@@ -1353,39 +1353,24 @@ document.addEventListener('click', e=>{
     case 'close': closeDrawer(); return;
     case 'size': { const p=CONFIG.sizeTiers.find(t=>t.ch===+v); state.sizeTier=+v; state.customOpen=false; bumpMsg='';
         state.cams = Math.min(+v, p?p.presets[0]:state.cams); state.n12 = Math.min(state.n12, state.cams); resetStorage(); } break;
-    case 'setcams': state.customOpen = false; setCams(+v); break;
-    case 'overcams': setCams(CONFIG.camRange[1]); state.overCams = true; bumpMsg = ''; break;   // 32+ → custom at survey
     case 'customopen': state.customOpen = true; bumpMsg=''; break;
     case 'customdone': state.customOpen = false; bumpMsg=''; break;
-    case 'camadj': setCams(state.cams + +v); break;
     // Project-step actions (existing/extype/exwork/constr/cflag/deadline/plans/planclear) moved to the
     // cameras spec (SPEC.actions) — handled via the default delegation. 'projnone' is navigation → stays here.
     case 'projnone': goNext(); return;   // "None of the above" → advance to the next step
     case 'level': state.level = v; state.levelManual = true; break;   // manual pick wins until "use recommended"
     case 'levelauto': state.levelManual = false; state.level = recommendLevel(state.features).level; break;
     // 'feat' moved to the cameras spec (SPEC.actions.feat) — handled via the default delegation below.
-    case 'prog': state.skipProg = v ? (v==='skip') : !state.skipProg; break;   // oseg sends inc/skip; the install card toggles
     case 'ups': state.ups = (v==='on'); break;
-    case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; monitorWarn = (v==='none'); break;
-    case 'monack': monitorWarn = false; break;   // dismiss the "only on phone" disclosure (keeps the choice)
-    case 'advtoggle': advOpen = !advOpen; break;  // controlled collapse so clicks inside don't close it
-    case 'cablecolor': state.cableColor = v; break;
-    case 'camcolor': state.camColor = v; break;
-    case 'res': state.camRes = v; state.n12 = (v==='12' ? state.cams : 0); resetStorage(); break;   // all cameras 8MP or 12MP
-    case 'monqty': state.monitorQty = Math.max(1, Math.min(8, (state.monitorQty||1) + +v)); break;
-    case 'days': state.desiredDays = +v; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); break;
     case 'daysmode': state.daysMode = 'custom'; state.extStorage = false; if(state.desiredDays<31 || state.desiredDays>60) state.desiredDays = 45; resetStorage(); break;
-    case 'dayadj': setDays(state.desiredDays + +v); break;
     case 'storadj': { const o=(Engine.sizeStorage(state).options)||[]; const cur=o.findIndex(x=>x.tb===Engine.sizeStorage(state).storageTB); const k=Math.max(0,Math.min(o.length-1,(cur<0?0:cur)+ +v)); if(o[k]) state.selectedStorageTB=o[k].tb; break; }
     case 'extstor': state.extStorage = true; state.daysMode = 'custom'; state.desiredDays = 60; resetStorage(); break;
     case 'stor': state.selectedStorageTB = +v; break;
     case 'storauto': state.selectedStorageTB = null; break;
     case 'nvrup': state.nvrUpgrade = v; state.selectedStorageTB = null; break;
-    case 'nvrpick': state.nvrPick = +v; state.selectedStorageTB = null; break;   // pick a recorder; storage re-auto-sizes & re-clamps to it
     case 'dayscap': setDays(+v); break;   // "keep N days" from the upgrade prompt — snap the target to the recorder's max
     case 'n12': state.n12 = +v; resetStorage(); break;
     case 'n12d': state.n12 = Math.max(0, Math.min(state.cams, state.n12 + +v)); resetStorage(); break;
-    case 'env': state.env = v; break;
     case 'storage': state.storage = v; break;
     case 'toggle': state[v] = !state[v]; if(v==='mount' && state.mount) state.monitor = true; if(v==='monitor' && !state.monitor) state.mount = false; break;
     case 'plan': state.plan = v; break;

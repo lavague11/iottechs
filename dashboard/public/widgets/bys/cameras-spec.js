@@ -553,6 +553,23 @@ const SPEC_actions = {
   deadline(){ state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; },
   plans(){ state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; },
   planclear(){ state.contact.floorPlanImg = null; },
+  // System step: cameras / recorder+retention / monitor / advanced. (Low-level sizing helpers — setCams,
+  // setDays, resetStorage — and the slider input listeners stay in the shell; these call them via shared scope.)
+  setcams(v){ state.customOpen = false; setCams(+v); },
+  overcams(){ setCams(CONFIG.camRange[1]); state.overCams = true; bumpMsg = ''; },   // 32+ → custom at survey
+  camadj(v){ setCams(state.cams + +v); },
+  prog(v){ state.skipProg = v ? (v==='skip') : !state.skipProg; },
+  mon(v){ state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; monitorWarn = (v==='none'); },
+  monack(){ monitorWarn = false; },
+  advtoggle(){ advOpen = !advOpen; },
+  cablecolor(v){ state.cableColor = v; },
+  camcolor(v){ state.camColor = v; },
+  res(v){ state.camRes = v; state.n12 = (v==='12' ? state.cams : 0); resetStorage(); },   // all cameras 8MP or 12MP
+  monqty(v){ state.monitorQty = Math.max(1, Math.min(8, (state.monitorQty||1) + +v)); },
+  days(v){ state.desiredDays = +v; state.daysMode = 'preset'; state.extStorage = false; resetStorage(); },
+  dayadj(v){ setDays(state.desiredDays + +v); },
+  nvrpick(v){ state.nvrPick = +v; state.selectedStorageTB = null; },   // pick a recorder; storage re-auto-sizes & re-clamps
+  env(v){ state.env = v; },
 };
 SPEC.render = SPEC_render;
 SPEC.actions = SPEC_actions;
