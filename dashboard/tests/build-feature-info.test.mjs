@@ -3,10 +3,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const src = readFileSync(
-  new URL("../public/widgets/cctv-quote-calculator.html", import.meta.url),
-  "utf8"
-);
+// BYS Phase 0: the CCTV catalog/copy (CONFIG) moved to the cameras spec; the shell markup/handlers stay
+// in the widget. Read both — together they are the rendered /build page.
+const src = [
+  readFileSync(new URL("../public/widgets/cctv-quote-calculator.html", import.meta.url), "utf8"),
+  readFileSync(new URL("../public/widgets/bys/cameras-spec.js", import.meta.url), "utf8"),
+].join("\n");
 
 // the 11 security features shown on the Features step
 const FEAT_IDS = [
