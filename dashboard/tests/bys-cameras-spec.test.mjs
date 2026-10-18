@@ -33,3 +33,14 @@ test("the spec declares the vertical identity (brand + lead), and the shell read
   assert.ok(widget.includes("SPEC.lead && SPEC.lead.endpoint"), "submitLead posts to SPEC.lead.endpoint");
   assert.ok(widget.includes("applySpecBranding") && widget.includes("SPEC.brand.title"), "the shell applies SPEC branding (title + header)");
 });
+
+test("step registry: the shell owns Intake + Quote bookends; the spec owns the config steps in between", () => {
+  // the spec declares its config steps (the vertical-specific middle of the flow)
+  for (const id of ["'features'", "'project'", "'system'"]) assert.ok(spec.includes(`id: ${id}`), `SPEC.steps includes ${id}`);
+  assert.ok(/steps:\s*\[/.test(spec), "SPEC declares a steps array");
+  // the shell assembles STEPS = Intake builtin + ...SPEC.steps + Quote builtin
+  assert.ok(widget.includes("...((typeof SPEC !== 'undefined' && Array.isArray(SPEC.steps)) ? SPEC.steps : [])"), "shell splices SPEC.steps between the bookends");
+  assert.ok(/id:'details', label:'Intake'/.test(widget) && /id:'quote',   label:'Quote'/.test(widget), "Intake + Quote remain shell built-ins");
+  // the vertical config steps are no longer hard-coded in the shell's STEPS literal
+  assert.ok(!/id:'system',\s*label:'System'/.test(widget), "the System step def lives in the spec, not the shell STEPS literal");
+});

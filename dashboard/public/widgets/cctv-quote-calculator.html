@@ -620,12 +620,12 @@ const ICON = {
 
 /* ---------- 3-step shell: regroup the topic renderers into Your Details / Build System / Review ---------- */
 const STEP_ICON = { property: ICON.house, cameras: ICON.cam, storage: ICON.nvr, install: ICON.cable };
+// BYS step registry: the shell owns the Intake + Quote bookends; the vertical spec owns the CONFIG steps
+// in between (SPEC.steps). Same 5 steps for cameras — but a new vertical defines its own middle steps.
 const STEPS = [
-  { id:'details',  label:'Intake',   title:'Your information',    single:['contact'] },
-  { id:'features', label:'Features',  title:'Security features',   single:['features'] },
-  { id:'project',  label:'Project',   title:'About your project',  single:['site'] },
-  { id:'system',   label:'System',    title:'Your system',         single:['system'] },
-  { id:'quote',    label:'Quote',     title:'Your quote',          single:['quote'] },
+  { id:'details', label:'Intake', title:'Your information', single:['contact'] },                 // shell built-in (IMPRESS intake)
+  ...((typeof SPEC !== 'undefined' && Array.isArray(SPEC.steps)) ? SPEC.steps : []),              // vertical config steps (from the spec)
+  { id:'quote',   label:'Quote',  title:'Your quote',       single:['quote'] },                   // shell built-in (package picker + feature board)
 ];
 function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
 function renderStep(st, q, i){
