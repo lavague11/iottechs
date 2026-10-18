@@ -365,3 +365,40 @@ const Engine = (() => {
   }
   return { compute, sizeStorage, nvrTier, boxesFor, planMonthly };
 })();
+
+/* =====================================================================
+   VERTICAL RENDERERS + ACTIONS (the BYS step-registry contract)
+   SPEC.render[topic]  — draws a vertical config step (the shell dispatches R[t] || SPEC.render[t]).
+   SPEC.actions[name]  — handles a vertical data-act (the shell's switch delegates unknown acts here, then
+                         re-renders). Both run at render/click time, so they freely use shell helpers
+                         (head, recommendLevel, money, esc, …) and state via the shared classic-script scope.
+   Phase 0.4a: Features moved here first; Project + System follow.
+   ===================================================================== */
+const SPEC_render = {
+  features(s, q, i){
+    const sel = new Set(state.features||[]);
+    const pkg = f => f.service ? {t:'service',l:'Service'} : ({1:{t:'ess',l:'Essential'},2:{t:'smart',l:'Smart'},3:{t:'pro',l:'Pro'}})[f.level] || null;
+    const info = f => f.info ? `<span class="feat-info" data-act="featinfo" data-v="${f.id}" role="button" tabindex="0" aria-label="About ${f.label}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11.3v4.4"/><circle cx="12" cy="7.9" r="1" fill="currentColor" stroke="none"/></svg></span>` : '';
+    const row = f => { const p = pkg(f); return `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
+      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span>${info(f)}${p?`<span class="feat-pkg ${p.t}">${p.l}</span>`:''}</button>`; };
+    const rec = recommendLevel(state.features);
+    const recName = ({essential:'Essential',smart:'Smart',pro:'Pro'})[rec.level];
+    const bits = rec.hasCamFeatures ? [`${recName} package`] : [];
+    if(rec.wantsMonitoring) bits.push('24/7 live monitoring');
+    if(rec.specialized.length) bits.push('specialized equipment (reviewed at survey)');
+    const recNote = bits.length ? `<div class="feat-rec"><span class="feat-rec-k">Recommended</span> ${bits.join(' · ')}</div>` : '';
+    return `${head(s,i,"Select all that apply — we'll match you to the right system.", false)}
+      <div class="feat-list">${CONFIG.catalog.securityFeatures.map(row).join('')}</div>
+      ${recNote}`;
+  },
+};
+const SPEC_actions = {
+  feat(v){   // security-feature checklist → auto-recommend a package (unless manually overridden)
+    const set = new Set(state.features||[]);
+    set.has(v) ? set.delete(v) : set.add(v);
+    state.features = [...set];
+    if(!state.levelManual) state.level = recommendLevel(state.features).level;
+  },
+};
+SPEC.render = SPEC_render;
+SPEC.actions = SPEC_actions;

@@ -44,3 +44,14 @@ test("step registry: the shell owns Intake + Quote bookends; the spec owns the c
   // the vertical config steps are no longer hard-coded in the shell's STEPS literal
   assert.ok(!/id:'system',\s*label:'System'/.test(widget), "the System step def lives in the spec, not the shell STEPS literal");
 });
+
+test("renderer contract (0.4): the shell dispatches R[t] || SPEC.render[t] and delegates unknown acts to SPEC.actions", () => {
+  assert.ok(widget.includes("function pickRenderer(t){ return R[t] || (typeof SPEC !== 'undefined' && SPEC.render && SPEC.render[t]); }"), "shell resolves a renderer from R OR SPEC.render");
+  assert.ok(widget.includes("pickRenderer(t)(slideOf(t), q, i)"), "renderStep dispatches via pickRenderer");
+  assert.ok(widget.includes("SPEC.actions && SPEC.actions[act]){ SPEC.actions[act](v, a); break; }"), "the switch default delegates unknown acts to SPEC.actions, then re-renders");
+  // Features moved to the spec; it's gone from the shell
+  assert.ok(/SPEC_render\s*=\s*\{[\s\S]*features\(s, q, i\)/.test(spec), "the spec provides the Features renderer");
+  assert.ok(/SPEC_actions\s*=\s*\{[\s\S]*feat\(v\)/.test(spec), "the spec provides the feat action");
+  assert.ok(spec.includes("SPEC.render = SPEC_render") && spec.includes("SPEC.actions = SPEC_actions"), "spec exposes render + actions on SPEC");
+  assert.ok(!/^  features\(s, q, i\)\{/m.test(widget), "the shell no longer defines R.features");
+});

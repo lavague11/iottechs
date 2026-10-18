@@ -628,13 +628,15 @@ const STEPS = [
   { id:'quote',   label:'Quote',  title:'Your quote',       single:['quote'] },                   // shell built-in (package picker + feature board)
 ];
 function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
+// BYS: a step's renderer is the shell's R[topic] OR the vertical spec's SPEC.render[topic] (the config steps).
+function pickRenderer(t){ return R[t] || (typeof SPEC !== 'undefined' && SPEC.render && SPEC.render[t]); }
 function renderStep(st, q, i){
   if(st.accordions) return st.accordions.map(a=>renderAccordion(a, q)).join('');
-  return (st.single||[]).map(t=>R[t](slideOf(t), q, i)).join('');
+  return (st.single||[]).map(t=>pickRenderer(t)(slideOf(t), q, i)).join('');
 }
 function renderAccordion(a, q){
   const open = (openAcc===a.id);
-  const body = a.types.map(t=>R[t](slideOf(t), q, 0)).join('');
+  const body = a.types.map(t=>pickRenderer(t)(slideOf(t), q, 0)).join('');
   return `<section class="acc${open?' open':''}">
     <button type="button" class="acc-h" data-acc="${a.id}" aria-expanded="${open}">
       <span class="acc-ic">${STEP_ICON[a.id]||''}</span>
@@ -1117,22 +1119,7 @@ const R = {
         <p class="fine">Used only to prepare and send your estimate. No spam, and a valid format isn’t a verified number — we may confirm by text or call.</p>
       </form>`;
   },
-  features(s, q, i){
-    const sel = new Set(state.features||[]);
-    const pkg = f => f.service ? {t:'service',l:'Service'} : ({1:{t:'ess',l:'Essential'},2:{t:'smart',l:'Smart'},3:{t:'pro',l:'Pro'}})[f.level] || null;
-    const info = f => f.info ? `<span class="feat-info" data-act="featinfo" data-v="${f.id}" role="button" tabindex="0" aria-label="About ${f.label}"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11.3v4.4"/><circle cx="12" cy="7.9" r="1" fill="currentColor" stroke="none"/></svg></span>` : '';
-    const row = f => { const p = pkg(f); return `<button type="button" class="feat-row ${sel.has(f.id)?'on':''}" data-act="feat" data-v="${f.id}" aria-pressed="${sel.has(f.id)}">
-      <span class="feat-box" aria-hidden="true"></span><span class="feat-name">${f.label}</span>${info(f)}${p?`<span class="feat-pkg ${p.t}">${p.l}</span>`:''}</button>`; };
-    const rec = recommendLevel(state.features);
-    const recName = ({essential:'Essential',smart:'Smart',pro:'Pro'})[rec.level];
-    const bits = rec.hasCamFeatures ? [`${recName} package`] : [];
-    if(rec.wantsMonitoring) bits.push('24/7 live monitoring');
-    if(rec.specialized.length) bits.push('specialized equipment (reviewed at survey)');
-    const recNote = bits.length ? `<div class="feat-rec"><span class="feat-rec-k">Recommended</span> ${bits.join(' · ')}</div>` : '';
-    return `${head(s,i,"Select all that apply — we'll match you to the right system.", false)}
-      <div class="feat-list">${CONFIG.catalog.securityFeatures.map(row).join('')}</div>
-      ${recNote}`;
-  },
+  // features(): moved to the cameras spec (SPEC.render.features) — BYS Phase 0.4a.
   site(s, q, i){
     const c = state.contact;
     return `${head(s,i,'A few quick things that help us quote accurately. All optional.', false)}
@@ -1520,13 +1507,7 @@ document.addEventListener('click', e=>{
     case 'projnone': goNext(); return;   // "None of the above" → advance to the next step
     case 'level': state.level = v; state.levelManual = true; break;   // manual pick wins until "use recommended"
     case 'levelauto': state.levelManual = false; state.level = recommendLevel(state.features).level; break;
-    case 'feat': {   // security-feature checklist → auto-recommend a package (unless manually overridden)
-      const set = new Set(state.features||[]);
-      set.has(v) ? set.delete(v) : set.add(v);
-      state.features = [...set];
-      if(!state.levelManual) state.level = recommendLevel(state.features).level;
-      break;
-    }
+    // 'feat' moved to the cameras spec (SPEC.actions.feat) — handled via the default delegation below.
     case 'prog': state.skipProg = v ? (v==='skip') : !state.skipProg; break;   // oseg sends inc/skip; the install card toggles
     case 'ups': state.ups = (v==='on'); break;
     case 'mon': state.monitorMode = v; state.monitor = v==='buy'; state.mount = v==='buy'; monitorWarn = (v==='none'); break;
@@ -1567,7 +1548,8 @@ document.addEventListener('click', e=>{
     case 'editcfg': { if(a.dataset.acc) openAcc=a.dataset.acc; go(a.dataset.step!=null?+a.dataset.step:1); return; }   // Review → jump back to edit a section
     case 'replock': rep = false; render(); renderDrawer(); return;
     case 'reset': Object.assign(state, CONFIG.defaults, { contact:{firstName:'',lastName:'',name:'',phone:'',phoneE164:'',email:'',company:'',address:'',unit:'',placeId:'',lat:null,lng:null,companyPlaceId:'',when:'',notes:''} }); submitted=null; done.clear(); openAcc='property'; try{ localStorage.removeItem(DRAFT_KEY); }catch(_){} closeDrawer(); render(); go(0); return;
-    default: return;
+    // BYS: a vertical data-act not handled above is delegated to the spec, then re-rendered (mutate-then-render, like a break).
+    default: if(typeof SPEC !== 'undefined' && SPEC.actions && SPEC.actions[act]){ SPEC.actions[act](v, a); break; } return;
   }
   render();
 });
