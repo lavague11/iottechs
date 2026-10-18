@@ -391,6 +391,56 @@ const SPEC_render = {
       <div class="feat-list">${CONFIG.catalog.securityFeatures.map(row).join('')}</div>
       ${recNote}`;
   },
+  site(s, q, i){
+    const c = state.contact;
+    return `${head(s,i,'A few quick things that help us quote accurately. All optional.', false)}
+      <div class="opts">
+        <div class="opt ${c.existingSystem?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="existing"><span class="check"></span>
+            <div><div class="opt-title">I have an existing system</div><div class="opt-sub">Cameras or wiring already in place we may be able to reuse</div></div></button>
+          ${c.existingSystem?`<div class="sub-q">
+            <div class="subq-field"><label>What type of system?</label>
+              <div class="subseg">${[['ip','IP / Digital'],['analog','Analog / Coax'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingType===v?'on':''}" data-act="extype" data-v="${v}">${l}</button>`).join('')}</div></div>
+            <div class="subq-field"><label>Is the system working?</label>
+              <div class="subseg">${[['yes','Yes'],['no','No'],['partial','Partially'],['unknown','Not sure']].map(([v,l])=>`<button type="button" class="${c.existingWorking===v?'on':''}" data-act="exwork" data-v="${v}">${l}</button>`).join('')}</div></div>
+          </div>`:''}
+        </div>
+        <div class="opt ${c.hasDeadline?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="deadline"><span class="check"></span>
+            <div><div class="opt-title">I have a deadline</div><div class="opt-sub">A date the system needs to be installed by</div></div></button>
+          ${c.hasDeadline?`<div class="sub-q"><div class="field"><label for="c_deadline">Install by</label>
+            <input id="c_deadline" type="date" value="${esc(c.deadline||'')}" data-contact="deadline" min="${new Date().toISOString().slice(0,10)}"></div></div>`:''}
+        </div>
+        <div class="opt ${c.construction?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="constr"><span class="check"></span>
+            <div><div class="opt-title">This is a construction project</div><div class="opt-sub">Property is under construction or being built out</div></div></button>
+          ${c.construction?`<div class="sub-q"><div class="cflags">
+            ${[['noSheetrock','No sheetrock'],['dropCeiling','Drop ceiling'],['needPermits','Need permits']].map(([k,l])=>`<button type="button" class="chip ${c[k]?'on':''}" data-act="cflag" data-v="${k}">${l}</button>`).join('')}
+          </div></div>`:''}
+        </div>
+        <div class="opt ${c.floorPlans?'sel':''}">
+          <button type="button" class="pick opt-head" data-act="plans"><span class="check"></span>
+            <div><div class="opt-title">I have floor plans</div><div class="opt-sub">Helps us place cameras and quote cable accurately</div></div></button>
+          ${c.floorPlans ? (c.floorPlanImg ? `
+          <div class="plan-prev" style="margin:0 12px 12px">
+            ${c.floorPlanImg.tooBig || c.floorPlanImg.error
+              ? `<div class="plan-file" style="background:var(--warn-bg);color:var(--warn)">!</div>`
+              : c.floorPlanImg.type.startsWith('image/')
+                ? `<img src="${c.floorPlanImg.dataUrl}" alt="Floor plan preview">`
+                : `<div class="plan-file">PDF</div>`}
+            <div class="plan-meta"><b>${esc(c.floorPlanImg.name)}</b><span class="num">${c.floorPlanImg.tooBig?'Too large — max 15 MB':c.floorPlanImg.error?'Couldn’t read file':(c.floorPlanImg.size/1048576).toFixed(1)+' MB'}</span></div>
+            <button type="button" class="x" data-act="planclear" aria-label="Remove floor plan">✕</button>
+          </div>` : `
+          <label class="plan-drop" style="margin:0 12px 12px">
+            <input type="file" accept="image/*,application/pdf" data-file="floorPlan" hidden>
+            <span class="plan-cta">Upload a photo or screenshot</span>
+            <span class="opt-sub">PNG, JPG or PDF — or skip for now</span>
+          </label>`) : ''}
+        </div>
+      </div>
+      ${(!c.existingSystem && !c.construction && !c.hasDeadline && !c.floorPlans)
+        ? `<button type="button" class="opt-none" data-act="projnone">None of the above <span aria-hidden="true">→</span></button>` : ''}`;
+  },
 };
 const SPEC_actions = {
   feat(v){   // security-feature checklist → auto-recommend a package (unless manually overridden)
@@ -399,6 +449,15 @@ const SPEC_actions = {
     state.features = [...set];
     if(!state.levelManual) state.level = recommendLevel(state.features).level;
   },
+  // Project step (site): existing system / deadline / construction / floor plans. ('projnone' is navigation — stays in the shell.)
+  existing(){ state.contact.existingSystem = !state.contact.existingSystem; if(!state.contact.existingSystem){ state.contact.existingType = null; state.contact.existingWorking = null; } },
+  extype(v){ state.contact.existingType = v; },
+  exwork(v){ state.contact.existingWorking = v; },
+  constr(){ state.contact.construction = !state.contact.construction; if(!state.contact.construction){ state.contact.noSheetrock = state.contact.dropCeiling = state.contact.needPermits = false; } },
+  cflag(v){ state.contact[v] = !state.contact[v]; },
+  deadline(){ state.contact.hasDeadline = !state.contact.hasDeadline; if(!state.contact.hasDeadline) state.contact.deadline = ''; },
+  plans(){ state.contact.floorPlans = !state.contact.floorPlans; if(!state.contact.floorPlans) state.contact.floorPlanImg = null; },
+  planclear(){ state.contact.floorPlanImg = null; },
 };
 SPEC.render = SPEC_render;
 SPEC.actions = SPEC_actions;
