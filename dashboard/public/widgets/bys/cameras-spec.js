@@ -6,6 +6,15 @@
    vertical, provide a sibling spec file that declares the same CONFIG + Engine.
    Phase 0: moved verbatim out of cctv-quote-calculator.html — no behavior change.
    ===================================================================== */
+/* The vertical's IDENTITY — the brand shown in the BYS shell + where leads are delivered. The shell reads
+   SPEC.brand (header + <title>) and SPEC.lead (submit endpoint). Swap this (with CONFIG + Engine) to
+   white-label another vertical, e.g. { id:'pos', brand:{…'Build Your POS System'}, lead:{service:'POS', endpoint:'/api/leads/pos'} }. */
+const SPEC = {
+  id: 'cameras',
+  brand: { company: 'IOT TECHS', tagline: 'Build your camera system', title: 'Build Your CCTV System' },
+  lead:  { service: 'CCTV', endpoint: '/api/leads/cctv' },
+};
+
 /* =====================================================================
    CONFIG — everything product-specific lives here. Swap this object to
    make a calculator for another product line. Money is integer cents.

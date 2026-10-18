@@ -1436,7 +1436,7 @@ function submitLead(snapshot, fp){
     fd.append('snapshot', JSON.stringify(lean));
     fd.append('text', (submitted && submitted.text) || '');
     if(file) fd.append('floorplan', file, file.name || 'floorplan');
-    fetch('/api/leads/cctv', { method:'POST', body:fd, credentials:'same-origin' })
+    fetch((typeof SPEC!=='undefined' && SPEC.lead && SPEC.lead.endpoint) || '/api/leads/cctv', { method:'POST', body:fd, credentials:'same-origin' })
       .then(function(r){ return r.json().catch(function(){ return null; }); })
       .then(function(j){ try{ console.log('[CCTV] lead saved', j); }catch(_){ } })
       .catch(function(err){ try{ console.warn('[CCTV] lead POST failed', err); }catch(_){ } });
@@ -1840,6 +1840,14 @@ function bindPhoton(el){
   el.addEventListener('blur', function(){ setTimeout(close, 150); });
 }
 
+// BYS: the vertical spec drives the brand + <title> (swap the spec → rebrand). The static markup is the
+// cameras fallback, so a missing/failed spec never blanks the header.
+(function applySpecBranding(){ try{ if(typeof SPEC==='undefined' || !SPEC.brand) return;
+  if(SPEC.brand.title) document.title = SPEC.brand.title;
+  var b=document.querySelector('.brand b'), s=document.querySelector('.brand span');
+  if(b && SPEC.brand.company) b.textContent = SPEC.brand.company;
+  if(s && SPEC.brand.tagline) s.textContent = SPEC.brand.tagline;
+}catch(_){ } })();
 loadDraft();   // resume an interrupted session (per-device draft), then paint
 render();
 </script>

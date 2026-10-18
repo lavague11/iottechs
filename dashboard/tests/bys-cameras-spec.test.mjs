@@ -23,3 +23,13 @@ test("the cameras spec is a classic script declaring the shared CONFIG + Engine 
   assert.ok(spec.includes("const Engine = (() => {") && spec.includes("return { compute, sizeStorage"), "spec declares the pricing Engine");
   assert.ok(!spec.includes('type="module"') && !/^\s*export\s/m.test(spec), "spec is a classic script (shares the shell's global scope), not an ES module");
 });
+
+test("the spec declares the vertical identity (brand + lead), and the shell reads it — not hard-coded", () => {
+  assert.ok(/const SPEC = \{/.test(spec), "spec declares a SPEC identity object");
+  assert.ok(spec.includes("id: 'cameras'"), "SPEC.id names the vertical");
+  assert.ok(/title:\s*'Build Your CCTV System'/.test(spec), "SPEC.brand carries the <title>");
+  assert.ok(/service:\s*'CCTV'/.test(spec) && /endpoint:\s*'\/api\/leads\/cctv'/.test(spec), "SPEC.lead carries the service + endpoint");
+  // the shell reads SPEC (the hard-coded path/brand survive only as fallback defaults)
+  assert.ok(widget.includes("SPEC.lead && SPEC.lead.endpoint"), "submitLead posts to SPEC.lead.endpoint");
+  assert.ok(widget.includes("applySpecBranding") && widget.includes("SPEC.brand.title"), "the shell applies SPEC branding (title + header)");
+});
