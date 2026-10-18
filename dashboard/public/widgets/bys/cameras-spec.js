@@ -374,6 +374,40 @@ const Engine = (() => {
                          (head, recommendLevel, money, esc, …) and state via the shared classic-script scope.
    Phase 0.4a: Features moved here first; Project + System follow.
    ===================================================================== */
+// Cameras-specific compositions used by the System step. They call the shell's reusable primitives
+// (cardGroup, money) via the shared classic-script scope at render time.
+function monitorControl(){
+  const price = CONFIG.catalog.addons.monitor.price + CONFIG.catalog.addons.mount.price;
+  const opt = (v,title,sub) => `<button type="button" class="nvr-btn ${state.monitorMode===v?'on':''}" data-act="mon" data-v="${v}" aria-pressed="${state.monitorMode===v}"><b>${title}</b><span>${sub}</span></button>`;
+  const qty = state.monitorMode==='buy' ? `<div class="mon-qty">
+      <span class="mon-qty-l">How many displays?</span>
+      <div class="qty-step">
+        <button type="button" class="qty-btn" data-act="monqty" data-v="-1" aria-label="Fewer displays" ${(state.monitorQty||1)<=1?'disabled':''}>−</button>
+        <b>${state.monitorQty||1}</b>
+        <button type="button" class="qty-btn" data-act="monqty" data-v="1" aria-label="More displays" ${(state.monitorQty||1)>=8?'disabled':''}>+</button>
+      </div></div>` : '';
+  return `<div class="eyebrow">Monitor</div>
+    <div class="nvr-seg">
+      ${opt('buy','Need a monitor', 'Screen &amp; mount')}
+      ${opt('own','I have a monitor','We connect it')}
+      ${opt('none','Only on phone','App access')}
+    </div>
+    ${qty}`;
+}
+// Advanced — a continuation of the configurator (Camera / Cable), same cards, no inner card/form chrome.
+function optionsStrip(q){
+  const up = money(CONFIG.catalog.cam[12].price - CONFIG.catalog.cam[8].price);
+  const grpH = t => `<div class="adv-grp">${t}</div>`;
+  return `<div class="adv-grid">
+      ${grpH('Camera')}
+      ${cardGroup('Resolution', 'res', state.camRes, [{v:'8',title:'8MP',sub:'4K'},{v:'12',title:'12MP',sub:'+'+up+' / camera'}])}
+      ${cardGroup('Camera setup', 'prog', state.skipProg?'skip':'inc', [{v:'inc',title:'Included',sub:'Configured for you'},{v:'skip',title:'Skip'}])}
+      ${cardGroup('Color', 'camcolor', state.camColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+      ${grpH('Cable')}
+      ${cardGroup('Type', 'env', state.env, [{v:'indoor',title:'Indoor'},{v:'outdoor',title:'Outdoor'}])}
+      ${cardGroup('Color', 'cablecolor', state.cableColor, [{v:'white',title:'White'},{v:'black',title:'Black'}])}
+    </div>`;
+}
 const SPEC_render = {
   features(s, q, i){
     const sel = new Set(state.features||[]);
@@ -440,6 +474,67 @@ const SPEC_render = {
       </div>
       ${(!c.existingSystem && !c.construction && !c.hasDeadline && !c.floorPlans)
         ? `<button type="button" class="opt-none" data-act="projnone">None of the above <span aria-hidden="true">→</span></button>` : ''}`;
+  },
+  count(s, q, i){
+    const [lo] = CONFIG.camRange, hiAbs = CONFIG.camRange[1];   // 1 … 32
+    const over = !!state.overCams;
+    const presets = [
+      { label:'8',   act:'setcams',  v:8,  on:!over&&state.cams===8 },
+      { label:'16',  act:'setcams',  v:16, on:!over&&state.cams===16 },
+      { label:'32',  act:'setcams',  v:32, on:!over&&state.cams===32 },
+      { label:'32+', act:'overcams',      on:over },
+    ];
+    const note = over
+      ? `<div class="note">Over 32 cameras — we’ll design a custom multi-recorder system at your free survey. The total is preliminary.</div>`
+      : '';   // the recorder auto-size message is a transient toast now, not an inline note
+    return heroControl({ value:state.cams, unit:'cameras', min:lo, max:hiAbs, adjAct:'camadj', rangeNum:'camsrange', presets }) + note;
+  },
+  recorder(s, q, i){
+    const ss = q.ss, R = CONFIG.catalog.retention;
+    const sysLabel = ss.groups.map(g=>`${g.count} × ${g.res}`).join(' + ') || '0 cameras';
+    const DMIN = 7, DMAX = 60;
+
+    // RECORDING & STORAGE — one compact summary ("28 days | 8TB"), days editable, storage auto-sized.
+    const hdd = ss.drives && ss.drives.length>1 ? ss.drives.map(d=>d+'TB').join(' + ') : '';
+    const dayPresets = [7,30,45,60].map(d=>`<button type="button" class="${ss.days===d?'on':''}" data-act="days" data-v="${d}">${d}</button>`).join('');
+    const recStorage = `<div class="rs-ctrl">
+        <div class="rs-sum"><input class="hero-input rs-num" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" value="${ss.days}" data-num="daysnum" aria-label="Recording days" autocomplete="off" spellcheck="false"><span class="rs-unit">days</span><span class="rs-sep">|</span><b class="rs-tb">${ss.storageTB}TB</b></div>
+        <div class="rs-help">${q.n} camera${q.n>1?'s':''} • 8MP • 24/7 recording${hdd?` • ${hdd}`:''}</div>
+        <div class="hero-row">
+          <button class="hero-pm" data-act="dayadj" data-v="-1" aria-label="Fewer days" ${ss.days<=DMIN?'disabled':''}>−</button>
+          <input type="range" min="${DMIN}" max="${DMAX}" value="${Math.min(Math.max(ss.days,DMIN),DMAX)}" data-num="daysrange" class="cc-slider" aria-label="Recording days">
+          <button class="hero-pm" data-act="dayadj" data-v="1" aria-label="More days" ${ss.days>=DMAX?'disabled':''}>+</button>
+        </div>
+        <div class="hero-presets">${dayPresets}</div>
+      </div>`;
+
+    const customNote = ss.noStandardFit ? `<div class="note">Keeping ${ss.days} days of ${sysLabel} needs about ${ss.recommendedTB}TB — more than a standard recorder. We’ll size a custom storage system at your free survey; the total stays preliminary.</div>` : '';
+
+    // Recorder selector — 8 / 16 / 32 channel; disabled below the camera count, capacity shown.
+    const nvrSel = `<div class="nvr-seg">${[8,16,32].map(ch=>{
+      const nv = CONFIG.catalog.nvr[ch], max = nv.bays*nv.maxTB, dis = ch < state.cams, on = ss.activeNvr.ch===ch;
+      return `<button type="button" class="nvr-btn ${on?'on':''}" data-act="nvrpick" data-v="${ch}" ${dis?'disabled':''} aria-pressed="${on}">
+        <b>${ch}-channel</b><span>up to ${ch} cams · ${max}TB</span></button>`;
+    }).join('')}</div>`;
+
+    return `<div class="eyebrow">Recorder</div>
+      ${nvrSel}
+      <div class="eyebrow">Recording &amp; storage</div>
+      ${recStorage}
+      ${customNote}
+      ${monitorControl()}`;
+  },
+  system(s, q, i){
+    const div = '<hr class="sys-div">';
+    return `<div class="sys-block"><div class="eyebrow">Cameras</div>${SPEC_render.count(slideOf('count'),q,i)}</div>`
+      + div
+      + `<div class="sys-block">${SPEC_render.recorder(slideOf('recorder'),q,i)}</div>`
+      + div
+      + `<div class="adv ${advOpen?'open':''}">
+          <button type="button" class="adv-sum" data-act="advtoggle" aria-expanded="${advOpen}">Advanced
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+          ${advOpen ? `<div class="adv-b">${optionsStrip(q)}</div>` : ''}
+        </div>`;
   },
 };
 const SPEC_actions = {
