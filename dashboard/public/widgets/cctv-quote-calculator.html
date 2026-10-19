@@ -1294,6 +1294,8 @@ function submitLead(snapshot, fp){
     var fd = new FormData();
     fd.append('snapshot', JSON.stringify(lean));
     fd.append('text', (submitted && submitted.text) || '');
+    // BYS: tell the generic lead route which vertical + service this is (maps to the project's service code).
+    try{ fd.append('vertical', (typeof SPEC!=='undefined' && SPEC.id) || 'cameras'); fd.append('service', (typeof SPEC!=='undefined' && SPEC.lead && SPEC.lead.service) || ''); }catch(_){ }
     if(file) fd.append('floorplan', file, file.name || 'floorplan');
     fetch((typeof SPEC!=='undefined' && SPEC.lead && SPEC.lead.endpoint) || '/api/leads/cctv', { method:'POST', body:fd, credentials:'same-origin' })
       .then(function(r){ return r.json().catch(function(){ return null; }); })
