@@ -84,7 +84,7 @@ export async function POST(req, ctx) {
   // Keep the full quote snapshot for the office (same store as cameras; the snapshot carries its own
   // calcVersion = the vertical) + a one-line summary on the project.
   try {
-    const sysName = snapshot.security?.selectedPackage || (snapshot.inputs && snapshot.inputs.level) || "";
+    const sysName = snapshot.packageName || snapshot.selectedPackage || snapshot.security?.selectedPackage || (snapshot.inputs && snapshot.inputs.level) || "";
     const summary = `${vertical.toUpperCase()} quote ${snapshot.id || ""}${sysName ? ` · ${sysName}` : ""}`
       + ` · ${dollars(snapshot.total)} (from the website).`;
     saveCctvQuoteLead({

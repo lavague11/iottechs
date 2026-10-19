@@ -59,3 +59,16 @@ test("renderer contract (0.4): the shell dispatches R[t] || SPEC.render[t] and d
   assert.ok(spec.includes("SPEC.render = SPEC_render") && spec.includes("SPEC.actions = SPEC_actions"), "spec exposes render + actions on SPEC");
   assert.ok(!/^  features\(s, q, i\)\{/m.test(widget), "the shell no longer defines R.features");
 });
+
+test("quote OUTPUT is generalized: generic in the shell, cameras specifics behind SPEC hooks", () => {
+  // shell: generic snapshot + a SPEC.snapshot merge; generic quoteText that defers to SPEC.quoteText
+  assert.ok(widget.includes("Object.assign(snapshot, SPEC.snapshot(q) || {})"), "finalizeQuote merges SPEC.snapshot(q)");
+  assert.ok(/vertical:\(typeof SPEC!=='undefined' && SPEC\.id\)\|\|'cameras'/.test(widget), "the snapshot carries the vertical + service generically");
+  assert.ok(widget.includes("typeof SPEC.quoteText==='function'){ try{ return SPEC.quoteText(q, id); }"), "quoteText defers to SPEC.quoteText when present");
+  // the LIVE shell quoteText is generic (brands from SPEC, no hard-coded cameras storage/NVR line)
+  const qt = widget.slice(widget.indexOf("function quoteText(q, id){"), widget.indexOf("function validateContact("));
+  assert.ok(!/Camera system quote/.test(qt) && !/activeNvr/.test(qt), "the shell's quoteText no longer hard-codes cameras specifics");
+  // cameras spec: owns its snapshot block + its byte-identical quote text
+  assert.ok(spec.includes("SPEC.snapshot = function(q)") && /storage:\{ desiredRetentionDays/.test(spec), "cameras SPEC.snapshot provides site/security/storage/overrides");
+  assert.ok(spec.includes("SPEC.quoteText = function(q, id)") && spec.includes("Camera system quote"), "cameras SPEC.quoteText keeps the cameras text verbatim");
+});

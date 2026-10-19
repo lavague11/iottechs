@@ -573,3 +573,59 @@ const SPEC_actions = {
 };
 SPEC.render = SPEC_render;
 SPEC.actions = SPEC_actions;
+
+/* Cameras-specific quote OUTPUT (optional contract hooks the shell calls):
+   SPEC.snapshot(q) — extra snapshot fields merged into the generic lead snapshot (site / security / storage
+                      / overrides — the office reads these; keep the shape stable).
+   SPEC.quoteText(q, id) — the full copyable quote text (overrides the shell's generic default). Verbatim the
+                      cameras text, so the cameras output is byte-identical to before BYS generalization. */
+SPEC.snapshot = function(q){
+  const c = state.contact, fp = c.floorPlanImg;
+  const r = recommendLevel(state.features), SF = CONFIG.catalog.securityFeatures, lbl = id=>(SF.find(f=>f.id===id)||{}).label||id;
+  return {
+    site:{ existingSystem:c.existingSystem, existingType:c.existingType, existingWorking:c.existingWorking,
+      construction:c.construction,
+      constructionDetails: c.construction ? { noSheetrock:!!c.noSheetrock, dropCeiling:!!c.dropCeiling, needPermits:!!c.needPermits } : null,
+      hasDeadline:c.hasDeadline, deadline:c.deadline,
+      floorPlans:c.floorPlans, floorPlanFile: fp ? { name:fp.name, type:fp.type, size:fp.size } : null },
+    security:{ features:[...(state.features||[])], featureLabels:(state.features||[]).map(lbl),
+      recommendedPackage:r.level, selectedPackage:state.level, packageManual:!!state.levelManual,
+      liveMonitoring:r.wantsMonitoring, specializedRequirements:r.specialized, specializedLabels:r.specialized.map(lbl),
+      customQuote: r.specialized.length>0 || !!state.extStorage || q.ss.noStandardFit },
+    storage:{ desiredRetentionDays:q.ss.days, recommendedStorageTB:q.ss.recommendedTB, selectedStorageTB:q.ss.storageTB,
+      estimatedRetentionDays:q.ss.estimatedDays, dailySystemTB:+q.ss.daily.toFixed(4), rawRequiredTB:+q.ss.rawTB.toFixed(3),
+      drives:q.ss.drives, selectedNvr:q.ss.activeNvr.code, nvrUpgrade:state.nvrUpgrade, requiredUpgrade:q.ss.requiresUpgrade, customSizing:q.ss.noStandardFit,
+      extendedRetention:!!state.extStorage, extendedRetentionNote: state.extStorage ? 'Customer requested 60+ days — size & price extended storage at the survey' : null },
+    overrides:{ poe:state.poe, extraBoxes:state.extraBoxes, footage:state.footage },
+  };
+};
+SPEC.quoteText = function(q, id){
+  const L = [];
+  L.push(`IOT TECHS · Camera system quote ${id}`, new Date().toLocaleString('en-US'), '');
+  L.push(`${state.contact.name} · ${state.contact.phone}${state.contact.email?' · '+state.contact.email:''}`);
+  if(state.contact.company) L.push(`Company: ${state.contact.company}`);
+  if(state.contact.address) L.push(state.contact.address);
+  if(state.contact.existingSystem) L.push(`Existing system: Yes (${({ip:'IP / digital',analog:'Analog / coax',unknown:'type not sure'})[state.contact.existingType]||'type not specified'}; ${({yes:'working',no:'not working',unknown:'working status unknown'})[state.contact.existingWorking]||'working status not specified'})`);
+  if(state.contact.construction) L.push('*** CONSTRUCTION PROJECT — property under construction ***');
+  if(state.contact.hasDeadline) L.push(`Deadline: install by ${state.contact.deadline||'(date not set)'}`);
+  L.push(`Floor plans: ${state.contact.floorPlans?(state.contact.floorPlanImg?'Yes — '+state.contact.floorPlanImg.name:'Yes (not uploaded)'):'No'}`);
+  L.push('');
+  L.push(`Security level: ${q.level.name} — ${q.level.features.join(', ')}`);
+  L.push(`System: ${q.ss.groups.map(g=>g.count+' × '+g.res).join(' + ')||q.n+' cameras'} · ${q.ss.activeNvr.name}`);
+  L.push(`Storage: ${q.ss.storageTB}TB ≈ ${q.ss.estimatedDays} days of 24/7 recording (target ${q.ss.days} days)`);
+  L.push('');
+  q.lines.forEach(l=>L.push(`${l.label}  ${l.qty===0.5?'½':l.qty} × ${money(l.unit)} = ${money(l.amt)}`));
+  L.push(`Package subtotal: ${money(q.base)}`);
+  if(q.discount) L.push(`Package discount (${Math.round(state.discount*100)}%): −${money(q.discount)}`);
+  if(q.promoDiscount) L.push(`Promo ${q.promo.code}: −${money(q.promoDiscount)}`);
+  q.addons.forEach(l=>L.push(`${l.label}: ${money(l.amt)}`));
+  if(q.plan.kind!=='none') L.push(`${q.plan.kind==='warranty'?'Extended warranty':'Full protection'} ${state.term} yr: ${q.plan.upfront?money(q.plan.upfront)+' paid in full':money(q.plan.monthly)+'/mo × '+q.plan.months}`);
+  if(q.adjust) L.push(`Adjustment (${state.adjustReason||'site survey'}): ${money(q.adjust)}`);
+  if(q.tax) L.push(`Sales tax: ${money(q.tax)}`);
+  L.push(`TOTAL DUE AT INSTALL: ${money(q.total)}`);
+  if(q.plan.monthlyDue) L.push(`Then ${money(q.plan.monthlyDue)}/mo for ${q.plan.months} months`);
+  if(state.contact.when) L.push('', `Site survey: ${state.contact.when}`);
+  if(state.contact.notes) L.push(`Notes: ${state.contact.notes}`);
+  L.push('', 'Estimate. Final price confirmed at site survey.');
+  return L.join('\n');
+};
