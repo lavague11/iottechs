@@ -9,11 +9,15 @@ import { readFileSync } from "node:fs";
 const widget = readFileSync(new URL("../public/widgets/cctv-quote-calculator.html", import.meta.url), "utf8");
 const spec = readFileSync(new URL("../public/widgets/bys/cameras-spec.js", import.meta.url), "utf8");
 
-test("the shell loads the cameras spec before its inline script, and never re-inlines CONFIG/Engine", () => {
-  const specIdx = widget.indexOf('<script src="/widgets/bys/cameras-spec.js');
-  assert.ok(specIdx >= 0, "loads the spec by ABSOLUTE path (resolves under the /build + /quote rewrites, not just /widgets/)");
-  const inlineIdx = widget.indexOf("<script>", specIdx);
-  assert.ok(inlineIdx > specIdx, "the spec <script src> comes before the inline shell <script> (shared-scope load order)");
+test("the shell loads the vertical spec (by route) before its inline script, and never re-inlines CONFIG/Engine", () => {
+  // The shell is vertical-agnostic: a bootstrap document.writes /widgets/bys/<vertical>-spec.js (from
+  // /build/<vertical>, default cameras) BEFORE the inline shell script, so the spec's consts exist first.
+  const bootIdx = widget.indexOf("document.write('<script src=\"/widgets/bys/' + v + '-spec.js");
+  assert.ok(bootIdx >= 0, "a bootstrap document.writes /widgets/bys/<vertical>-spec.js");
+  assert.ok(/match\(\/\\\/build\\\/\(\[a-z0-9-\]\+\)\/\)/.test(widget) || widget.includes("location.pathname"), "vertical is read from the /build/<vertical> path");
+  assert.ok(/v = 'cameras'/.test(widget), "defaults to the cameras vertical");
+  const inlineIdx = widget.indexOf("<script>", bootIdx);
+  assert.ok(inlineIdx > bootIdx, "the bootstrap <script> comes before the inline shell <script> (load order)");
   assert.ok(!widget.includes("const CONFIG = {"), "CONFIG lives in the spec, not re-inlined in the shell");
   assert.ok(!widget.includes("const Engine = (() => {"), "Engine lives in the spec, not re-inlined in the shell");
 });

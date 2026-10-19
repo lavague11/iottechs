@@ -551,9 +551,18 @@ input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-b
 <div id="drawerRoot"></div>
 <div id="toastRoot"></div>
 
-<!-- BYS vertical spec (catalog + pricing engine). Absolute path so it resolves under the /build and
-     /quote rewrites too, not just the direct /widgets/ URL. Swap this file to white-label another vertical. -->
-<script src="/widgets/bys/cameras-spec.js?v=20261018"></script>
+<!-- BYS shell: load the VERTICAL SPEC (catalog + pricing engine + steps + renderers + actions) before the
+     shell script below. The vertical comes from /build/<vertical> (e.g. /build/pos), or ?vertical=, default
+     cameras. document.write keeps it synchronous during parse, so the spec's CONFIG/Engine/SPEC consts exist
+     by the time the shell runs. Add a vertical = add one /widgets/bys/<vertical>-spec.js — no shell edits. -->
+<script>
+(function(){
+  var m = (location.pathname||'').match(/\/build\/([a-z0-9-]+)/);
+  var v = (m && m[1]) || (new URLSearchParams(location.search).get('vertical')) || 'cameras';
+  if(!/^[a-z0-9-]{1,24}$/.test(v)) v = 'cameras';
+  document.write('<script src="/widgets/bys/' + v + '-spec.js?v=20261019"><\/script>');
+})();
+</script>
 <script>
 
 /* =====================================================================
@@ -627,7 +636,7 @@ const STEPS = [
   ...((typeof SPEC !== 'undefined' && Array.isArray(SPEC.steps)) ? SPEC.steps : []),              // vertical config steps (from the spec)
   { id:'quote',   label:'Quote',  title:'Your quote',       single:['quote'] },                   // shell built-in (package picker + feature board)
 ];
-function slideOf(type){ return CONFIG.slides.find(s=>s.type===type) || { id:type, title:type, type }; }
+function slideOf(type){ return ((CONFIG.slides||[]).find(s=>s.type===type)) || { id:type, title:type, type }; }   // CONFIG.slides is an optional legacy map — specs needn't define it
 // BYS: a step's renderer is the shell's R[topic] OR the vertical spec's SPEC.render[topic] (the config steps).
 function pickRenderer(t){ return R[t] || (typeof SPEC !== 'undefined' && SPEC.render && SPEC.render[t]); }
 function renderStep(st, q, i){
@@ -1038,7 +1047,8 @@ const R = {
    A per-device draft so a reload or accidental navigation never loses progress. The large floor-plan
    image is excluded (quota) and the draft is cleared on submit. localStorage is wrapped in try/catch and
    the app works if it's blocked. */
-const DRAFT_KEY = 'iot-cctv-draft';
+// Per-vertical draft key so a cameras draft never bleeds into POS (etc.) and vice-versa.
+const DRAFT_KEY = 'iot-bys-draft-' + ((typeof SPEC!=='undefined' && SPEC.id) ? SPEC.id : 'cameras');
 let draftT = null;
 function saveDraft(){ clearTimeout(draftT); draftT = setTimeout(function(){ try{
   if(submitted){ localStorage.removeItem(DRAFT_KEY); return; }
@@ -1152,8 +1162,8 @@ function renderDrawer(q){
     <aside class="drawer" role="dialog" aria-label="All steps">
       <div class="drawer-h"><b>All steps</b><button class="icon-btn" data-act="close" aria-label="Close">✕</button></div>
       <div class="drawer-b">
-        ${CONFIG.slides.map((s,i)=>`<button class="ix ${i===cur?'on':''} ${done.has(i)?'done':''}" data-go="${i}">
-          <span class="n">${done.has(i)?'✓':i}</span><span><b>${s.title}</b><small>${esc(summaryFor(s.id,q))}</small></span><span aria-hidden="true">›</span></button>`).join('')}
+        ${STEPS.map((st,i)=>`<button class="ix ${i===cur?'on':''} ${done.has(i)?'done':''}" data-go="${i}">
+          <span class="n">${done.has(i)?'✓':i}</span><span><b>${st.title}</b><small>${esc(summaryFor((st.single||[])[0],q))}</small></span><span aria-hidden="true">›</span></button>`).join('')}
         <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
           <!-- PUBLIC BUILD — no rep PIN / unlock here. -->
           <button class="btn ghost" data-act="reset" style="padding:8px 12px;width:100%">Start over</button>
@@ -1182,7 +1192,7 @@ function setCams(n){
   resetStorage();
 }
 function skipSlide(){
-  const s = CONFIG.slides[cur];
+  const s = (CONFIG.slides||[])[cur] || {};
   (s.fields||[]).forEach(f=>state[f] = CONFIG.defaults[f]);
   render(); go(cur+1);
 }

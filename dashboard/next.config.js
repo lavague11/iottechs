@@ -19,8 +19,10 @@ const nextConfig = {
   async rewrites() {
     return [
       { source: "/", destination: "/home.html" },
-      // Shareable / textable public CCTV quote builder (also opened as an overlay from the homepage).
+      // BYS "Build Your System" — one shell, many verticals. /build = cameras (default); /build/<vertical>
+      // (e.g. /build/pos) serves the same shell, which loads /widgets/bys/<vertical>-spec.js by the path.
       { source: "/build", destination: "/widgets/cctv-quote-calculator.html" },
+      { source: "/build/:vertical", destination: "/widgets/cctv-quote-calculator.html" },
       { source: "/quote", destination: "/widgets/cctv-quote-calculator.html" },
     ];
   },
