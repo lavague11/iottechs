@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Build Your System · IOT TECHS</title>
+<meta name="description" content="Design your system online and get an instant estimate — cameras, point of sale, sound, or Toast. IOT TECHS, NYC & NJ.">
+<style>
+  :root{ --bg:#F7F4EC; --surface:#FFFFFF; --fg:#10151F; --muted:#5C6473; --line:#E7E2D4; --gold:#B98A2E; --gold-ink:#8A6512; --sel:#FBF3DF; --bar:#0B0F1A; --bar-fg:#F7F4EC; --f-body:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --bg:#0E1017; --surface:#161A24; --fg:#F2F3F5; --muted:#9AA2B1; --line:#262C39; --sel:#231D10; --bar:#05080f; --bar-fg:#F2F3F5; } }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--fg);font:16px/1.5 var(--f-body);-webkit-font-smoothing:antialiased;min-height:100dvh;display:flex;flex-direction:column}
+  a{color:inherit;text-decoration:none}
+  .top{background:var(--bar);color:var(--bar-fg);border-bottom:2px solid var(--gold);padding:12px 20px;display:flex;align-items:center;justify-content:space-between}
+  .brand b{font-weight:800;letter-spacing:.02em}
+  .brand span{display:block;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#C9A14A;margin-top:1px}
+  .home{font-size:13px;font-weight:600;color:var(--bar-fg);opacity:.8}
+  .home:hover{opacity:1}
+  main{flex:1;max-width:980px;width:100%;margin:0 auto;padding:40px 20px 56px}
+  .eyebrow{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-ink);font-weight:700;display:flex;align-items:center;gap:10px}
+  .eyebrow::after{content:"";height:1px;background:var(--gold);flex:1;opacity:.5}
+  h1{font-size:clamp(28px,5vw,40px);line-height:1.1;margin:14px 0 6px;letter-spacing:-.01em}
+  .lede{color:var(--muted);max-width:58ch;margin:0 0 30px}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  @media (max-width:640px){ .grid{grid-template-columns:1fr} }
+  .card{display:flex;flex-direction:column;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:22px;transition:border-color .16s,transform .16s,box-shadow .16s}
+  .card:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 14px 40px -24px rgba(16,20,24,.4)}
+  .ic{width:44px;height:44px;border-radius:12px;background:var(--sel);color:var(--gold-ink);display:grid;place-items:center;flex:none}
+  .ic svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .c-name{font-size:18px;font-weight:800}
+  .c-sub{font-size:13.5px;color:var(--muted);margin-top:2px}
+  .c-go{margin-top:auto;font-size:13.5px;font-weight:700;color:var(--gold-ink);display:inline-flex;align-items:center;gap:6px}
+  .c-go svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .16s}
+  .card:hover .c-go svg{transform:translateX(3px)}
+  .fine{color:var(--muted);font-size:13px;margin-top:28px}
+  .fine a{color:var(--gold-ink);font-weight:600}
+</style>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="/" aria-label="IOT TECHS home"><b>IOT TECHS</b><span>Build your system</span></a>
+    <a class="home" href="/">← Home</a>
+  </header>
+  <main>
+    <div class="eyebrow">Design it yourself</div>
+    <h1>Build your system</h1>
+    <p class="lede">Pick what you're putting in. Configure it online in a couple of minutes and get an instant estimate — no sales call required.</p>
+
+    <div class="grid">
+      <a class="card" href="/build">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M3 9h13l5 3v4l-5 3H3z"/><circle cx="10" cy="14" r="3"/></svg></span>
+        <div><div class="c-name">Camera System</div><div class="c-sub">Security cameras, recording &amp; phone viewing.</div></div>
+        <span class="c-go">Build <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a class="card" href="/build/pos">
+        <span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M3 20h18M8 9h8M8 13h5"/></svg></span>
+        <div><div class="c-name">POS System</div><div class="c-sub">Restaurant point of sale — terminals, KDS, printers.</div></div>
+        <span class="c-go">Build <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a class="card" href="/build/audio">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 8.5a4 4 0 0 1 0 7M18.5 6a7 7 0 0 1 0 12"/></svg></span>
+        <div><div class="c-name">Sound System</div><div class="c-sub">Commercial audio, paging &amp; multi-zone control.</div></div>
+        <span class="c-go">Build <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+      </a>
+
+      <a class="card" href="/build/toast">
+        <span class="ic"><svg viewBox="0 0 24 24"><path d="M5 11a7 7 0 0 1 14 0v7a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M9 19v-5h6v5"/></svg></span>
+        <div><div class="c-name">Toast System</div><div class="c-sub">Toast POS — Flex, Go handhelds, kiosks &amp; setup.</div></div>
+        <span class="c-go">Build <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+      </a>
+    </div>
+
+    <p class="fine">Not sure what you need? <a href="/">Talk to us</a> — we design and install across the NYC &amp; NJ metro.</p>
+  </main>
+</body>
+</html>

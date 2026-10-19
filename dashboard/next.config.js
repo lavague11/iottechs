@@ -24,6 +24,8 @@ const nextConfig = {
       { source: "/build", destination: "/widgets/cctv-quote-calculator.html" },
       { source: "/build/:vertical", destination: "/widgets/cctv-quote-calculator.html" },
       { source: "/quote", destination: "/widgets/cctv-quote-calculator.html" },
+      // BYS picker — one page that lists every "Build Your <X> System" builder.
+      { source: "/systems", destination: "/bys-index.html" },
     ];
   },
   // Tell browsers to forget any advertised HTTP/3 (QUIC) endpoint. LiteSpeed advertises
