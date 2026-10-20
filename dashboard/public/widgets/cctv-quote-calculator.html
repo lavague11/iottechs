@@ -1060,7 +1060,9 @@ function loadDraft(){ try{
   const d = JSON.parse(raw); if(!d || d.v!==1 || !d.state) return false;
   if(d.at && Date.now()-d.at > 1000*60*60*24*14){ localStorage.removeItem(DRAFT_KEY); return false; }   // expire after 2 weeks
   Object.assign(state, d.state); if(state.contact) state.contact.floorPlanImg = null;
-  if(typeof d.cur==='number') cur = Math.max(0, Math.min(STEPS.length-1, d.cur));
+  // Resume the saved DATA but always start on Intake (step 0). Opening a builder should begin at the top,
+  // not drop the visitor into the middle of a short flow (the saved step felt like it "skipped" steps).
+  cur = 0;
   if(d.openAcc) openAcc = d.openAcc;
   return true;
 }catch(_){ return false; } }
