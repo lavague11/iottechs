@@ -40,6 +40,10 @@ test("the spec declares the vertical identity (brand + lead), and the shell read
   assert.ok(/<a class="brand" href="\/" target="_top"/.test(widget), "brand is a home link (works direct + inside the overlay via _top)");
   assert.ok(widget.includes("(typeof SPEC!=='undefined' && SPEC.intakeLede) || 'Tell us who you are and where the system goes"), "intake lede is SPEC.intakeLede with a generic default");
   assert.ok(spec.includes("intakeLede: 'Tell us who you are and where the cameras go"), "cameras keeps its intake wording via SPEC.intakeLede");
+  // Back on Intake exits to the /systems selector; on later steps it goes to the previous step
+  assert.ok(widget.includes("if(cur===0){ try{ (window.top||window).location.href='/systems'; }"), "Back on Intake navigates to the /systems selector");
+  assert.ok(widget.includes("} else go(cur-1); }"), "Back on later steps goes to the previous step");
+  assert.ok(widget.includes("$('#prev').disabled = false;"), "Back is always enabled (never a dead button on Intake)");
 });
 
 test("step registry: the shell owns Intake + Quote bookends; the spec owns the config steps in between", () => {

@@ -1091,7 +1091,7 @@ function chrome(q){
   $('#dots').innerHTML = STEPS.map((st,i)=>`<button class="seg ${i===cur?'on':''} ${(i<cur||done.has(i))?'done':''}" data-go="${i}" aria-label="${st.label}" aria-current="${i===cur}"><span class="seg-n">${i+1}</span><span class="seg-l">${st.label}</span></button>`).join('');
   // The footer is navigation ONLY — no running total (it competed with Continue and felt like checkout
   // while configuring). Price lives on the Quote step's quote document, fully calculated as before.
-  $('#prev').disabled = cur===0;
+  $('#prev').disabled = false;   // Back always works — on Intake it exits to the Build-Your-System selector
   const nx=$('#next'), lbl=nx.querySelector('.lbl');
   lbl.textContent = cur < STEPS.length-1 ? 'Continue' : 'Submit';
   nx.disabled = (cur===STEPS.length-1 && !!submitted);
@@ -1551,7 +1551,8 @@ document.addEventListener('submit', e=>{
   if(e.target.id==='cform'){ e.preventDefault(); if(validateContact(true)) go(cur+1); return; }
   // PUBLIC BUILD — no rep PIN form.
 });
-$('#prev').onclick = ()=>go(cur-1);
+// Back: previous step, or — on Intake — exit to the /systems selector (top-level, so it works inside the overlay too).
+$('#prev').onclick = ()=>{ if(cur===0){ try{ (window.top||window).location.href='/systems'; }catch(_){ location.href='/systems'; } } else go(cur-1); };
 $('#next').onclick = goNext;
 $('#openIndex').onclick = openDrawer;
 document.addEventListener('keydown', e=>{
