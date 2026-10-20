@@ -13,6 +13,7 @@ const SPEC = {
   id: 'cameras',
   brand: { company: 'IOT TECHS', tagline: 'Build your camera system', title: 'Build Your CCTV System' },
   lead:  { service: 'CCTV', endpoint: '/api/leads/cctv' },
+  intakeLede: 'Tell us who you are and where the cameras go — your estimate is sent here.',
   // The vertical's CONFIG steps — they sit between the shell's built-in Intake + Quote bookends. Each names
   // the renderer topic(s) it draws (dispatched by the shell as R[topic]). Phase 0.3: flow is now spec-owned;
   // the renderers themselves move into the spec in the next increment.

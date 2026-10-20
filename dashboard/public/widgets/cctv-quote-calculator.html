@@ -39,7 +39,8 @@ body.kb-open .bottom{display:none}
 
 /* top bar */
 .top{background:var(--bar);color:var(--bar-fg);border-bottom:2px solid var(--gold);padding:10px 16px;display:flex;align-items:center;gap:12px}
-.brand{display:flex;flex-direction:column;line-height:1.15;min-width:0}
+.brand{display:flex;flex-direction:column;line-height:1.15;min-width:0;text-decoration:none;color:inherit;cursor:pointer}
+.brand:hover b{color:var(--gold)}
 .brand b{font-size:13px;letter-spacing:.14em}
 .brand span{font-size:11px;color:var(--gold);letter-spacing:.08em;text-transform:uppercase}
 .step{margin-left:auto;font-size:12px;color:var(--bar-muted);text-align:right;white-space:nowrap}
@@ -532,7 +533,7 @@ input,textarea,select,.hero-input,.rs-num{scroll-margin-top:70px;scroll-margin-b
 
 <div class="app" id="app">
   <header class="top">
-    <div class="brand"><b>IOT TECHS</b><span>Build your camera system</span></div>
+    <a class="brand" href="/" target="_top" aria-label="IOT TECHS — home"><b>IOT TECHS</b><span>Build your camera system</span></a>
     <span class="rep-badge" id="repBadge" hidden>REP</span>
     <div class="step" id="stepLbl"></div>
     <button class="icon-btn" id="openIndex" aria-label="Open slide index" hidden>
@@ -1020,7 +1021,7 @@ const R = {
     const fld = (id,label,type,ph,req,ac,im,ek) => `<div class="field"><label for="c_${id}">${label}${req?' *':''}</label>`
       + `<input id="c_${id}" type="${type}" value="${esc(c[id]||'')}" data-contact="${id}" placeholder="${ph}" autocomplete="${ac||'off'}"${im?` inputmode="${im}"`:''}${ek?` enterkeyhint="${ek}"`:''} spellcheck="false">`
       + `<span class="err" id="e_${id}"></span></div>`;
-    return `${head(s,i,'Tell us who you are and where the cameras go — your estimate is sent here.', false)}
+    return `${head(s,i,(typeof SPEC!=='undefined' && SPEC.intakeLede) || 'Tell us who you are and where the system goes — your estimate is sent here.', false)}
       <form class="form" id="cform" novalidate>
         <div class="grid2">
           ${fld('firstName','First name','text','Jane',true,'given-name',null,'next')}

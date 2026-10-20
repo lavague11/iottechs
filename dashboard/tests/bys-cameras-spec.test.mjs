@@ -36,6 +36,10 @@ test("the spec declares the vertical identity (brand + lead), and the shell read
   // the shell reads SPEC (the hard-coded path/brand survive only as fallback defaults)
   assert.ok(widget.includes("SPEC.lead && SPEC.lead.endpoint"), "submitLead posts to SPEC.lead.endpoint");
   assert.ok(widget.includes("applySpecBranding") && widget.includes("SPEC.brand.title"), "the shell applies SPEC branding (title + header)");
+  // the header brand links home; the intake lede is spec-driven (not hard-coded cameras copy)
+  assert.ok(/<a class="brand" href="\/" target="_top"/.test(widget), "brand is a home link (works direct + inside the overlay via _top)");
+  assert.ok(widget.includes("(typeof SPEC!=='undefined' && SPEC.intakeLede) || 'Tell us who you are and where the system goes"), "intake lede is SPEC.intakeLede with a generic default");
+  assert.ok(spec.includes("intakeLede: 'Tell us who you are and where the cameras go"), "cameras keeps its intake wording via SPEC.intakeLede");
 });
 
 test("step registry: the shell owns Intake + Quote bookends; the spec owns the config steps in between", () => {
