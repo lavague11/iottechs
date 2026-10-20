@@ -54,6 +54,17 @@
     return norm(final);
   }
 
+  // Orient so the road is horizontal AND the CURB is at the BOTTOM, using an explicit curb direction
+  // (a unit-ish vector in image space, y-down, pointing from the property toward the street — e.g. derived
+  // from the nearest Street View panorama). This is the RELIABLE side signal: the marker-vs-road heuristic
+  // can't tell the frontage from a parallel back street, but "where the Street View car drove" can.
+  function rotationForCurbDown(roadDirDeg, curbX, curbY) {
+    var phi0 = norm(-roadDirDeg);
+    // want the curb vector pointing DOWN on screen (screen-y > 0) after rotation
+    var final = (screenY(phi0, curbX, curbY) >= 0) ? phi0 : norm(phi0 + 180);
+    return norm(final);
+  }
+
   /* ---------------- image helpers (operate on {data,width,height}) ------- */
 
   // Downsample RGBA ImageData to grayscale Float32 at a target longest edge.
@@ -236,6 +247,32 @@
     };
   }
 
+  /* ---------------- frontage selection via the curb direction -----------
+     When we know which way the street is (curbVec, from the nearest Street View pano), the frontage is the
+     road that runs ALONG the curb (its normal ~parallel to curbVec) AND sits on the curb side of the
+     property. This resolves the parallel-street / cross-street ambiguity the marker-only heuristic can't.
+     curb = unit vector in detector px (y-down), property -> street.
+     ---------------------------------------------------------------------- */
+  function pickFrontageByCurb(lines, curb, w, h, opts) {
+    opts = opts || {};
+    if (!lines || !lines.length) return { ok: false, reason: "no-lines" };
+    var cx = (w - 1) / 2, cy = (h - 1) / 2, diag = Math.sqrt(w * w + h * h);
+    var maxS = 0; for (var i = 0; i < lines.length; i++) if (lines[i].strength > maxS) maxS = lines[i].strength;
+    var best = null, bestScore = -1;
+    for (var j = 0; j < lines.length; j++) {
+      var L = lines[j];
+      var align = Math.abs(L.nx * curb.x + L.ny * curb.y);     // 1 = road runs ⟂ to the curb direction (correct frontage)
+      if (align < 0.6) continue;                               // skip cross-streets / wrongly-oriented edges
+      var side = (L.px - cx) * curb.x + (L.py - cy) * curb.y;  // >0 = the line is on the curb side of the property
+      if (side <= 0) continue;
+      var peri = Math.min(1, Math.abs(L.rho) / (0.10 * diag)); // not a central roof ridge
+      var score = (L.strength / (maxS || 1)) * (0.4 + 0.6 * align) * (0.5 + 0.5 * peri);
+      if (score > bestScore) { bestScore = score; best = L; }
+    }
+    if (!best) return { ok: false, reason: "no-frontage-on-curb-side" };
+    return { ok: true, angle: best.dir, roadPoint: { x: best.px, y: best.py }, normal: { x: best.nx, y: best.ny }, confidence: bestScore };
+  }
+
   /* ---------------- orchestrator ---------------------------------------
      img      : ImageData-like {data,width,height} — the north-up aerial.
      anchor   : {x,y} property marker in ORIGINAL image px.
@@ -249,9 +286,16 @@
     if (!det.lines.length) return { ok: false, reason: "no-lines" };
     // project the anchor into downscaled detector px
     var a = { x: anchor.x / det.scale, y: anchor.y / det.scale };
-    var pick = pickFrontage(det.lines, a, det.w, det.h, opts);
+    // A curb direction (from the nearest Street View pano) is the reliable side signal — use it to BOTH pick
+    // the frontage road and decide which horizontal orientation puts the curb at the bottom. Without it, fall
+    // back to the marker-vs-road heuristic (angle still right; side may be reversed on a mid-block lot).
+    var cv = opts.curbVec, cvx, cvy, haveCurb = false;
+    if (cv) { cvx = (cv.length === 2) ? cv[0] : cv.x; cvy = (cv.length === 2) ? cv[1] : cv.y;
+      var m = Math.sqrt(cvx * cvx + cvy * cvy); if (m > 0) { cvx /= m; cvy /= m; haveCurb = true; } }
+    var pick = haveCurb ? pickFrontageByCurb(det.lines, { x: cvx, y: cvy }, det.w, det.h, opts)
+                        : pickFrontage(det.lines, a, det.w, det.h, opts);
     if (!pick.ok) return pick;
-    var rot = targetRotation(pick.angle, pick.roadPoint, a);
+    var rot = haveCurb ? rotationForCurbDown(pick.angle, cvx, cvy) : targetRotation(pick.angle, pick.roadPoint, a);
     // Perpendicular distance property->frontage road, back in ORIGINAL image px — Auto-Frame turns this
     // into meters to choose the zoom (road sits in the lower part of the frame). det.scale: downscaled->original.
     var roadDistPx = Math.abs((a.x - pick.roadPoint.x) * pick.normal.x + (a.y - pick.roadPoint.y) * pick.normal.y) * det.scale;
@@ -260,10 +304,10 @@
 
   root.IOTAutoLevel = {
     norm: norm, mod180: mod180, screenY: screenY,
-    targetRotation: targetRotation,
+    targetRotation: targetRotation, rotationForCurbDown: rotationForCurbDown,
     toGray: toGray, detectLines: detectLines,
-    pickFrontage: pickFrontage, analyze: analyze,
-    _version: "2026-10-20"
+    pickFrontage: pickFrontage, pickFrontageByCurb: pickFrontageByCurb, analyze: analyze,
+    _version: "2026-10-20b"
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = root.IOTAutoLevel;

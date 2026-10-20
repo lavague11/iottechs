@@ -507,6 +507,10 @@
         mt=(map.getMapTypeId()==="hybrid"?"hybrid":"satellite");
     var url="https://maps.googleapis.com/maps/api/staticmap?center="+C.lat().toFixed(7)+","+C.lng().toFixed(7)
       +"&zoom="+z+"&size="+SIZE+"x"+SIZE+"&scale="+SC+"&format=png&maptype="+mt+"&key="+API_KEY;
+    // WHICH side is the street? The nearest Street View panorama sits on the frontage road, so the bearing
+    // property→pano is the reliable "curb direction" — it resolves the frontage from a parallel/back street
+    // that imagery alone can't. One cheap metadata lookup; falls back to the marker heuristic if no pano.
+    curbVectorFor(C, function(curbVec){
     var im=new Image(); im.crossOrigin="anonymous";
     im.onload=function(){
       try{
@@ -516,7 +520,7 @@
         var P=(marker && marker.getPosition && marker.getPosition()) || C;   // the geocoded property = the side-of-road anchor
         var f=Math.pow(2,z)*SC;                                              // world(256-space) → image px at this zoom/scale
         var anchor={ x: cv.width/2 + (wx(P)-wx(C))*f, y: cv.height/2 + (wy(P)-wy(C))*f };
-        var res=window.IOTAutoLevel.analyze(id, anchor, {});
+        var res=window.IOTAutoLevel.analyze(id, anchor, curbVec ? { curbVec:curbVec } : {});
         setAutoBusy(false);
         if(!res || !res.ok){
           autoStatus(
@@ -532,6 +536,26 @@
     };
     im.onerror=function(){ setAutoBusy(false); autoStatus("Couldn't load imagery for Auto-level."); };
     im.src=url;
+    });   // curbVectorFor
+  }
+  // The curb direction (property → nearest Street View pano) as an IMAGE vector (y-down, north-up): the
+  // frontage road is the one along this direction. Geographic bearing β (0=N, CW) → image (sinβ, -cosβ).
+  // Returns null (→ marker-heuristic fallback) if Street View / geometry isn't available or no pano is near.
+  function curbVectorFor(P, cb){
+    try{
+      if(!(window.google && google.maps && google.maps.StreetViewService && google.maps.geometry)){ cb(null); return; }
+      var done=false, finish=function(v){ if(done) return; done=true; cb(v); };
+      setTimeout(function(){ finish(null); }, 2500);   // never hang the feature on a slow pano lookup
+      new google.maps.StreetViewService().getPanorama(
+        { location:P, radius:70, preference:google.maps.StreetViewPreference.NEAREST, source:google.maps.StreetViewSource.OUTDOOR },
+        function(data, status){
+          try{
+            if(status!=="OK" || !data || !data.location || !data.location.latLng){ finish(null); return; }
+            var brg=google.maps.geometry.spherical.computeHeading(P, data.location.latLng)*Math.PI/180;
+            finish([ Math.sin(brg), -Math.cos(brg) ]);   // north-up image vector toward the curb
+          }catch(e){ finish(null); }
+        });
+    }catch(e){ cb(null); }
   }
   // Auto-Frame — center the property and pick a zoom that frames it, keeping the frontage road near the
   // bottom. Reuses the SAME analysis (no extra fetch): the road's perpendicular distance from the property

@@ -54,6 +54,37 @@ test("already property-facing (road below, property above) needs no turn", () =>
   assert.equal(AL.norm(rot), 0);
 });
 
+/* ---------------------- curb-based side (Street View) --------------------- */
+test("rotationForCurbDown: road horizontal, curb vector ends up pointing DOWN", () => {
+  for (let dir = 0; dir < 180; dir += 11) {
+    for (const b of [0, 50, 120, 210, 300]) {
+      const r = b * DEG, cvx = Math.sin(r), cvy = -Math.cos(r);     // image curb vector from a bearing
+      const rot = AL.rotationForCurbDown(dir, cvx, cvy);
+      assert.ok(roadSlope(rot, dir) < 1e-6, `road not horizontal dir=${dir} b=${b}`);
+      assert.ok(AL.screenY(rot, cvx, cvy) >= -1e-9, `curb not at bottom dir=${dir} b=${b}`);
+    }
+  }
+});
+
+test("the curb direction picks the frontage side: same two parallel streets, curb flips which goes to the bottom", () => {
+  const w = 300, h = 300;
+  const img = raster(w, h, [
+    { dir: 20, px: 150, py: 225, th: 3 },   // SOUTH street (below centre)
+    { dir: 20, px: 150, py: 75, th: 3 },    // NORTH street (above centre)
+  ]);
+  const anchor = { x: 150, y: 150 };
+  // curb toward the SOUTH → south street must end at the bottom (below the property)
+  const south = AL.analyze(img, anchor, { maxEdge: 300, curbVec: [0, 1] });
+  assert.ok(south.ok, JSON.stringify(south));
+  assert.ok(AL.screenY(south.rotation, 0, 225 - 150) > 0, "south street not at bottom");
+  assert.ok(AL.screenY(south.rotation, 0, 75 - 150) < 0, "north street should be at top");
+  // curb toward the NORTH → the OTHER street ends at the bottom (the 180° flip)
+  const north = AL.analyze(img, anchor, { maxEdge: 300, curbVec: [0, -1] });
+  assert.ok(north.ok, JSON.stringify(north));
+  assert.ok(AL.screenY(north.rotation, 0, 75 - 150) > 0, "north street not at bottom");
+  assert.ok(Math.abs(AL.norm(south.rotation - north.rotation)) > 150, "the two curbs give opposite (≈180°) orientations");
+});
+
 /* --------------------------- synthetic detector --------------------------- */
 // Build an ImageData-like raster: gray bg + a bright road line at `dir` through
 // (px,py), optional short decoy stripes.
@@ -134,6 +165,10 @@ test("satellite-capture: loads the core, Auto button in #popLevel, applies via r
   assert.ok(fn.includes('crossOrigin'), "CORS-clean Static-Maps fetch");
   assert.ok(fn.includes('maptype='), "fetches Static-Maps imagery (not the tainted live-map canvas)");
   assert.ok(fn.includes("ambiguous-frontage") && fn.includes("level manually"), "ambiguous/low-confidence → status, no silent rotation");
+  // Street View gives the reliable curb side
+  assert.ok(fn.includes("curbVectorFor(C,") && fn.includes("curbVec:curbVec"), "uses the Street View curb direction for the side decision");
+  assert.ok(sat.includes("StreetViewService") && sat.includes("computeHeading"), "curbVectorFor uses the nearest pano bearing");
+  assert.ok(/Math\.sin\(brg\)[\s\S]*-Math\.cos\(brg\)/.test(sat), "bearing → north-up image vector (sinβ, -cosβ)");
   // Auto-Frame: centers + zooms the property from the road distance, reusing the same analysis; no crop.
   assert.ok(fn.includes("autoFrame(res,"), "Auto-Level hands off to Auto-Frame after rotating");
   const af = sat.slice(sat.indexOf("function autoFrame("), sat.indexOf('$("tAuto").addEventListener'));
