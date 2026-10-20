@@ -40,10 +40,11 @@ test("the survey widget emits iotSurveyStep from goStep and handles the step com
 
 test("contextual editing: a host step navigation opens that step's editor (Background → bg editor, Floor Plan → Structure)", () => {
   // guards: the step command no longer just shows the step — it opens the editor (owner request). Cameras
-  // (focus:"devices") is excluded; aerial-not-yet-plan floors keep the FAB (no auto-open).
+  // (focus:"devices") is excluded. Floor Plan ALWAYS lands in the plan tool: edit an existing plan, else build one.
   assert.ok(survey.includes('else if(typeof m.step==="number") contextualEdit(m.step);'), "the step handler delegates to contextualEdit (except the Cameras focus branch)");
   assert.ok(survey.includes("function contextualEdit(step){"), "contextualEdit exists");
   assert.ok(/if\(RO \|\| frozen\(\) \|\| bgToolOpen \|\| !bgHasImage\) return;/.test(survey), "contextualEdit is guarded: read-only / frozen / already-in-a-tool / no background");
   assert.ok(survey.includes('if(step===0){ var cb=document.getElementById("changeBgBtn"); if(cb) cb.click(); return; }'), "Background reopens via the existing #changeBgBtn path (stored image — no re-capture / enhance)");
-  assert.ok(/if\(step===1\)\{ if\(hybridCapable\(f\) \|\| \(f\.plan && \(f\.plan\.cells\|\|f\.plan\.rooms\)\)\) enterDraw\(\); \}/.test(survey), "Floor Plan opens the Structure editor only when a plan exists");
+  assert.ok(/if\(hybridCapable\(f\) \|\| \(f\.plan && \(f\.plan\.cells\|\|f\.plan\.rooms\)\)\)\{ enterDraw\(\); return; \}/.test(survey), "Floor Plan edits the Structure when a plan already exists");
+  assert.ok(/if\(canBuild\(f\)\)\{ var bp=document\.getElementById\("buildPlanBtn"\); if\(bp\) bp\.click\(\); \}/.test(survey), "Floor Plan on an aerial-not-yet-plan floor starts the plan tool (same #buildPlanBtn as the FAB)");
 });

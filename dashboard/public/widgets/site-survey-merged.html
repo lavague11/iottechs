@@ -2832,14 +2832,19 @@
     var unsubConfirm=false, unsubTimer=null;   // second-tap confirm before an unsubmit
     // Contextual editing (owner request): navigating to a step via the host rail opens THAT step's editor
     // directly — Background → the background editor (reuses #changeBgBtn, which reopens on the STORED image via
-    // iotLoadCapture: no re-capture, no paid enhance), Floor Plan → the Structure editor on the stored plan.
-    // Only on a real host navigation (goRail → cmd:"step") — never on passive restore; !bgToolOpen blocks
-    // re-entrancy; Cameras is excluded by the focus branch. Aerial-not-yet-plan floors keep the FAB (no surprise).
+    // iotLoadCapture: no re-capture, no paid enhance), Floor Plan → the Structure editor. Only on a real host
+    // navigation (goRail → cmd:"step") — never on passive restore; !bgToolOpen blocks re-entrancy; Cameras is
+    // excluded by the focus branch. The Floor Plan step always LANDS IN the plan tool: a floor that already has a
+    // plan reopens it for editing (enterDraw on the stored plan); an aerial-not-yet-plan floor starts building one
+    // (the same #buildPlanBtn the Create-Floor-Plan FAB fires) — so clicking Floor Plan never does nothing.
     function contextualEdit(step){
       if(RO || frozen() || bgToolOpen || !bgHasImage) return;
       var f=floors[curFloor]||{};
       if(step===0){ var cb=document.getElementById("changeBgBtn"); if(cb) cb.click(); return; }   // Background → reopen the bg editor
-      if(step===1){ if(hybridCapable(f) || (f.plan && (f.plan.cells||f.plan.rooms))) enterDraw(); }   // Floor Plan (plan exists) → Structure editor
+      if(step===1){
+        if(hybridCapable(f) || (f.plan && (f.plan.cells||f.plan.rooms))){ enterDraw(); return; }   // plan exists → edit the Structure
+        if(canBuild(f)){ var bp=document.getElementById("buildPlanBtn"); if(bp) bp.click(); }       // aerial, no plan yet → start the plan tool
+      }
     }
     function goStep(idx){
       idx=Math.max(0,Math.min(1,idx));   // 0 Background · 1 Setup (submit is in the host footer; clamps any stale Submit/4-step save)
