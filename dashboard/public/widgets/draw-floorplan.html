@@ -147,6 +147,9 @@
   .hb{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.95);color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(16,17,18,.14);backdrop-filter:blur(4px)}
   .hb:hover{border-color:var(--ink)}
   .hb svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .hb:disabled{opacity:.4;cursor:default;border-color:var(--line)}
+  /* Bottom-right zoom controls — mirror the history cluster */
+  .zoomctl{position:absolute;right:14px;bottom:14px;z-index:14;display:flex;flex-direction:column;gap:8px}
   @media(max-width:640px){
     .tbar{gap:6px}
     .segb{padding:9px 11px}
@@ -154,6 +157,7 @@
     .tb.use{height:44px;padding:0 16px}
     .stools{gap:5px}
     .histctl{left:10px;bottom:14px}   /* undo stays in the canvas, bottom-left, just above the footer */
+    .zoomctl{right:10px;bottom:14px}
     .hb{width:44px;height:44px}
   }
   @media(max-width:400px){ .tbar{gap:4px} .tb.ico{width:38px} .tb.use{padding:0 12px} .stools{gap:4px} .segToggle{padding:0 11px;gap:6px} }
@@ -201,6 +205,12 @@
     <div class="histctl" id="histCtl">
       <button class="hb" id="tUndo" title="Undo" aria-label="Undo" style="display:none"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/></svg></button>
       <button class="hb" id="tRedo" title="Redo" aria-label="Redo" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h1"/></svg></button>
+    </div>
+    <!-- Zoom in to draw rooms precisely. Pinch / two-finger pan on touch; wheel on desktop; these are the discoverable controls. -->
+    <div class="zoomctl" id="zoomCtl">
+      <button class="hb" id="zoomIn" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M20 20l-3.5-3.5"/></svg></button>
+      <button class="hb" id="zoomFit" title="Reset zoom" aria-label="Reset zoom" style="display:none"><svg viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button>
+      <button class="hb" id="zoomOut" title="Zoom out" aria-label="Zoom out" disabled><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M20 20l-3.5-3.5"/></svg></button>
     </div>
   </div>
 
@@ -372,13 +382,42 @@
   // the frame (contain, centered). Floors with no aerial keep vk=1 — byte-identical to before. This never
   // changes what's exported: cells, ctxVB, planSvg and device coords all stay in untouched world space.
   var _vk=1, _vx=0, _vy=0;
-  function computeView(){ _vk=1; _vx=0; _vy=0;
-    if(!(_bdImg && _seed && +_seed.sc>0)) return;            // only aerial floors fill; hand-drawn stay 1:1
-    var a=+_seed.aspect||1, sc=+_seed.sc, bw=a*sc, bh=sc;    // the aerial plate box in world px (drawBackdrop's rect)
-    if(!(bw>0&&bh>0)) return;
-    var W0=W(), H0=H(), k=Math.min(W0/bw, H0/bh);            // contain → fills the frame edge-to-edge, never crops
-    if(!(k>0)||!isFinite(k)) return;
-    _vk=k; _vx=(W0-bw*k)/2-(+_seed.offx||0)*k; _vy=(H0-bh*k)/2-(+_seed.offy||0)*k; }
+  // The fit-to-fill BASE: world → canvas before any user zoom. (vk=1 for hand-drawn floors.)
+  function baseView(){ var bvk=1, bvx=0, bvy=0;
+    if(_bdImg && _seed && +_seed.sc>0){
+      var a=+_seed.aspect||1, sc=+_seed.sc, bw=a*sc, bh=sc;
+      if(bw>0&&bh>0){ var W0=W(), H0=H(), k=Math.min(W0/bw, H0/bh);
+        if(k>0&&isFinite(k)){ bvk=k; bvx=(W0-bw*k)/2-(+_seed.offx||0)*k; bvy=(H0-bh*k)/2-(+_seed.offy||0)*k; } } }
+    return { vk:bvk, vx:bvx, vy:bvy }; }
+  // USER zoom/pan — a purely visual magnify on top of the base so you can draw rooms precisely. _uz=1 is
+  // the fit view (no pan). Composed into _vk/_vx/_vy, so rel()/redraw()/label overlays all follow one path
+  // and nothing exported changes (cells/ctxVB/planSvg/devices stay in world space).
+  var _uz=1, _utx=0, _uty=0, MAXZ=6;
+  function clampPan(){ var mx=(_uz-1)*W(), my=(_uz-1)*H();   // can't drag the content endlessly off-frame
+    _utx=Math.max(-mx,Math.min(mx,_utx)); _uty=Math.max(-my,Math.min(my,_uty)); }
+  function computeView(){ var b=baseView();
+    if(_uz<=1){ _uz=1; _utx=0; _uty=0; } else clampPan();     // at fit, snap pan to centred
+    _vk=b.vk*_uz; _vx=b.vx*_uz+_utx; _vy=b.vy*_uz+_uty; }
+  // Set zoom to newUz keeping the world point under (fx,fy) [canvas px] fixed. No redraw (caller redraws).
+  function setZoomAbout(fx, fy, newUz){
+    newUz=Math.max(1, Math.min(MAXZ, newUz));
+    var wx=(fx-_vx)/_vk, wy=(fy-_vy)/_vk, b=baseView();
+    _uz=newUz; _utx=fx - wx*b.vk*_uz - b.vx*_uz; _uty=fy - wy*b.vk*_uz - b.vy*_uz; }
+  function zoomAbout(fx, fy, newUz){ setZoomAbout(fx, fy, newUz); computeView(); redraw(); updateZoomUI(); }
+  function resetZoom(){ _uz=1; _utx=0; _uty=0; computeView(); redraw(); updateZoomUI(); }
+  function canvasCenter(){ return { x:W()/2, y:H()/2 }; }
+  function updateZoomUI(){ var o=$("zoomOut"), f=$("zoomFit"); if(o) o.disabled=(_uz<=1); if(f) f.style.display=(_uz>1.001)?"":"none"; }
+  // ---- pinch-to-zoom + two-finger pan (touch) ----
+  var _ptrs=new Map(), _pinching=false, _pp=null;
+  function pinchGeom(){ var a=[]; _ptrs.forEach(function(v){ a.push(v); }); if(a.length<2) return null;
+    var dx=a[0].x-a[1].x, dy=a[0].y-a[1].y; return { d:Math.hypot(dx,dy), mx:(a[0].x+a[1].x)/2, my:(a[0].y+a[1].y)/2 }; }
+  function beginPinch(){ _pinching=true; _pp=pinchGeom(); }
+  function updatePinch(){ var g=pinchGeom(); if(!g||!_pp) return; var r=cv.getBoundingClientRect();
+    var factor=_pp.d>0 ? g.d/_pp.d : 1;
+    setZoomAbout(g.mx-r.left, g.my-r.top, _uz*factor);        // zoom about the current midpoint
+    _utx += (g.mx-_pp.mx); _uty += (g.my-_pp.my);             // two-finger drag pans
+    _pp=g; computeView(); redraw(); updateZoomUI(); }
+  function endPinch(){ _pinching=false; _pp=null; }
   function rel(e){ var r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left-_vx)/_vk, y:(e.clientY-r.top-_vy)/_vk}; }
   // Rooms are grid-cell sets in the SAME coordinate space as the structure, so a room can only ever occupy
   // cells the structure occupies (ROOM ⊆ STRUCTURE). Hit-test / bbox / boundary all derive from those cells.
@@ -897,6 +936,9 @@
     updateTools(); redraw(); }
 
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
+    if(e.pointerType==="touch"){ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(_ptrs.size>=2){                                   // a second finger → pinch/pan; abort any in-progress draw
+        dragging=false; wallDrag=null; pendingWall=null; startPt=dragCur=null; beginPinch(); redraw(); return; } }
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="opening"){ return; }   // door placement / cycling happens on click/dblclick (so a double-click can open the door menu without cycling twice)
@@ -932,7 +974,9 @@
     else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a) openRoomMenu(a,true); }
     else if(mode==="opening"){ var d=doorAt(pt.x,pt.y); if(d){ cancelDoorCycle(); openDoorMenu(d,pt.x,pt.y); } } });
   var wallKeyOf=function(r){ return r ? (r.orient+r.b+":"+r.lo+"-"+r.hi) : ""; };
-  cv.addEventListener("pointermove", function(e){ var pt=rel(e); hoverPt=pt;
+  cv.addEventListener("pointermove", function(e){
+    if(e.pointerType==="touch" && _ptrs.has(e.pointerId)){ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(_pinching){ updatePinch(); return; } }
+    var pt=rel(e); hoverPt=pt;
     if(pendingWall && (Math.abs(pt.x-pendingWall.start.x)+Math.abs(pt.y-pendingWall.start.y) > 6)){ wallDrag={run:pendingWall.run}; pendingWall=null; }   // movement past a tap → it's a drag
     if(wallDrag){ wallDrag.cur=pt; redraw(); return; }
     if(!dragging){ if(mode==="structure"||mode==="eraser") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
@@ -940,6 +984,8 @@
       return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
   cv.addEventListener("pointerup", function(e){
+    if(e.pointerType==="touch" && _ptrs.has(e.pointerId)){ var wasPinch=_pinching; _ptrs.delete(e.pointerId);
+      if(wasPinch){ if(_ptrs.size<2) endPinch(); return; } }   // lifting a pinch finger never commits a draw
     if(wallDrag){ var b2=snappedWallB(wallDrag.run, wallDrag.cur.x, wallDrag.cur.y); commitWallMove(sel, wallDrag.run, b2); wallDrag=null; pendingWall=null; redraw(); return; }
     if(pendingWall){ var pw=pendingWall; pendingWall=null; var hh=roomHit(pw.start.x,pw.start.y); if(hh && hh!==sel){ sel=hh; redraw(); } return; }   // a tap on a wall (no drag) just (re)selects
     if(!dragging) return; dragging=false;
@@ -977,6 +1023,14 @@
       var shape={cells:rk, label:""}; rooms.push(shape); sel=shape; pushHist(); redraw(); openLabel(shape); }
     else { redraw(); } });
   cv.addEventListener("pointerleave", function(){ hoverPt=null; hoverWall=null; if(wallHover){ wallHover=null; cv.style.cursor="crosshair"; } if(!dragging && !wallDrag) redraw(); });
+  cv.addEventListener("pointercancel", function(e){ if(_ptrs.has(e.pointerId)){ _ptrs.delete(e.pointerId); if(_pinching && _ptrs.size<2) endPinch(); } });
+  // Desktop: wheel zooms about the cursor (trackpad pinch arrives as ctrl+wheel — same path).
+  cv.addEventListener("wheel", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
+    e.preventDefault(); var r=cv.getBoundingClientRect(), f=e.deltaY<0?1.12:1/1.12;
+    zoomAbout(e.clientX-r.left, e.clientY-r.top, _uz*f); }, {passive:false});
+  $("zoomIn").addEventListener("click", function(){ var c=canvasCenter(); zoomAbout(c.x,c.y,_uz*1.5); });
+  $("zoomOut").addEventListener("click", function(){ var c=canvasCenter(); zoomAbout(c.x,c.y,_uz/1.5); });
+  $("zoomFit").addEventListener("click", resetZoom);
 
   // ---- intelligent room-name combobox (rooms only; the structure shell needs no name) ----
   // Type → 3–5 context-ranked suggestions → Enter / click / click-away saves; Escape cancels.
