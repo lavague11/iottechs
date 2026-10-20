@@ -20,7 +20,7 @@ import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerpr
 import { can } from "../../../lib/roles";
 import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
-import { emailProposalReady } from "../../../lib/email";
+import { emailProposalReady, emailPaymentReceived } from "../../../lib/email";
 
 const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
@@ -523,6 +523,13 @@ export async function recordPaymentAction(accessId, payment) {
     source: isCustomer ? "customer" : "staff", note: payment.note,
     paidAt: payment.paidAt,   // staff-set date the money changed hands
   }, actorName(tok));
+  // A STAFF entry is money in hand (confirmed) → email the customer a "payment recorded" confirmation.
+  // A customer submission is still pending until staff confirm it (that email fires in confirmPaymentAction).
+  if (!isCustomer) {
+    emailPaymentReceived(accessId, {
+      amount: payment.amount, kind: payment.kind, method: payment.method, paidAt: payment.paidAt,
+    }).catch(() => {});
+  }
   // Payment events are DERIVED from the payment records in the Job Log (so existing deposits show too),
   // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
@@ -581,6 +588,13 @@ export async function confirmPaymentAction(accessId, id) {
   const tok = await getSessionRole();
   if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can confirm payments." };
   const payments = confirmProjectPayment(accessId, id);
+  // Now the money is received → email the customer a "payment recorded" confirmation with the amount.
+  const confirmed = (payments || []).find((x) => String(x.id) === String(id));
+  if (confirmed) {
+    emailPaymentReceived(accessId, {
+      amount: confirmed.amount, kind: confirmed.kind, method: confirmed.method, paidAt: confirmed.paid_at,
+    }).catch(() => {});
+  }
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);

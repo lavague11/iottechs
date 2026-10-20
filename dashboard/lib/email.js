@@ -256,6 +256,40 @@ export async function sendOfficeEmail({ subject, heading, lines = [], accessId }
   } catch (e) { console.error(`[email:office] ${e?.message || e}`); return { ok: false, error: "exception" }; }
 }
 
+// Payment received — a confirmation that the customer's payment was recorded toward their balance.
+// Fired only when money is actually IN HAND (a staff entry, or a staff-confirmed customer submission),
+// never on an unconfirmed customer submission. Amount + kind/method/date; the live balance stays on the
+// portal (we don't recompute it here to avoid drifting from the payment page's math). Never throws.
+const PAY_KIND_LABEL = { deposit: "deposit", final: "final balance", partial: "partial payment", other: "payment" };
+export async function emailPaymentReceived(accessId, { amount, kind, method, paidAt } = {}) {
+  try {
+    const amt = Number(amount || 0);
+    if (!(amt > 0)) return { ok: false, error: "no-amount" };
+    const money = "$" + amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const kindLabel = PAY_KIND_LABEL[kind] || "payment";
+    const when = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || ""))
+      ? new Date(`${paidAt}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+      : null;
+    return await sendCustomerEmail(accessId, {
+      subject: `Payment received — ${money}`,
+      heading: "We’ve recorded your payment",
+      intro: `Thanks! Your ${kindLabel} of ${money} has been received and applied toward your balance.`,
+      lines: [
+        `Amount: ${money}`,
+        method ? `Method: ${method}` : null,
+        when ? `Date: ${when}` : null,
+        "You can see your up-to-date balance any time on your project page.",
+      ].filter(Boolean),
+      ctaLabel: "View Balance",
+      open: "payment",
+      footNote: "This is a confirmation that your payment was recorded. Reply to this email with any questions.",
+    });
+  } catch (e) {
+    console.error(`[email:payment] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
 export async function emailProposalReady(accessId) {
   try {
