@@ -223,6 +223,9 @@
   .pop .val{font-size:13px;min-width:40px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink)}
   .pop .rz{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;font-family:inherit}
   .pop .rz:hover{border-color:var(--gold)}
+  .pop #tAuto{display:inline-flex;align-items:center;gap:5px;font-weight:600}
+  .pop #tAuto svg{color:var(--gold)}
+  .pop #tAuto:disabled,.pop #tAuto.busy{opacity:.55;cursor:default;border-color:var(--line)}
   .pop .pophint{font-size:12px;color:var(--muted)}
   /* editable exact-angle field (merged the old 0° reset + readout into one settable input) */
   .pop .degfield{display:flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:#fff}
@@ -295,6 +298,7 @@
         <input id="rot" type="range" min="-45" max="45" value="0">
         <button class="rz" id="rot90" title="Turn a further 90°">+90°</button>
         <div class="degfield"><input id="rotDeg" type="number" min="-180" max="180" step="1" value="0" title="Set the exact angle" aria-label="Angle in degrees"><span>&deg;</span></div>
+        <button class="rz" id="tAuto" title="Auto-level to the street (road along the bottom)" aria-label="Auto-level to the street"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Auto</span></button>
       </div>
       <button class="tb" id="tLevel" title="Level the aerial"><svg viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="2"/><circle cx="12" cy="12" r="1.5"/><path d="M9 9.5v5M15 9.5v5"/></svg><span>Level</span></button>
       <button class="tb" id="tCrop" title="Crop the aerial"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span>Crop</span></button>
@@ -306,6 +310,8 @@
       <button class="tb use" id="tDone">Done</button>
     </div>
 
+<!-- Auto-Level core (pure, dependency-free): finds the frontage road + the property-facing rotation. -->
+<script src="auto-level.js?v=20261020"></script>
 <script>
   var API_KEY=null, map=null, geocoder=null, marker=null;
   var PID=new URLSearchParams(location.search).get("project")||"";
@@ -476,6 +482,53 @@
   function commitRotDeg(){ var d=parseInt($("rotDeg").value,10); if(isNaN(d)) d=0; rotCoarse=norm(d); $("rot").value=0; applyRot(); invalidateCapture(); }
   $("rotDeg").addEventListener("change", commitRotDeg);
   $("rotDeg").addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); commitRotDeg(); $("rotDeg").blur(); } });
+
+  /* ---------- Auto-Level (property-facing) ----------
+     One north-up Static-Maps raster of the current view (CORS-clean, same source capture() uses), analyzed
+     ENTIRELY client-side by IOTAutoLevel to find the frontage road + the rotation that lands that road along
+     the BOTTOM with the property above it. Applies ONLY through the existing rotCoarse / slider / applyRot /
+     invalidateCapture — manual rotate, +90°, exact angle, crop, pan, zoom and saved-state restore are
+     untouched. Never crops or zooms (Auto-Frame is a later feature). Never guesses: an ambiguous frontage,
+     weak signal, or off-frame property shows a status and leaves the angle as-is. */
+  var autoBusy=false;
+  function setAutoBusy(b){ autoBusy=b; var btn=$("tAuto"); if(btn){ btn.classList.toggle("busy",b); btn.disabled=b; } }
+  function autoStatus(m){ msg(m); setTimeout(function(){ if($("msg").textContent===m) msg(""); }, 2800); }
+  function autoLevel(){
+    if(autoBusy) return;
+    if(!map || !API_KEY){ autoStatus("Add GOOGLE_MAPS_API_KEY in Development ▸ API Keys, then reopen."); return; }
+    if(!window.IOTAutoLevel){ autoStatus("Auto-level is unavailable."); return; }
+    if(preview.classList.contains("show")) backToLive();   // work on the live map, not a stored preview
+    setAutoBusy(true); msg("Analyzing…");
+    var C=map.getCenter(), z=Math.round(map.getZoom()), SIZE=512, SC=2,
+        mt=(map.getMapTypeId()==="hybrid"?"hybrid":"satellite");
+    var url="https://maps.googleapis.com/maps/api/staticmap?center="+C.lat().toFixed(7)+","+C.lng().toFixed(7)
+      +"&zoom="+z+"&size="+SIZE+"x"+SIZE+"&scale="+SC+"&format=png&maptype="+mt+"&key="+API_KEY;
+    var im=new Image(); im.crossOrigin="anonymous";
+    im.onload=function(){
+      try{
+        var cv=document.createElement("canvas"); cv.width=im.naturalWidth||SIZE*SC; cv.height=im.naturalHeight||SIZE*SC;
+        cv.getContext("2d").drawImage(im,0,0);
+        var id=cv.getContext("2d").getImageData(0,0,cv.width,cv.height);
+        var P=(marker && marker.getPosition && marker.getPosition()) || C;   // the geocoded property = the side-of-road anchor
+        var f=Math.pow(2,z)*SC;                                              // world(256-space) → image px at this zoom/scale
+        var anchor={ x: cv.width/2 + (wx(P)-wx(C))*f, y: cv.height/2 + (wy(P)-wy(C))*f };
+        var res=window.IOTAutoLevel.analyze(id, anchor, {});
+        setAutoBusy(false);
+        if(!res || !res.ok){
+          autoStatus(
+            (res&&res.reason==="ambiguous-frontage") ? "Couldn't confirm the frontage street — level manually." :
+            (res&&res.reason==="anchor-offframe")    ? "Center the property first, then Auto-level." :
+                                                       "Couldn't find a clear street edge — level manually.");
+          return;
+        }
+        rotCoarse=norm(res.rotation); $("rot").value=0; applyRot(); invalidateCapture(); msg("");
+      }catch(e){ setAutoBusy(false); autoStatus("Auto-level couldn't read the imagery — level manually."); }
+    };
+    im.onerror=function(){ setAutoBusy(false); autoStatus("Couldn't load imagery for Auto-level."); };
+    im.src=url;
+  }
+  $("tAuto").addEventListener("click", autoLevel);
+
   function ensureRect(){ if(!rect){ var st=document.querySelector(".stage"); rect={x:0,y:0,w:st.clientWidth,h:st.clientHeight}; } }   // no box drawn → capture the whole view
 
   /* ---------- floating toolbar: Level · Crop · Enhance · Download · Done ---------- */
