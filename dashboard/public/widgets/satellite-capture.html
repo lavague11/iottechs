@@ -298,7 +298,7 @@
         <input id="rot" type="range" min="-45" max="45" value="0">
         <button class="rz" id="rot90" title="Turn a further 90°">+90°</button>
         <div class="degfield"><input id="rotDeg" type="number" min="-180" max="180" step="1" value="0" title="Set the exact angle" aria-label="Angle in degrees"><span>&deg;</span></div>
-        <button class="rz" id="tAuto" title="Auto-level to the street (road along the bottom)" aria-label="Auto-level to the street"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Auto</span></button>
+        <button class="rz" id="tAuto" title="Auto-level & frame the property (road along the bottom)" aria-label="Auto-level and frame the property"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/></svg><span>Auto</span></button>
       </div>
       <button class="tb" id="tLevel" title="Level the aerial"><svg viewBox="0 0 24 24"><rect x="2" y="9" width="20" height="6" rx="2"/><circle cx="12" cy="12" r="1.5"/><path d="M9 9.5v5M15 9.5v5"/></svg><span>Level</span></button>
       <button class="tb" id="tCrop" title="Crop the aerial"><svg viewBox="0 0 24 24"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span>Crop</span></button>
@@ -499,7 +499,11 @@
     if(!window.IOTAutoLevel){ autoStatus("Auto-level is unavailable."); return; }
     if(preview.classList.contains("show")) backToLive();   // work on the live map, not a stored preview
     setAutoBusy(true); msg("Analyzing…");
-    var C=map.getCenter(), z=Math.round(map.getZoom()), SIZE=512, SC=2,
+    // Analyze CENTERED ON THE PROPERTY (the geocoded marker), not the current pan — the property stays
+    // dead-centre so the side-of-road anchor is exact and the result is stable regardless of where the
+    // user panned. Zoom follows the current view (clamped) so lot size is respected.
+    var C=(marker && marker.getPosition && marker.getPosition()) || map.getCenter(),
+        z=Math.max(18, Math.min(20, Math.round(map.getZoom()))), SIZE=512, SC=2,
         mt=(map.getMapTypeId()==="hybrid"?"hybrid":"satellite");
     var url="https://maps.googleapis.com/maps/api/staticmap?center="+C.lat().toFixed(7)+","+C.lng().toFixed(7)
       +"&zoom="+z+"&size="+SIZE+"x"+SIZE+"&scale="+SC+"&format=png&maptype="+mt+"&key="+API_KEY;
@@ -521,11 +525,29 @@
                                                        "Couldn't find a clear street edge — level manually.");
           return;
         }
-        rotCoarse=norm(res.rotation); $("rot").value=0; applyRot(); invalidateCapture(); msg("");
+        rotCoarse=norm(res.rotation); $("rot").value=0; applyRot();
+        autoFrame(res, C, z, P, SC);        // then center + zoom the property (road kept near the bottom)
+        invalidateCapture(); msg("");
       }catch(e){ setAutoBusy(false); autoStatus("Auto-level couldn't read the imagery — level manually."); }
     };
     im.onerror=function(){ setAutoBusy(false); autoStatus("Couldn't load imagery for Auto-level."); };
     im.src=url;
+  }
+  // Auto-Frame — center the property and pick a zoom that frames it, keeping the frontage road near the
+  // bottom. Reuses the SAME analysis (no extra fetch): the road's perpendicular distance from the property
+  // sets the scale. Centers on the geocoded marker; the orientation (viewRot) set by Auto-Level is untouched.
+  // No crop. Manual pan/zoom still adjust afterward. Skips silently if the distance signal is unusable.
+  function autoFrame(res, C, z, P, SC){
+    if(!map || !res || !(res.roadDistPx>0)) return;
+    var latRad=C.lat()*Math.PI/180, EQ=156543.03392;
+    var mppAnalysis = EQ*Math.cos(latRad)/Math.pow(2,z)/SC;          // meters per analysis-image px
+    var dMeters = Math.max(10, Math.min(150, res.roadDistPx*mppAnalysis));   // front setback, clamped sane
+    var stage=document.querySelector(".stage"), stageH=(stage&&stage.clientHeight)||600;
+    var K=3.2;                                                        // frame height ≈ K·d → road sits ~81% down
+    var mppTarget = K*dMeters/stageH;
+    var zTarget = Math.log(EQ*Math.cos(latRad)/mppTarget)/Math.LN2;
+    zTarget = Math.max(16, Math.min(21, zTarget));
+    try{ map.setCenter(P); map.setZoom(zTarget); }catch(e){}
   }
   $("tAuto").addEventListener("click", autoLevel);
 

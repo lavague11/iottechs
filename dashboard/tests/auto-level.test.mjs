@@ -84,6 +84,8 @@ test("detector + analyze: a diagonal frontage road is turned horizontal with pro
   // detected direction ≈ 30°
   const dAng = Math.min(Math.abs(res.angle - 30), 180 - Math.abs(res.angle - 30));
   assert.ok(dAng < 8, `angle off: ${res.angle}`);
+  // Auto-Frame input: the perpendicular property->road distance (~100px here) comes back for the zoom math
+  assert.ok(res.roadDistPx > 50 && res.roadDistPx < 160, `roadDistPx off: ${res.roadDistPx}`);
   // applying rotation makes the TRUE road horizontal …
   assert.ok(roadSlope(res.rotation, 30) < 0.12, `not horizontal: rot=${res.rotation}`);
   // … and the TRUE anchor above the TRUE road point
@@ -120,7 +122,7 @@ test("blank imagery → low confidence, no rotation", () => {
 });
 
 /* --------------------------- widget wiring (drift) ------------------------ */
-test("satellite-capture: loads the core, Auto button in #popLevel, applies via rotCoarse/applyRot/invalidateCapture, no crop/zoom", () => {
+test("satellite-capture: loads the core, Auto button in #popLevel, applies via rotCoarse/applyRot/invalidateCapture, frames without cropping", () => {
   const sat = readFileSync(new URL("../public/widgets/satellite-capture.html", import.meta.url), "utf8");
   assert.ok(sat.includes('<script src="auto-level.js'), "loads the auto-level core before the inline script");
   const pop = sat.slice(sat.indexOf('id="popLevel"'), sat.indexOf('id="tLevel"'));
@@ -131,6 +133,12 @@ test("satellite-capture: loads the core, Auto button in #popLevel, applies via r
   assert.ok(fn.includes("marker.getPosition") && fn.includes("wx(P)") && fn.includes("wy(P)"), "uses the geocoded property marker as the side-of-road anchor");
   assert.ok(fn.includes('crossOrigin'), "CORS-clean Static-Maps fetch");
   assert.ok(fn.includes('maptype='), "fetches Static-Maps imagery (not the tainted live-map canvas)");
-  assert.ok(!/\brect\s*=\s*\{/.test(fn) && !/setZoom\(/.test(fn), "v1 does NOT crop or zoom (Auto-Frame is later)");
   assert.ok(fn.includes("ambiguous-frontage") && fn.includes("level manually"), "ambiguous/low-confidence → status, no silent rotation");
+  // Auto-Frame: centers + zooms the property from the road distance, reusing the same analysis; no crop.
+  assert.ok(fn.includes("autoFrame(res,"), "Auto-Level hands off to Auto-Frame after rotating");
+  const af = sat.slice(sat.indexOf("function autoFrame("), sat.indexOf('$("tAuto").addEventListener'));
+  assert.ok(af.includes("map.setCenter(P)") && af.includes("map.setZoom("), "Auto-Frame centers on the property and sets zoom");
+  assert.ok(af.includes("res.roadDistPx"), "zoom derives from the frontage-road distance");
+  assert.ok(/Math\.max\(16[\s\S]*Math\.min\(21/.test(af), "zoom is clamped to a sane range");
+  assert.ok(!/\brect\s*=\s*\{/.test(sat.slice(sat.indexOf("function autoLevel()"), sat.indexOf("function ensureRect"))), "Auto still does NOT crop (no rect assignment)");
 });

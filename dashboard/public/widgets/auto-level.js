@@ -252,7 +252,10 @@
     var pick = pickFrontage(det.lines, a, det.w, det.h, opts);
     if (!pick.ok) return pick;
     var rot = targetRotation(pick.angle, pick.roadPoint, a);
-    return { ok: true, rotation: rot, angle: pick.angle, confidence: pick.confidence };
+    // Perpendicular distance property->frontage road, back in ORIGINAL image px — Auto-Frame turns this
+    // into meters to choose the zoom (road sits in the lower part of the frame). det.scale: downscaled->original.
+    var roadDistPx = Math.abs((a.x - pick.roadPoint.x) * pick.normal.x + (a.y - pick.roadPoint.y) * pick.normal.y) * det.scale;
+    return { ok: true, rotation: rot, angle: pick.angle, confidence: pick.confidence, roadDistPx: roadDistPx };
   }
 
   root.IOTAutoLevel = {
