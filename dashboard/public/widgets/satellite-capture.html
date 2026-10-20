@@ -396,10 +396,13 @@
     var d=e&&e.data; if(!d||d.type!=="iotAerialRestore") return;
     applyAerial(d.aerial);
   });
-  // A parent-supplied capture (Build Floor Plan hands THIS floor's aerial here) is a STATIC image, not the live map —
-  // Level/Crop drive the live map, so hide them in this loaded state (Outline/Enhance/Download/Done stay in a normal
-  // load; outlineOnly hides the lot via body.outline-only). Cleared the instant a fresh live capture or backToLive.
-  function applyLoadedCapture(){ var d=loadedCapture?"none":""; if($("tLevel")) $("tLevel").style.display=d; if($("tCrop")) $("tCrop").style.display=d; }
+  // A parent-supplied capture (Edit background reopens THIS floor's stored aerial here) is a STATIC image, not the live
+  // map. Level/Crop drive the live map — but their handlers call backToLive() first, so they re-enter the live map ON
+  // TAP and work from a loaded state too. Keep them VISIBLE (owner request: "can't rotate/level/crop" on a reopened
+  // aerial): hiding them stranded the editor with no way back to the live map to re-level. Nothing auto-fires, so the
+  // enhance-safe reopen is unchanged. The focused Build-Floor-Plan trace (outlineOnly) hides the WHOLE toolbar via
+  // body.outline-only CSS, so this never shows them there. Kept as a hook for future loaded-state tweaks.
+  function applyLoadedCapture(){ if($("tLevel")) $("tLevel").style.display=""; if($("tCrop")) $("tCrop").style.display=""; }
   var pendingCapture=null;   // a capture that arrived before Maps loaded → applied at the end of initMap (mirrors pendingAerial) so the default geocode never wins over it
   function applyOutlineOnly(){ document.body.classList.toggle("outline-only", outlineOnly); }
   // iotLoadCapture (parent→satellite, same pattern as iotAerialRestore): load m.src as THE capture so the user OUTLINES

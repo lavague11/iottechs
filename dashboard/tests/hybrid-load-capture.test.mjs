@@ -97,13 +97,15 @@ test("satellite — ft→meters conversion matches capMetersW/H", () => {
   assert.equal(metersFromFt(undefined), 0, "undefined ft → 0 meters");
 });
 
-/* ------------------------------ Level/Crop hidden in loaded mode (unchanged) ------------------------------ */
-test("satellite — Level/Crop are hidden in loaded-capture mode and return on a live capture / backToLive", () => {
-  assert.ok(sat.includes('function applyLoadedCapture(){ var d=loadedCapture?"none":""; if($("tLevel")) $("tLevel").style.display=d; if($("tCrop")) $("tCrop").style.display=d; }'), "applyLoadedCapture hides/shows Level + Crop");
+/* ------------------------------ Level/Crop stay available in loaded mode (reopen can re-level) ------------------------------ */
+test("satellite — Level/Crop stay VISIBLE in loaded-capture mode (their handlers backToLive on tap) so a reopened aerial can be re-leveled/cropped", () => {
+  assert.ok(sat.includes('function applyLoadedCapture(){ if($("tLevel")) $("tLevel").style.display=""; if($("tCrop")) $("tCrop").style.display=""; }'), "applyLoadedCapture keeps Level + Crop shown (owner request: couldn't rotate/level/crop a reopened aerial)");
   assert.ok(/var capturedCurrent=false, cropMode=false, loadedCapture=false;/.test(sat), "loadedCapture declared false by default");
-  const cap = sat.slice(sat.indexOf("capCanvas=cut;"), sat.indexOf("capCanvas=cut;") + 240);
-  assert.ok(cap.includes("loadedCapture=false; applyLoadedCapture();"), "a fresh live capture clears loaded mode");
+  // the controls self-heal: tapping Level/Crop re-enters the live map first
+  assert.ok(/\$\("tLevel"\)\.addEventListener\("click", function\(\)\{ if\(preview\.classList\.contains\("show"\)\) backToLive\(\);/.test(sat), "Level re-enters the live map on tap");
   assert.ok(sat.includes("capturedCurrent=false; loadedCapture=false; applyLoadedCapture();"), "backToLive clears loaded mode");
+  // outline-only (Build Floor Plan trace) still hides the WHOLE toolbar via CSS, so Level/Crop never show there
+  assert.ok(/body\.outline-only[^}]*\.tbar\{display:none!important\}/.test(sat), "outline-only hides the full toolbar (Level/Crop included) via CSS");
 });
 
 /* ------------------------------ trCtx unchanged — reads capCanvas ------------------------------ */
