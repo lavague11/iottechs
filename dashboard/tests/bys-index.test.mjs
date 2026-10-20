@@ -8,10 +8,11 @@ const nextCfg = readFileSync(new URL("../next.config.js", import.meta.url), "utf
 const home = readFileSync(new URL("../public/home.html", import.meta.url), "utf8");
 
 test("the /systems picker links to all four builders", () => {
-  for (const href of ['href="/build"', 'href="/build/pos"', 'href="/build/audio"', 'href="/build/toast"']) {
+  for (const href of ['href="/build"', 'href="/build/adt"', 'href="/build/audio"', 'href="/build/toast"']) {
     assert.ok(index.includes(href), `picker links ${href}`);
   }
-  assert.ok(/Camera System/.test(index) && /POS System/.test(index) && /Sound System/.test(index) && /Toast System/.test(index), "all four named");
+  assert.ok(/Camera System/.test(index) && /ADT System/.test(index) && /Sound System/.test(index) && /Toast System/.test(index), "all four named");
+  assert.ok(!index.includes('href="/build/pos"'), "the generic POS card was swapped for ADT (Toast already covers restaurant POS)");
   assert.ok(nextCfg.includes('source: "/systems"') && nextCfg.includes('destination: "/bys-index.html"'), "/systems rewrites to the picker");
 });
 
