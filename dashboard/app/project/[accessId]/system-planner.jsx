@@ -370,9 +370,10 @@ export default function SystemPlanner({
                  context here and suppress a competing Next CTA (no "Done vs Next" confusion). */
               <span className="syp-nav-hint">Floor Plan · Structure — tap <b>Done</b> when finished</span>
             ) : (<>
-              {nextStep && <span className="syp-nav-hint">Next · {NEXT_PROMPT[nextStep]}</span>}
+              {/* The CTA names the next step itself (e.g. "Create Floor Plan →") — no separate
+                  "Next · X" hint; one button, zero redundancy. Back (left) still steps backward. */}
               {nextStep ? (
-                <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>Next <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+                <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
               ) : reviewCta ? (
                 <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
               ) : null}

@@ -35,6 +35,9 @@ test("contextual nav footer: Back/Next progression + a state-derived Review CTA 
   // guided navigation reuses goRail; Views drops out of the Next flow when optional+untouched
   assert.ok(sp.includes('const navOrder = ["background", "plan", "cameras", ...(viewsInFlow ? ["views"] : []), "review"];'), "Next skips optional Views");
   assert.ok(sp.includes("const nextStep = navOrder[navIdx + 1] || null;") && sp.includes("const prevStep = navOrder[navIdx - 1] || null;"), "prev/next derived from the canonical order");
+  // the forward CTA NAMES the next step itself (e.g. "Create Floor Plan →") — no separate "Next · X" hint, no generic "Next" label
+  assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg"), "the forward CTA label is the next step's prompt, not a generic Next");
+  assert.ok(!sp.includes('syp-nav-hint">Next ·'), "the redundant 'Next · <step>' hint is gone");
   assert.ok(sp.includes("Submit Site Survey") && sp.includes("Re-submit Site Survey") && sp.includes("Continue to Proposal"), "Review CTA = Submit / Re-submit / Continue");
   assert.ok(sp.includes('onSubmitTool && onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
   assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");
