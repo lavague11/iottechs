@@ -81,9 +81,9 @@ test("regression: a real (populated) proposal renders the full customer view, no
   await expect(page.getByText("Customer view")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText(/Total Investment/i)).toBeVisible();   // the full proposal summary rendered (no depositPct ReferenceError)
   // Redesign acceptance: the line-item breakdown is visible WITHOUT a click, and there is exactly ONE
-  // canonical Approve & Sign CTA (the acceptance box no longer carries a duplicate).
+  // canonical Review & Sign CTA (the acceptance box no longer carries a duplicate).
   await expect(page.getByText(/Project Cost Breakdown/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Approve & Sign/i })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: /^Review & Sign$/i })).toHaveCount(1);
   await NO_ERROR(page);
 });
 

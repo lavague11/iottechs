@@ -40,6 +40,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
 import EsignSigner from "./esign/esign-signer";
+import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -113,6 +114,12 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const [mockupRaw, setMockupRaw]   = useState(null);
   const [focusCid, setFocusCid]     = useState(null);   // camera the customer asked to locate (View Placement)
   const rootRef = useRef(null);
+  // Guided-review spotlight targets (Cost → Payment terms → Review & Sign).
+  const costRef = useRef(null);
+  const payRef = useRef(null);
+  const signRef = useRef(null);
+  const [spotlightOn, setSpotlightOn] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(false);   // big → compact for this version (per device)
   const [camRoster, setCamRoster] = useState([]);   // survey camera roster → camera line-item location names
   useEffect(() => {   // booleans only — the heavy survey/mockup blobs are NOT fetched here
     let live = true;
@@ -392,6 +399,25 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const docOpen = true;
   const toggleDoc = () => {};
   const canAct = !locked && !isDraftPreview && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
+  // ---- Signature-request attention (customer only) ------------------------------------------------
+  // A new, actionable, unsigned version → the customer is guided to it instead of hunting. Version-aware:
+  // keyed to the proposal id + version so a refresh never re-nags and a NEW version re-arms. The signed
+  // state (server truth) switches it off; this is attention only — it never signs/approves anything.
+  const isCustomerView = !preview && !embedded;
+  const needsSig = isCustomerView && canAct && !locked && p?.status !== "declined";
+  const verKey = p ? `docrev:${accessId}:prop:v${p.version || 1}:${p.id}` : null;
+  // Big banner on first sight of THIS version; collapses to a compact pill once seen/dismissed/started.
+  useEffect(() => {
+    if (!needsSig || !verKey) return;
+    try { if (localStorage.getItem(verKey) === "seen") setBannerDismissed(true); } catch { /* private mode */ }
+  }, [needsSig, verKey]);
+  const markSeen = () => { setBannerDismissed(true); try { if (verKey) localStorage.setItem(verKey, "seen"); } catch { /* ignore */ } };
+  const startReview = () => { markSeen(); setSpotlightOn(true); };
+  const reviewSteps = () => [
+    { getEl: () => costRef.current, title: "Your project cost", hint: "Here’s your full breakdown and grand total. Take a look, then tap Next." },
+    { getEl: () => payRef.current, title: "Payment schedule", hint: "This is when each payment is due. Review it before you sign." },
+    { getEl: () => signRef.current, title: "Ready to continue?", hint: "Review and sign your proposal — this opens the signer; it won’t submit until you sign.", cta: "Review & Sign" },
+  ];
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
   const canReq = canAct || reviseMode;
@@ -453,6 +479,38 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   return (
     <div className="pcv-root" ref={rootRef}>
       <style>{PCV_CSS}</style>
+
+      {/* Signature-request attention — the customer never has to hunt for a new, actionable document.
+          Big card on first sight of this version; collapses to a compact pill once seen/dismissed; gone
+          once signed. "Review document" starts the guided spotlight (it does NOT sign). */}
+      {needsSig && !spotlightOn && !bannerDismissed && (
+        <div className="pcv-sigbanner" role="region" aria-label="Signature requested">
+          <button type="button" className="pcv-sigbanner-x" aria-label="Dismiss" onClick={markSeen}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+          <span className="pcv-sigbanner-ic">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /><path d="M8.5 16.5c1-1.3 2-1.3 3 0s2 1.3 3 0" /></svg>
+          </span>
+          <div className="pcv-sigbanner-k">Signature requested</div>
+          <div className="pcv-sigbanner-ttl">Your proposal is ready to review</div>
+          <div className="pcv-sigbanner-sub">We’ll walk you through your cost and payment terms, then you can sign.</div>
+          <button type="button" className="pcv-sigbanner-cta" onClick={startReview}>Review document</button>
+        </div>
+      )}
+      {needsSig && !spotlightOn && bannerDismissed && (
+        <button type="button" className="pcv-sigpill" onClick={startReview} aria-label="Signature required — review your proposal">
+          <span className="pcv-sigpill-dot" />
+          <span className="pcv-sigpill-lbl">Signature required</span>
+          <span className="pcv-sigpill-go">Review ›</span>
+        </button>
+      )}
+      {spotlightOn && (
+        <DocReviewSpotlight
+          steps={reviewSteps()}
+          onClose={() => setSpotlightOn(false)}
+          onFinish={() => { setSpotlightOn(false); if (opt) choose(opt.id); }}
+        />
+      )}
 
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
           + chevron). The whole proposal collapses; after accept+sign it auto-folds so "Make Your
@@ -606,6 +664,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* The breakdown is always shown — Payment Terms and Approve & Sign sit right below it, so there's
           nothing to collapse for. */}
       {(<>
+      <div className="pcv-cost-region" ref={costRef}>
       <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
       <div className="pcv-table">
         <div className="pcv-table-head">
@@ -704,6 +763,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit{pcpApproved ? "" : " (pending)"}</span><span>−{money(t.pcpCredit)}</span></div>}
       {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}
       <div className="pcv-grand"><span>Grand Total</span><span>{money(t.grand)}</span></div>
+      </div>
 
       {camBlocks.length > 0 && (
         <>
@@ -720,6 +780,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       )}
       </>)}
 
+      <div className="pcv-pay-region" ref={payRef}>
       <div className="pcv-section-hd">Payment Terms</div>
       {/* Stacked milestones (no table on mobile) — phase + % on the left with its due date,
           amount on the right. The plan's prose terms line is dropped when the milestones already
@@ -737,14 +798,16 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       </div>
       {payTerms && payPhases.length <= 1 && <div className="pcv-pay-terms">{payTerms}</div>}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
+      </div>{/* /pcv-pay-region */}
 
-      {/* Primary action lives here, directly under the money — bold gold so it's unmistakable. */}
+      {/* Primary action lives here, directly under the money — bold gold so it's unmistakable. The label
+          is "Review & Sign" (not "Approve & Sign"): tapping it OPENS the signer, it doesn't silently accept. */}
       {canAct && (
-        <button className="pcv-signbar" disabled={busy} onClick={() => choose(opt.id)}>
+        <button ref={signRef} className="pcv-signbar" disabled={busy} onClick={() => choose(opt.id)}>
           {optAccepted ? `Remove Option ${opt.id}` : (
             <>
               <svg className="pcv-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z" /></svg>
-              {diffInfo ? "Review & Sign" : "Approve & Sign"}
+              Review &amp; Sign
             </>
           )}
         </button>
@@ -834,7 +897,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             )}
             {canAct && (
               <>
-                <p>{diffInfo ? "Review the changes and use Review & Sign under Payment Terms — or request a change / decline here." : "Use Approve & Sign under Payment Terms to accept. You can also request a change or decline here."}</p>
+                <p>{diffInfo ? "Review the changes and use Review & Sign under Payment Terms — or request a change / decline here." : "Use Review & Sign under Payment Terms to accept. You can also request a change or decline here."}</p>
                 <div className="pcv-accept-actions secondary">
                   <button className="pcv-btn" onClick={() => { setReviseMode(true); setDeclineOpen(false); setMenuFor(null); }}>
                     <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -911,6 +974,22 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
 }
 
 const PCV_CSS = `
+/* Signature-request attention banner + compact pill (customer only) */
+.pcv-sigbanner{position:relative;margin:4px 0 18px;background:#fffdf8;border:1px solid #ece4d2;border-radius:16px;padding:20px 20px 18px;box-shadow:0 10px 34px -16px rgba(16,17,18,.3);text-align:left}
+.pcv-sigbanner-x{position:absolute;top:10px;right:10px;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:#a79a80;border-radius:8px;cursor:pointer}
+.pcv-sigbanner-x:hover{background:#f0ead9;color:#161821}
+.pcv-sigbanner-ic{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:11px;background:#fbf3df;color:#8A6512;margin-bottom:12px}
+.pcv-sigbanner-k{font:700 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.15em;text-transform:uppercase;color:#B4945C}
+.pcv-sigbanner-ttl{font:650 19px/1.25 system-ui,-apple-system,"Segoe UI",sans-serif;color:#141821;letter-spacing:-.01em;margin-top:6px}
+.pcv-sigbanner-sub{font:400 14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#6b6555;margin-top:5px;max-width:46ch}
+.pcv-sigbanner-cta{display:inline-flex;align-items:center;gap:8px;margin-top:15px;background:#161821;color:#F0E7D4;border:0;border-radius:11px;padding:12px 22px;font:650 14.5px system-ui,sans-serif;cursor:pointer}
+.pcv-sigbanner-cta:hover{background:#000}
+.pcv-sigpill{position:sticky;top:8px;z-index:30;display:flex;align-items:center;gap:9px;margin:0 0 14px;width:100%;background:#fffdf8;border:1px solid #e7dfcd;border-radius:12px;padding:10px 14px;box-shadow:0 6px 20px -10px rgba(16,17,18,.28);cursor:pointer;font:inherit;text-align:left}
+.pcv-sigpill-dot{width:9px;height:9px;border-radius:50%;background:#C9A14A;box-shadow:0 0 0 4px rgba(201,161,74,.18);flex:none;animation:pcvpulse 1.8s ease-in-out infinite}
+@keyframes pcvpulse{0%,100%{opacity:1}50%{opacity:.45}}
+.pcv-sigpill-lbl{font:650 13.5px system-ui,sans-serif;color:#141821}
+.pcv-sigpill-go{margin-left:auto;font:700 13px system-ui,sans-serif;color:#8A6512}
+@media (prefers-reduced-motion: reduce){ .pcv-sigpill-dot{animation:none} }
 /* Diff before re-sign */
 .pcv-doclinks{display:inline-flex;gap:8px;flex-wrap:wrap}
 .pcv-doclinks a{text-decoration:none}
