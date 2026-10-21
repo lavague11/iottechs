@@ -291,6 +291,13 @@ test("survey/mockup appendix: the pages are baked into the signed PDF and gate t
   assert.equal(doc.meta.hasMockup, true, "doc meta records it carries mockup pages");
   assert.ok(doc.meta.pageCount > basePages, `appendix adds pages (${doc.meta.pageCount} > ${basePages})`);
 
+  // Opening the session (ensure with NO appendix, as startSignAction does right after /api/esign/prepare)
+  // must REUSE the prepared doc, never rebuild the appendix pages away.
+  const PS = await import("../lib/esign/proposal-source.js");
+  const again = PS.ensureProposalUnsigned(a, "A", {});
+  assert.equal(again.reused, true, "a null-appendix ensure reuses the prepared doc");
+  assert.equal(again.doc.id, doc.id, "same stored doc — the survey/mockup pages stay");
+
   // Signing WITHOUT the survey/mockup acks is rejected…
   S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "jo rivera", signature: { method: "draw", data: SIG }, acks: { terms: true, payment: true } } });
   const bad = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });

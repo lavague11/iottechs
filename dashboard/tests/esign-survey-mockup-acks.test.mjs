@@ -61,7 +61,7 @@ test("the signing pipeline threads the appendix + facts end to end (drift)", () 
   const src = readFileSync(new URL("../lib/esign/proposal-source.js", import.meta.url), "utf8");
   assert.ok(/buildProposalUnsigned\(accessId, optKey, row, appendix\)/.test(src), "ensureProposalUnsigned builds WITH the appendix");
   assert.ok(/appendixHash: built\.appendixHash, hasSurvey: built\.hasSurvey, hasMockup: built\.hasMockup/.test(src), "and stores the facts in the doc meta");
-  assert.ok(/\(cur\.meta\?\.appendixHash \|\| EMPTY_APPENDIX_HASH\) === apx/.test(src), "reuse is invalidated when the appendix changes");
+  assert.ok(/const apxOk = apx == null \|\| \(cur\?\.meta\?\.appendixHash \|\| EMPTY_APPENDIX_HASH\) === apx;/.test(src), "a supplied appendix is matched by hash; a null appendix reuses the current doc");
 
   const sess = readFileSync(new URL("../lib/esign/session.js", import.meta.url), "utf8");
   assert.ok(/appendix = null/.test(sess) && /ensureProposalUnsigned\(accessId, optKey, \{ by: caller\.role, appendix \}\)/.test(sess), "startSession forwards the appendix");
@@ -71,9 +71,14 @@ test("the signing pipeline threads the appendix + facts end to end (drift)", () 
   assert.ok(/missingRequired\(values, payload, facts\)/.test(comp) && /requiredAcks\(payload, facts\)/.test(comp), "and gates the required acks + certificate list on them");
 
   const act = readFileSync(new URL("../app/project/[accessId]/esign-actions.js", import.meta.url), "utf8");
-  assert.ok(/startSignAction\(accessId, optKey, resumeToken = null, appendix = null\)/.test(act), "the server action accepts the client appendix");
   assert.ok(/factsOf = \(doc\) =>/.test(act) && /ackList\(r\.row, r\.doc\)/.test(act), "views derive facts from the doc");
 
+  // The appendix (MBs of images) rides a route handler, not the server action.
+  const route = readFileSync(new URL("../app/api/esign/prepare/route.js", import.meta.url), "utf8");
+  assert.ok(/maySignProposal\(caller, accessId\)/.test(route), "the prepare route re-checks the caller may sign");
+  assert.ok(/ensureProposalUnsigned\(accessId, optKey, \{ by: caller\.role, appendix \}\)/.test(route), "and builds the unsigned doc with the appendix");
+
   const signer = readFileSync(new URL("../app/project/[accessId]/esign/esign-signer.jsx", import.meta.url), "utf8");
-  assert.ok(/prepareAppendix/.test(signer) && /startSignAction\(accessId, optKey, store\.get\(tokenKey\(accessId, optKey\)\), appendix\)/.test(signer), "the signer renders + passes the appendix");
+  assert.ok(/prepareAppendix/.test(signer) && /fetch\("\/api\/esign\/prepare"/.test(signer), "the signer renders + POSTs the appendix to the route");
+  assert.ok(/startSignAction\(accessId, optKey, store\.get\(tokenKey\(accessId, optKey\)\)\)/.test(signer), "then opens the session on the prepared doc");
 });

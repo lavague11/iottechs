@@ -69,15 +69,24 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     let live = true;
     setDoc(null); setFatal(null);
     (async () => {
-      let appendix = null;
+      // Render the appendix and hand it to the server (a route handler — a server action can't carry MBs
+      // of images), which builds the unsigned doc WITH those pages. Strip each entry to {name,img} / dataURL
+      // so no large nested arrays ride along. Best-effort: on any failure we open the numbers-only document.
       if (prepRef.current) {
         setPrepping(true);
-        try { const a = await prepRef.current(); if (a) appendix = { surveyImages: a.surveyImages || [], mockupImages: a.mockupImages || [] }; }
-        catch { /* best-effort — fall back to the numbers-only document */ }
+        try {
+          const a = await prepRef.current();
+          const surveyImages = (a?.surveyImages || []).filter((f) => f?.img).map((f) => ({ name: f.name || "", img: f.img }));
+          const mockupImages = (a?.mockupImages || []).filter((s) => typeof s === "string");
+          if (surveyImages.length || mockupImages.length) {
+            await fetch("/api/esign/prepare", { method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ accessId, optKey, appendix: { surveyImages, mockupImages } }) });
+          }
+        } catch { /* fall back to the numbers-only document */ }
         if (live) setPrepping(false);
       }
       if (!live) return;
-      startSignAction(accessId, optKey, store.get(tokenKey(accessId, optKey)), appendix).then((r) => {
+      startSignAction(accessId, optKey, store.get(tokenKey(accessId, optKey))).then((r) => {
         if (!live) return;
         if (r?.error) { setFatal({ error: r.error, code: r.code }); return; }
         store.set(tokenKey(accessId, optKey), r.token);

@@ -30,11 +30,15 @@ const err = (r) => ({ error: r.error || "Couldn't sign.", code: r.code });
 
 // Open (or resume, with `resumeToken`) a signing session for one option. Generates + stores the unsigned
 // PDF the first time (or when the content changed); returns the token, document and any saved values.
-export async function startSignAction(accessId, optKey, resumeToken = null, appendix = null) {
+// The survey/mockup appendix is NOT passed here — it's multi-MB client-rendered images with nested
+// arrays, which a server action can't carry (1–8 MB body cap + "Maximum array nesting" on the flight
+// payload). The client POSTs it to /api/esign/prepare first (a route handler, no such caps), which builds
+// the unsigned doc WITH those pages; this action then opens the session on that already-built doc.
+export async function startSignAction(accessId, optKey, resumeToken = null) {
   const { caller, ip, ua } = await ctx();
   if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
   let r;
-  try { r = startSession({ accessId, optKey: String(optKey || ""), caller, resumeToken, appendix, ip, ua }); }
+  try { r = startSession({ accessId, optKey: String(optKey || ""), caller, resumeToken, ip, ua }); }
   catch (e) { return { error: "Couldn't prepare the document.", code: "ERROR" }; }
   if (!r.ok) return err(r);
   return { ok: true, token: r.token, session: publicSession(r.session), doc: docView(r.doc), values: valuesView(r.values, r.row, r.doc), acks: ackList(r.row, r.doc), resumed: !!r.resumed };

@@ -114,11 +114,15 @@ export function ensureProposalUnsigned(accessId, optKey, { by = null, appendix =
   const why = signBlocker(row, optKey);
   if (why) return { error: why };
   const fp = proposalFingerprintOf(row);
-  const apx = appendixHash(cleanAppendix(appendix));
+  // appendix == null means "use the current document as-is" (the signer opens the session right after
+  // /api/esign/prepare already built the doc WITH the appendix) — so a null appendix reuses on content +
+  // option alone and never rebuilds the pages away. A supplied appendix is matched by its hash.
+  const apx = appendix == null ? null : appendixHash(cleanAppendix(appendix));
   if (row.unsigned_doc_id) {
     const cur = getDocumentInfo(row.unsigned_doc_id);
+    const apxOk = apx == null || (cur?.meta?.appendixHash || EMPTY_APPENDIX_HASH) === apx;
     if (cur && !cur.voided && cur.kind === "unsigned" && cur.proposal_id === row.id && cur.meta?.option === optKey
-        && cur.meta?.fingerprint === fp && (cur.meta?.appendixHash || EMPTY_APPENDIX_HASH) === apx) {
+        && cur.meta?.fingerprint === fp && apxOk) {
       return { doc: cur, row, fingerprint: fp, reused: true };
     }
     if (cur && !cur.voided) voidDocument(cur.id);   // stale (content, option or appendix changed): keep for history, stop serving

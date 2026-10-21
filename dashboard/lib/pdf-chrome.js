@@ -1,4 +1,6 @@
-"use client";
+// Pure jsPDF chrome — no "use client" directive on purpose: lib/esign/ renders the Site Survey appendix
+// from server code (the signer bakes it into the stored unsigned PDF), and a client module can't be called
+// there. It uses no browser globals, so it is a shared module both the client Download and the server use.
 import { jsPDF } from "jspdf";
 
 // Shared brand chrome for the smaller documents (Work Order, Site Survey, …): the same navy/gold
