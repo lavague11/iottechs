@@ -413,7 +413,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   // A new, actionable, unsigned version → the customer is guided to it instead of hunting. Version-aware:
   // keyed to the proposal id + version so a refresh never re-nags and a NEW version re-arms. The signed
   // state (server truth) switches it off; this is attention only — it never signs/approves anything.
-  const isCustomerView = !preview && !embedded;
+  // The real customer surface = NOT a staff "preview as customer" (custView). `embedded` is only the deck
+  // layout context (the customer's proposal renders inside the deck), so it must NOT suppress the attention.
+  const isCustomerView = !preview;
   const needsSig = isCustomerView && canAct && !locked && p?.status !== "declined";
   const verKey = p ? `docrev:${accessId}:prop:v${p.version || 1}:${p.id}` : null;
   // Big banner on first sight of THIS version; collapses to a compact pill once seen/dismissed/started.
