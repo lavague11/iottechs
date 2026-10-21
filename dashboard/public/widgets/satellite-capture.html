@@ -34,6 +34,7 @@
   #msg.on{display:grid}
   #draw{position:absolute;inset:0;z-index:5;display:none;touch-action:none;cursor:crosshair}
   #draw.on{display:block}
+  #draw.over{z-index:9}   /* cropping the enhanced PREVIEW → lift the crop layer above #preview (z8) */
   #drawCv{position:absolute;inset:0;width:100%;height:100%}
 
   #preview{position:absolute;inset:0;background:var(--soft);display:none;z-index:8}
@@ -596,20 +597,46 @@
     ensureRect();
     return capture().then(function(ok){ if(ok){ capturedCurrent=true; preview.classList.add("show"); } return ok; });
   }
-  function exitCrop(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } }
-  $("tLevel").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
+  function exitCrop(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("draw").classList.remove("over"); $("tCrop").classList.remove("on"); } }
+  $("tLevel").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();   // leveling re-shoots the live map
     var open=!$("popLevel").classList.contains("on"); exitCrop(); closePops();   // Level and Crop are mutually exclusive — leaving one enters the other cleanly (no rotate-vs-crop-layer tangle)
     $("popLevel").classList.toggle("on",open); $("tLevel").classList.toggle("on",open); $("levelGrid").classList.toggle("on",open); });
-  $("tCrop").addEventListener("click", function(){ if(preview.classList.contains("show")) backToLive();
-    if(cropMode){
-      // second tap: crop — the drawn box if there is one, otherwise the whole view
-      cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); closePops();
-      ensureCaptured();
-    } else {
-      cropMode=true; $("draw").classList.add("on"); $("tCrop").classList.add("on"); closePops();
+  // Crop. On the LIVE map it stitches + cuts (capture()). On the ENHANCED/captured PREVIEW it crops the
+  // shown image IN PLACE (cropPreview) — no revert to the old background, no re-enhance.
+  $("tCrop").addEventListener("click", function(){
+    var inPreview=preview.classList.contains("show");
+    if(cropMode){                                   // second tap → commit the drawn box
+      cropMode=false; $("draw").classList.remove("on"); $("draw").classList.remove("over"); $("tCrop").classList.remove("on"); closePops();
+      if(inPreview) cropPreview();                  // crop the enhanced preview, staying in preview
+      else ensureCaptured();                        // live map → stitch + cut the rect
+    } else {                                         // first tap → arm the crop box (lift it over the preview)
+      closePops(); cropMode=true; rect=null;
+      $("draw").classList.add("on"); $("tCrop").classList.add("on");
+      if(inPreview) $("draw").classList.add("over"); else $("draw").classList.remove("over");
+      paint();
     } });
+  // Crop the ENHANCED preview image (capCanvas) by the drawn box, in place — keeps the enhancement, no
+  // re-capture. rect + trImgRect share the stage coordinate space; the box maps to source px as a fraction
+  // of the displayed image. Real-world size + the aerial rect shrink proportionally so Use posts the right scale.
+  function cropPreview(){
+    if(!capCanvas || !rect){ return false; }
+    var ir=trImgRect();
+    var x0=Math.max(rect.x, ir.x), y0=Math.max(rect.y, ir.y),
+        x1=Math.min(rect.x+rect.w, ir.x+ir.w), y1=Math.min(rect.y+rect.h, ir.y+ir.h);
+    if(!(x1-x0>8 && y1-y0>8)){ rect=null; paint(); return false; }   // too small / off the image → ignore
+    var fx=(x0-ir.x)/ir.w, fy=(y0-ir.y)/ir.h, fw=(x1-x0)/ir.w, fh=(y1-y0)/ir.h;
+    var sx=Math.round(fx*capCanvas.width), sy=Math.round(fy*capCanvas.height),
+        sw=Math.max(4,Math.round(fw*capCanvas.width)), sh=Math.max(4,Math.round(fh*capCanvas.height));
+    var cut=document.createElement("canvas"); cut.width=sw; cut.height=sh;
+    cut.getContext("2d").drawImage(capCanvas, sx,sy,sw,sh, 0,0, sw,sh);
+    capCanvas=cut; $("prevImg").src=cut.toDataURL("image/jpeg",0.92);
+    if(capMetersW>0) capMetersW*=fw; if(capMetersH>0) capMetersH*=fh;                 // scale posted on Use stays correct
+    if(capAerial && capAerial.rect){ var R=capAerial.rect; capAerial.rect={ x:R.x+fx*R.w, y:R.y+fy*R.h, w:R.w*fw, h:R.h*fh }; }
+    rect=null; resetCompare(); paint();              // still the enhanced image (enhancedOnce stays), now cropped
+    return true;
+  }
   // Committing (Enhance/Download/Done) freezes the frame — tuck the popovers + crop tool away first.
-  function commitUI(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("tCrop").classList.remove("on"); } closePops(); }
+  function commitUI(){ if(cropMode){ cropMode=false; $("draw").classList.remove("on"); $("draw").classList.remove("over"); $("tCrop").classList.remove("on"); } closePops(); }
   $("tDl").addEventListener("click", function(){ commitUI(); ensureCaptured().then(function(ok){ if(ok) downloadImg(); }); });
   $("tDone").addEventListener("click", function(){ commitUI(); ensureCaptured().then(function(ok){ if(ok) usePreview(); }); });
   // Back → abandon back to the floor (the stored aerial is unchanged). The host handles iotCaptureCancel → exitBg(false).
