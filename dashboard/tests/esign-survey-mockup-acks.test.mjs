@@ -86,9 +86,10 @@ test("the signing pipeline threads the appendix + facts end to end (drift)", () 
 test("sign-off: the signer emits a survey/mockup sign-off page + each signature spot is placed deliberately", () => {
   // proposal-pdf.js adds the sign-off page with its own fields, signing mode only, only when there's an appendix.
   const pdf = readFileSync(new URL("../lib/proposal-pdf.js", import.meta.url), "utf8");
-  assert.ok(/if \(meta\.__signing && Array\.isArray\(meta\.__fields\) && \(surveyImages\.length \|\| mockupImages\.length\)\)/.test(pdf), "the sign-off page is signing-mode + appendix-only");
+  assert.ok(/if \(\(surveyImages\.length \|\| mockupImages\.length\) && \(ackSigning \|\| ackForm\)\)/.test(pdf), "the sign-off page renders for the signer OR the download, appendix-only");
   assert.ok(/sectionHeader\("SITE SURVEY & SYSTEM MOCKUP"/.test(pdf), "it has its own section header");
-  assert.ok(/ackFrac\("name_ack", "name"/.test(pdf) && /ackFrac\("date_ack", "date"/.test(pdf) && /ackFrac\("signature_ack", "signature"/.test(pdf), "and its own name/date/signature fields");
+  assert.ok(/ackFrac\("name_ack", "name"/.test(pdf) && /ackFrac\("date_ack", "date"/.test(pdf) && /ackFrac\("signature_ack", "signature"/.test(pdf), "the signer gets overlay fields (*_ack)");
+  assert.ok(/push\("name", "survey_mockup_client_name"/.test(pdf) && /push\("sign", "survey_mockup_authorized_signature"/.test(pdf), "the download gets real AcroForm fields");
 
   // flatten.js anchors the certification block to the FIRST signature (acceptance), not the sign-off one.
   const flat = readFileSync(new URL("../lib/esign/flatten.js", import.meta.url), "utf8");

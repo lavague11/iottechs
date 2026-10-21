@@ -68,3 +68,28 @@ test("a signed/accepted proposal downloads with NO fillable fields (the signatur
   const form = (await PDFDocument.load(bytes)).getForm();
   assert.equal(form.getFields().length, 0, "signed proposal has no AcroForm fields");
 });
+
+// A valid 1×1 PNG so the appendix images embed (survey/mockup pages render, which triggers the sign-off page).
+const PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+test("with a survey/mockup appendix, the download adds a sign-off page with its own fillable fields", async () => {
+  const { bytes } = await buildFillableProposalBytes(proposal(), META, { surveyImages: [{ name: "Floor 1", img: PNG1 }], mockupImages: [PNG1] });
+  const form = (await PDFDocument.load(bytes)).getForm();
+  const names = form.getFields().map((f) => f.getName());
+  for (const n of ["survey_mockup_client_name", "survey_mockup_signature_date", "survey_mockup_authorized_signature"]) {
+    assert.ok(names.includes(n), `sign-off field ${n} present`);
+  }
+  assert.ok(names.includes("proposal_client_name"), "the acceptance fields are still there too");
+  assert.equal(form.getField("survey_mockup_client_name").isRequired(), true, "sign-off client name required");
+  assert.equal(form.getField("survey_mockup_authorized_signature").isRequired(), false, "sign-off signature optional");
+  // the sign-off field is a real cross-viewer text field
+  assert.equal(form.getField("survey_mockup_authorized_signature").constructor.name, "PDFTextField");
+});
+
+test("a signed proposal's download stamps the sign-off page (no sign-off fields) even with an appendix", async () => {
+  const signed = proposal({ signed_at: "2026-10-09T12:00:00Z", signed_name: "Jane Customer", accepted_options: ["A"], signedPayload: proposal().payload, signature_data: PNG1 });
+  const { bytes } = await buildFillableProposalBytes(signed, META, { surveyImages: [{ name: "Floor 1", img: PNG1 }], mockupImages: [PNG1] });
+  const form = (await PDFDocument.load(bytes)).getForm();
+  assert.equal(form.getFields().length, 0, "a signed download stays a flat, field-free PDF");
+  assert.ok(bytes.length > 1000, "it still renders the stamped document");
+});
