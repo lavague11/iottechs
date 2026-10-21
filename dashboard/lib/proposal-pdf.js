@@ -870,6 +870,38 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     });
   }
 
+  // E-sign only: a dedicated sign-off page AFTER the survey + mockup appendix, with its own Client Name /
+  // Date / Signature so the customer signs off on the site survey + system mockup separately from the
+  // pricing acceptance. Signing mode only (meta.__signing + meta.__fields) and only when there actually is
+  // an appendix — the fields are keyed `*_ack` and flattened by lib/esign/flatten.js onto this page.
+  if (meta.__signing && Array.isArray(meta.__fields) && (surveyImages.length || mockupImages.length)) {
+    const ackOpt = renderOptions[0]?.id;
+    let y = newPage("portrait");
+    currentSection = "Sign-off";
+    y = sectionHeader("SITE SURVEY & SYSTEM MOCKUP", y) + 7.2;
+    doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
+    doc.text("I have reviewed the site survey and system mockup pages above and confirm the equipment and placement shown reflect my property.", lm, y, { maxWidth: rw });
+    y += 24;
+    doc.setFillColor(...WHITE); doc.rect(lm, y, rw, 72, "F");
+    doc.setDrawColor(...GOLD); doc.setLineWidth(2); doc.line(lm, y, lm + rw, y);
+    doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.5); doc.rect(lm, y, rw, 72, "S");
+    const asc = [lm + 8, lm + rw * 0.42, lm + rw * 0.72];
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
+    doc.text("CLIENT NAME", asc[0], y + 12);
+    doc.text("DATE", asc[1], y + 12);
+    doc.setDrawColor(221, 216, 206); doc.setLineWidth(0.4); doc.line(lm, y + 36, lm + rw, y + 36);
+    doc.setFontSize(7); doc.setFont("helvetica", "normal"); doc.setTextColor(74, 82, 112);
+    doc.text("AUTHORIZED SIGNATURE", asc[0], y + 48);
+    const ackName = [asc[0] - 3, y + 15, (asc[1] - asc[0]) - 12, 15];
+    const ackDate = [asc[1] - 3, y + 15, (asc[2] - asc[1]) - 12, 15];
+    const ackSign = [asc[0] - 3, y + 50, rw * 0.5, 21];
+    const abox = (x, yTop, w, h) => { doc.setFillColor(250, 248, 243); doc.setDrawColor(212, 205, 191); doc.setLineWidth(0.5); doc.roundedRect(x, yTop, w, h, 2, 2, "FD"); };
+    abox(...ackName); abox(...ackDate); abox(...ackSign);
+    const ackPage = doc.getCurrentPageInfo().pageNumber;
+    const ackFrac = (key, type, [bx, by, bw, bh]) => ({ key, type, opt: ackOpt, page: ackPage, x: bx / W, y: by / H, w: bw / W, h: bh / H, required: true });
+    meta.__fields.push(ackFrac("name_ack", "name", ackName), ackFrac("date_ack", "date", ackDate), ackFrac("signature_ack", "signature", ackSign));
+  }
+
   // Terms & Conditions are NOT printed in the proposal PDF. The customer reviews the full Master Terms and
   // initials the Section 83 acknowledgments in the on-screen acceptance flow (captured in proposals.signed_acks).
 

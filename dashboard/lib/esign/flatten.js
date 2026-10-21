@@ -52,7 +52,9 @@ export async function flattenSigned({ unsignedBytes, fields, values, signedAt, t
       // and only when it still fits inside the field (a wide signature simply omits it, no overlap).
       const stampX = sigX + dw + 14;
       if (stampX + 50 < left + w) page.drawText("ACCEPTED", { x: stampX, y: bottom + (h - 11) / 2 + 2, size: 11, font, color: GREEN });
-      sigPlace = { page, left, w, bottom, W, H };
+      // The certification block anchors to the FIRST signature (the acceptance block, pushed before any
+      // appendix sign-off field) — not whichever signature was stamped last.
+      if (!sigPlace) sigPlace = { page, left, w, bottom, W, H };
     }
   }
 

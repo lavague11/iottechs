@@ -290,6 +290,12 @@ test("survey/mockup appendix: the pages are baked into the signed PDF and gate t
   assert.equal(doc.meta.hasSurvey, true, "doc meta records it carries survey pages");
   assert.equal(doc.meta.hasMockup, true, "doc meta records it carries mockup pages");
   assert.ok(doc.meta.pageCount > basePages, `appendix adds pages (${doc.meta.pageCount} > ${basePages})`);
+  // The appendix adds a dedicated sign-off page with its OWN signature spot (keyed *_ack, on the sign-off page).
+  const ackSig = doc.meta.fields.find((f) => f.key === "signature_ack");
+  assert.ok(ackSig && ackSig.type === "signature" && ackSig.required, "a required survey/mockup signature field is emitted");
+  assert.ok(doc.meta.fields.some((f) => f.key === "name_ack") && doc.meta.fields.some((f) => f.key === "date_ack"), "with its own name + date fields");
+  const accSig = doc.meta.fields.find((f) => f.type === "signature" && f.key !== "signature_ack");
+  assert.ok(accSig && doc.meta.fields.indexOf(accSig) < doc.meta.fields.indexOf(ackSig), "the acceptance signature comes before the sign-off one (cert anchors to it)");
 
   // Opening the session (ensure with NO appendix, as startSignAction does right after /api/esign/prepare)
   // must REUSE the prepared doc, never rebuild the appendix pages away.
@@ -310,6 +316,7 @@ test("survey/mockup appendix: the pages are baked into the signed PDF and gate t
   const signed = store.getDocument(ok.signedDocId);
   const texts = await pageTexts(signed.bytes);
   assert.ok(texts.length > basePages, "signed PDF has the extra appendix pages");
+  assert.ok(texts.some((t) => /SITE SURVEY & SYSTEM MOCKUP/i.test(t) && /reviewed the site survey/i.test(t)), "the signed PDF carries the survey/mockup sign-off page");
   // the certificate records the survey + mockup sign-off
   const certId = store.getDocumentInfo(ok.signedDocId).meta.certificateDocId;
   const certTxt = (await pageTexts(store.getDocument(certId).bytes)).join(" ");

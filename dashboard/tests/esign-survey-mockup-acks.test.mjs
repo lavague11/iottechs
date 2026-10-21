@@ -82,3 +82,22 @@ test("the signing pipeline threads the appendix + facts end to end (drift)", () 
   assert.ok(/prepareAppendix/.test(signer) && /fetch\("\/api\/esign\/prepare"/.test(signer), "the signer renders + POSTs the appendix to the route");
   assert.ok(/startSignAction\(accessId, optKey, store\.get\(tokenKey\(accessId, optKey\)\)\)/.test(signer), "then opens the session on the prepared doc");
 });
+
+test("sign-off: the signer emits a survey/mockup sign-off page + each signature spot is placed deliberately", () => {
+  // proposal-pdf.js adds the sign-off page with its own fields, signing mode only, only when there's an appendix.
+  const pdf = readFileSync(new URL("../lib/proposal-pdf.js", import.meta.url), "utf8");
+  assert.ok(/if \(meta\.__signing && Array\.isArray\(meta\.__fields\) && \(surveyImages\.length \|\| mockupImages\.length\)\)/.test(pdf), "the sign-off page is signing-mode + appendix-only");
+  assert.ok(/sectionHeader\("SITE SURVEY & SYSTEM MOCKUP"/.test(pdf), "it has its own section header");
+  assert.ok(/ackFrac\("name_ack", "name"/.test(pdf) && /ackFrac\("date_ack", "date"/.test(pdf) && /ackFrac\("signature_ack", "signature"/.test(pdf), "and its own name/date/signature fields");
+
+  // flatten.js anchors the certification block to the FIRST signature (acceptance), not the sign-off one.
+  const flat = readFileSync(new URL("../lib/esign/flatten.js", import.meta.url), "utf8");
+  assert.ok(/if \(!sigPlace\) sigPlace = \{ page, left, w, bottom, W, H \}/.test(flat), "cert anchors to the first signature");
+
+  // esign-signer.jsx: adopt once, then place each signature spot deliberately.
+  const signer = readFileSync(new URL("../app/project/[accessId]/esign/esign-signer.jsx", import.meta.url), "utf8");
+  assert.ok(/const allPlaced = sigFields\.length > 0 && sigFields\.every\(\(f\) => placed\.has\(f\.key\)\)/.test(signer), "done requires every signature spot placed");
+  assert.ok(/const signed = !!\(values\.name && values\.signature && allPlaced\)/.test(signer), "Finish is gated on all spots placed");
+  assert.ok(/else placeField\(f\.key\)/.test(signer), "tapping an empty spot with a signature adopted places it");
+  assert.ok(/done = system \? true : f\.type === "name" \? !!values\.name : placed\.has\(f\.key\)/.test(signer), "a signature spot shows the signature only once placed");
+});

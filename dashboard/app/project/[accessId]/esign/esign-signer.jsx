@@ -59,9 +59,11 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   const [fatal, setFatal] = useState(null);    // { error, code } — session can't continue
   const [epoch, setEpoch] = useState(0);       // bump to reopen with a fresh session
   const [prepping, setPrepping] = useState(false);
+  const [placed, setPlaced] = useState(() => new Set());   // signature-field keys the customer has placed
   const scrollRef = useRef(null);
   const prepRef = useRef(prepareAppendix);     // latest, without re-triggering the open effect
   prepRef.current = prepareAppendix;
+  const placeTargetRef = useRef(null);         // which signature field a capture-sheet adoption lands on
 
   // Open (or resume) the session. First render the survey / mockup appendix (client-side, same images the
   // Download carries) so the signer shows — and the customer signs — the WHOLE document, not just pricing.
@@ -98,7 +100,12 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
 
   const fields = doc?.fields || [];
   const byPage = useMemo(() => fields.reduce((m, f, i) => { (m[f.page] ||= []).push({ ...f, i }); return m; }, {}), [fields]);
-  const signed = !!(values.name && values.signature);
+  const sigFields = useMemo(() => fields.map((f, i) => ({ ...f, i })).filter((f) => f.type === "signature"), [fields]);
+  useEffect(() => { setPlaced(new Set()); }, [doc]);   // a fresh document starts every signature spot empty
+  // "Sign each spot": the customer adopts one signature, then taps EACH signature field to place it.
+  const allPlaced = sigFields.length > 0 && sigFields.every((f) => placed.has(f.key));
+  const signed = !!(values.name && values.signature && allPlaced);
+  const placeField = (key) => setPlaced((prev) => { const n = new Set(prev); n.add(key); return n; });
 
   const handle = useCallback((r) => {
     if (r?.error) {
@@ -118,7 +125,14 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     setValues(r.values); after?.(r.values);
   }
 
-  const adopt = (name, signature) => save({ name, signature }, () => { setSheet(null); setActive(Math.max(0, fields.findIndex((f) => f.type === "signature"))); });
+  // Adopting a signature places it on the field that opened the capture sheet (the one the customer tapped
+  // / Next landed on), then moves the highlight to the next still-empty signature spot.
+  const adopt = (name, signature) => save({ name, signature }, () => {
+    setSheet(null);
+    const key = placeTargetRef.current || sigFields[0]?.key;
+    placeTargetRef.current = null;
+    if (key) { placeField(key); const nx = sigFields.find((f) => f.key !== key && !placed.has(f.key)); if (nx) setActive(nx.i); }
+  });
   // Sign: the server re-validates everything, flattens the signed PDF and runs accept + sign.
   async function finish(a) {
     if (!sess?.token) return;
@@ -133,15 +147,20 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
 
   function scrollTo(i) { scrollRef.current?.querySelector(`[data-field="${fields[i]?.key}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }
   function next() {
-    // Not signed → jump straight to the one real action (the signature; or the name when it wasn't
-    // auto-filled) and open the capture sheet. The date is never a stop.
-    if (!signed) {
-      let i = fields.findIndex((f) => f.type === "signature" && !values.signature);
-      if (i < 0) i = fields.findIndex((f) => f.type === "name" && !values.name);
-      if (i < 0) i = fields.findIndex((f) => f.type !== "date");
-      setActive(Math.max(0, i)); scrollTo(Math.max(0, i)); setSheet("capture"); return;
+    // Not done → go to the next empty signature spot: open the capture sheet to adopt a signature the
+    // first time, or place the already-adopted signature there (a deliberate step per spot).
+    if (!allPlaced) {
+      const target = sigFields.find((f) => !placed.has(f.key));
+      if (target) {
+        setActive(target.i); scrollTo(target.i);
+        if (!values.signature) { placeTargetRef.current = target.key; setSheet("capture"); }
+        else placeField(target.key);
+        return;
+      }
+      const ni = fields.findIndex((f) => f.type === "name" && !values.name);   // fallback: name wasn't auto-filled
+      if (ni >= 0) { setActive(ni); scrollTo(ni); setSheet("capture"); return; }
     }
-    // Already signed → cycle the active highlight through the non-date fields for review.
+    // Every spot placed → cycle the active highlight through the non-date fields for review.
     const nd = fields.map((f, idx) => idx).filter((idx) => fields[idx].type !== "date");
     const pos = nd.indexOf(active); const i = nd.length ? nd[(pos + 1) % nd.length] : 0;
     setActive(i); scrollTo(i);
@@ -149,7 +168,14 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   function tap(f) {
     if (f.type === "date") return;   // system-filled, not interactive
     setActive(f.i);
-    setSheet("capture");
+    if (f.type === "signature") {
+      // No signature yet → adopt one (this spot becomes its target). Already adopted but this spot empty →
+      // place it here (the deliberate per-spot sign). Already placed → reopen to re-sign.
+      if (!values.signature || placed.has(f.key)) { placeTargetRef.current = f.key; setSheet("capture"); }
+      else placeField(f.key);
+      return;
+    }
+    setSheet("capture");   // name (only reachable when it wasn't auto-filled)
   }
 
   const overlay = (page) => (byPage[page] || []).map((f) => {
@@ -158,7 +184,7 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     // interactive highlight. Only an un-filled signature (or a missing name, the fallback) is live.
     const system = f.type === "date";
     const [label, icon] = TAG[f.type] || [f.type, null];
-    const done = system ? true : f.type === "name" ? !!values.name : !!values.signature;
+    const done = system ? true : f.type === "name" ? !!values.name : placed.has(f.key);
     const interactive = !system;
     return (
       <button key={f.key} type="button" data-field={f.key} data-type={f.type} data-done={done ? "1" : "0"}
@@ -174,10 +200,11 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     );
   });
 
-  // Fields the customer must act on: the signature always, plus the name only when it couldn't be
-  // auto-filled. The date never counts. So a proposal with a known PREPARED FOR shows "0 / 1" → "1 / 1".
-  const actionFields = fields.filter((f) => f.type === "signature" || (f.type === "name" && !values.name));
-  const filled = actionFields.filter((f) => (f.type === "signature" ? !!values.signature : !!values.name)).length;
+  // The customer must place every signature spot (acceptance + the survey/mockup sign-off). The name
+  // auto-fills from PREPARED FOR (captured alongside the first signature when it doesn't), the date is
+  // system-stamped — so the counter tracks signature spots: "0 / 2" → "2 / 2".
+  const actionFields = sigFields;
+  const filled = sigFields.filter((f) => placed.has(f.key)).length;
 
   return createPortal(
     // Portaled to <body>: the deck wraps tools in transformed containers, which would otherwise capture `position: fixed`.
