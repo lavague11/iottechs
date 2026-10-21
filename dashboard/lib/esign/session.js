@@ -67,7 +67,7 @@ export function validateSession(token, accessId, caller, { now = Date.now() } = 
 }
 
 // Open (or resume) a signing session for one option. `resumeToken` lets a reload pick the same session up.
-export function startSession({ accessId, optKey, caller, resumeToken = null, ip = null, ua = null, now = Date.now() }) {
+export function startSession({ accessId, optKey, caller, resumeToken = null, appendix = null, ip = null, ua = null, now = Date.now() }) {
   if (!maySignProposal(caller, accessId)) return fail("DENIED", MSG.DENIED);
   if (resumeToken) {
     const v = validateSession(resumeToken, accessId, caller, { now });
@@ -83,7 +83,7 @@ export function startSession({ accessId, optKey, caller, resumeToken = null, ip 
       return { ok: true, token: resumeToken, session: publicSession({ ...v.session, expires_at: now + SESSION_TTL_MS }), doc: v.doc, values, row: v.row, resumed: true };
     }
   }
-  const r = ensureProposalUnsigned(accessId, optKey, { by: caller.role });
+  const r = ensureProposalUnsigned(accessId, optKey, { by: caller.role, appendix });
   if (r.error) return fail("NOT_SIGNABLE", r.error);
   const { row, doc, fingerprint } = r;
   // One live session per signer + proposal: a fresh open replaces any earlier one.

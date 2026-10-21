@@ -452,5 +452,9 @@ export const PROPOSAL_ACKS = [
   { key: "terms", required: true, label: "I have read and agree to the IOT TECHS Master Terms & Conditions." },
   { key: "payment", required: true, label: "Prompt payment: the balance is due at substantial completion; a payment more than 7 days late with no approved arrangement puts the account in default, with a $35 late fee and the remedies in Section 6." },
   { key: "pcp", required: true, pcpOnly: true, label: "PCP credit: the credit is discretionary, may be adjusted if conditions change, and is removed if the account defaults." },
+  // Shown only when the signed document actually carries those pages (gated on the stored doc, not the
+  // payload). The customer reviews the appended site-survey / mockup pages and confirms them here.
+  { key: "survey", required: true, surveyOnly: true, label: "Site survey & system layout: I have reviewed the survey / layout pages and confirm the equipment and placement shown reflect my property." },
+  { key: "mockup", required: true, mockupOnly: true, label: "Camera mockup: I have reviewed the mockup pages and approve the proposed camera views." },
   { key: "marketing", required: false, label: "Social media & marketing (optional): IOT TECHS may post non-identifying photos and video of my completed project." },
 ];

@@ -6,16 +6,15 @@
 import { sqliteHandle, getActiveProposal, getJobByAccessId, selectProposalOption, signProposal, voidProposalSignature, maybeAutoAdvance, logProjectEvent } from "../db.js";
 import { getDocument, storeDocument, setProposalSignPointers, recordSignEvent, listSignEvents, sha256Hex } from "./store.js";
 import { validateSession } from "./session.js";
-import { missingRequired } from "./capture.js";
+import { missingRequired, requiredAcks } from "./capture.js";
 import { flattenSigned } from "./flatten.js";
 import { buildCertificate } from "./certificate.js";
-import { PROPOSAL_ACKS } from "../proposal-terms.js";
 
 const h = () => sqliteHandle();
 const fail = (code, error) => ({ ok: false, code, error });
 const ROLE_LABEL = { customer: "Customer", admin: "Admin (signing on the customer's behalf)", manager: "Manager (signing on the customer's behalf)" };
 const EVENT_LABEL = { opened: "Document opened", set_name: "Name entered", set_signature: "Signature adopted", set_acks: "Terms acknowledged", completed: "Signed" };
-const ACK_SHORT = { terms: "Master Terms & Conditions", payment: "Prompt payment terms", pcp: "PCP credit terms", marketing: "Marketing (optional)" };
+const ACK_SHORT = { terms: "Master Terms & Conditions", payment: "Prompt payment terms", pcp: "PCP credit terms", survey: "Site survey & system layout", mockup: "Camera mockup", marketing: "Marketing (optional)" };
 const METHOD = { draw: "Drawn", type: "Typed", upload: "Uploaded image" };
 
 export async function completeSession({ token, accessId, caller, ip = null, ua = null, now = Date.now() }) {
@@ -23,7 +22,10 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
   if (!v.ok) return v;
   const { session: s, row, doc, values } = v;
   let payload; try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
-  if (missingRequired(values, payload).length) return fail("MISSING", "Add your signature and agree to the required terms first.");
+  // Which acknowledgments apply is decided by the STORED unsigned document (does it carry survey / mockup
+  // pages), never by the client — so the survey/mockup sign-off can't be skipped or faked.
+  const facts = { hasSurvey: !!doc.meta?.hasSurvey, hasMockup: !!doc.meta?.hasMockup };
+  if (missingRequired(values, payload, facts).length) return fail("MISSING", "Add your signature and agree to the required terms first.");
 
   // Claim the session: only one completion can win; a replay finds it already taken.
   const claim = h().prepare("UPDATE sign_sessions SET state='completing' WHERE id=? AND state='open'").run(s.id);
@@ -67,7 +69,7 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
     const project = getJobByAccessId(accessId);
     const events = [...listSignEvents(row.id).filter((e) => e.session_id === s.id).map((e) => ({ at: e.created_at, label: `${EVENT_LABEL[e.kind] || e.kind}${e.kind === "set_signature" ? (() => { try { return ` (${(METHOD[JSON.parse(e.detail || "{}").method] || "").toLowerCase()})`; } catch { return ""; } })() : ""}`, ip: e.ip })),
       { at: signedRow.signed_at, label: "Signed", ip }];
-    const acks = PROPOSAL_ACKS.filter((a) => !a.pcpOnly || +(payload.pcp_credit || 0) > 0).map((a) => ({ label: ACK_SHORT[a.key] || a.key, agreed: !!values.acks?.[a.key] }));
+    const acks = requiredAcks(payload, facts).map((a) => ({ label: ACK_SHORT[a.key] || a.key, agreed: !!values.acks?.[a.key] }));
     const certBytes = await buildCertificate({
       reference, version: row.version, optionKey: s.option_key, projectId: String(accessId), fileName: doc.meta?.fileName || null,
       fingerprint: s.fingerprint, unsignedSha256: doc.sha256, signedSha256: signedSha, signedAt: signedRow.signed_at,

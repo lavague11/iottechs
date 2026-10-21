@@ -20,21 +20,24 @@ async function ctx() {
 // Public view of a stored document — never the bytes (those come through the gated /api/proposal-doc/[id]).
 const docView = (d) => ({ id: d.id, sha256: d.sha256, version: d.version, fileName: d.meta?.fileName || null, pageCount: d.meta?.pageCount || 0, fields: d.meta?.fields || [], option: d.meta?.option || null });
 const payloadOf = (row) => { try { return JSON.parse(row.payload || "{}"); } catch { return {}; } };
+// Which acks apply is read from the STORED unsigned doc's meta (does it carry survey / mockup pages), so
+// the survey/mockup sign-off tracks the actual document, not anything the client sends.
+const factsOf = (doc) => ({ hasSurvey: !!doc?.meta?.hasSurvey, hasMockup: !!doc?.meta?.hasMockup });
 // What the client may keep of the captured values (it already holds them; nothing here is secret from the signer).
-const valuesView = (v, row) => ({ name: v?.name || null, signature: v?.signature ? { method: v.signature.method, data: v.signature.data } : null, acks: v?.acks || {}, missing: missingRequired(v, payloadOf(row)) });
-const ackList = (row) => requiredAcks(payloadOf(row)).map((a) => ({ key: a.key, required: !!a.required }));
+const valuesView = (v, row, doc) => ({ name: v?.name || null, signature: v?.signature ? { method: v.signature.method, data: v.signature.data } : null, acks: v?.acks || {}, missing: missingRequired(v, payloadOf(row), factsOf(doc)) });
+const ackList = (row, doc) => requiredAcks(payloadOf(row), factsOf(doc)).map((a) => ({ key: a.key, required: !!a.required }));
 const err = (r) => ({ error: r.error || "Couldn't sign.", code: r.code });
 
 // Open (or resume, with `resumeToken`) a signing session for one option. Generates + stores the unsigned
 // PDF the first time (or when the content changed); returns the token, document and any saved values.
-export async function startSignAction(accessId, optKey, resumeToken = null) {
+export async function startSignAction(accessId, optKey, resumeToken = null, appendix = null) {
   const { caller, ip, ua } = await ctx();
   if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
   let r;
-  try { r = startSession({ accessId, optKey: String(optKey || ""), caller, resumeToken, ip, ua }); }
+  try { r = startSession({ accessId, optKey: String(optKey || ""), caller, resumeToken, appendix, ip, ua }); }
   catch (e) { return { error: "Couldn't prepare the document.", code: "ERROR" }; }
   if (!r.ok) return err(r);
-  return { ok: true, token: r.token, session: publicSession(r.session), doc: docView(r.doc), values: valuesView(r.values, r.row), acks: ackList(r.row), resumed: !!r.resumed };
+  return { ok: true, token: r.token, session: publicSession(r.session), doc: docView(r.doc), values: valuesView(r.values, r.row, r.doc), acks: ackList(r.row, r.doc), resumed: !!r.resumed };
 }
 
 // Save the signer's name / adopted signature / acknowledgments on the session (validated server-side).
@@ -43,7 +46,7 @@ export async function saveSignValuesAction(accessId, token, patch) {
   if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
   const r = saveValues({ token, accessId, caller, patch: patch || {}, ip, ua });
   if (!r.ok) return err(r);
-  return { ok: true, values: valuesView(r.values, r.row), expiresAt: r.expiresAt };
+  return { ok: true, values: valuesView(r.values, r.row, r.doc), expiresAt: r.expiresAt };
 }
 
 // Finish: flatten the signed PDF, run the existing accept + sign lifecycle, write the certificate.

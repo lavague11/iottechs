@@ -274,12 +274,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     showToast("PCP signature voided — customer can re-approve");
   }
 
-  // Build & download the PDF — rasterizes BOTH tools exactly as they render on screen: each mockup
-  // page (iPhone frame + camera grid) and each site-survey floor plan (pinned). All best-effort: a
-  // missing/empty tool just means fewer appendix pages, never a failed download.
-  async function handleDownload(mode = "standard") {
-    if (dlBusy) return;
-    setDlBusy(true);
+  // Rasterize BOTH tools exactly as they render on screen — each mockup page (iPhone frame + camera grid)
+  // and each site-survey floor plan (pinned) — into the appendix the proposal PDF carries. Shared by the
+  // Download button AND the signer (so the customer signs the SAME survey/mockup pages they can download).
+  // All best-effort: a missing/empty tool just means fewer appendix pages, never a failure.
+  async function buildAppendix() {
     let mockupImages = [], surveyImages = [], surveyFloors = [];
     try {
       const [mk, sv] = await Promise.all([
@@ -305,7 +304,15 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         jobs.push(exportSurvey2Images(sv.saved.data).then((r) => { surveyImages = r; }).catch(() => {}));
       }
       await Promise.all(jobs);
-    } catch { /* fetch failed — download the numbers-only proposal */ }
+    } catch { /* fetch failed — proceed numbers-only */ }
+    return { mockupImages, surveyImages, surveyFloors };
+  }
+
+  // Build & download the PDF (best-effort appendix as above).
+  async function handleDownload(mode = "standard") {
+    if (dlBusy) return;
+    setDlBusy(true);
+    const { mockupImages, surveyImages, surveyFloors } = await buildAppendix();
     try {
       if (mode === "survey") downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
       else await saveFillableProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors });
@@ -1000,6 +1007,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
 
       {esignFor && (
         <EsignSigner accessId={accessId} optKey={esignFor} optLabel={optName(esignFor)} reference={propNum} defaultName={customerName || ""}
+          prepareAppendix={buildAppendix}
           onClose={() => setEsignFor(null)}
           onDone={(r) => {
             setEsignFor(null); setP(r.proposal); setConfirmApprove(false);

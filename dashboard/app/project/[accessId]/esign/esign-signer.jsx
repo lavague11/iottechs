@@ -46,7 +46,7 @@ const store = {
   set: (k, v) => { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch {} },
 };
 
-export default function EsignSigner({ accessId, optKey, optLabel, reference, defaultName = "", onClose, onDone }) {
+export default function EsignSigner({ accessId, optKey, optLabel, reference, defaultName = "", prepareAppendix = null, onClose, onDone }) {
   const [sess, setSess] = useState(null);      // { token }
   const [doc, setDoc] = useState(null);
   const [values, setValues] = useState({ name: null, signature: null, acks: {}, missing: [] });
@@ -58,18 +58,32 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   const [err, setErr] = useState(null);        // sheet-level, recoverable
   const [fatal, setFatal] = useState(null);    // { error, code } — session can't continue
   const [epoch, setEpoch] = useState(0);       // bump to reopen with a fresh session
+  const [prepping, setPrepping] = useState(false);
   const scrollRef = useRef(null);
+  const prepRef = useRef(prepareAppendix);     // latest, without re-triggering the open effect
+  prepRef.current = prepareAppendix;
 
-  // Open (or resume) the session.
+  // Open (or resume) the session. First render the survey / mockup appendix (client-side, same images the
+  // Download carries) so the signer shows — and the customer signs — the WHOLE document, not just pricing.
   useEffect(() => {
     let live = true;
     setDoc(null); setFatal(null);
-    startSignAction(accessId, optKey, store.get(tokenKey(accessId, optKey))).then((r) => {
+    (async () => {
+      let appendix = null;
+      if (prepRef.current) {
+        setPrepping(true);
+        try { const a = await prepRef.current(); if (a) appendix = { surveyImages: a.surveyImages || [], mockupImages: a.mockupImages || [] }; }
+        catch { /* best-effort — fall back to the numbers-only document */ }
+        if (live) setPrepping(false);
+      }
       if (!live) return;
-      if (r?.error) { setFatal({ error: r.error, code: r.code }); return; }
-      store.set(tokenKey(accessId, optKey), r.token);
-      setSess({ token: r.token }); setDoc(r.doc); setValues(r.values); setAcks(r.acks);
-    }).catch(() => live && setFatal({ error: "Couldn't open the document.", code: "ERROR" }));
+      startSignAction(accessId, optKey, store.get(tokenKey(accessId, optKey)), appendix).then((r) => {
+        if (!live) return;
+        if (r?.error) { setFatal({ error: r.error, code: r.code }); return; }
+        store.set(tokenKey(accessId, optKey), r.token);
+        setSess({ token: r.token }); setDoc(r.doc); setValues(r.values); setAcks(r.acks);
+      }).catch(() => live && setFatal({ error: "Couldn't open the document.", code: "ERROR" }));
+    })();
     return () => { live = false; };
   }, [accessId, optKey, epoch]);
 
@@ -177,7 +191,7 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
             </div>
           </div>
         )}
-        {!fatal && !doc && <div className="esg-note">Preparing…</div>}
+        {!fatal && !doc && <div className="esg-note">{prepping ? "Preparing your document…" : "Preparing…"}</div>}
         {!fatal && doc && <PdfPages url={`/api/proposal-doc/${doc.id}`} expectedSha={doc.sha256} zoom={zoom} renderOverlay={overlay} onError={(m) => setFatal({ error: m, code: "ERROR" })} />}
       </div>
       <div className="esg-bar">

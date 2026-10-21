@@ -46,15 +46,19 @@ export function signBlocker(row, optKey) {
 // exportMockupImages the Download uses) because they can't be produced server-side; we only accept well-
 // formed, size-capped data: images, and never more than a sane page count. The survey/mockup DATA remains
 // the source of truth — these are the visual snapshot the customer reviews and approves.
-const MAX_APPENDIX_IMG = 2_800_000;   // ~2.8 MB per rendered page (data URL length)
-const MAX_APPENDIX_PAGES = 24;
+const MAX_APPENDIX_IMG = 6_000_000;     // ~6 MB per rendered page — a crisp 2400px floor-plan PNG fits
+const MAX_APPENDIX_PAGES = 20;          // per section (survey, mockup)
+const MAX_APPENDIX_TOTAL = 32_000_000;  // whole-appendix byte budget, so a signed BLOB stays bounded
 function okImg(s) { return typeof s === "string" && /^data:image\/(png|jpeg);base64,/.test(s) && s.length <= MAX_APPENDIX_IMG; }
 export function cleanAppendix(appendix) {
   if (!appendix || typeof appendix !== "object") return { surveyImages: [], mockupImages: [] };
+  let budget = MAX_APPENDIX_TOTAL;
+  const take = (s) => { if (s.length > budget) return false; budget -= s.length; return true; };   // running total guard
   const surveyImages = (Array.isArray(appendix.surveyImages) ? appendix.surveyImages : [])
-    .filter((f) => f && okImg(f.img)).slice(0, MAX_APPENDIX_PAGES).map((f) => ({ name: String(f.name || "").slice(0, 80), img: f.img, counts: f.counts || null }));
+    .filter((f) => f && okImg(f.img)).slice(0, MAX_APPENDIX_PAGES).filter((f) => take(f.img))
+    .map((f) => ({ name: String(f.name || "").slice(0, 80), img: f.img, counts: f.counts || null }));
   const mockupImages = (Array.isArray(appendix.mockupImages) ? appendix.mockupImages : [])
-    .filter(okImg).slice(0, MAX_APPENDIX_PAGES);
+    .filter(okImg).slice(0, MAX_APPENDIX_PAGES).filter(take);
   return { surveyImages, mockupImages };
 }
 // A short, order-independent fingerprint of the accepted appendix — lets the stored unsigned doc rebuild
@@ -98,24 +102,32 @@ export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(
   };
 }
 
-// Return the stored unsigned document for (proposal, option) — creating it the first time or whenever
-// the signable content drifted (fingerprint changed) — and point the proposal row at it.
-export function ensureProposalUnsigned(accessId, optKey, { by = null } = {}) {
+const EMPTY_APPENDIX_HASH = appendixHash(cleanAppendix(null));
+
+// Return the stored unsigned document for (proposal, option) — creating it the first time, whenever the
+// signable content drifted (fingerprint changed), OR whenever the client-rendered survey/mockup appendix
+// changed (appendixHash) — and point the proposal row at it. The stored doc's meta records which pages it
+// carries (hasSurvey/hasMockup) so the consent step gates the survey/mockup acknowledgments on the ACTUAL
+// signed document, never on anything the client claims.
+export function ensureProposalUnsigned(accessId, optKey, { by = null, appendix = null } = {}) {
   const row = getActiveProposal(accessId);
   const why = signBlocker(row, optKey);
   if (why) return { error: why };
   const fp = proposalFingerprintOf(row);
+  const apx = appendixHash(cleanAppendix(appendix));
   if (row.unsigned_doc_id) {
     const cur = getDocumentInfo(row.unsigned_doc_id);
-    if (cur && !cur.voided && cur.kind === "unsigned" && cur.proposal_id === row.id && cur.meta?.option === optKey && cur.meta?.fingerprint === fp) {
+    if (cur && !cur.voided && cur.kind === "unsigned" && cur.proposal_id === row.id && cur.meta?.option === optKey
+        && cur.meta?.fingerprint === fp && (cur.meta?.appendixHash || EMPTY_APPENDIX_HASH) === apx) {
       return { doc: cur, row, fingerprint: fp, reused: true };
     }
-    if (cur && !cur.voided) voidDocument(cur.id);   // stale (content or option changed): keep for history, stop serving
+    if (cur && !cur.voided) voidDocument(cur.id);   // stale (content, option or appendix changed): keep for history, stop serving
   }
-  const built = buildProposalUnsigned(accessId, optKey, row);
+  const built = buildProposalUnsigned(accessId, optKey, row, appendix);
   const stored = storeDocument({
     proposalId: row.id, accessId, version: row.version, kind: "unsigned", bytes: built.bytes, createdBy: by,
-    meta: { option: optKey, fingerprint: fp, fields: built.fields, pageCount: built.pageCount, fileName: built.fileName },
+    meta: { option: optKey, fingerprint: fp, fields: built.fields, pageCount: built.pageCount, fileName: built.fileName,
+      appendixHash: built.appendixHash, hasSurvey: built.hasSurvey, hasMockup: built.hasMockup },
   });
   setProposalSignPointers(row.id, { unsignedDocId: stored.id });
   return { doc: getDocumentInfo(stored.id), row, fingerprint: fp, reused: false };

@@ -31,11 +31,18 @@ export function cleanName(s) {
   return n.length >= 2 ? n : null;
 }
 
-// The acknowledgments this proposal needs initialed (the PCP one only when a credit is on it). Same
-// rule the on-screen flow used, so the consent step never asks for more or less than before.
-export function requiredAcks(payload) {
+// The acknowledgments this proposal needs initialed. PCP only when a credit is on the payload; survey /
+// mockup only when the stored signed document actually carries those pages (facts.hasSurvey/hasMockup,
+// read from the unsigned doc's meta — NOT the client). Same rule the on-screen flow used, so the consent
+// step never asks for more or less than what the customer is actually signing.
+export function requiredAcks(payload, facts = {}) {
   const pcp = +(payload?.pcp_credit || 0) > 0;
-  return PROPOSAL_ACKS.filter((a) => !a.pcpOnly || pcp);
+  return PROPOSAL_ACKS.filter((a) => {
+    if (a.pcpOnly && !pcp) return false;
+    if (a.surveyOnly && !facts.hasSurvey) return false;
+    if (a.mockupOnly && !facts.hasMockup) return false;
+    return true;
+  });
 }
 
 // Merge a client patch into the stored values, validating each part. Returns { values } or { error }.
@@ -65,10 +72,10 @@ export function mergeValues(prev, patch, now = new Date()) {
 
 // What's still missing before the document can be completed. Name + signature fill the three fields
 // (the date is stamped by the server at completion); the required acknowledgments must all be checked.
-export function missingRequired(values, payload) {
+export function missingRequired(values, payload, facts = {}) {
   const miss = [];
   if (!values?.name) miss.push("name");
   if (!values?.signature?.data) miss.push("signature");
-  for (const a of requiredAcks(payload)) if (a.required && !values?.acks?.[a.key]) miss.push(`ack:${a.key}`);
+  for (const a of requiredAcks(payload, facts)) if (a.required && !values?.acks?.[a.key]) miss.push(`ack:${a.key}`);
   return miss;
 }
