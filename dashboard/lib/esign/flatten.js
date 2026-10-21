@@ -7,6 +7,7 @@ import { fmtSignStamp } from "../proposal.js";
 
 const INK = rgb(16 / 255, 32 / 255, 74 / 255);
 const GREEN = rgb(29 / 255, 122 / 255, 58 / 255);
+const GRAY = rgb(96 / 255, 101 / 255, 115 / 255);
 const SIG_MAX_W = 140;   // pt — same footprint the legacy signed PDF gave a drawn signature
 
 // Helvetica only encodes WinAnsi: drop anything it can't (a name with CJK must not crash the signing).
@@ -23,9 +24,11 @@ export async function flattenSigned({ unsignedBytes, fields, values, signedAt, t
   if (!values?.name) throw new Error("A name is required.");
   const pdf = await PDFDocument.load(unsignedBytes);
   const font = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const reg = await pdf.embedFont(StandardFonts.Helvetica);
   const img = await pdf.embedPng(png.bytes);
   const pages = pdf.getPages();
   const dateText = fmtSignStamp(signedAt);
+  let sigPlace = null;   // remember where the signature landed → stamp the certification block under it
 
   for (const f of fields) {
     const page = pages[f.page - 1];
@@ -49,7 +52,26 @@ export async function flattenSigned({ unsignedBytes, fields, values, signedAt, t
       // and only when it still fits inside the field (a wide signature simply omits it, no overlap).
       const stampX = sigX + dw + 14;
       if (stampX + 50 < left + w) page.drawText("ACCEPTED", { x: stampX, y: bottom + (h - 11) / 2 + 2, size: 11, font, color: GREEN });
+      sigPlace = { page, left, w, bottom, W, H };
     }
+  }
+
+  // DocuSign-style certification block UNDER the authorized signature: the full signing timestamp plus who
+  // signed, how they were verified, their IP, and the immutable document reference — the same facts the
+  // standalone Certificate of Completion records, stamped onto the document itself. Drawn in small gray
+  // type just below the signature line; clamped so it never runs off the page.
+  if (sigPlace && meta.certify) {
+    const { page, left, w, bottom } = sigPlace;
+    const line = (t, y, { size = 6.2, f = reg, color = GRAY } = {}) => {
+      let s = String(t); while (size > 4.5 && f.widthOfTextAtSize(safe(f, s), size) > w) size -= 0.3;
+      page.drawText(safe(f, s), { x: left, y, size, font: f, color });
+    };
+    const via = meta.via ? `Verified via ${meta.via}` : "Verified by IOT TECHS e-sign";
+    const idBits = [meta.reference ? `Document ${meta.reference}` : null, meta.fingerprint ? `Ref ${String(meta.fingerprint).slice(0, 12)}` : null].filter(Boolean).join("  ·  ");
+    let y = bottom - 9;
+    line(`Electronically signed by ${values.name}  ·  ${dateText}`, y, { size: 6.6, f: font, color: INK }); y -= 8.4;
+    line(`${via}${meta.ip ? `  ·  IP ${meta.ip}` : ""}`, y); y -= 7.6;
+    if (idBits) { line(`${idBits}  ·  IOT TECHS e-sign — Certificate of Completion on file`, y); }
   }
   pdf.setTitle(title);
   pdf.setProducer("IOT TECHS e-sign");

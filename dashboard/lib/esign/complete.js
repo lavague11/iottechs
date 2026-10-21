@@ -55,12 +55,16 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
     if (!signedRow) throw new Error("The proposal couldn't be signed.");
     if (signedRow.signed_fingerprint !== s.fingerprint) throw new Error("The proposal changed while signing.");
 
-    // Final flatten uses the record's own signed_at so the PDF and the database agree to the minute.
-    const signedBytes = await flattenSigned({ unsignedBytes: unsigned.bytes, fields, values, signedAt: signedRow.signed_at, title: `Signed proposal — ${doc.meta?.fileName || ""}`.trim() });
+    // Final flatten uses the record's own signed_at so the PDF and the database agree to the minute, and
+    // stamps the DocuSign-style certification block (timestamp + signer + verification + IP + doc ref)
+    // under the signature — the same facts the standalone Certificate of Completion records.
+    const reference = `PROP-${String(row.id).padStart(4, "0")}-v${row.version}`;
+    const signedBytes = await flattenSigned({ unsignedBytes: unsigned.bytes, fields, values, signedAt: signedRow.signed_at,
+      title: `Signed proposal — ${doc.meta?.fileName || ""}`.trim(),
+      meta: { certify: true, reference, fingerprint: s.fingerprint, via: s.via_pin ? "Project PIN" : "Account sign-in", ip } });
     const signedSha = sha256Hex(signedBytes);
 
     const project = getJobByAccessId(accessId);
-    const reference = `PROP-${String(row.id).padStart(4, "0")}-v${row.version}`;
     const events = [...listSignEvents(row.id).filter((e) => e.session_id === s.id).map((e) => ({ at: e.created_at, label: `${EVENT_LABEL[e.kind] || e.kind}${e.kind === "set_signature" ? (() => { try { return ` (${(METHOD[JSON.parse(e.detail || "{}").method] || "").toLowerCase()})`; } catch { return ""; } })() : ""}`, ip: e.ip })),
       { at: signedRow.signed_at, label: "Signed", ip }];
     const acks = PROPOSAL_ACKS.filter((a) => !a.pcpOnly || +(payload.pcp_credit || 0) > 0).map((a) => ({ label: ACK_SHORT[a.key] || a.key, agreed: !!values.acks?.[a.key] }));

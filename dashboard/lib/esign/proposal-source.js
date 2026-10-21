@@ -41,8 +41,35 @@ export function signBlocker(row, optKey) {
   return null;
 }
 
+// Validate + bound the client-rendered appendix images (site-survey floor plans + system mockup) before
+// they go into a SIGNED document. The customer's browser rasterizes them (the same exportSurvey2Images /
+// exportMockupImages the Download uses) because they can't be produced server-side; we only accept well-
+// formed, size-capped data: images, and never more than a sane page count. The survey/mockup DATA remains
+// the source of truth — these are the visual snapshot the customer reviews and approves.
+const MAX_APPENDIX_IMG = 2_800_000;   // ~2.8 MB per rendered page (data URL length)
+const MAX_APPENDIX_PAGES = 24;
+function okImg(s) { return typeof s === "string" && /^data:image\/(png|jpeg);base64,/.test(s) && s.length <= MAX_APPENDIX_IMG; }
+export function cleanAppendix(appendix) {
+  if (!appendix || typeof appendix !== "object") return { surveyImages: [], mockupImages: [] };
+  const surveyImages = (Array.isArray(appendix.surveyImages) ? appendix.surveyImages : [])
+    .filter((f) => f && okImg(f.img)).slice(0, MAX_APPENDIX_PAGES).map((f) => ({ name: String(f.name || "").slice(0, 80), img: f.img, counts: f.counts || null }));
+  const mockupImages = (Array.isArray(appendix.mockupImages) ? appendix.mockupImages : [])
+    .filter(okImg).slice(0, MAX_APPENDIX_PAGES);
+  return { surveyImages, mockupImages };
+}
+// A short, order-independent fingerprint of the accepted appendix — lets the stored unsigned doc rebuild
+// when the survey/mockup the customer will sign changes, without recomputing the whole PDF to compare.
+export function appendixHash(clean) {
+  const parts = [...(clean.surveyImages || []).map((f) => (f.name || "") + ":" + f.img.length), ...(clean.mockupImages || []).map((s) => "m:" + s.length)];
+  let h = 5381; const str = parts.join("|");
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36) + "-" + parts.length;
+}
+
 // Render the unsigned PDF for one option. Pure of side effects except reading the proposal + project.
-export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(accessId)) {
+// `appendix` (optional) = client-rendered { surveyImages:[{name,img}], mockupImages:[dataURL] } — appended
+// as the site-survey + mockup pages so the customer reviews and signs the WHOLE document, not just pricing.
+export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(accessId), appendix = null) {
   const why = signBlocker(row, optKey);
   if (why) throw Object.assign(new Error(why), { code: "NOT_SIGNABLE" });
   const project = getJobByAccessId(accessId);
@@ -60,11 +87,14 @@ export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(
     fileBase: projectFileBase(project || { access_id: accessId }), projectId: accessId,
     __return: true, __signing: true, __fields: [],
   };
-  const doc = downloadProposalPdf(p, meta, {});
+  const clean = cleanAppendix(appendix);
+  const doc = downloadProposalPdf(p, meta, { surveyImages: clean.surveyImages, mockupImages: clean.mockupImages });
   const bytes = Buffer.from(doc.output("arraybuffer"));
   return {
     bytes, fields: meta.__fields, pageCount: doc.getNumberOfPages(), fileName: doc.__fileName,
-    fingerprint: proposalFingerprintOf(row), ref: { proposalId: row.id, version: row.version },
+    fingerprint: proposalFingerprintOf(row), appendixHash: appendixHash(clean),
+    hasSurvey: clean.surveyImages.length > 0, hasMockup: clean.mockupImages.length > 0,
+    ref: { proposalId: row.id, version: row.version },
   };
 }
 
