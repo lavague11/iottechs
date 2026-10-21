@@ -137,6 +137,15 @@ export async function sendProposalAction(accessId) {
   // proposal stage (forward-only; never rewinds a job already further along). It parks there
   // until the customer accepts an option, which is what advances it onward.
   const stage = advanceStageForward(accessId, "proposal", actorName(tok));
+  // DOCUMENT_ACTION_REQUIRED — a proposal that needs the customer's signature is now outstanding. Drop an
+  // in-app notification (parity with change-orders/revisions, which already notify) so the requirement
+  // reaches them in their feed, not only when they happen to open the project; the link deep-links to the
+  // proposal where the guided review takes over. Best-effort, never blocks the send.
+  try {
+    const cu = getCustomerUserForProject(accessId);
+    if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal is ready to review",
+      body: `Review your proposal and sign to get started (${accessId}).`, link: `/project/${accessId}?open=proposal` });
+  } catch { /* notification is best-effort */ }
   // Notify the customer their proposal is ready — fire-and-forget so a slow/failed
   // email never blocks or fails the send. No-op until RESEND_API_KEY is configured.
   emailProposalReady(accessId).catch(() => {});

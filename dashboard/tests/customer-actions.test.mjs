@@ -50,3 +50,11 @@ test("the DB wrapper, server action, and portal action center are wired", () => 
   assert.ok(pcv.includes("showActionCenter") && pcv.includes("pcv-actctr") && pcv.includes("documents need your attention"), "multi-document action center renders");
   assert.ok(/pageActions\.length > 1/.test(pcv), "action center shows only when MORE THAN ONE action is outstanding");
 });
+
+test("DOCUMENT_ACTION_REQUIRED: sending a proposal drops an in-app customer notification (parity with change orders)", () => {
+  const act = readFileSync(new URL("../app/project/[accessId]/proposal-actions.js", import.meta.url), "utf8");
+  const send = act.slice(act.indexOf("export async function sendProposalAction"), act.indexOf("export async function", act.indexOf("export async function sendProposalAction") + 10));
+  assert.ok(send.includes("getCustomerUserForProject(accessId)") && send.includes("createNotification("), "send creates a customer notification");
+  assert.ok(send.includes("Your proposal is ready to review") && send.includes("?open=proposal"), "it reads as a review request and deep-links to the proposal");
+  assert.ok(send.includes("emailProposalReady(accessId)"), "and the email still fires alongside it");
+});
