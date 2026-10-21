@@ -8,7 +8,7 @@ import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { survey2HasData } from "../../../lib/tool-data";
-import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction } from "./proposal-actions";
+import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction, customerActionsAction } from "./proposal-actions";
 
 // What changed since the customer last signed (ledger P4) — structured, never raw JSON. Rendered
 // above the acceptance box only when the current version supersedes a signed one.
@@ -120,6 +120,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const signRef = useRef(null);
   const [spotlightOn, setSpotlightOn] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);   // big → compact for this version (per device)
+  const [reqActions, setReqActions] = useState(null);   // canonical outstanding customer actions (server resolver)
   const [camRoster, setCamRoster] = useState([]);   // survey camera roster → camera line-item location names
   useEffect(() => {   // booleans only — the heavy survey/mockup blobs are NOT fetched here
     let live = true;
@@ -206,6 +207,15 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     getProposalAction(accessId).then((r) => { if (live && r?.proposal) setP(r.proposal); }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
+
+  // Canonical outstanding customer actions (proposal signature, change orders, PCP approval) — drives the
+  // multi-document action center. Re-pulled whenever the proposal state changes (sign / revise / new version).
+  useEffect(() => {
+    if (preview || embedded) return;   // customer surface only
+    let live = true;
+    customerActionsAction(accessId).then((r) => { if (live && r?.ok) setReqActions(Array.isArray(r.actions) ? r.actions : []); }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId, preview, embedded, p?.signed_at, p?.status, p?.version, p?.pcp_agreed_at]);
   // Keep the working flag set in sync with whatever the server last stored.
   const savedFlagsKey = JSON.stringify(p?.customerFlags || {});
   useEffect(() => { setFlags(p?.customerFlags || {}); }, [savedFlagsKey]);
@@ -418,6 +428,19 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     { getEl: () => payRef.current, title: "Payment schedule", hint: "This is when each payment is due. Review it before you sign." },
     { getEl: () => signRef.current, title: "Ready to continue?", hint: "Review and sign your proposal — this opens the signer; it won’t submit until you sign.", cta: "Review & Sign" },
   ];
+  // Multi-document action center: when more than one customer action is outstanding on this surface
+  // (proposal signature + PCP approval), list them in ONE center instead of competing banners. Each routes
+  // to its own review (proposal → spotlight, PCP → scroll to the agreement). Change orders resolve on their
+  // own surface (the resolver still returns them for the project-level center).
+  const pageActions = (reqActions || []).filter((a) => a.documentType === "proposal" || a.documentType === "pcp");
+  const showActionCenter = needsSig && !bannerDismissed && pageActions.length > 1;
+  const actionLabel = (a) => a.documentType === "pcp" ? "Performance Credit" : "Proposal";
+  const actionVerb = (a) => a.action === "approval" ? "Approval required" : "Signature required";
+  const runAction = (a) => {
+    markSeen();
+    if (a.documentType === "pcp") { const el = rootRef.current?.querySelector(".pcv-pcp-box"); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+    else setSpotlightOn(true);
+  };
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
   const canReq = canAct || reviseMode;
@@ -480,10 +503,31 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     <div className="pcv-root" ref={rootRef}>
       <style>{PCV_CSS}</style>
 
+      {/* Multi-document action center — more than one thing needs the customer (proposal + PCP). One
+          calm list, each routing to its own review, instead of competing banners. */}
+      {showActionCenter && !spotlightOn && (
+        <div className="pcv-actctr" role="region" aria-label="Documents that need your attention">
+          <button type="button" className="pcv-sigbanner-x" aria-label="Dismiss" onClick={markSeen}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
+          <div className="pcv-actctr-k">{pageActions.length} documents need your attention</div>
+          <div className="pcv-actctr-list">
+            {pageActions.map((a, idx) => (
+              <div key={a.documentType + idx} className="pcv-actctr-row">
+                <span className="pcv-actctr-info">
+                  <span className="pcv-actctr-name">{actionLabel(a)}</span>
+                  <span className="pcv-actctr-verb">{actionVerb(a)}</span>
+                </span>
+                <button type="button" className="pcv-actctr-go" onClick={() => runAction(a)}>Review</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Signature-request attention — the customer never has to hunt for a new, actionable document.
           Big card on first sight of this version; collapses to a compact pill once seen/dismissed; gone
           once signed. "Review document" starts the guided spotlight (it does NOT sign). */}
-      {needsSig && !spotlightOn && !bannerDismissed && (
+      {needsSig && !spotlightOn && !bannerDismissed && !showActionCenter && (
         <div className="pcv-sigbanner" role="region" aria-label="Signature requested">
           <button type="button" className="pcv-sigbanner-x" aria-label="Dismiss" onClick={markSeen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -990,6 +1034,15 @@ const PCV_CSS = `
 .pcv-sigpill-lbl{font:650 13.5px system-ui,sans-serif;color:#141821}
 .pcv-sigpill-go{margin-left:auto;font:700 13px system-ui,sans-serif;color:#8A6512}
 @media (prefers-reduced-motion: reduce){ .pcv-sigpill-dot{animation:none} }
+.pcv-actctr{position:relative;margin:4px 0 18px;background:#fffdf8;border:1px solid #ece4d2;border-radius:16px;padding:18px 18px 10px;box-shadow:0 10px 34px -16px rgba(16,17,18,.3)}
+.pcv-actctr-k{font:700 11px/1 system-ui,-apple-system,"Segoe UI",sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#B4945C;margin-bottom:10px}
+.pcv-actctr-list{display:flex;flex-direction:column}
+.pcv-actctr-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid #f0ead9}
+.pcv-actctr-info{display:flex;flex-direction:column;gap:2px;min-width:0}
+.pcv-actctr-name{font:650 15px system-ui,sans-serif;color:#141821}
+.pcv-actctr-verb{font:600 12px system-ui,sans-serif;color:#B4945C}
+.pcv-actctr-go{margin-left:auto;flex:none;background:#161821;color:#F0E7D4;border:0;border-radius:10px;padding:9px 18px;font:650 13.5px system-ui,sans-serif;cursor:pointer}
+.pcv-actctr-go:hover{background:#000}
 /* Diff before re-sign */
 .pcv-doclinks{display:inline-flex;gap:8px;flex-wrap:wrap}
 .pcv-doclinks a{text-decoration:none}

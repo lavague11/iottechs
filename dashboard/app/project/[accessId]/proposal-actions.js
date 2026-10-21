@@ -14,7 +14,7 @@ import {
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
-  customerOwnsProjectAccount,
+  customerOwnsProjectAccount, resolveCustomerRequiredActions,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
@@ -606,6 +606,13 @@ export async function confirmPaymentAction(accessId, id) {
 export async function getPaymentsForLogAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false, payments: [] };
   return { ok: true, payments: getProjectPayments(accessId) };
+}
+
+// Canonical outstanding customer actions (proposal signature, change orders, PCP approval) — powers the
+// portal's Signature-Requested banner / multi-document action center. Read-gated to the project's people.
+export async function customerActionsAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false, actions: [] };
+  return { ok: true, actions: resolveCustomerRequiredActions(accessId) };
 }
 
 // Reads are gated too: a project's acceptance state and its notes thread are private to the

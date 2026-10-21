@@ -10,7 +10,7 @@ import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, addendumSignatureCurrent } from "./proposal.js";
+import { optionTotals, proposalFingerprint, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
@@ -6211,6 +6211,30 @@ export function voidTechSignature(accessId) {
   db.prepare("UPDATE proposals SET tech_signed_name=NULL, tech_signed_at=NULL, tech_signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
   return getActiveProposal(accessId);
 }
+// Canonical: which customer actions remain OUTSTANDING for a project (proposal signature, change-order
+// signatures, PCP approval). Reads already-authoritative state and resolves it via the pure core — the
+// project knows exactly what the customer still has to do, regardless of which pages they visited.
+export function resolveCustomerRequiredActions(accessId) {
+  let proposal = null, pcp = null, addendums = [];
+  const prop = getActiveProposal(accessId);
+  if (prop) {
+    const fp = proposalFingerprint(prop.payload, prop.tax_rate, prop.deposit_pct);
+    const signedCurrent = !!prop.signed_name && (!prop.signed_fingerprint || prop.signed_fingerprint === fp);
+    const actionable = ["sent", "changes_requested", "accepted"].includes(prop.status);
+    proposal = { ref: prop.id, version: prop.version, signedCurrent, actionable };
+    const pcpCreditPct = +(prop?.payload?.pcp_credit || prop.pcp_credit || 0);
+    pcp = { applies: pcpCreditPct > 0, agreed: !!prop.pcp_agreed_at };
+  }
+  try {
+    const addRow = getToolData(accessId, "addendum");
+    addendums = (JSON.parse(addRow?.data || "{}").addendums || []).map((a) => ({
+      id: a?.id, title: a?.title, shared: !!a?.shared, needsPricing: !!a?.needsPricing,
+      signedCurrent: addendumSignatureCurrent(a),
+    }));
+  } catch { addendums = []; }
+  return requiredActionsFromState({ proposal, pcp, addendums });
+}
+
 // Confirmed money only — the number the balance and stage gates trust.
 export function confirmedPaymentTotal(accessId, kind) {
   const rows = db.prepare("SELECT amount, kind FROM project_payments WHERE project_access_id=? AND status='confirmed'").all(String(accessId));

@@ -728,6 +728,32 @@ export function addendumFingerprint(a) {
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
 
+// ---- Canonical customer required-action resolver (PURE) ---------------------------------------
+// Given already-authoritative state, return the outstanding customer actions for a project — the single
+// answer to "whatever needs signing must get signed". The DB wrapper (db.resolveCustomerRequiredActions)
+// gathers the state and calls this; the portal's action center / banner render from it. Order = priority:
+// blocking signatures first (proposal, then change orders), then discretionary approvals (PCP). Each
+// document type declares its own requirement (signature vs approval) — nothing is inferred from UI.
+export function requiredActionsFromState(state = {}) {
+  const out = [];
+  const prop = state.proposal;
+  // Proposal: a sent/actionable version whose CURRENT fingerprint isn't signed yet → signature required.
+  if (prop && prop.actionable && !prop.signedCurrent) {
+    out.push({ documentType: "proposal", title: "Proposal", action: "signature", status: "required", version: prop.version || 1, ref: prop.ref ?? null });
+  }
+  // Change orders / addendums shared with the customer, priced, and not yet signed-current.
+  (state.addendums || []).forEach((a) => {
+    if (a && a.shared && !a.needsPricing && !a.signedCurrent) {
+      out.push({ documentType: "change_order", title: a.title || "Change Order", action: "signature", status: "required", ref: a.id ?? null });
+    }
+  });
+  // PCP: a credit applies but the customer hasn't agreed → approval required (discretionary, lowest priority).
+  if (state.pcp && state.pcp.applies && !state.pcp.agreed) {
+    out.push({ documentType: "pcp", title: "Performance Credit", action: "approval", status: "required", ref: prop?.ref ?? null });
+  }
+  return out;
+}
+
 // ---- Canonical project financial summary (ONE source of truth) --------------------------------
 // Every stage (Proposal, Approval/Deposit, Record-a-Payment, Closeout, invoices) must derive its
 // money from THIS so a project can never show two different totals. An addendum is an AMENDMENT, so
