@@ -272,3 +272,40 @@ test("mid-completion version bump aborts instead of signing the wrong version (i
   assert.equal(db.sqliteHandle().prepare("SELECT state FROM sign_sessions WHERE doc_id=?").get(x.unsignedId).state, "void");
   assert.equal((await done(x)).code, "VOID", "the token can't be retried");
 });
+
+test("survey/mockup appendix: the pages are baked into the signed PDF and gate the required acks", async () => {
+  const img = makePng(200, 120);
+  // Baseline: same proposal with NO appendix.
+  const base = project("Appendix Base", "5552220017"); sent(base);
+  const rb = S.startSession({ accessId: base, optKey: "A", caller: pin(base) });
+  assert.ok(rb.ok, rb.error);
+  const basePages = rb.doc.meta.pageCount;
+
+  // WITH a survey floor + two mockup pages.
+  const a = project("Appendix Co", "5552220018"); sent(a);
+  const appendix = { surveyImages: [{ name: "Floor 1", img }], mockupImages: [img, img] };
+  const r = S.startSession({ accessId: a, optKey: "A", caller: pin(a), appendix });
+  assert.ok(r.ok, r.error);
+  const doc = store.getDocumentInfo(r.doc.id);
+  assert.equal(doc.meta.hasSurvey, true, "doc meta records it carries survey pages");
+  assert.equal(doc.meta.hasMockup, true, "doc meta records it carries mockup pages");
+  assert.ok(doc.meta.pageCount > basePages, `appendix adds pages (${doc.meta.pageCount} > ${basePages})`);
+
+  // Signing WITHOUT the survey/mockup acks is rejected…
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "jo rivera", signature: { method: "draw", data: SIG }, acks: { terms: true, payment: true } } });
+  const bad = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
+  assert.equal(bad.ok, false); assert.equal(bad.code, "MISSING");
+
+  // …and succeeds once they're checked; the signed PDF carries the appendix pages.
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: true, survey: true, mockup: true } } });
+  const ok = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
+  assert.ok(ok.ok, ok.error);
+  const signed = store.getDocument(ok.signedDocId);
+  const texts = await pageTexts(signed.bytes);
+  assert.ok(texts.length > basePages, "signed PDF has the extra appendix pages");
+  // the certificate records the survey + mockup sign-off
+  const certId = store.getDocumentInfo(ok.signedDocId).meta.certificateDocId;
+  const certTxt = (await pageTexts(store.getDocument(certId).bytes)).join(" ");
+  assert.match(certTxt, /Site survey/i);
+  assert.match(certTxt, /Camera mockup/i);
+});
