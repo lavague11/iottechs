@@ -50,6 +50,50 @@ export function speak(text, { rate = 1.02, onEnd } = {}) {
 }
 export function stopSpeaking() { try { window.speechSynthesis?.cancel(); } catch { /* noop */ } }
 
+// Honest mic-level metering via Web Audio. Resolves to a controller { onLevels(fn), stop() } whose levels
+// are REAL (RMS folded into `bars` bands, 0..1), or null when the mic is unavailable (no API / blocked /
+// denied) — callers then show a non-reactive state rather than a waveform that fakes audio detection.
+export async function startMeter(bars = 5) {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return null;
+  let stream, ctx, raf;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { stream.getTracks().forEach((t) => t.stop()); return null; }
+    ctx = new AC();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.72;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    const band = Math.max(1, Math.floor(buf.length / bars));
+    let onLevels = () => {};
+    const tick = () => {
+      analyser.getByteFrequencyData(buf);
+      const out = [];
+      for (let b = 0; b < bars; b++) {
+        let s = 0; for (let i = 0; i < band; i++) s += buf[b * band + i];
+        out.push(Math.min(1, (s / band) / 170));   // 0..1, headroom so speech reaches the top
+      }
+      onLevels(out);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return {
+      onLevels(fn) { if (typeof fn === "function") onLevels = fn; },
+      stop() {
+        try { cancelAnimationFrame(raf); } catch { /* noop */ }
+        try { stream.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+        try { ctx.close(); } catch { /* noop */ }
+      },
+    };
+  } catch {
+    try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+    try { ctx?.close(); } catch { /* noop */ }
+    return null;
+  }
+}
+
 const usd = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Turn a CommandSurface result into a short line to SPEAK (push-to-talk / conversation replies).

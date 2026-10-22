@@ -9,7 +9,7 @@ import { aiStatusAction, aiInterpretAction, aiResolvePickAction, aiApplyNoteActi
 // disambiguate callbacks; the surface itself is domain-agnostic and reusable elsewhere later. Proposal
 // edits apply to the builder's live payload (its own validated autosave is the server write); notes go
 // straight to the server. Renders only when AI_COMMANDS is on and the caller is staff.
-const PLACEHOLDER = "Command — “add 8 cameras at $300”, “change the cameras to $275”, “rewrite the pool camera”, “move audio to the top”, “take me to the proposal”";
+const PLACEHOLDER = "Edit or ask…";
 
 export default function AiCommandBar({ accessId, projectName, payload, patchPayload }) {
   const router = useRouter();

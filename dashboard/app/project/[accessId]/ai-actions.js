@@ -159,9 +159,13 @@ export async function aiGlobalInterpretAction(text, context = {}) {
     if (!context.currentAccessId) return { ok: true, kind: "unsupported", speak: "Open a project first, then jump to its sections." };
     return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=${intent.stage}${intent.open ? `&open=${intent.open}` : ""}`, label: intent.label };
   }
-  if (["add_items", "edit_item", "set_desc", "set_discount", "reorder_section", "add_note"].includes(intent.type))
-    return { ok: true, kind: "unsupported", speak: "That edits a proposal — open the project and use the command bar on its proposal." };
-  if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "Try opening a customer, or go to Tickets, Inventory, Customers or Finances." };
+  if (["add_items", "edit_item", "set_desc", "set_discount", "reorder_section", "add_note"].includes(intent.type)) {
+    // A real target exists → offer to open the proposal (where the edit bar lives), rather than telling
+    // them to open a project they may already be viewing. No project in context → a concise nudge.
+    if (context.currentAccessId) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
+    return { ok: true, kind: "unsupported", speak: "Open a project’s proposal to edit it." };
+  }
+  if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "I can point you somewhere — try Tickets, Inventory, Customers or Finances." };
   return { ok: true, kind: "unknown", noKey: !!noKey };
 }
 

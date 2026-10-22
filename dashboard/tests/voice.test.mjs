@@ -2,7 +2,7 @@
 // recognition event). The browser I/O (SpeechRecognition / speechSynthesis) is exercised live, not here.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { speechSupport, readRecognition, summarizeForSpeech, voiceDecision } from "../lib/voice.js";
+import { speechSupport, readRecognition, summarizeForSpeech, voiceDecision, startMeter } from "../lib/voice.js";
 
 test("speechSupport reports nothing in a non-browser (node) env", () => {
   assert.deepEqual(speechSupport(), { recognition: false, synthesis: false });
@@ -34,4 +34,11 @@ test("voiceDecision classifies a spoken reply while a change is pending", () => 
   assert.deepEqual(voiceDecision("number 3"), { kind: "pick", index: 3 });
   assert.equal(voiceDecision("add more cameras"), null, "a real command is not a decision");
   assert.equal(voiceDecision(""), null);
+});
+
+test("startMeter returns null (honest fallback) when no mic API is present — never a fake waveform", async () => {
+  // No navigator.mediaDevices.getUserMedia in node → the meter must resolve to null so the UI shows a
+  // non-reactive listening state instead of bars that imply audio is being detected.
+  const m = await startMeter(5);
+  assert.equal(m, null);
 });
