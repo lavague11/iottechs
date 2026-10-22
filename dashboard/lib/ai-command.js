@@ -260,7 +260,8 @@ const TOOL = {
 };
 
 export function buildClaudeBody(text, context = {}) {
-  const ctx = context.projectName ? `The user is currently viewing project "${context.projectName}". "this"/"them"/"the proposal" refer to it.` : "No project is open.";
+  const ctx = (context.projectName ? `The user is currently viewing project "${context.projectName}". "this"/"them"/"the proposal" refer to it.` : "No project is open.")
+    + (context.recent ? ` The user's PREVIOUS command was: "${String(context.recent).slice(0, 160)}". A follow-up like "make it 10", "change that to $250" or "undo" refers to the SAME item(s)/section from that command.` : "");
   return {
     model: AI_MODEL,
     max_tokens: 300,
