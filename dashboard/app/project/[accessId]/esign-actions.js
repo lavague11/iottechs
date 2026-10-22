@@ -24,7 +24,7 @@ const payloadOf = (row) => { try { return JSON.parse(row.payload || "{}"); } cat
 // the survey/mockup sign-off tracks the actual document, not anything the client sends.
 const factsOf = (doc) => ({ hasSurvey: !!doc?.meta?.hasSurvey, hasMockup: !!doc?.meta?.hasMockup });
 // What the client may keep of the captured values (it already holds them; nothing here is secret from the signer).
-const valuesView = (v, row, doc) => ({ name: v?.name || null, signature: v?.signature ? { method: v.signature.method, data: v.signature.data } : null, acks: v?.acks || {}, missing: missingRequired(v, payloadOf(row), factsOf(doc)) });
+const valuesView = (v, row, doc) => ({ name: v?.name || null, signature: v?.signature ? { method: v.signature.method, data: v.signature.data } : null, acks: v?.acks || {}, placed: Array.isArray(v?.placed) ? v.placed : [], missing: missingRequired(v, payloadOf(row), factsOf(doc)) });
 const ackList = (row, doc) => requiredAcks(payloadOf(row), factsOf(doc)).map((a) => ({ key: a.key, required: !!a.required }));
 const err = (r) => ({ error: r.error || "Couldn't sign.", code: r.code });
 

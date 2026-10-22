@@ -67,6 +67,13 @@ export function mergeValues(prev, patch, now = new Date()) {
     for (const a of PROPOSAL_ACKS) clean[a.key] = !!patch.acks[a.key];
     out.acks = clean;
   }
+  // Which signature fields the customer has placed (green). Persisted so each placement survives refresh /
+  // navigation and the field only goes green after the server has stored it. The authoritative check that
+  // every field is placed happens at completion against the document's own fields.
+  if (patch?.placed !== undefined) {
+    if (!Array.isArray(patch.placed)) return { error: "Bad placements." };
+    out.placed = [...new Set(patch.placed.map((k) => String(k || "")).filter(Boolean))].slice(0, 50);
+  }
   return { values: out };
 }
 

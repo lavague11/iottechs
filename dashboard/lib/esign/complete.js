@@ -13,7 +13,7 @@ import { buildCertificate } from "./certificate.js";
 const h = () => sqliteHandle();
 const fail = (code, error) => ({ ok: false, code, error });
 const ROLE_LABEL = { customer: "Customer", admin: "Admin (signing on the customer's behalf)", manager: "Manager (signing on the customer's behalf)" };
-const EVENT_LABEL = { opened: "Document opened", set_name: "Name entered", set_signature: "Signature adopted", set_acks: "Terms acknowledged", completed: "Signed" };
+const EVENT_LABEL = { opened: "Document opened", set_name: "Name entered", set_signature: "Signature adopted", set_acks: "Terms acknowledged", set_placed: "Signature placed", completed: "Signed" };
 const ACK_SHORT = { terms: "Master Terms & Conditions", payment: "Prompt payment terms", pcp: "PCP credit terms", survey: "Site survey & system layout", mockup: "Camera mockup", marketing: "Marketing (optional)" };
 const METHOD = { draw: "Drawn", type: "Typed", upload: "Uploaded image" };
 
@@ -26,6 +26,11 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
   // pages), never by the client — so the survey/mockup sign-off can't be skipped or faked.
   const facts = { hasSurvey: !!doc.meta?.hasSurvey, hasMockup: !!doc.meta?.hasMockup };
   if (missingRequired(values, payload, facts).length) return fail("MISSING", "Add your signature and agree to the required terms first.");
+  // Every signature field must have been placed (and persisted) — the document isn't Approved until all
+  // required signatures are in, not just one adopted. The placements come from the session, not the client.
+  const sigKeys = (doc.meta?.fields || []).filter((f) => f.opt === s.option_key && f.type === "signature").map((f) => f.key);
+  const placedSet = new Set(Array.isArray(values.placed) ? values.placed : []);
+  if (sigKeys.some((k) => !placedSet.has(k))) return fail("MISSING", "Place every signature before the document is complete.");
 
   // Claim the session: only one completion can win; a replay finds it already taken.
   const claim = h().prepare("UPDATE sign_sessions SET state='completing' WHERE id=? AND state='open'").run(s.id);

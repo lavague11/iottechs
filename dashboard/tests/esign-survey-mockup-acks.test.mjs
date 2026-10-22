@@ -95,10 +95,12 @@ test("sign-off: the signer emits a survey/mockup sign-off page + each signature 
   const flat = readFileSync(new URL("../lib/esign/flatten.js", import.meta.url), "utf8");
   assert.ok(/if \(!sigPlace\) sigPlace = \{ page, left, w, bottom, W, H \}/.test(flat), "cert anchors to the first signature");
 
-  // esign-signer.jsx: adopt once, then place each signature spot deliberately.
+  // esign-signer.jsx: adopt once, then place each signature spot deliberately — each placement PERSISTS on
+  // adopt (field green only after the server confirms), and the last one auto-completes (no Finish to save).
   const signer = readFileSync(new URL("../app/project/[accessId]/esign/esign-signer.jsx", import.meta.url), "utf8");
-  assert.ok(/const allPlaced = sigFields\.length > 0 && sigFields\.every\(\(f\) => placed\.has\(f\.key\)\)/.test(signer), "done requires every signature spot placed");
-  assert.ok(/const signed = !!\(values\.name && values\.signature && allPlaced\)/.test(signer), "Finish is gated on all spots placed");
-  assert.ok(/else placeField\(f\.key\)/.test(signer), "tapping an empty spot with a signature adopted places it");
+  assert.ok(/const allPlaced = sigFields\.length > 0 && sigFields\.every\(\(f\) => placed\.has\(f\.key\)\)/.test(signer), "every signature spot must be placed");
+  assert.ok(/saveSignValuesAction\(accessId, sess\.token, \{ placed: nextKeys \}\)/.test(signer), "placing a spot persists it server-side (green only after the server confirms)");
+  assert.ok(/if \(allNow\) autoComplete\(/.test(signer), "the last placement auto-completes — signing never depends on Finish");
+  assert.ok(/else placeSaved\(f\.key\)/.test(signer), "tapping an empty spot with a signature adopted places + saves it");
   assert.ok(/done = system \? true : f\.type === "name" \? !!values\.name : placed\.has\(f\.key\)/.test(signer), "a signature spot shows the signature only once placed");
 });

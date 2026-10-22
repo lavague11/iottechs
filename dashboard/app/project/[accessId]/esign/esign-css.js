@@ -68,4 +68,18 @@ export const ESG_CSS = `
 .esg-link{background:none;border:none;color:var(--esg-gold);font-family:inherit;font-size:.78rem;font-weight:600;text-decoration:underline;cursor:pointer;padding:0;text-align:left}
 .esg-err{color:var(--esg-err);font-size:.8rem}
 .esg-fine{font-size:.66rem;color:var(--esg-meta);line-height:1.5}
+/* Save/completion toast — top-center so it never covers the bottom signing controls; auto-dismisses. */
+.esg-toast{position:absolute;top:calc(58px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:20;
+  display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);padding:11px 15px;border-radius:12px;
+  background:var(--esg-bar);border:1px solid var(--esg-line);box-shadow:0 12px 30px -10px rgba(0,0,0,.6);color:var(--esg-ink);
+  animation:esg-toast-in .26s cubic-bezier(.2,.7,.3,1)}
+.esg-toast.done{background:#10351f;border-color:#1f6f40}
+.esg-toast.err{background:#3a1b1b;border-color:#7a2f2f}
+.esg-toast-ic{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1f8f4d;color:#fff;flex:none}
+.esg-toast-tx{display:flex;flex-direction:column;line-height:1.3;min-width:0}
+.esg-toast-tx b{font-size:.86rem;font-weight:650}
+.esg-toast-tx small{font-size:.74rem;color:var(--esg-meta)}
+.esg-toast.done .esg-toast-tx small{color:#a7e3c0}
+@keyframes esg-toast-in{from{opacity:0;transform:translate(-50%,-8px)}to{opacity:1;transform:translate(-50%,0)}}
+@media (prefers-reduced-motion: reduce){.esg-toast{animation:none}}
 `;

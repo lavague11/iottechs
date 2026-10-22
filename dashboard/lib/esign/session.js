@@ -116,9 +116,9 @@ export function saveValues({ token, accessId, caller, patch, ip = null, ua = nul
   if (merged.error) return fail("BAD_VALUE", merged.error);
   h().prepare("UPDATE sign_sessions SET values_json=?, expires_at=? WHERE id=?").run(JSON.stringify(merged.values), now + SESSION_TTL_MS, v.session.id);
   if (v.row.sign_status !== "signing") setProposalSignPointers(v.row.id, { signStatus: "signing" });
-  for (const k of ["name", "signature", "acks"]) {
+  for (const k of ["name", "signature", "acks", "placed"]) {
     if (patch?.[k] !== undefined) recordSignEvent({ accessId: v.session.project_access_id, proposalId: v.row.id, sessionId: v.session.id, kind: `set_${k}`, actor: caller.role, ip, ua,
-      detail: k === "signature" ? { method: patch.signature.method } : k === "acks" ? merged.values.acks : null });
+      detail: k === "signature" ? { method: patch.signature.method } : k === "acks" ? merged.values.acks : k === "placed" ? { placed: merged.values.placed } : null });
   }
   return { ok: true, values: merged.values, expiresAt: now + SESSION_TTL_MS, row: v.row, doc: v.doc, session: v.session };
 }

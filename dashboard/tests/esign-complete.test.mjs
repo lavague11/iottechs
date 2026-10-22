@@ -34,11 +34,15 @@ const sent = (a) => { db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 8, de
 const pin = (a, role = "customer") => ({ role, accessId: a, viaPin: true });
 const ACKS = { terms: true, payment: true, marketing: false };
 
+// Every signature field must be PLACED (persisted) before a document completes — the signer saves each
+// placement on Adopt. In tests we place them all up front alongside name/signature/acks.
+const placeKeys = (r, opt) => (r.doc.meta?.fields || []).filter((f) => f.type === "signature" && (!opt || f.opt === opt)).map((f) => f.key);
+
 async function ready(name, phone) {
   const a = project(name, phone); sent(a);
   const r = S.startSession({ accessId: a, optKey: "A", caller: pin(a), ip: "203.0.113.9", ua: "node-test/1.0" });
   assert.ok(r.ok, r.error);
-  const sv = S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "jordan rivera", signature: { method: "draw", data: SIG }, acks: ACKS }, ip: "203.0.113.9", ua: "node-test/1.0" });
+  const sv = S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "jordan rivera", signature: { method: "draw", data: SIG }, acks: ACKS, placed: placeKeys(r, "A") }, ip: "203.0.113.9", ua: "node-test/1.0" });
   assert.ok(sv.ok, sv.error);
   return { a, token: r.token, unsignedId: r.doc.id };
 }
@@ -144,12 +148,12 @@ test("certificate of completion: signer, role, email, timestamps, IP, UA, both h
   assert.ok(txt.replace(/\s+/g, "").includes(signed.meta.unsignedSha256));
 });
 
-test("append-only audit trail records open → name → signature → acks → completed with ip + ua", async () => {
+test("append-only audit trail records open → name → signature → acks → placed → completed with ip + ua", async () => {
   const x = await ready("Done Five", "5552220005");
   await done(x);
   const pid = db.getActiveProposal(x.a).id;
   const kinds = store.listSignEvents(pid).map((e) => e.kind);
-  assert.deepEqual(kinds, ["opened", "set_name", "set_signature", "set_acks", "completed"]);
+  assert.deepEqual(kinds, ["opened", "set_name", "set_signature", "set_acks", "set_placed", "completed"]);
   const last = store.listSignEvents(pid).at(-1);
   assert.equal(last.ip, "203.0.113.9"); assert.equal(last.ua, "node-test/1.0");
   assert.ok(JSON.parse(last.detail).signedSha256);
@@ -183,7 +187,7 @@ test("required fields + acknowledgments are enforced server-side (nothing is sig
   S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: false } } });
   assert.equal((await done(x)).code, "MISSING", "payment ack still missing");
   assert.equal(db.getActiveProposal(a).signed_name, null);
-  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: true } } });
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: true }, placed: placeKeys(r, "A") } });
   assert.ok((await done(x)).ok, "now complete");
 });
 
@@ -233,7 +237,7 @@ test("signed PDF + certificate are served through the read gate (owner yes, stra
 test("a name with characters Helvetica can't encode doesn't break signing", async () => {
   const a = project("Done Unicode", "5552220014"); sent(a);
   const r = S.startSession({ accessId: a, optKey: "A", caller: pin(a) });
-  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "Zoë Łukasz 山田", signature: { method: "upload", data: SIG }, acks: ACKS } });
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "Zoë Łukasz 山田", signature: { method: "upload", data: SIG }, acks: ACKS, placed: placeKeys(r, "A") } });
   const out = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
   assert.ok(out.ok, out.error);
   assert.match((await pageTexts(store.getDocument(out.signedDocId).bytes)).at(-1), /Zo/);
@@ -246,7 +250,7 @@ test("multi-option proposal: signing B signs ONLY B (document narrowed to the op
   const r = S.startSession({ accessId: a, optKey: "B", caller: pin(a) });
   assert.ok(r.ok, r.error);
   assert.ok(r.doc.meta.fields.every((f) => f.opt === "B"));
-  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "Pat Doe", signature: { method: "draw", data: SIG }, acks: ACKS } });
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "Pat Doe", signature: { method: "draw", data: SIG }, acks: ACKS, placed: placeKeys(r, "B") } });
   const out = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
   assert.ok(out.ok, out.error);
   const p = db.getActiveProposal(a);
@@ -309,8 +313,8 @@ test("survey/mockup appendix: the pages are baked into the signed PDF and gate t
   const bad = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
   assert.equal(bad.ok, false); assert.equal(bad.code, "MISSING");
 
-  // …and succeeds once they're checked; the signed PDF carries the appendix pages.
-  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: true, survey: true, mockup: true } } });
+  // …and succeeds once they're checked AND every signature is placed; the signed PDF carries the pages.
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { acks: { terms: true, payment: true, survey: true, mockup: true }, placed: placeKeys(r, "A") } });
   const ok = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
   assert.ok(ok.ok, ok.error);
   const signed = store.getDocument(ok.signedDocId);
@@ -322,4 +326,30 @@ test("survey/mockup appendix: the pages are baked into the signed PDF and gate t
   const certTxt = (await pageTexts(store.getDocument(certId).bytes)).join(" ");
   assert.match(certTxt, /Site survey/i);
   assert.match(certTxt, /Camera mockup/i);
+});
+
+test("placement gates approval: signatures save independently, persist on resume, and the last one completes", async () => {
+  const img = makePng(200, 120);
+  const a = project("Placement Co", "5552220030"); sent(a);
+  const r = S.startSession({ accessId: a, optKey: "A", caller: pin(a), appendix: { surveyImages: [{ name: "Floor 1", img }], mockupImages: [img] } });
+  assert.ok(r.ok, r.error);
+  const sigKeys = placeKeys(r, "A");
+  assert.equal(sigKeys.length, 2, "two signature spots (acceptance + survey/mockup sign-off)");
+
+  // Adopt + agree, but place ONLY the first signature.
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { name: "Pat Doe", signature: { method: "draw", data: SIG }, acks: { terms: true, payment: true, survey: true, mockup: true }, placed: [sigKeys[0]] } });
+  const partial = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
+  assert.equal(partial.ok, false); assert.equal(partial.code, "MISSING", "not approved until every signature is placed");
+  assert.equal(db.getActiveProposal(a).signed_name, null, "nothing signed on a partial document");
+
+  // A reopen/refresh RESTORES the saved placement (session persistence).
+  const resumed = S.startSession({ accessId: a, optKey: "A", caller: pin(a), resumeToken: r.token });
+  assert.ok(resumed.ok && resumed.resumed, "session resumes");
+  assert.deepEqual(resumed.values.placed, [sigKeys[0]], "the first signature stays placed across a reopen");
+
+  // Place the SECOND signature → the document completes.
+  S.saveValues({ token: r.token, accessId: a, caller: pin(a), patch: { placed: sigKeys } });
+  const ok = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
+  assert.ok(ok.ok, ok.error);
+  assert.equal(db.getActiveProposal(a).signed_name, "Pat Doe", "approved once every signature is in");
 });
