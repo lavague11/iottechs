@@ -10,6 +10,10 @@ const GIT_COMMIT = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || gi
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   env: { GIT_COMMIT, BUILT_AT: new Date().toISOString() },
+  // Hide the dev-only on-screen build indicator (bottom-right). It floats above everything (z-index
+  // ~99999) and sat on top of the full-screen signer's Finish button, making it hard to click while
+  // testing. Dev-only — production never renders it; this just keeps full-screen overlays usable in dev.
+  devIndicators: false,
   // The camera-mockup tool syncs its photo grid (data-URL images) to the server via a server
   // action; the 1MB default rejects any real photo set, silently breaking Submit. localStorage
   // caps the blob near ~5MB, so 8MB gives comfortable headroom.

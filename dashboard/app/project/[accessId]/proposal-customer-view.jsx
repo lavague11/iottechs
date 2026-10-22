@@ -230,7 +230,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   }
   const signConsumed = useRef(false);
   useEffect(() => {
-    if (signConsumed.current || preview || embedded) return;
+    // NOT gated on `embedded`: the deck renders the real customer proposal surface embedded, so the link
+    // must still open the signer there. Only a staff preview-as-customer (`preview`) is skipped.
+    if (signConsumed.current || preview) return;
     const want = signWanted.current;
     if (!want || !p || !p.payload || !Array.isArray(p.payload.options)) return;
     signConsumed.current = true;
@@ -246,7 +248,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     if (match && accepted.has(match.id)) showToast("That option is already signed.");
     else if (match) setEsignFor(match.id);
     else showToast("Open a proposal option to review and sign.");
-  }, [p, preview, embedded]);
+  }, [p, preview]);
 
   // Keep the working flag set in sync with whatever the server last stored.
   const savedFlagsKey = JSON.stringify(p?.customerFlags || {});

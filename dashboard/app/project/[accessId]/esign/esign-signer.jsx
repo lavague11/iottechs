@@ -10,7 +10,7 @@ import { startSignAction, saveSignValuesAction, completeSignAction } from "../es
 
 // The signer: the ACTUAL generated proposal PDF, page by page, with the signature / name / date fields
 // laid over the acceptance block. Full-screen, mobile-first (sticky Next/Finish bar, large tap targets).
-// Flow: tap a field (or Next) → adopt name + signature → Finish → agree to the terms → sign.
+// Flow: tap Sign (or Next) → agree to the terms → adopt name + signature → place each spot → Finish → sign.
 
 const TAG = { signature: ["Sign", Icon.pen], name: ["Name", Icon.user], date: ["Date", Icon.cal] };
 const RESTART = new Set(["EXPIRED", "VOID", "CHANGED", "TAMPERED", "NO_SESSION"]);
@@ -65,6 +65,10 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   prepRef.current = prepareAppendix;
   const placeTargetRef = useRef(null);         // which signature field a capture-sheet adoption lands on
 
+  // While the full-screen signer is open, hide the floating bug-report FAB — it's docked bottom-right at a
+  // near-max z-index and otherwise sits on top of the Finish button (the owner couldn't tap it).
+  useEffect(() => { document.body.classList.add("esg-open"); return () => document.body.classList.remove("esg-open"); }, []);
+
   // Open (or resume) the session. First render the survey / mockup appendix (client-side, same images the
   // Download carries) so the signer shows — and the customer signs — the WHOLE document, not just pricing.
   useEffect(() => {
@@ -106,6 +110,9 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   const allPlaced = sigFields.length > 0 && sigFields.every((f) => placed.has(f.key));
   const signed = !!(values.name && values.signature && allPlaced);
   const placeField = (key) => setPlaced((prev) => { const n = new Set(prev); n.add(key); return n; });
+  // Terms must be agreed BEFORE the signature is adopted (not at Finish). Agreed = every required ack saved.
+  const requiredAckKeys = acks.filter((a) => a.required).map((a) => a.key);
+  const termsAgreed = requiredAckKeys.every((k) => !!values.acks?.[k]);
 
   const handle = useCallback((r) => {
     if (r?.error) {
@@ -124,6 +131,12 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     if (!handle(r)) return;
     setValues(r.values); after?.(r.values);
   }
+
+  // Open the signature-adoption sheet, but gate the FIRST adoption behind the terms: no signature yet and
+  // terms not agreed → show the consent sheet first; it saves the acks then opens the capture sheet.
+  function openAdopt(key) { placeTargetRef.current = key; setErr(null); setSheet(termsAgreed ? "capture" : "consent"); }
+  // The consent sheet is now the PRE-adopt gate: record the agreement, then adopt the signature.
+  function agreeThenCapture(checks) { save({ acks: checks }, () => setSheet("capture")); }
 
   // Adopting a signature places it on the field that opened the capture sheet (the one the customer tapped
   // / Next landed on), then moves the highlight to the next still-empty signature spot.
@@ -153,7 +166,7 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       const target = sigFields.find((f) => !placed.has(f.key));
       if (target) {
         setActive(target.i); scrollTo(target.i);
-        if (!values.signature) { placeTargetRef.current = target.key; setSheet("capture"); }
+        if (!values.signature) openAdopt(target.key);   // agree to terms → adopt (gated)
         else placeField(target.key);
         return;
       }
@@ -169,9 +182,10 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     if (f.type === "date") return;   // system-filled, not interactive
     setActive(f.i);
     if (f.type === "signature") {
-      // No signature yet → adopt one (this spot becomes its target). Already adopted but this spot empty →
-      // place it here (the deliberate per-spot sign). Already placed → reopen to re-sign.
-      if (!values.signature || placed.has(f.key)) { placeTargetRef.current = f.key; setSheet("capture"); }
+      // No signature yet → agree to terms, then adopt (openAdopt gates the first time). Already adopted but
+      // this spot empty → place it here (deliberate per-spot sign). Already placed → reopen to re-sign.
+      if (!values.signature) openAdopt(f.key);
+      else if (placed.has(f.key)) { placeTargetRef.current = f.key; setSheet("capture"); }
       else placeField(f.key);
       return;
     }
@@ -233,10 +247,11 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       <div className="esg-bar">
         <span className="esg-count">{actionFields.length ? `${filled} / ${actionFields.length}` : ""}</span>
         <button type="button" className="esg-go" data-testid="esign-next" disabled={!fields.length || !!fatal} onClick={next}>Next</button>
-        <button type="button" className="esg-go" data-testid="esign-finish" disabled={!signed || !!fatal} onClick={() => { setErr(null); setSheet("consent"); }}>Finish</button>
+        <button type="button" className="esg-go" data-testid="esign-finish" disabled={!signed || !!fatal} onClick={() => { setErr(null); finish(values.acks); }}>Finish</button>
       </div>
       {sheet === "capture" && <CaptureSheet defaultName={values.name || defaultName} busy={busy} error={err} onAdopt={adopt} onCancel={() => { setSheet(null); setErr(null); }} />}
-      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Sign" onConfirm={finish} onCancel={() => { setSheet(null); setErr(null); }} />}
+      {/* Pre-adopt gate: agree to the terms the FIRST time Sign is tapped, before adopting a signature. */}
+      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Agree & Continue" onConfirm={agreeThenCapture} onCancel={() => { setSheet(null); setErr(null); }} />}
     </div>,
     document.body
   );

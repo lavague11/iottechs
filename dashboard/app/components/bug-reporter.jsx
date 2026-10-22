@@ -331,6 +331,8 @@ export default function BugReporter() {
 }
 
 const CSS = `
+/* The full-screen e-sign signer sets body.esg-open; hide the FAB so it never covers the Finish button. */
+body.esg-open .bugr-fab{display:none}
 .bugr-fab{position:fixed;right:14px;bottom:14px;z-index:2147483000;display:inline-flex;align-items:center;justify-content:center;
   width:34px;height:34px;padding:0;border-radius:50%;border:1px solid rgba(255,255,255,.14);
   background:#12151b;color:#f0a04b;cursor:pointer;box-shadow:0 6px 20px -6px rgba(0,0,0,.5);opacity:.66;transition:opacity .16s,transform .16s}
