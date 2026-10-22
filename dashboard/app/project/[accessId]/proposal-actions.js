@@ -20,7 +20,7 @@ import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerpr
 import { can } from "../../../lib/roles";
 import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
-import { emailProposalReady, emailPaymentReceived } from "../../../lib/email";
+import { emailProposalReady, emailSignatureRequest, emailPaymentReceived } from "../../../lib/email";
 
 const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
@@ -141,14 +141,17 @@ export async function sendProposalAction(accessId) {
   // in-app notification (parity with change-orders/revisions, which already notify) so the requirement
   // reaches them in their feed, not only when they happen to open the project; the link deep-links to the
   // proposal where the guided review takes over. Best-effort, never blocks the send.
+  // Direct signing deep-link: open the proposal AND auto-open the signer on the primary option.
+  const primaryOpt = payload.options?.[0]?.id;
+  const signLink = `/project/${accessId}?open=proposal${primaryOpt != null ? `&sign=${encodeURIComponent(primaryOpt)}` : ""}`;
   try {
     const cu = getCustomerUserForProject(accessId);
     if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal is ready to review",
-      body: `Review your proposal and sign to get started (${accessId}).`, link: `/project/${accessId}?open=proposal` });
+      body: `Review your proposal and sign to get started (${accessId}).`, link: signLink });
   } catch { /* notification is best-effort */ }
-  // Notify the customer their proposal is ready — fire-and-forget so a slow/failed
-  // email never blocks or fails the send. No-op until RESEND_API_KEY is configured.
-  emailProposalReady(accessId).catch(() => {});
+  // Notify the customer their proposal is ready, with the direct signing link baked into the CTA —
+  // fire-and-forget so a slow/failed email never blocks or fails the send. No-op without RESEND_API_KEY.
+  emailSignatureRequest(accessId, primaryOpt).catch(() => {});
   await revalidate(accessId);
   return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
 }
@@ -162,6 +165,40 @@ export async function emailProposalAction(accessId) {
   if (!cur || cur.status === "draft") return { error: "Send the proposal first." };
   const r = await emailProposalReady(accessId).catch(() => null);
   const sent = !!(r && (r.ok || r.id));
+  return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
+// "Request Signature" → email the customer a DIRECT signing link (?open=proposal&sign=<opt>). Staff
+// only. The link carries no secret — it lands on the proposal, the PIN gate confirms identity, then the
+// signer auto-opens on the current revision (outdated/revised/signed states are handled by the e-sign
+// version+fingerprint binding, so this never lets a stale proposal be signed). Debounced: a repeated tap
+// within 90s is a no-op (prevents duplicate emails). A real send is logged to the project feed + an
+// in-app notification; a share-sheet open is NOT logged here (the client never calls this for sharing).
+export async function requestSignatureEmailAction(accessId, optKey) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status === "draft") return { error: "Send the proposal first." };
+  if (cur.status === "accepted" && cur.signed_name) return { ok: true, sent: false, note: "Already signed." };
+  // Debounce repeated taps: a signature-request email logged in the last 90s wins.
+  try {
+    const events = getProjectEvents(accessId) || [];
+    const now = Date.now();
+    const recent = events.find((e) => e.kind === "email" && /signature request/i.test(e.label || "")
+      && (now - new Date(String(e.created_at || "").replace(" ", "T")).getTime()) < 90000);
+    if (recent) return { ok: true, sent: false, note: "Just sent — give it a minute." };
+  } catch { /* if the feed read fails, fall through and send */ }
+  const r = await emailSignatureRequest(accessId, optKey).catch(() => null);
+  const sent = !!(r && (r.ok || r.id));
+  if (sent) {
+    logProjectEvent(accessId, { kind: "email", label: "Signature request emailed to the customer", actor: actorName(tok) });
+    try {
+      const cu = getCustomerUserForProject(accessId);
+      if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your signature is requested",
+        body: `Review and sign your proposal (${accessId}).`,
+        link: `/project/${accessId}?open=proposal${optKey != null ? `&sign=${encodeURIComponent(optKey)}` : ""}` });
+    } catch { /* notification is best-effort */ }
+  }
   return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
 }
 

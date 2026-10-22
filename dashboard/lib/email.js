@@ -144,12 +144,17 @@ async function customerContact(accessId) {
   };
 }
 
-// `open` deep-links the CTA straight to a tool (e.g. "proposal" → opens the proposal document). The
-// project page consumes ?open= on first load then strips it, so the link never sticks on refresh.
-function projectLink(accessId, open) {
+// `open` deep-links the CTA straight to a tool (e.g. "proposal" → opens the proposal document); `sign`
+// additionally auto-opens the proposal signer on that option on arrival. The project page consumes
+// ?open=/?sign= on first load then strips them, so the link never sticks on refresh.
+function projectLink(accessId, open, sign) {
   const base = appUrl();
   if (!base) return null;
-  return `${base}/project/${accessId}${open ? `?open=${encodeURIComponent(open)}` : ""}`;
+  const qs = new URLSearchParams();
+  if (open) qs.set("open", String(open));
+  if (sign != null && sign !== "") qs.set("sign", String(sign));
+  const q = qs.toString();
+  return `${base}/project/${accessId}${q ? `?${q}` : ""}`;
 }
 
 // Send a customer email for a project. content = {heading, intro, lines, ctaLabel}.
@@ -157,7 +162,7 @@ function projectLink(accessId, open) {
 export async function sendCustomerEmail(accessId, content) {
   const c = await customerContact(accessId);
   if (!c || !c.email) return { ok: false, error: "no-customer-email" };
-  const ctaUrl = projectLink(accessId, content.open);
+  const ctaUrl = projectLink(accessId, content.open, content.sign);
   const payload = {
     heading: content.heading,
     intro: content.intro,
@@ -296,6 +301,27 @@ export async function emailProposalReady(accessId) {
     return await sendCustomerEmail(accessId, STAGE_EMAIL.proposal);
   } catch (e) {
     console.error(`[email:proposal] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
+// A direct "please sign" request (the admin "Request Signature" action, and the auto-send on Submit).
+// The CTA deep-links to the proposal with ?sign=<optKey> so the signer opens on arrival — after the
+// usual PIN gate at the door; nothing secret rides in the URL. `optKey` selects which option to sign.
+export async function emailSignatureRequest(accessId, optKey) {
+  try {
+    return await sendCustomerEmail(accessId, {
+      subject: "Your signature is requested",
+      heading: "Review & sign your proposal",
+      intro: "Your proposal is ready for your signature.",
+      lines: ["Open it, review the equipment and total, then sign — it only takes a minute."],
+      ctaLabel: "Review & Sign Your Proposal",
+      open: "proposal",
+      sign: optKey == null ? "" : optKey,
+      footNote: "This link opens your proposal and signing page; you’ll confirm it’s you at the door. Reply with any questions.",
+    });
+  } catch (e) {
+    console.error(`[email:sigrequest] ${e?.message || e}`);
     return { ok: false, error: "exception" };
   }
 }

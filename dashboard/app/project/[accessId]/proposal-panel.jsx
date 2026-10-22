@@ -46,6 +46,10 @@ const PROP_CSS = `
 /* Edit = light outlined control (not the dark Submit CTA) — matches the compact deck toolbar. */
 .pvx .prop-head-cta.prop-head-edit{background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);border-color:var(--dv-line,#E4E4DF)}
 .pvx .prop-head-cta.prop-head-edit:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-ink,#101418);filter:none}
+/* Request Signature = gold, matching the customer's "Review & Sign" bar. */
+.pvx .prop-head-cta.prop-head-sign{display:inline-flex;align-items:center;gap:6px;background:#C9A96E;color:#101418;border-color:#C9A96E}
+.pvx .prop-head-cta.prop-head-sign:hover{filter:brightness(1.06)}
+.pvx .prop-head-cta.prop-head-sign svg{width:15px;height:15px}
 .pvx .prop-head-toolbar{gap:8px}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}

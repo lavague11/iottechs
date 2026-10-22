@@ -217,6 +217,37 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     customerActionsAction(accessId).then((r) => { if (live && r?.ok) setReqActions(Array.isArray(r.actions) ? r.actions : []); }).catch(() => {});
     return () => { live = false; };
   }, [accessId, preview, embedded, p?.signed_at, p?.status, p?.version, p?.pcp_agreed_at]);
+  // Direct signing deep-link — /project/<id>?open=proposal&sign=<optKey>. The admin "Request Signature"
+  // share/email and the Send workflow point here; the customer lands after the PIN gate (the deck only
+  // mounts this once access is granted) and the signer auto-opens on the current revision. Captured at
+  // first render so the deck's param-strip can't race it, consumed once, then stripped from the URL. It
+  // never forces a signature: if the proposal isn't currently signable we just surface a note. Outdated /
+  // revised / already-signed proposals are rejected downstream by the e-sign version+fingerprint binding.
+  const signWanted = useRef(undefined);
+  if (signWanted.current === undefined) {
+    try { signWanted.current = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("sign") : null; }
+    catch { signWanted.current = null; }
+  }
+  const signConsumed = useRef(false);
+  useEffect(() => {
+    if (signConsumed.current || preview || embedded) return;
+    const want = signWanted.current;
+    if (!want || !p || !p.payload || !Array.isArray(p.payload.options)) return;
+    signConsumed.current = true;
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.has("sign")) { u.searchParams.delete("sign"); window.history.replaceState({}, "", u.pathname + u.search + u.hash); }
+    } catch { /* history API unavailable — harmless */ }
+    const accepted = new Set(p.accepted_options || []);
+    const signable = !(p.signed_name && accepted.size > 0) && ["sent", "changes_requested", "accepted", "declined"].includes(p.status);
+    if (!signable) { showToast("This proposal isn’t awaiting a signature right now."); return; }
+    const opts = p.payload.options;
+    const match = opts.find((o) => String(o.id) === String(want)) || (opts.length === 1 ? opts[0] : null);
+    if (match && accepted.has(match.id)) showToast("That option is already signed.");
+    else if (match) setEsignFor(match.id);
+    else showToast("Open a proposal option to review and sign.");
+  }, [p, preview, embedded]);
+
   // Keep the working flag set in sync with whatever the server last stored.
   const savedFlagsKey = JSON.stringify(p?.customerFlags || {});
   useEffect(() => { setFlags(p?.customerFlags || {}); }, [savedFlagsKey]);

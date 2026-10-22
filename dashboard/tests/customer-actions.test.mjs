@@ -56,5 +56,6 @@ test("DOCUMENT_ACTION_REQUIRED: sending a proposal drops an in-app customer noti
   const send = act.slice(act.indexOf("export async function sendProposalAction"), act.indexOf("export async function", act.indexOf("export async function sendProposalAction") + 10));
   assert.ok(send.includes("getCustomerUserForProject(accessId)") && send.includes("createNotification("), "send creates a customer notification");
   assert.ok(send.includes("Your proposal is ready to review") && send.includes("?open=proposal"), "it reads as a review request and deep-links to the proposal");
-  assert.ok(send.includes("emailProposalReady(accessId)"), "and the email still fires alongside it");
+  assert.ok(send.includes("&sign="), "the deep-link auto-opens the signer on the primary option");
+  assert.ok(send.includes("emailSignatureRequest(accessId, primaryOpt)"), "and the email fires with the direct signing link baked in");
 });
