@@ -147,6 +147,9 @@ const PROP_CSS = `
 .pvx .prop-svc-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x:hover{color:var(--dv-red,#C4553D)}
 .pvx .prop-item{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;align-items:center;padding:7px 12px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-item-desc{grid-column:1 / -1;margin:1px 0 0;border:0;background:transparent;font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);padding:2px 4px 2px 2px;width:100%;outline:none;box-sizing:border-box}
+.pvx .prop-item-desc:focus{background:var(--dv-raise,#FBFBFA);border-radius:5px}
+.pvx .prop-item-desc::placeholder{font-style:normal;color:#c2c6cf}
 .pvx .prop-item.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-item input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;width:100%;box-sizing:border-box}
 .pvx .prop-item input:focus{border-color:var(--dv-gold-text,#8A6A1F)}

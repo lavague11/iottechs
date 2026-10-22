@@ -446,6 +446,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <button className="prop-item-x" title="Remove"
                 onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
       ) : <span />}
+      {/* Optional customer-facing description — separate from the product name. Spans the full row; shown
+          for top-level lines only (sub-items don't carry one). Empty + editable = a faint placeholder. */}
+      {!parent && (!readOnly || it.desc) && (
+        <input className="prop-item-desc" value={it.desc || ""} disabled={readOnly} maxLength={600}
+               placeholder="Customer description (optional)" title="A short explanation the customer sees on the proposal — not the product name"
+               onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
+      )}
     </div>
     );
   };

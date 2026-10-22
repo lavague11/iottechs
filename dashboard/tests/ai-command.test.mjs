@@ -153,6 +153,37 @@ test("edit_item rename/rewrite shows old → new and never touches price or qty"
   assert.match(summary, /"Pool Cam" → "Exterior IP Camera/);
 });
 
+test("set_desc writes a customer description on matched item(s) and never touches name/price/qty", () => {
+  const p = { options: [{ id: "A", services: [{ key: "camera", label: "Cameras", items: [
+    { id: "c1", name: "8MP 4K Security Camera", qty: 2, price: 300, cost: 0 },
+    { id: "c2", name: "8MP 4K Security Camera", qty: 1, price: 300, cost: 0 },
+    { id: "nvr", name: "NVR · 8-Channel", qty: 1, price: 150, cost: 0 },
+  ] }] }] };
+  const { payload: out, summary, desc, count } = applyIntentToPayload(p, { type: "set_desc", match: { name: "camera" }, desc: "High-resolution security camera with remote mobile viewing." });
+  const cams = out.options[0].services[0].items.filter((i) => /camera/i.test(i.name));
+  assert.equal(cams.length, 2, "both cameras matched (not the NVR)");
+  for (const c of cams) {
+    assert.equal(c.desc, "High-resolution security camera with remote mobile viewing.", "description written");
+    assert.equal(c.name, "8MP 4K Security Camera", "product name untouched");
+    assert.equal(c.price, 300); assert.equal(c.qty, 2 === c.qty ? 2 : 1);   // prices/qtys unchanged
+  }
+  assert.equal(out.options[0].services[0].items.find((i) => i.id === "nvr").desc, undefined, "NVR untouched");
+  assert.equal(count, 2); assert.ok(desc && /Describe/.test(summary));
+  assert.match(applyIntentToPayload(p, { type: "set_desc", match: { name: "nothing" }, desc: "x" }).error, /No line item matching/);
+});
+
+test("parseClaudeResult handles set_desc (match + desc), and the prompt enforces grounding", () => {
+  const res = (input) => ({ content: [{ type: "tool_use", name: "proposal_command", input }] });
+  assert.deepEqual(parseClaudeResult(res({ type: "set_desc", match: { name: "camera" }, desc: "  Clear, color   night   overview. " })),
+    { type: "set_desc", match: { name: "camera" }, desc: "Clear, color night overview." });
+  assert.deepEqual(parseClaudeResult(res({ type: "set_desc", match: {}, desc: "" })), { type: "unknown" }, "needs a match + text");
+  // the grounding rule must be in the system prompt the model receives
+  const sys = buildClaudeBody("x", {}).system;
+  assert.match(sys, /ONLY on the product name/);
+  assert.match(sys, /Never invent/i);
+  assert.match(sys, /set_desc NEVER changes the product name/);
+});
+
 test("resolveSection maps phrases to the deck's stage + open slug", () => {
   assert.deepEqual(resolveSection("take me to the proposal"), { stage: "proposal", open: "proposal", label: "Proposal" });
   assert.deepEqual(resolveSection("the site survey"), { stage: "site_survey", open: "survey", label: "Site Survey" });

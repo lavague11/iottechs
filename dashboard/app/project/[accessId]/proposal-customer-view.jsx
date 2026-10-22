@@ -773,6 +773,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                             {flags[it.id] ? "↩" : "✕"}
                           </button>
                         )}
+                        {it.desc && <span className="pcv-rowblurb">{it.desc}</span>}
                       </span>
                       <span className="r">{hasSub ? "1" : (it.qty ?? 1)}</span>
                       <span className="r">{it.waived ? <s className="pcv-waived-strike">{money(hasSub ? itemTotal({ ...it, waived: false }) : it.price)}</s> : money(hasSub ? itemTotal(it) : it.price)}</span>
@@ -1260,7 +1261,8 @@ const PCV_CSS = `
 .pcv-row.expandable{cursor:pointer}
 .pcv-row.expandable:hover{background:rgba(201,169,110,.08)}
 .pcv-rownum{text-align:center;color:var(--dv-meta,#787D84);font-size:.74rem}
-.pcv-rowdesc{display:flex;align-items:center;gap:5px;min-width:0}
+.pcv-rowdesc{display:flex;align-items:center;gap:5px;min-width:0;flex-wrap:wrap}
+.pcv-rowblurb{flex-basis:100%;font-size:12px;font-style:italic;line-height:1.35;color:var(--dv-muted,#6a7085);margin-top:1px}
 .pcv-chev{font-size:.68rem;color:var(--dv-gold-text,#8A6A1F);flex-shrink:0}
 .r{text-align:right}
 .b{font-weight:600}

@@ -201,6 +201,17 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
     return { payload: p, summary: `Set ${label} — ${parts.join(", ")}`, count: matches.length };
   }
 
+  if (intent.type === "set_desc") {
+    const opt = p.options[0];
+    const matches = resolveItems(p, intent.match || {}, { optionId: opt.id });
+    if (!matches.length) return { error: `No line item matching ${describeMatch(intent.match)}.` };
+    const desc = String(intent.desc || "").trim().slice(0, 600);
+    if (!desc) return { error: "No description to write." };
+    for (const m of matches) opt.services[m.svcIdx].items[m.itemIdx].desc = desc;   // name/price/qty untouched
+    const label = matches.length > 1 ? `${matches.length} items` : `"${matches[0].name}"`;
+    return { payload: p, summary: `Describe ${label}`, desc, count: matches.length };
+  }
+
   if (intent.type === "reorder_section") {
     const opt = p.options[0];
     const svcs = Array.isArray(opt.services) ? opt.services : [];
@@ -229,12 +240,13 @@ const TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      type: { type: "string", enum: ["add_items", "edit_item", "reorder_section", "set_discount", "add_note", "navigate_project", "navigate_section", "unsupported", "unknown"] },
+      type: { type: "string", enum: ["add_items", "edit_item", "set_desc", "reorder_section", "set_discount", "add_note", "navigate_project", "navigate_section", "unsupported", "unknown"] },
       name: { type: "string", description: "line-item name for add_items, e.g. Camera" },
       qty: { type: "integer", description: "quantity for add_items" },
       price: { type: ["number", "null"], description: "unit price for add_items; null to use the price book" },
-      match: { type: "object", description: "edit_item: find the EXISTING line item(s); reorder_section: find the section by name", properties: { name: { type: "string" }, qty: { type: "integer" }, priceEach: { type: "number" } } },
-      set: { type: "object", description: "edit_item: the new values. For a professional REWRITE of a description, put the polished name in `set.name` and NOTHING else (never price/qty).", properties: { qty: { type: "integer" }, price: { type: "number" }, name: { type: "string" } } },
+      match: { type: "object", description: "edit_item / set_desc: find the EXISTING line item(s); reorder_section: find the section by name", properties: { name: { type: "string" }, qty: { type: "integer" }, priceEach: { type: "number" } } },
+      set: { type: "object", description: "edit_item: new values. RENAME a product → set.name (the exact new name the user gave). This does NOT write a description — use set_desc for that.", properties: { qty: { type: "integer" }, price: { type: "number" }, name: { type: "string" } } },
+      desc: { type: "string", description: "set_desc: a short, customer-friendly DESCRIPTION of the matched item(s). Ground it ONLY in the product name/type — never state resolution, megapixels, warranty, night-vision, IP rating, codec or any spec/feature unless those exact words appear in the product name." },
       moveToService: { type: "string", description: "edit_item: move the matched item into this service (e.g. camera, sound, software)" },
       to: { type: "string", enum: ["top", "bottom", "up", "down"], description: "reorder_section: where to move the section" },
       target: { type: "string", description: "navigate_section: which section of THIS project to open — survey, mockups, proposal, approval, schedule, install, qc, payment or completion" },
@@ -255,8 +267,8 @@ export function buildClaudeBody(text, context = {}) {
     system:
       "You convert a security-install company staff member's command into ONE structured action via the proposal_command tool. Supported:\n" +
       "- add_items: add line items like cameras.\n" +
-      "- edit_item: change an EXISTING line item's price/qty/name, or move it to another section. Put the user's reference in `match` (e.g. \"the 8 cameras I just added\" → match {name:'camera', qty:8}) and only the changes in `set`.\n" +
-      "- To REWRITE a description professionally / clean it up / make it sound better: use edit_item with `set.name` = a polished, professional product description and NOTHING else in `set` — NEVER change price or qty.\n" +
+      "- edit_item: change an EXISTING line item's price/qty, MOVE it to another section, or RENAME the product. A rename sets `set.name` to the exact new name the USER gave (e.g. \"rename the camera to Front Door Camera\"). Put the user's reference in `match` and only the changes in `set`. A rename is a product-name change — it is NOT a description.\n" +
+      "- set_desc: write or improve the customer-facing DESCRIPTION of a line item (\"rewrite the description\", \"describe the cameras\", \"add a description to all cameras\", \"explain this to the customer\"). Match the item(s) and put the blurb in `desc`. CRITICAL grounding rule: base the description ONLY on the product name/type. Never invent or state specs, resolution/megapixels, warranty, night-vision, IP rating, codecs, or features that are not literally in the product name. A set_desc NEVER changes the product name, price or qty.\n" +
       "- reorder_section: move a whole section/service (match it by name) to the `to` position (top/bottom/up/down).\n" +
       "- set_discount: percent off.\n" +
       "- add_note: save a project log note.\n" +
@@ -293,6 +305,15 @@ export function parseClaudeResult(json) {
         // Needs something to find the item AND something to change.
         if (!Object.keys(match).length || (!Object.keys(set).length && !out.moveToService)) return { type: "unknown" };
         return out;
+      }
+      case "set_desc": {
+        const match = {};
+        if (i.match?.id) match.id = String(i.match.id);
+        if (i.match?.name) match.name = String(i.match.name).slice(0, 60);
+        if (i.match?.qty != null) match.qty = +i.match.qty;
+        if (i.match?.priceEach != null) match.priceEach = +i.match.priceEach;
+        const desc = i.desc ? String(i.desc).replace(/\s+/g, " ").trim().slice(0, 600) : "";
+        return Object.keys(match).length && desc ? { type: "set_desc", match, desc } : { type: "unknown" };
       }
       case "reorder_section": {
         const name = i.match?.name ? String(i.match.name).slice(0, 60) : (i.name ? String(i.name).slice(0, 60) : "");

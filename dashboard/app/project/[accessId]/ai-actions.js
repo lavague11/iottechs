@@ -87,7 +87,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return { ok: true, kind: "write", write: "note", intent, preview: { title: "Add project note", body: intent.body } };
   }
 
-  if (intent.type === "add_items" || intent.type === "set_discount" || intent.type === "edit_item" || intent.type === "reorder_section") {
+  if (["add_items", "set_discount", "edit_item", "set_desc", "reorder_section"].includes(intent.type)) {
     return proposalPreview(accessId, intent);
   }
 
@@ -107,9 +107,11 @@ function proposalPreview(accessId, intent) {
   const applied = applyIntentToPayload(payload, intent, { priceOf });
   if (applied.ambiguous) return { ok: true, kind: "disambiguate", intent, action: applied.action, candidates: applied.ambiguous };
   if (applied.error) return { error: applied.error };
-  // Only show the money line when the total actually moves (a rename / reorder leaves it unchanged).
+  // Only show the money line when the total actually moves (a rename / reorder / description leaves it
+  // unchanged). A description edit shows the written blurb so staff can read it before it's applied.
   const before = grandOf(payload, row), after = grandOf(applied.payload, row);
   const preview = { title: applied.summary };
+  if (applied.desc) preview.body = applied.desc;
   if (before !== after) { preview.before = before; preview.after = after; }
   return { ok: true, kind: "write", write: "proposal", intent, preview };
 }

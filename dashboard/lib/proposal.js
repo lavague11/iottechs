@@ -973,6 +973,7 @@ export function validatePayload(payload) {
         if ((it.sub || []).length > 20) return "Too many sub-items.";
         for (const x of rows) {
           if (String(x.name || "").length > 120) return "Item name too long.";
+          if (x.desc != null && String(x.desc).length > 600) return "Description too long.";   // optional customer-facing blurb, separate from the product name
           if (!(+x.qty >= 0 && +x.qty <= 9999)) return "Bad quantity.";
           if (!(+x.price >= -1000000 && +x.price <= 1000000)) return "Bad price.";   // negative price allowed → a line item can be a customer CREDIT (e.g. "Wiring Credit" −$150)
           if (x.cost != null && !(+x.cost >= 0 && +x.cost <= 1000000)) return "Bad cost.";

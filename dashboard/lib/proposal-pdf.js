@@ -310,10 +310,15 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // long name pushes what follows down instead of overprinting the next row or the footer.
   const DESC_W = rw * 0.66, ROW_H = 18, LINE_H = 10;
   const descLines = (desc) => { doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); return doc.splitTextToSize(String(desc), DESC_W); };
-  const rowHeight = (desc) => ROW_H + (descLines(desc).length - 1) * LINE_H;
-  const tableRow = (num, desc, qty, unit, total, yPos, strike = false) => {
+  // Optional customer-facing description under the product name — small, muted, italic. Backward-compatible:
+  // items without a description render exactly as before (empty blurb → no extra lines, no height change).
+  const BLURB_LH = 9;
+  const blurbLines = (blurb) => { const s = String(blurb || "").trim(); if (!s) return []; doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); return doc.splitTextToSize(s, DESC_W); };
+  const rowHeight = (desc, blurb) => ROW_H + (descLines(desc).length - 1) * LINE_H + (blurbLines(blurb).length ? blurbLines(blurb).length * BLURB_LH + 2 : 0);
+  const tableRow = (num, desc, qty, unit, total, yPos, strike = false, blurb = "") => {
     const lines = descLines(desc);
-    const h = ROW_H + (lines.length - 1) * LINE_H;
+    const bl = blurbLines(blurb);
+    const h = ROW_H + (lines.length - 1) * LINE_H + (bl.length ? bl.length * BLURB_LH + 2 : 0);
     const bg = rowIdx % 2 === 0 ? WHITE : MIST;
     doc.setFillColor(...bg);
     doc.rect(lm, yPos, rw, h, "F");
@@ -322,6 +327,12 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     doc.text(num, lm + 12, yPos + 12, { align: "center" });
     lines.forEach((ln, i) => doc.text(ln, lm + 22, yPos + 12 + i * LINE_H));
+    if (bl.length) {
+      doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(112, 118, 132);
+      const by = yPos + 12 + lines.length * LINE_H - 1;
+      bl.forEach((ln, i) => doc.text(ln, lm + 22, by + i * BLURB_LH));
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
+    }
     doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
     const price = (txt, x) => {
       doc.setTextColor(...(strike ? RED : INK));
@@ -558,8 +569,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         const desc = titleCase(it.name) + (it.waived ? "  — Waived" : "");
         const hasSub = (it.sub || []).length > 0;
         const showKids = detailed && hasSub && !it.waived;
+        const blurb = String(it.desc || "").trim();
         if (lineNum > 1 && (lineNum - 1) % 12 === 0 && !detailed) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
-        else { const ny = ensureRoom(y, rowHeight(desc) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
+        else { const ny = ensureRoom(y, rowHeight(desc, blurb) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
         const tot = itemTotal(it);
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
@@ -567,7 +579,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
           String(lineNum), detailed && it.waived ? titleCase(it.name) : desc,
           hasSub ? "1" : String(it.qty ?? 1),
           detailed && it.waived ? "—" : "$" + money(hasSub ? gross : it.price),
-          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed
+          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed, blurb
         );
         if (showKids) {
           // Components explain the package total; a parent with its own price on top is flagged
