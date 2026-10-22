@@ -2,7 +2,14 @@
 // the Claude tool-result parser are all isomorphic and validated here; the server action + UI are thin.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { routeCommand, applyIntentToPayload, parseClaudeResult, buildClaudeBody, AI_MODEL, resolveItems } from "../lib/ai-command.js";
+import { routeCommand, applyIntentToPayload, parseClaudeResult, buildClaudeBody, AI_MODEL, resolveItems, resolveSection, resolveServiceIndex } from "../lib/ai-command.js";
+
+// A multi-section proposal for the reorder / navigation tests.
+const sectioned = () => ({ options: [{ id: "A", services: [
+  { key: "camera", label: "Security Cameras", items: [{ id: "c", name: "Camera", qty: 2, price: 300, cost: 0 }] },
+  { key: "sound", label: "Audio System", items: [{ id: "s", name: "Speaker", qty: 1, price: 150, cost: 0 }] },
+  { key: "network", label: "Networking", items: [{ id: "n", name: "Switch", qty: 1, price: 120, cost: 0 }] },
+] }], discount: { type: "flat", value: 0 } });
 
 const payload = () => ({ options: [{ id: "A", name: "Premium", services: [{ key: "camera", label: "Security Cameras", items: [{ id: "x", name: "Camera", qty: 1, price: 300, cost: 0 }] }] }], discount: { type: "flat", value: 0 } });
 
@@ -113,6 +120,59 @@ test("edit_item moves a single item into another section, creating it if needed"
 
 test("edit_item with no matching item errors clearly", () => {
   assert.match(applyIntentToPayload(editable(), { type: "edit_item", match: { name: "thermostat" }, set: { price: 10 } }).error, /No line item matching/);
+});
+
+// ---- Slice 2: reorganize sections, rewrite descriptions, contextual navigation ----
+
+test("router parses section reorder (zero tokens) and resolveServiceIndex finds sections fuzzily", () => {
+  assert.deepEqual(routeCommand("move the audio section to the top"), { type: "reorder_section", match: { name: "audio" }, to: "top" });
+  assert.deepEqual(routeCommand("put networking last"), { type: "reorder_section", match: { name: "networking" }, to: "bottom" });
+  assert.deepEqual(routeCommand("move cameras up"), { type: "reorder_section", match: { name: "cameras" }, to: "up" });
+  const p = sectioned();
+  assert.equal(resolveServiceIndex(p, { name: "audio" }), 1, "fuzzy: 'audio' → Audio System");
+  assert.equal(resolveServiceIndex(p, { name: "security cameras" }), 0, "exact label");
+  assert.equal(resolveServiceIndex(p, { name: "nope" }), -1);
+});
+
+test("reorder_section moves a whole section and leaves the total unchanged", () => {
+  const { payload: out, summary, reorder } = applyIntentToPayload(sectioned(), { type: "reorder_section", match: { name: "networking" }, to: "top" });
+  assert.deepEqual(out.options[0].services.map((s) => s.key), ["network", "camera", "sound"], "Networking moved to the top");
+  assert.ok(reorder && /Networking/.test(summary));
+  // down / already-at-edge
+  assert.deepEqual(applyIntentToPayload(sectioned(), { type: "reorder_section", match: { name: "camera" }, to: "down" }).payload.options[0].services.map((s) => s.key), ["sound", "camera", "network"]);
+  assert.match(applyIntentToPayload(sectioned(), { type: "reorder_section", match: { name: "camera" }, to: "top" }).error, /already at the top/);
+  assert.match(applyIntentToPayload(sectioned(), { type: "reorder_section", match: { name: "ghost" }, to: "up" }).error, /No section matching/);
+});
+
+test("edit_item rename/rewrite shows old → new and never touches price or qty", () => {
+  const p = { options: [{ id: "A", services: [{ key: "camera", label: "Cameras", items: [{ id: "x", name: "Pool Cam", qty: 1, price: 300, cost: 0 }] }] }] };
+  const { payload: out, summary } = applyIntentToPayload(p, { type: "edit_item", match: { id: "x" }, set: { name: "Exterior IP Camera — Pool Area" } });
+  const it = out.options[0].services[0].items[0];
+  assert.equal(it.name, "Exterior IP Camera — Pool Area");
+  assert.equal(it.price, 300, "price locked"); assert.equal(it.qty, 1, "qty locked");
+  assert.match(summary, /"Pool Cam" → "Exterior IP Camera/);
+});
+
+test("resolveSection maps phrases to the deck's stage + open slug", () => {
+  assert.deepEqual(resolveSection("take me to the proposal"), { stage: "proposal", open: "proposal", label: "Proposal" });
+  assert.deepEqual(resolveSection("the site survey"), { stage: "site_survey", open: "survey", label: "Site Survey" });
+  assert.deepEqual(resolveSection("final payment"), { stage: "payment", open: "payment", label: "Payment" });
+  assert.deepEqual(resolveSection("quality control"), { stage: "qc", open: null, label: "Quality Control" });
+  assert.equal(resolveSection("the moon"), null);
+});
+
+test("router sends a known section to navigate_section, an unknown name to navigate_project", () => {
+  assert.deepEqual(routeCommand("take me to the proposal"), { type: "navigate_section", stage: "proposal", open: "proposal", label: "Proposal" });
+  assert.deepEqual(routeCommand("open the site survey"), { type: "navigate_section", stage: "site_survey", open: "survey", label: "Site Survey" });
+  assert.deepEqual(routeCommand("open Crazy Cars"), { type: "navigate_project", query: "Crazy Cars" });
+});
+
+test("parseClaudeResult handles reorder_section + navigate_section, and resolves/declines nav targets", () => {
+  const res = (input) => ({ content: [{ type: "tool_use", name: "proposal_command", input }] });
+  assert.deepEqual(parseClaudeResult(res({ type: "reorder_section", match: { name: "audio" }, to: "bottom" })), { type: "reorder_section", match: { name: "audio" }, to: "bottom" });
+  assert.deepEqual(parseClaudeResult(res({ type: "reorder_section", match: { name: "audio" }, to: "sideways" })), { type: "unknown" }, "bad direction rejected");
+  assert.deepEqual(parseClaudeResult(res({ type: "navigate_section", target: "payment screen" })), { type: "navigate_section", stage: "payment", open: "payment", label: "Payment" });
+  assert.equal(parseClaudeResult(res({ type: "navigate_section", target: "the kitchen" })).type, "unsupported", "unknown section → unsupported with guidance");
 });
 
 test("parseClaudeResult handles edit_item (match + set) and rejects an empty edit", () => {

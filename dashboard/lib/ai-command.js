@@ -45,14 +45,24 @@ export function routeCommand(text) {
     if (price != null) return { type: "edit_item", match: { name: m[1].replace(/s$/i, "").trim() }, set: { price } };
   }
 
+  // "move the cameras section to the top", "put audio last", "move software up" — reorder whole sections.
+  m = t.match(/^(?:move|put|send|bring)\s+(?:the\s+)?(.{2,40}?)\s+(?:section\s+)?(?:to\s+(?:the\s+)?)?(top|bottom|up|down|first|last)\b/i);
+  if (m) {
+    const to = { first: "top", last: "bottom" }[m[2].toLowerCase()] || m[2].toLowerCase();
+    return { type: "reorder_section", match: { name: m[1].replace(/\s+section$/i, "").trim() }, to };
+  }
+
   // "note: wants two more cameras", "add a note that ...", "log that ..."
   m = t.match(/^(?:add\s+a\s+)?(?:note|log)\b(?:\s+that\b|\s*[:\-])?\s*(.+)/i);
   if (m && m[1].trim().length > 1) return { type: "add_note", body: m[1].trim() };
 
-  // "open Crazy Cars", "go to Crazy Cars", "pull up Crazy Cars"
-  m = t.match(/^(?:open|go\s+to|pull\s+up|show\s+me)\s+(.{2,})/i);
-  if (m && !/\b(invoice|invoices|payment|payments|survey|proposal)\b/i.test(m[1])) {
-    return { type: "navigate_project", query: m[1].trim().replace(/[.?!]+$/, "") };
+  // "take me to the proposal", "open the site survey", "go to Crazy Cars". A known SECTION of THIS project
+  // wins (in-project navigation); anything else is treated as a project/customer name.
+  m = t.match(/^(?:open|go\s+to|take\s+me\s+to|pull\s+up|show\s+me|jump\s+to)\s+(.{2,})/i);
+  if (m) {
+    const sec = resolveSection(m[1]);
+    if (sec) return { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label };
+    if (!/\b(invoice|invoices|payments?)\b/i.test(m[1])) return { type: "navigate_project", query: m[1].trim().replace(/[.?!]+$/, "") };
   }
 
   return null;
@@ -68,6 +78,10 @@ function nameMatches(itemName, q) {
   if (!b) return true;
   if (a.includes(b) || b.includes(a)) return true;
   const syn = NAME_SYN[b]; if (syn && a.includes(syn)) return true;
+  // Token overlap — a multi-word reference matches when every meaningful word is present (so
+  // "side door sensor" → "Side Door Door/Window Sensor", "pool camera" → "Pool (Yard Side) Camera").
+  const toks = b.split(/[^a-z0-9]+/).filter((w) => w.length > 2);
+  if (toks.length >= 2 && toks.every((w) => a.includes(w) || (NAME_SYN[w] && a.includes(NAME_SYN[w])))) return true;
   return false;
 }
 export function describeMatch(m = {}) {
@@ -92,6 +106,40 @@ export function resolveItems(payload, match = {}, { optionId } = {}) {
     if (match.priceEach != null && c.price !== +match.priceEach) return false;
     return true;
   });
+}
+
+// Find a proposal SECTION (service) by name — label or key, fuzzy. Returns its index in the first option.
+export function resolveServiceIndex(payload, match = {}, { optionId } = {}) {
+  const opts = payload?.options || [];
+  const opt = optionId ? opts.find((o) => o.id === optionId) : opts[0];
+  if (!opt) return -1;
+  const name = norm(match.name);
+  if (!name) return -1;
+  const svcs = opt.services || [];
+  const exact = svcs.findIndex((s) => norm(s.label) === name || norm(s.key) === name);
+  if (exact >= 0) return exact;
+  return svcs.findIndex((s) => nameMatches(s.label, name) || nameMatches(s.key, name));
+}
+
+// In-project navigation targets: a phrase → the deck deep-link (?stage= + optional ?open=<tool>) that the
+// gateway understands. Pure + data-driven so "take me to the proposal / survey / payment" resolves the same
+// in the router and the Haiku fallback. Stage keys are lib/stage-flow MASTER_ORDER; open slugs are the
+// gateway's OPEN_TOOL_NAMES.
+const SECTION_NAV = [
+  { re: /\b(site[\s-]*survey|survey|floor[\s-]*plan|consulting)\b/, stage: "site_survey", open: "survey", label: "Site Survey" },
+  { re: /\b(mock[\s-]?up|mockups?|camera[\s-]*views?|\bviews\b|layout)\b/, stage: "site_survey", open: "mockup", label: "Mockups" },
+  { re: /\b(proposal|quote|pricing)\b/, stage: "proposal", open: "proposal", label: "Proposal" },
+  { re: /\b(approval|deposit|sign[\s-]?off|signature|accept)\b/, stage: "approval_deposit", open: "deposit", label: "Approval & Deposit" },
+  { re: /\b(schedule|appointment|booking)\b/, stage: "schedule", open: null, label: "Schedule" },
+  { re: /\b(install(?:ation)?|work[\s-]*order)\b/, stage: "install", open: null, label: "Install" },
+  { re: /\b(quality[\s-]*control|\bqc\b|quality)\b/, stage: "qc", open: null, label: "Quality Control" },
+  { re: /\b(final[\s-]*payment|payment|invoice|balance)\b/, stage: "payment", open: "payment", label: "Payment" },
+  { re: /\b(completion|wrap[\s-]?up|warranty|certificate)\b/, stage: "completion", open: null, label: "Completion" },
+];
+export function resolveSection(text) {
+  const t = norm(text);
+  for (const s of SECTION_NAV) if (s.re.test(t)) return { stage: s.stage, open: s.open || null, label: s.label };
+  return null;
 }
 
 // Apply an intent to a proposal payload — PURE, returns a NEW payload + a one-line change summary, or an
@@ -129,16 +177,17 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
     if ((renaming || moving) && matches.length > 1) {
       return { ambiguous: matches.map((m) => ({ id: m.id, label: `${m.name} · qty ${m.qty} · $${m.price.toFixed(2)}` })), action: renaming ? "rename" : "move" };
     }
+    const oldName = matches.length === 1 ? matches[0].name : null;
     const parts = [];
     for (const m of matches) {
       const it = opt.services[m.svcIdx].items[m.itemIdx];
       if (set.qty != null) it.qty = clampQty(set.qty);
       if (set.price != null) it.price = Math.max(0, +set.price);
-      if (set.name != null) it.name = String(set.name).slice(0, 80);
+      if (set.name != null) it.name = String(set.name).slice(0, 80);   // price/qty untouched — a rewrite never changes them
     }
     if (set.price != null) parts.push(`$${(+set.price).toFixed(2)}`);
     if (set.qty != null) parts.push(`qty ${clampQty(set.qty)}`);
-    if (set.name != null) parts.push(`renamed to "${String(set.name).slice(0, 40)}"`);
+    if (set.name != null) parts.push(oldName ? `"${oldName}" → "${String(set.name).slice(0, 48)}"` : `renamed to "${String(set.name).slice(0, 48)}"`);
     if (moving) {
       const m = matches[0], from = opt.services[m.svcIdx];
       const [it] = from.items.splice(m.itemIdx, 1);
@@ -148,8 +197,24 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
       dest.items.push(it);
       parts.push(`moved to ${dest.label}`);
     }
-    const label = matches.length > 1 ? `${matches.length} items` : `"${matches[0].name}"`;
+    const label = matches.length > 1 ? `${matches.length} items` : `"${oldName}"`;
     return { payload: p, summary: `Set ${label} — ${parts.join(", ")}`, count: matches.length };
+  }
+
+  if (intent.type === "reorder_section") {
+    const opt = p.options[0];
+    const svcs = Array.isArray(opt.services) ? opt.services : [];
+    if (svcs.length < 2) return { error: "There's only one section — nothing to reorder." };
+    const idx = resolveServiceIndex(p, intent.match || {}, { optionId: opt.id });
+    if (idx < 0) return { error: `No section matching ${describeMatch(intent.match)}.` };
+    const to = intent.to;
+    const target = to === "top" ? 0 : to === "bottom" ? svcs.length - 1 : to === "up" ? Math.max(0, idx - 1) : to === "down" ? Math.min(svcs.length - 1, idx + 1) : -1;
+    if (target < 0) return { error: "Say top, bottom, up or down." };
+    const name = svcs[idx].label || svcs[idx].key;
+    if (target === idx) return { error: `"${name}" is already ${to === "up" || to === "top" ? "at the top" : "at the bottom"}.` };
+    const [m] = svcs.splice(idx, 1);
+    svcs.splice(target, 0, m);
+    return { payload: p, summary: `Move "${name}" ${to === "top" || to === "bottom" ? "to the " : ""}${to}`, reorder: true };
   }
 
   return { error: "That isn't a proposal edit." };
@@ -164,17 +229,19 @@ const TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      type: { type: "string", enum: ["add_items", "edit_item", "set_discount", "add_note", "navigate_project", "unsupported", "unknown"] },
+      type: { type: "string", enum: ["add_items", "edit_item", "reorder_section", "set_discount", "add_note", "navigate_project", "navigate_section", "unsupported", "unknown"] },
       name: { type: "string", description: "line-item name for add_items, e.g. Camera" },
       qty: { type: "integer", description: "quantity for add_items" },
       price: { type: ["number", "null"], description: "unit price for add_items; null to use the price book" },
-      match: { type: "object", description: "edit_item: how to find the EXISTING line item(s) to change", properties: { name: { type: "string" }, qty: { type: "integer" }, priceEach: { type: "number" } } },
-      set: { type: "object", description: "edit_item: the new values to apply", properties: { qty: { type: "integer" }, price: { type: "number" }, name: { type: "string" } } },
+      match: { type: "object", description: "edit_item: find the EXISTING line item(s); reorder_section: find the section by name", properties: { name: { type: "string" }, qty: { type: "integer" }, priceEach: { type: "number" } } },
+      set: { type: "object", description: "edit_item: the new values. For a professional REWRITE of a description, put the polished name in `set.name` and NOTHING else (never price/qty).", properties: { qty: { type: "integer" }, price: { type: "number" }, name: { type: "string" } } },
       moveToService: { type: "string", description: "edit_item: move the matched item into this service (e.g. camera, sound, software)" },
+      to: { type: "string", enum: ["top", "bottom", "up", "down"], description: "reorder_section: where to move the section" },
+      target: { type: "string", description: "navigate_section: which section of THIS project to open — survey, mockups, proposal, approval, schedule, install, qc, payment or completion" },
       pct: { type: "number", description: "discount percent 0-100 for set_discount" },
       body: { type: "string", description: "note text for add_note" },
       query: { type: "string", description: "project/customer name for navigate_project" },
-      reason: { type: "string", description: "for unsupported: what was asked that Phase 1 can't do" },
+      reason: { type: "string", description: "for unsupported: what was asked that isn't a proposal edit / note / navigation" },
     },
     required: ["type"],
   },
@@ -186,10 +253,16 @@ export function buildClaudeBody(text, context = {}) {
     model: AI_MODEL,
     max_tokens: 300,
     system:
-      "You convert a security-install company staff member's command into ONE structured action via the proposal_command tool. " +
-      "Supported: add_items (add line items like cameras); edit_item (change an EXISTING line item's price/qty/name, or move it to another section — use `match` to identify it by name/qty/price and `set` for the new values); set_discount (percent); add_note (project log); navigate_project (open a customer/project). " +
-      "For edit_item, put the user's reference in `match` (e.g. \"the 8 cameras I just added\" → match {name:'camera', qty:8}) and only the changes in `set`. " +
-      "Anything else (scheduling, payments, sending messages, surveys) → type \"unsupported\" with a short reason. If it's not a command at all → \"unknown\". " +
+      "You convert a security-install company staff member's command into ONE structured action via the proposal_command tool. Supported:\n" +
+      "- add_items: add line items like cameras.\n" +
+      "- edit_item: change an EXISTING line item's price/qty/name, or move it to another section. Put the user's reference in `match` (e.g. \"the 8 cameras I just added\" → match {name:'camera', qty:8}) and only the changes in `set`.\n" +
+      "- To REWRITE a description professionally / clean it up / make it sound better: use edit_item with `set.name` = a polished, professional product description and NOTHING else in `set` — NEVER change price or qty.\n" +
+      "- reorder_section: move a whole section/service (match it by name) to the `to` position (top/bottom/up/down).\n" +
+      "- set_discount: percent off.\n" +
+      "- add_note: save a project log note.\n" +
+      "- navigate_project: open a different customer/project (by name) in `query`.\n" +
+      "- navigate_section: open a section of THE CURRENT project — set `target` to survey, mockups, proposal, approval, schedule, install, qc, payment or completion.\n" +
+      "Anything else (sending messages, recording payments, booking real appointments) → \"unsupported\" with a short reason. Not a command → \"unknown\". " +
       ctx + " Never invent a price; omit it unless the user stated one.",
     tools: [TOOL],
     tool_choice: { type: "tool", name: "proposal_command" },
@@ -220,6 +293,16 @@ export function parseClaudeResult(json) {
         // Needs something to find the item AND something to change.
         if (!Object.keys(match).length || (!Object.keys(set).length && !out.moveToService)) return { type: "unknown" };
         return out;
+      }
+      case "reorder_section": {
+        const name = i.match?.name ? String(i.match.name).slice(0, 60) : (i.name ? String(i.name).slice(0, 60) : "");
+        const to = ["top", "bottom", "up", "down"].includes(i.to) ? i.to : null;
+        return name && to ? { type: "reorder_section", match: { name }, to } : { type: "unknown" };
+      }
+      case "navigate_section": {
+        const sec = resolveSection(i.target || i.query || "");
+        return sec ? { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label }
+          : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "set_discount": return { type: "set_discount", pct: Math.max(0, Math.min(100, +i.pct || 0)) };
       case "add_note": return i.body ? { type: "add_note", body: String(i.body).slice(0, 2000) } : { type: "unknown" };

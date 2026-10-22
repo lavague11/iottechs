@@ -78,11 +78,16 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return { ok: true, kind: "navigate", href: `/project/${top.access_id}`, label: top.customer || top.access_id, more: hits.length - 1 };
   }
 
+  if (intent.type === "navigate_section") {
+    const href = `/project/${accessId}?stage=${intent.stage}${intent.open ? `&open=${intent.open}` : ""}`;
+    return { ok: true, kind: "navigate", href, label: intent.label };
+  }
+
   if (intent.type === "add_note") {
     return { ok: true, kind: "write", write: "note", intent, preview: { title: "Add project note", body: intent.body } };
   }
 
-  if (intent.type === "add_items" || intent.type === "set_discount" || intent.type === "edit_item") {
+  if (intent.type === "add_items" || intent.type === "set_discount" || intent.type === "edit_item" || intent.type === "reorder_section") {
     return proposalPreview(accessId, intent);
   }
 
@@ -102,7 +107,11 @@ function proposalPreview(accessId, intent) {
   const applied = applyIntentToPayload(payload, intent, { priceOf });
   if (applied.ambiguous) return { ok: true, kind: "disambiguate", intent, action: applied.action, candidates: applied.ambiguous };
   if (applied.error) return { error: applied.error };
-  return { ok: true, kind: "write", write: "proposal", intent, preview: { title: applied.summary, before: grandOf(payload, row), after: grandOf(applied.payload, row) } };
+  // Only show the money line when the total actually moves (a rename / reorder leaves it unchanged).
+  const before = grandOf(payload, row), after = grandOf(applied.payload, row);
+  const preview = { title: applied.summary };
+  if (before !== after) { preview.before = before; preview.after = after; }
+  return { ok: true, kind: "write", write: "proposal", intent, preview };
 }
 
 // The signer picked a specific candidate for an ambiguous rename/move — force the match to that id and

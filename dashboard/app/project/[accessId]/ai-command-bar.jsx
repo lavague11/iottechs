@@ -9,7 +9,7 @@ import { aiStatusAction, aiInterpretAction, aiResolvePickAction, aiApplyNoteActi
 // disambiguate callbacks; the surface itself is domain-agnostic and reusable elsewhere later. Proposal
 // edits apply to the builder's live payload (its own validated autosave is the server write); notes go
 // straight to the server. Renders only when AI_COMMANDS is on and the caller is staff.
-const PLACEHOLDER = "Command the proposal — “add 8 cameras at $300”, “change the cameras to $275”, “15% discount”, “note: …”, “open Crazy Cars”";
+const PLACEHOLDER = "Command — “add 8 cameras at $300”, “change the cameras to $275”, “rewrite the pool camera”, “move audio to the top”, “take me to the proposal”";
 
 export default function AiCommandBar({ accessId, projectName, payload, patchPayload }) {
   const router = useRouter();
@@ -18,7 +18,12 @@ export default function AiCommandBar({ accessId, projectName, payload, patchPayl
 
   const interpret = (text) => aiInterpretAction(accessId, text, { projectName });
   const onPick = (res, id) => aiResolvePickAction(accessId, res.intent, id);
-  const onNavigate = (res) => router.push(res.href);
+  // A different project → client-side push. An IN-project jump (?stage=/?open=) → hard navigate, because
+  // the deck reads those deep-link params only on mount, so a soft push wouldn't actually move it.
+  const onNavigate = (res) => {
+    if (typeof window !== "undefined" && res.href.startsWith(window.location.pathname)) window.location.assign(res.href);
+    else router.push(res.href);
+  };
 
   async function onApply(res) {
     if (res.write === "note") {
