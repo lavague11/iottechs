@@ -10,7 +10,8 @@ import { startSignAction, saveSignValuesAction, completeSignAction } from "../es
 
 // The signer: the ACTUAL generated proposal PDF, page by page, with the signature / name / date fields
 // laid over the acceptance block. Full-screen, mobile-first (sticky Next/Finish bar, large tap targets).
-// Flow: tap Sign (or Next) → agree to the terms → adopt name + signature → place each spot → Finish → sign.
+// Flow: tap Sign (or Next) → agree to the terms (Continue to Signature) → adopt name + signature (SAVES,
+// field green) → place each spot → explicit "Sign & Accept Proposal" finalizes. Adopting never finalizes.
 
 const TAG = { signature: ["Sign", Icon.pen], name: ["Name", Icon.user], date: ["Date", Icon.cal] };
 const RESTART = new Set(["EXPIRED", "VOID", "CHANGED", "TAMPERED", "NO_SESSION"]);
@@ -150,23 +151,25 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   // Open the signature-adoption sheet, but gate the FIRST adoption behind the terms: no signature yet and
   // terms not agreed → show the consent sheet first; it saves the acks then opens the capture sheet.
   function openAdopt(key) { placeTargetRef.current = key; setErr(null); setSheet(termsAgreed ? "capture" : "consent"); }
-  // The consent sheet is now the PRE-adopt gate: record the agreement, then adopt the signature.
+  // The consent sheet is the PRE-adopt gate: record the agreement, then open the signature pad.
   function agreeThenCapture(checks) { save({ acks: checks }, () => setSheet("capture")); }
 
-  // Auto-complete: once every signature is placed + the terms agreed, the document signs itself — no
-  // Finish step. Guarded so it fires exactly once; on success the viewer shows the completed state + toast.
-  const autoComplete = useCallback(async (vals) => {
+  // Explicit finalize — "Sign & Accept Proposal". Adopting a signature only SAVES it; the proposal is
+  // accepted only when the customer deliberately submits here. The server re-validates the acks + every
+  // placement before it signs. Guarded so it runs once; on success the viewer shows the completed state.
+  const finish = useCallback(async () => {
     if (completingRef.current || !sess?.token) return;
     completingRef.current = true;
     setBusy(true); setErr(null);
-    const r = await completeSignAction(accessId, sess.token, vals?.acks).catch(() => ({ error: "Couldn't complete signing. Try again." }));
+    const r = await completeSignAction(accessId, sess.token, null).catch(() => ({ error: "Couldn't complete signing. Try again." }));
     setBusy(false);
     if (!handle(r)) { completingRef.current = false; toast("err"); return; }   // allow a retry
     store.set(tokenKey(accessId, optKey), null);
     setSheet(null); setCompleted(true); doneResultRef.current = r; toast("done");
   }, [accessId, optKey, sess, handle, toast]);
 
-  // Persist a placement; the field turns green ONLY after the server confirms it. The last one completes.
+  // Persist a placement; the field turns green ONLY after the server confirms it. Saving ≠ accepting —
+  // the proposal is finalized separately via "Sign & Accept Proposal".
   async function placeSaved(key) {
     if (!sess?.token || busy || placed.has(key)) return;
     const nextKeys = [...new Set([...placed, key])];
@@ -177,13 +180,12 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
     setValues(r.values);
     const confirmed = new Set(r.values?.placed || nextKeys);
     setPlaced(confirmed);
-    const allNow = sigFields.length > 0 && sigFields.every((f) => confirmed.has(f.key));
-    if (allNow) autoComplete(r.values);
-    else { toast("save"); const nx = sigFields.find((f) => !confirmed.has(f.key)); if (nx) setActive(nx.i); }
+    toast("save");
+    const nx = sigFields.find((f) => !confirmed.has(f.key)); if (nx) setActive(nx.i);
   }
 
   // Adopt a signature: saves name + signature AND marks the target field placed in ONE round trip, so the
-  // field goes green on Adopt with no Finish step. If that was the last signature, the document completes.
+  // field goes green on Adopt. This only SAVES — it never finalizes (that's the explicit Sign & Accept).
   const adopt = (name, signature) => {
     const key = placeTargetRef.current || sigFields[0]?.key;
     placeTargetRef.current = null;
@@ -192,9 +194,8 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       setSheet(null);
       const confirmed = new Set(vals?.placed || nextKeys);
       setPlaced(confirmed);
-      const allNow = sigFields.length > 0 && sigFields.every((f) => confirmed.has(f.key));
-      if (allNow) autoComplete(vals);
-      else { if (key) toast("save"); const nx = sigFields.find((f) => !confirmed.has(f.key)); if (nx) setActive(nx.i); }
+      if (key) toast("save");
+      const nx = sigFields.find((f) => !confirmed.has(f.key)); if (nx) setActive(nx.i);
     });
   };
 
@@ -259,6 +260,9 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
   const filled = sigFields.filter((f) => placed.has(f.key)).length;
   const progressText = completed ? "Signed ✓"
     : sigCount ? `${filled} of ${sigCount} signature${sigCount === 1 ? "" : "s"} completed` : "";
+  // The explicit final action is enabled only once every signature is placed AND the terms are agreed
+  // (the server re-checks both before it signs — this gate is UX, not the authority).
+  const canFinalize = sigCount > 0 && allPlaced && termsAgreed && !completed;
 
   return createPortal(
     // Portaled to <body>: the deck wraps tools in transformed containers, which would otherwise capture `position: fixed`.
@@ -286,10 +290,12 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       </div>
       <div className="esg-bar">
         <span className="esg-count" data-testid="esign-progress">{progressText}</span>
-        {!completed && <button type="button" className="esg-go esg-ghost" data-testid="esign-next" disabled={!fields.length || !!fatal || busy} onClick={next}>Next</button>}
-        {/* Signing is automatic on Adopt — this button only dismisses the viewer; saved signatures persist. */}
-        <button type="button" className="esg-go" data-testid="esign-close"
-          onClick={() => { if (completed && doneResultRef.current) onDone?.(doneResultRef.current); else onClose?.(); }}>Close</button>
+        {/* Next navigates between spots while signing; the × (top-left) closes without losing saved signatures. */}
+        {!completed && !canFinalize && <button type="button" className="esg-go esg-ghost" data-testid="esign-next" disabled={!fields.length || !!fatal || busy} onClick={next}>Next</button>}
+        {/* Explicit final acceptance — enabled only once every signature is placed + terms agreed. Becomes Close when done. */}
+        {!completed
+          ? <button type="button" className="esg-go" data-testid="esign-finish" disabled={!canFinalize || !!fatal || busy} onClick={() => { setErr(null); finish(); }}>Sign &amp; Accept Proposal</button>
+          : <button type="button" className="esg-go" data-testid="esign-close" onClick={() => { if (doneResultRef.current) onDone?.(doneResultRef.current); else onClose?.(); }}>Close</button>}
       </div>
       {toastMsg && (
         <div className={`esg-toast ${toastMsg.kind}`} role="status" aria-live="polite" data-testid="esign-toast">
@@ -299,7 +305,7 @@ export default function EsignSigner({ accessId, optKey, optLabel, reference, def
       )}
       {sheet === "capture" && <CaptureSheet defaultName={values.name || defaultName} busy={busy} error={err} onAdopt={adopt} onCancel={() => { setSheet(null); setErr(null); }} />}
       {/* Pre-adopt gate: agree to the terms the FIRST time Sign is tapped, before adopting a signature. */}
-      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Agree & Continue" onConfirm={agreeThenCapture} onCancel={() => { setSheet(null); setErr(null); }} />}
+      {sheet === "consent" && <ConsentSheet acks={acks} initial={values.acks} busy={busy} error={err} confirmLabel="Continue to Signature" onConfirm={agreeThenCapture} onCancel={() => { setSheet(null); setErr(null); }} />}
     </div>,
     document.body
   );

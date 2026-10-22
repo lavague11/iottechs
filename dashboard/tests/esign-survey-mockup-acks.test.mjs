@@ -100,7 +100,8 @@ test("sign-off: the signer emits a survey/mockup sign-off page + each signature 
   const signer = readFileSync(new URL("../app/project/[accessId]/esign/esign-signer.jsx", import.meta.url), "utf8");
   assert.ok(/const allPlaced = sigFields\.length > 0 && sigFields\.every\(\(f\) => placed\.has\(f\.key\)\)/.test(signer), "every signature spot must be placed");
   assert.ok(/saveSignValuesAction\(accessId, sess\.token, \{ placed: nextKeys \}\)/.test(signer), "placing a spot persists it server-side (green only after the server confirms)");
-  assert.ok(/if \(allNow\) autoComplete\(/.test(signer), "the last placement auto-completes — signing never depends on Finish");
+  assert.ok(/const canFinalize = sigCount > 0 && allPlaced && termsAgreed && !completed/.test(signer), "the explicit finalize is enabled only once every spot is placed + terms agreed");
+  assert.ok(/data-testid="esign-finish"[\s\S]*?Sign &amp; Accept Proposal/.test(signer), "finalizing is an explicit Sign & Accept Proposal action, not automatic on adopt");
   assert.ok(/else placeSaved\(f\.key\)/.test(signer), "tapping an empty spot with a signature adopted places + saves it");
   assert.ok(/done = system \? true : f\.type === "name" \? !!values\.name : placed\.has\(f\.key\)/.test(signer), "a signature spot shows the signature only once placed");
 });

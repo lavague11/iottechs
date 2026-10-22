@@ -50,6 +50,18 @@ const PROP_CSS = `
 .pvx .prop-head-cta.prop-head-sign{display:inline-flex;align-items:center;gap:6px;background:#C9A96E;color:#101418;border-color:#C9A96E}
 .pvx .prop-head-cta.prop-head-sign:hover{filter:brightness(1.06)}
 .pvx .prop-head-cta.prop-head-sign svg{width:15px;height:15px}
+/* Internal admin-review banner on a signed contract (staff-only). */
+.pvx .prop-review-bar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA)}
+.pvx .prop-review-bar.pending{border-left:3px solid #C9A96E}
+.pvx .prop-review-bar.done{border-left:3px solid #2f7d5a}
+.pvx .prop-review-bar > svg{flex:none;color:var(--dv-meta,#787D84)}
+.pvx .prop-review-bar.done > svg{color:#2f7d5a}
+.pvx .prr-tx{display:flex;flex-direction:column;line-height:1.3;min-width:0}
+.pvx .prr-tx b{font-size:.82rem;font-weight:650;color:var(--dv-ink,#101418)}
+.pvx .prr-tx small{font-size:.72rem;color:var(--dv-meta,#787D84)}
+.pvx .prr-btn{margin-left:auto;flex:none;height:30px;padding:0 14px;border:1px solid var(--dv-ink,#101418);border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prr-btn:hover{filter:brightness(1.12)}
+.pvx .prr-btn:disabled{opacity:.45;cursor:default}
 .pvx .prop-head-toolbar{gap:8px}
 .pvx .prop-head{display:flex;align-items:center;gap:10px}
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}

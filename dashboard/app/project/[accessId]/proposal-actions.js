@@ -5,7 +5,7 @@ import {
   getJobByAccessId, getActiveProposal, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
-  signProposal, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
+  signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
   getStageAcceptances, notifyRoles, createNotification, getCustomerUserForProject, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
@@ -200,6 +200,18 @@ export async function requestSignatureEmailAction(accessId, optKey) {
     } catch { /* notification is best-effort */ }
   }
   return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
+// Internal admin review of a SIGNED contract. Admin/manager only. This is an acknowledgment ("I looked at
+// it"), NOT a second customer approval — it never touches the signed document or the customer's acceptance.
+export async function markProposalReviewedAction(accessId, reviewed = true) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Unauthorized." };
+  const row = markProposalReviewed(accessId, actorName(tok), reviewed !== false);
+  if (!row) return { error: "Nothing signed to review yet." };
+  try { logProjectEvent(accessId, { kind: "review", label: reviewed !== false ? "Signed contract reviewed" : "Contract review cleared", actor: actorName(tok) }); } catch { /* best-effort */ }
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
 export async function reviseProposalAction(accessId) {

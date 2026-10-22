@@ -1,6 +1,6 @@
 // Validation of what the signer captures. The client is never trusted: every value is re-checked here
 // before it is stored, and again when the PDF is flattened.
-import { PROPOSAL_ACKS } from "../proposal-terms.js";
+import { PROPOSAL_ACKS, PROPOSAL_TERMS_VERSION } from "../proposal-terms.js";
 
 // The data URL (what proposals.signature_data stores, sliced to 200000 chars by signProposal) must fit in 200KB —
 // a longer one would be truncated into a corrupt image, so it is refused up front.
@@ -66,6 +66,9 @@ export function mergeValues(prev, patch, now = new Date()) {
     const clean = {};
     for (const a of PROPOSAL_ACKS) clean[a.key] = !!patch.acks[a.key];
     out.acks = clean;
+    // Bind the exact terms version the customer accepted (audit — "which document version was agreed").
+    out.termsVersion = PROPOSAL_TERMS_VERSION;
+    out.acksAt = now.toISOString();
   }
   // Which signature fields the customer has placed (green). Persisted so each placement survives refresh /
   // navigation and the field only goes green after the server has stored it. The authoritative check that

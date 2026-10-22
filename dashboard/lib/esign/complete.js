@@ -98,6 +98,21 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
     recordSignEvent({ accessId, proposalId: row.id, sessionId: s.id, kind: "completed", actor: values.name, ip, ua,
       detail: { signedDocId: stored.id, certificateDocId: cert.id, unsignedSha256: doc.sha256, signedSha256: signedSha, fingerprint: s.fingerprint } });
     logProjectEvent(accessId, { kind: "sign", label: `Proposal v${row.version} signed (PDF) — Option ${s.option_key} by ${values.name}`, actor: values.name });
+    // Notify the admin(s) that the contract was signed — fire-and-forget so a slow/failed email NEVER
+    // reverses a completed signature. Idempotent: the `admin_notified` event is the key (one per revision;
+    // completion runs once per version, and a reopen of a signed doc can't re-complete). Logged either way.
+    try {
+      const already = listSignEvents(row.id).some((e) => e.kind === "admin_notified");
+      if (!already) {
+        recordSignEvent({ accessId, proposalId: row.id, sessionId: s.id, kind: "admin_notified", actor: "system", detail: { version: row.version } });
+        const projectName = project?.business_name || project?.customer || accessId;
+        import("../email.js").then(({ emailContractSigned }) =>
+          emailContractSigned(accessId, { signerName: values.name, customerName: project?.contact_name || project?.customer, version: row.version, signedAt: signedRow.signed_at, projectName })
+            .then((res) => { try { logProjectEvent(accessId, { kind: "email", label: res?.sent ? `Signed contract — admin notified (${(res.recipients || []).length} recipient${(res.recipients || []).length === 1 ? "" : "s"})` : `Signed contract — admin email not sent (${res?.error || "no recipients"})`, actor: "system" }); } catch { /* log is best-effort */ } })
+            .catch((e) => { try { logProjectEvent(accessId, { kind: "email", label: `Signed contract — admin email failed (${e?.message || "error"})`, actor: "system" }); } catch {} })
+        ).catch(() => {});
+      }
+    } catch { /* admin notification is best-effort — never blocks a completed signature */ }
     const stage = maybeAutoAdvance(accessId);
     return { ok: true, stage, row: getActiveProposal(accessId), signedDocId: stored.id, certificateDocId: cert.id, signedSha256: signedSha };
   } catch (e) {

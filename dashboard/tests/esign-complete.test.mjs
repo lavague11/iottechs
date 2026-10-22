@@ -148,15 +148,15 @@ test("certificate of completion: signer, role, email, timestamps, IP, UA, both h
   assert.ok(txt.replace(/\s+/g, "").includes(signed.meta.unsignedSha256));
 });
 
-test("append-only audit trail records open → name → signature → acks → placed → completed with ip + ua", async () => {
+test("append-only audit trail records open → name → signature → acks → placed → completed → admin_notified with ip + ua", async () => {
   const x = await ready("Done Five", "5552220005");
   await done(x);
   const pid = db.getActiveProposal(x.a).id;
   const kinds = store.listSignEvents(pid).map((e) => e.kind);
-  assert.deepEqual(kinds, ["opened", "set_name", "set_signature", "set_acks", "set_placed", "completed"]);
-  const last = store.listSignEvents(pid).at(-1);
-  assert.equal(last.ip, "203.0.113.9"); assert.equal(last.ua, "node-test/1.0");
-  assert.ok(JSON.parse(last.detail).signedSha256);
+  assert.deepEqual(kinds, ["opened", "set_name", "set_signature", "set_acks", "set_placed", "completed", "admin_notified"]);
+  const completedEv = store.listSignEvents(pid).find((e) => e.kind === "completed");
+  assert.equal(completedEv.ip, "203.0.113.9"); assert.equal(completedEv.ua, "node-test/1.0");
+  assert.ok(JSON.parse(completedEv.detail).signedSha256);
 });
 
 test("replay: the same token can't complete (or save) twice; a second session can't re-sign a signed proposal", async () => {
@@ -352,4 +352,28 @@ test("placement gates approval: signatures save independently, persist on resume
   const ok = await K.completeSession({ token: r.token, accessId: a, caller: pin(a) });
   assert.ok(ok.ok, ok.error);
   assert.equal(db.getActiveProposal(a).signed_name, "Pat Doe", "approved once every signature is in");
+});
+
+test("admin notification + internal review: one notice per revision; review is staff-only and never changes acceptance", async () => {
+  const x = await ready("Admin Notify Co", "5552220040");
+  const out = await done(x);
+  assert.ok(out.ok, out.error);
+  const pid = db.getActiveProposal(x.a).id;
+  // Idempotency key = document + revision: completion records admin_notified exactly once.
+  assert.equal(store.listSignEvents(pid).filter((e) => e.kind === "admin_notified").length, 1, "admin notified exactly once");
+
+  const { sanitizeProposal } = await import("../lib/proposal.js");
+  // Right after signing: Signed — Pending Review. Staff see the field; the customer never does.
+  assert.equal(sanitizeProposal(db.getActiveProposal(x.a), "admin").admin_reviewed_at, null, "pending review after signing");
+  assert.equal("admin_reviewed_at" in sanitizeProposal(db.getActiveProposal(x.a), "customer"), false, "customer never sees the internal review field");
+
+  // Marking reviewed is an internal acknowledgment — it never touches the customer's signed acceptance.
+  const reviewed = db.markProposalReviewed(x.a, "Owner Admin", true);
+  assert.ok(reviewed.admin_reviewed_at && reviewed.admin_reviewed_by === "Owner Admin", "review recorded");
+  assert.equal(db.getActiveProposal(x.a).signed_name, "Jordan Rivera", "reviewing doesn't change the signed acceptance");
+  assert.equal(db.markProposalReviewed(x.a, "Owner Admin", false).admin_reviewed_at, null, "un-review clears it");
+
+  // The exact terms VERSION is bound to the acknowledgment.
+  const { mergeValues } = await import("../lib/esign/capture.js");
+  assert.ok(mergeValues({}, { acks: { terms: true, payment: true } }).values.termsVersion, "accepted terms version is recorded");
 });

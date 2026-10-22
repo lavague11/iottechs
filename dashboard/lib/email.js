@@ -295,6 +295,49 @@ export async function emailPaymentReceived(accessId, { amount, kind, method, pai
   }
 }
 
+// Admin notification — a customer finished signing a proposal. Sent to the configured admin recipients
+// (ADMIN_NOTIFY_EMAIL vault override, else active admin accounts). The CTA opens the signed proposal in
+// the AUTHENTICATED admin project interface — never a public document link. Best-effort: a failed email
+// must never reverse a completed signature, so callers fire-and-forget.
+export async function emailContractSigned(accessId, { signerName = null, customerName = null, version = null, docType = "Security System Proposal", signedAt = null, projectName = null } = {}) {
+  try {
+    const { getJobByAccessId, getAdminRecipients } = await import("./db.js");
+    const project = getJobByAccessId(accessId);
+    if (!project) return { ok: false, error: "no-project" };
+    const who = customerName || signerName || project.contact_name || project.customer || "A customer";
+    const pname = projectName || project.business_name || project.customer || accessId;
+    const base = appUrl();
+    const ctaUrl = base ? `${base}/project/${encodeURIComponent(accessId)}?open=proposal` : null;
+    const override = secretValue("ADMIN_NOTIFY_EMAIL");
+    const recipients = [...new Set((override
+      ? String(override).split(/[,;]/).map((s) => s.trim())
+      : (getAdminRecipients() || []).map((u) => u.email)).filter((e) => e && e.includes("@")))];
+    if (!recipients.length) return { ok: false, error: "no-admin-recipient" };
+    let when = null;
+    try { when = signedAt ? new Date(String(signedAt).replace(" ", "T")).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : null; } catch { when = signedAt; }
+    const payload = {
+      heading: "Contract Signed Successfully",
+      intro: `${who} has signed and completed their IOT TECHS proposal.`,
+      lines: [
+        `Project: ${pname} (${accessId})`,
+        `Document: ${docType}${version ? ` · v${version}` : ""}`,
+        "Status: Signed — Pending Admin Review",
+        when ? `Completed: ${when}` : null,
+      ].filter(Boolean),
+      ctaLabel: "Review Signed Contract",
+      ctaUrl,
+      footNote: "The signed document has been saved to the project and is ready for your review. IOT TECHS — Automated Notification.",
+    };
+    const results = [];
+    for (const to of recipients) results.push(await sendEmail({ to, subject: `Contract Signed — ${who}`, html: renderEmail(payload), text: plainText(payload) }));
+    const sent = results.some((r) => r && (r.ok || r.id || r.skipped));
+    return { ok: true, sent, recipients, results };
+  } catch (e) {
+    console.error(`[email:contract-signed] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
 export async function emailProposalReady(accessId) {
   try {

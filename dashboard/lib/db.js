@@ -1166,6 +1166,10 @@ function init() {
   if (!propCols.includes("signed_fingerprint"))  db.exec("ALTER TABLE proposals ADD COLUMN signed_fingerprint TEXT");
   if (!propCols.includes("signed_payload"))      db.exec("ALTER TABLE proposals ADD COLUMN signed_payload TEXT");
   if (!propCols.includes("signed_acks"))         db.exec("ALTER TABLE proposals ADD COLUMN signed_acks TEXT");   // { ackKey: bool } — the Section 83 initials the customer checked at signing
+  // Internal admin review of a SIGNED contract — separate from the customer's acceptance. The customer's
+  // contract is complete the moment they sign; this is just an internal "a human looked at it" acknowledgment.
+  if (!propCols.includes("admin_reviewed_at"))   db.exec("ALTER TABLE proposals ADD COLUMN admin_reviewed_at TEXT");
+  if (!propCols.includes("admin_reviewed_by"))   db.exec("ALTER TABLE proposals ADD COLUMN admin_reviewed_by TEXT");
   // Work order: the office finalizes the auto-created work order (payout reviewed) before a tech
   // can accept it. Null until finalized; stamped with the finalizer's name + timestamp.
   if (!propCols.includes("wo_finalized_at"))     db.exec("ALTER TABLE proposals ADD COLUMN wo_finalized_at TEXT");
@@ -1881,6 +1885,12 @@ export function userEffectivePin(user) {
 // gets a real cross-project session (dashboard access + correct attribution), not a synthetic one.
 export function getPrimaryAdmin() {
   return db.prepare("SELECT * FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) ORDER BY id ASC LIMIT 1").get() || null;
+}
+
+// Active admin accounts with a real email — the default recipients for internal "contract signed"
+// notifications (a vault ADMIN_NOTIFY_EMAIL override wins in the email layer). Authorized recipients only.
+export function getAdminRecipients() {
+  return db.prepare("SELECT name, email FROM users WHERE role='admin' AND (disabled IS NULL OR disabled=0) AND email IS NOT NULL AND TRIM(email) != ''").all();
 }
 
 // Projects that have a generated System QR — powers the guide's "which system?" picker.
@@ -6153,6 +6163,17 @@ export function signProposal(accessId, name, signatureData, acks) {
   }
   db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, signed_acks=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, acksJson, cur.id);
+  return getActiveProposal(accessId);
+}
+// Internal admin acknowledgment that a SIGNED contract has been reviewed. Separate from customer
+// acceptance — it never changes the signed document or the customer's approval. Idempotent-ish: only a
+// signed proposal can be marked, and re-marking just refreshes the reviewer/timestamp. Pass reviewed=false
+// to clear it (un-review). Returns the active proposal, or null if there's nothing signed to review.
+export function markProposalReviewed(accessId, reviewer, reviewed = true) {
+  const cur = getActiveProposal(accessId);
+  if (!cur || !cur.signed_name) return null;
+  db.prepare("UPDATE proposals SET admin_reviewed_at=?, admin_reviewed_by=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(reviewed ? new Date().toISOString().replace("T", " ").slice(0, 19) : null, reviewed ? String(reviewer || "").slice(0, 120) : null, cur.id);
   return getActiveProposal(accessId);
 }
 // Technician accepts the (customer-accepted) work order: records the tech's signature on the
