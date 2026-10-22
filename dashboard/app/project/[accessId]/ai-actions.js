@@ -13,8 +13,8 @@ import {
 } from "../../../lib/db";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
+import { aiGate } from "../../../lib/ai-authz";
 
-const STAFF = new Set(["admin", "manager", "sales"]);
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 // Same session-role resolution the proposal actions use (cookie token, then PIN-scoped access cookie).
@@ -33,10 +33,16 @@ async function getSessionRole() {
 const flagOn = () => secretValue("AI_COMMANDS") === "on";
 const grandOf = (payload, row) => (payload.options || []).reduce((a, o) => a + optionTotals(o, +row.tax_rate || 0, payload.discount, +row.deposit_pct || 50, 0).grand, 0);
 
+// The single authorization funnel every action runs first: resolve the caller, then aiGate(role, flag).
+async function authorize() {
+  const tok = await getSessionRole();
+  return { tok, ...aiGate(tok, flagOn()) };
+}
+
 // Is the feature live for this caller? Drives whether the command bar renders at all.
 export async function aiStatusAction() {
   const tok = await getSessionRole();
-  return { enabled: flagOn() && !!tok && STAFF.has(tok.role), hasKey: !!secretValue("ANTHROPIC_API_KEY") };
+  return { enabled: aiGate(tok, flagOn()).ok, hasKey: !!secretValue("ANTHROPIC_API_KEY") };
 }
 
 // Router first (0 tokens); only unrouted text hits Haiku. Returns { intent, noKey }.
@@ -58,9 +64,8 @@ async function interpret(text, context) {
 
 // Read-only: text → a validated intent + a human preview. Writes nothing.
 export async function aiInterpretAction(accessId, text, context = {}) {
-  const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Unauthorized." };
-  if (!flagOn()) return { error: "AI commands are off." };
+  const g = await authorize();
+  if (!g.ok) return { error: g.error };
   const t = String(text || "").trim();
   if (!t) return { error: "Type a command." };
 
@@ -103,9 +108,8 @@ function proposalPreview(accessId, intent) {
 // The signer picked a specific candidate for an ambiguous rename/move — force the match to that id and
 // return the concrete write preview (no Claude re-parse).
 export async function aiResolvePickAction(accessId, intent, pickedId) {
-  const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Unauthorized." };
-  if (!flagOn()) return { error: "AI commands are off." };
+  const g = await authorize();
+  if (!g.ok) return { error: g.error };
   if (!intent || intent.type !== "edit_item" || !pickedId) return { error: "Nothing to resolve." };
   return proposalPreview(accessId, { ...intent, match: { id: String(pickedId) } });
 }
@@ -114,22 +118,20 @@ export async function aiResolvePickAction(accessId, intent, pickedId) {
 // applyIntentToPayload the preview used, then persisted by the builder's own role-guarded, payload-validated
 // autosave (saveProposalDraftAction) — so this records the audit line once the edit is confirmed.
 export async function aiAuditAction(accessId, summary) {
-  const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Unauthorized." };
-  if (!flagOn()) return { error: "AI commands are off." };
-  logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(tok)}`, actor: actorName(tok) });
+  const g = await authorize();
+  if (!g.ok) return { error: g.error };
+  logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
   return { ok: true };
 }
 
 // Apply an add_note command.
 export async function aiApplyNoteAction(accessId, body) {
-  const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Unauthorized." };
-  if (!flagOn()) return { error: "AI commands are off." };
+  const g = await authorize();
+  if (!g.ok) return { error: g.error };
   const text = String(body || "").trim();
   if (text.length < 2) return { error: "The note is empty." };
-  addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: text, scope: "general", isPublic: false });
-  logProjectEvent(accessId, { kind: "ai", label: `AI: note added — by ${actorName(tok)}`, actor: actorName(tok) });
+  addProjectNote(accessId, { role: g.tok.role, name: actorName(g.tok), body: text, scope: "general", isPublic: false });
+  logProjectEvent(accessId, { kind: "ai", label: `AI: note added — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };
