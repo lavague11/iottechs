@@ -7,6 +7,7 @@ import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 import { exportMockupImages } from "../../../lib/mockup-export";
+import { compactAppendix } from "../../../lib/image-compact";
 import { survey2HasData } from "../../../lib/tool-data";
 import { selectOptionAction, requestChangesAction, getProposalAction, submitProposalFlagsAction, declineOptionAction, approvePcpAction, voidPcpAgreementAction, getToolDataAction, proposalLayoutMetaAction, getProposalDiffAction, customerActionsAction } from "./proposal-actions";
 
@@ -305,6 +306,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       }
       await Promise.all(jobs);
     } catch { /* fetch failed — proceed numbers-only */ }
+    // Shrink the appendix (2400px PNG floor plans → capped JPEG) so the proposal PDF stays light and the
+    // signer / download load fast. Best-effort: on any hiccup the originals pass through unchanged.
+    try { ({ surveyImages, mockupImages } = await compactAppendix({ surveyImages, mockupImages })); } catch { /* keep originals */ }
     return { mockupImages, surveyImages, surveyFloors };
   }
 

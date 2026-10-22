@@ -56,7 +56,8 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
   if (d) {
     const imgX = planM + (availW - d.w) / 2, imgY = top + (availH - d.h) / 2;
     doc.setDrawColor(...GOLD_D); doc.setLineWidth(1); doc.rect(imgX - pad, imgY - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
-    try { doc.addImage(f.img, "PNG", imgX, imgY, d.w, d.h); } catch { /* bad image — skip, keep the page */ }
+    const ifmt = /^data:image\/jpe?g/i.test(f.img) ? "JPEG" : "PNG";   // plans may arrive compacted to JPEG
+    try { doc.addImage(f.img, ifmt, imgX, imgY, d.w, d.h); } catch { /* bad image — skip, keep the page */ }
   }
   if (rows) {
     const ly = legendTop + 12;

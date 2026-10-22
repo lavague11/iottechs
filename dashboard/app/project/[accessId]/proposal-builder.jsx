@@ -16,6 +16,7 @@ import { applyPrices } from "../../../lib/proposal-reuse";
 import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
+import { compactAppendix } from "../../../lib/image-compact";
 import { survey2HasData } from "../../../lib/tool-data";
 import { parseSurveyFloors } from "../../../lib/survey2-model";
 import { downloadSurveyPdf } from "../../../lib/survey-pdf";
@@ -411,7 +412,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         // Site Survey on its own: the planner's floors with every device, named "… - Site Survey.pdf".
         const out = downloadSurveyPdf({ fileBase, customerName, customerAddress, projectId: accessId, surveyImages });
         if (!out) setDlError("No site survey on this project yet.");
-      } else await saveFillableProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages, surveyImages, surveyFloors: plannerFloors });
+      } else {
+        // Shrink the appendix so the proposal PDF stays light (fast signer + download). Best-effort.
+        let sImgs = surveyImages, mImgs = mockupImages;
+        try { ({ surveyImages: sImgs, mockupImages: mImgs } = await compactAppendix({ surveyImages, mockupImages })); } catch { /* keep originals */ }
+        await saveFillableProposalPdf(p, { customerName, customerAddress, customerPhone, customerEmail, mode, fileBase, projectId: accessId }, { mockupImages: mImgs, surveyImages: sImgs, surveyFloors: plannerFloors });
+      }
     }
     finally { setDlBusy(false); }
   }

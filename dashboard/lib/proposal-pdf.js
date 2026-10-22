@@ -865,7 +865,8 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       const imgX = lm + (rw - d.w) / 2;   // centered within the document content frame (aligned with the header)
       doc.setDrawColor(...GOLD_D); doc.setLineWidth(1);
       doc.rect(imgX - pad, y - pad, d.w + 2 * pad, d.h + 2 * pad, "S");
-      try { doc.addImage(src, "JPEG", imgX, y, d.w, d.h); } catch { /* bad image */ }
+      const mfmt = /^data:image\/png/i.test(src) ? "PNG" : "JPEG";
+      try { doc.addImage(src, mfmt, imgX, y, d.w, d.h); } catch { /* bad image */ }
       y += d.h + 2 * pad + 16;
     });
   }
