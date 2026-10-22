@@ -14,6 +14,7 @@ import {
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
 import { aiGate } from "../../../lib/ai-authz";
+import { resolveAppRoute } from "../../../lib/ai-global";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
@@ -133,6 +134,35 @@ export async function aiAuditAction(accessId, summary) {
   if (!g.ok) return { error: g.error };
   logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
   return { ok: true };
+}
+
+// GLOBAL command center: navigation anywhere in the staff app. App routes resolve with ZERO tokens; the
+// shared interpreter then handles "open <customer/project>" and, when a project is in context, jumping to
+// its sections. It never edits data — an edit phrasing is pointed back to the project's own bar.
+export async function aiGlobalInterpretAction(text, context = {}) {
+  const g = await authorize();
+  if (!g.ok) return { error: g.error };
+  const t = String(text || "").trim();
+  if (!t) return { error: "Type a command." };
+
+  const app = resolveAppRoute(t);
+  if (app) return { ok: true, kind: "navigate", href: app.href, label: app.label };
+
+  const { intent, noKey } = await interpret(t, { recent: context.recent });
+  if (intent.type === "navigate_project") {
+    const hits = (searchProjects(intent.query) || []).slice(0, 5);
+    if (!hits.length) return { ok: true, kind: "none", speak: `No project matching "${intent.query}".` };
+    const top = hits[0];
+    return { ok: true, kind: "navigate", href: `/project/${top.access_id}`, label: top.customer || top.access_id, more: hits.length - 1 };
+  }
+  if (intent.type === "navigate_section") {
+    if (!context.currentAccessId) return { ok: true, kind: "unsupported", speak: "Open a project first, then jump to its sections." };
+    return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=${intent.stage}${intent.open ? `&open=${intent.open}` : ""}`, label: intent.label };
+  }
+  if (["add_items", "edit_item", "set_desc", "set_discount", "reorder_section", "add_note"].includes(intent.type))
+    return { ok: true, kind: "unsupported", speak: "That edits a proposal — open the project and use the command bar on its proposal." };
+  if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "Try opening a customer, or go to Tickets, Inventory, Customers or Finances." };
+  return { ok: true, kind: "unknown", noKey: !!noKey };
 }
 
 // Apply an add_note command.

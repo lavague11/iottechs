@@ -8,6 +8,7 @@ import { logoutAction } from "../login/actions";
 import AddressAutocomplete from "./address-autocomplete";
 import { TaglinePill, Wordmark } from "./brand";
 import EnrollBanner from "./enroll-banner";
+import GlobalCommandBar from "./global-command-bar";
 import { NEW_PROJECT_SERVICES, DEFAULT_NEW_PROJECT_SERVICE, propertyAfterCompany } from "../../lib/spec";
 import { ReusePicker } from "../project/[accessId]/proposal-start";
 import { searchCustomersAction, customerSummaryAction, updateCustomerAction } from "./crm-actions";
@@ -686,6 +687,7 @@ export default function AdminShell({ user, alerts, active, children }) {
           <div><Link href="/">Help</Link> · <Link href="/">Privacy</Link></div>
         </div>
       </footer>
+      <GlobalCommandBar />
     </div>
   );
 }

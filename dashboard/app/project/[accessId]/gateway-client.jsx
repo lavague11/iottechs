@@ -23,6 +23,7 @@ import LeadInfoStep      from "./lead-info-step";
 import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
+import GlobalCommandBar   from "../../components/global-command-bar";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
 import ApprovalPanel     from "./approval-panel";
@@ -4027,6 +4028,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       <div className="pvx pvx-deck">
         <style>{PV_CSS}</style>
         {body}
+        <GlobalCommandBar currentAccessId={project.access_id} />
       </div>
     );
   }
