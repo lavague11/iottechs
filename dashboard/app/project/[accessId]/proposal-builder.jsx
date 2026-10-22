@@ -10,6 +10,7 @@ import {
 import ProposalItemsEditor from "./proposal-items-editor";
 import PricingDefaults from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
+import AiCommandBar from "./ai-command-bar";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
@@ -631,6 +632,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
       {err && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
+      {!readOnly && <AiCommandBar accessId={accessId} projectName={customerName} payload={payload} patchPayload={patchPayload} />}
       {!readOnly && canReuse && !hasItems && !startHidden && (
         <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
       )}
