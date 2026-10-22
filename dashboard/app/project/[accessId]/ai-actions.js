@@ -77,20 +77,37 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return { ok: true, kind: "write", write: "note", intent, preview: { title: "Add project note", body: intent.body } };
   }
 
-  if (intent.type === "add_items" || intent.type === "set_discount") {
-    const row = getActiveProposal(accessId);
-    if (!row) return { error: "There's no proposal on this project yet." };
-    if (row.signed_name || row.status === "accepted") return { error: "This proposal is signed — revise it before editing." };
-    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
-    // Resolve a book price into the intent so the client applies the EXACT same numbers it previewed.
-    if (intent.type === "add_items" && intent.price == null) intent.price = +priceOf(intent.name) || 0;
-    const applied = applyIntentToPayload(payload, intent, { priceOf });
-    if (applied.error) return { error: applied.error };
-    return { ok: true, kind: "write", write: "proposal", intent, preview: { title: applied.summary, before: grandOf(payload, row), after: grandOf(applied.payload, row) } };
+  if (intent.type === "add_items" || intent.type === "set_discount" || intent.type === "edit_item") {
+    return proposalPreview(accessId, intent);
   }
 
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "That's a later phase — Phase 1 covers proposal edits, notes and opening a project." };
   return { ok: true, kind: "unknown", noKey: !!noKey };
+}
+
+// Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
+// than one line item comes back as a disambiguation (candidates to pick) rather than a guess.
+function proposalPreview(accessId, intent) {
+  const row = getActiveProposal(accessId);
+  if (!row) return { error: "There's no proposal on this project yet." };
+  if (row.signed_name || row.status === "accepted") return { error: "This proposal is signed — revise it before editing." };
+  let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
+  // Resolve a book price into the intent so the client applies the EXACT same numbers it previewed.
+  if (intent.type === "add_items" && intent.price == null) intent.price = +priceOf(intent.name) || 0;
+  const applied = applyIntentToPayload(payload, intent, { priceOf });
+  if (applied.ambiguous) return { ok: true, kind: "disambiguate", intent, action: applied.action, candidates: applied.ambiguous };
+  if (applied.error) return { error: applied.error };
+  return { ok: true, kind: "write", write: "proposal", intent, preview: { title: applied.summary, before: grandOf(payload, row), after: grandOf(applied.payload, row) } };
+}
+
+// The signer picked a specific candidate for an ambiguous rename/move — force the match to that id and
+// return the concrete write preview (no Claude re-parse).
+export async function aiResolvePickAction(accessId, intent, pickedId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF.has(tok.role)) return { error: "Unauthorized." };
+  if (!flagOn()) return { error: "AI commands are off." };
+  if (!intent || intent.type !== "edit_item" || !pickedId) return { error: "Nothing to resolve." };
+  return proposalPreview(accessId, { ...intent, match: { id: String(pickedId) } });
 }
 
 // A proposal edit (add_items / set_discount) is applied to the builder's live payload with the SAME pure
