@@ -74,6 +74,31 @@ function preferredVoice() {
   return _preferredVoice;
 }
 
+// Neural voice: fetch synthesized speech from our server route (OpenAI Realtime; key stays server-side) and
+// play it through one Audio element. THROWS on any failure (no key, network, autoplay blocked, empty audio)
+// so the caller can fall back to the browser voice. Returns a controller with stop() for interrupt/Stop.
+// onEnd fires once, when playback finishes (or stop() is called). Never calls onEnd on failure — the throw
+// is the signal. `text` is the finished reply; the server caps its length.
+export async function speakNeural(text, { voice, onEnd } = {}) {
+  if (typeof window === "undefined" || !String(text || "").trim()) throw new Error("no-neural");
+  const controller = new AbortController();
+  const res = await fetch("/api/tts", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: String(text), ...(voice ? { voice } : {}) }), signal: controller.signal,
+  });
+  if (!res.ok) throw new Error("tts-" + res.status);
+  const blob = await res.blob();
+  if (!blob || blob.size < 128) throw new Error("tts-empty");
+  const url = URL.createObjectURL(blob);
+  const audio = new Audio(url);
+  let done = false;
+  const finish = () => { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch {} onEnd?.(); };
+  audio.onended = finish;
+  audio.onerror = finish;
+  await audio.play();   // rejects if autoplay is blocked (no user gesture) → caller falls back
+  return { stop: () => { try { controller.abort(); } catch {} try { audio.pause(); } catch {} finish(); } };
+}
+
 // Slightly slower rate + a touch more pitch reads as warmer and less robotic than the default monotone.
 export function speak(text, { rate = 0.97, pitch = 1.08, onEnd } = {}) {
   try {

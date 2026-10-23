@@ -29,7 +29,8 @@
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "sharp": "^0.35.3",
-    "signature_pad": "^4.2.0"
+    "signature_pad": "^4.2.0",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",

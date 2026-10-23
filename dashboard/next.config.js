@@ -20,6 +20,9 @@ const nextConfig = {
   experimental: {
     serverActions: { bodySizeLimit: "8mb" },
   },
+  // `ws` (server-side WebSocket to OpenAI's Realtime API for neural TTS) has optional native deps — keep it
+  // external so webpack doesn't try to bundle them.
+  serverExternalPackages: ["ws"],
   async rewrites() {
     return [
       { source: "/", destination: "/home.html" },

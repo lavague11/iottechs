@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { speechSupport, createRecognizer, readRecognition, speak, stopSpeaking, startMeter, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
+import { speechSupport, createRecognizer, readRecognition, speak, speakNeural, stopSpeaking, startMeter, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
 
 // Reusable AI command surface — a minimal, conversational assistant: a compact composer (mode toggle +
 // one input) that stays small at rest and grows a chat thread ABOVE it only once there's a conversation,
@@ -40,9 +40,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const recentRef = useRef(null);    // last command summary → follow-up context
   const threadRef = useRef(null);
   const idc = useRef(0);
+  const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
   const nid = () => `t${Date.now()}_${idc.current++}`;
+  // Stop any speech in flight — the neural audio AND the browser voice.
+  const stopSay = () => { try { sayCtlRef.current?.stop(); } catch {} sayCtlRef.current = null; stopSpeaking(); };
 
-  useEffect(() => { setSupport(speechSupport()); return () => { try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSpeaking(); }; }, []);
+  useEffect(() => { setSupport(speechSupport()); return () => { try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSay(); }; }, []);
   useEffect(() => { resRef.current = pending?.res || null; pendRef.current = pending; }, [pending]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   // Keep the newest turn / live state in view, input stays anchored below.
@@ -111,7 +114,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     setListening(false); setLevels(null);
   }
   function listen({ continuous = false, toField = false, onFinal, onEnd }) {
-    stopListening(); stopSpeaking();
+    stopListening(); stopSay();
     const r = createRecognizer({ continuous, interim: true });
     if (!r) { sysMsg("err", "Voice input isn’t available in this browser."); return null; }
     recRef.current = r; setListening(true); setInterim("");
@@ -124,8 +127,19 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     return r;
   }
 
-  const say = (t, after) => { if (!support.synthesis || !t) { after?.(); return; } setSpeaking(true); speak(t, { onEnd: () => { setSpeaking(false); after?.(); } }); };
-  const interrupt = () => { stopSpeaking(); setSpeaking(false); };
+  // Speak a reply with the NEURAL voice (OpenAI Realtime via /api/tts); fall back to the browser voice on
+  // any failure (no key, offline, autoplay blocked). One `after` callback fires exactly once, whichever path
+  // runs. sayCtlRef (declared above) holds the active neural controller so interrupt()/Stop can abort it.
+  const say = (t, after) => {
+    if (!t) { after?.(); return; }
+    setSpeaking(true);
+    let fired = false;
+    const done = () => { if (fired) return; fired = true; setSpeaking(false); after?.(); };
+    speakNeural(t, { onEnd: done })
+      .then((ctl) => { sayCtlRef.current = ctl; })
+      .catch(() => { if (support.synthesis) speak(t, { onEnd: done }); else done(); });   // neural failed → browser voice
+  };
+  const interrupt = () => { stopSay(); setSpeaking(false); };
 
   // text mode: dictation fills the field for review + send. talk/chat: interim shows in the live bubble.
   function dictate() { if (listening) { stopListening(); return; } listen({ toField: true }); }
@@ -142,7 +156,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     } });
   }
   function toggleConversation() {
-    if (convRef.current) { convRef.current = false; stopListening(); stopSpeaking(); setSpeaking(false); return; }
+    if (convRef.current) { convRef.current = false; stopListening(); stopSay(); setSpeaking(false); return; }
     convRef.current = true;
     const loop = () => {
       if (!convRef.current) return;
@@ -159,7 +173,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   }
 
   const onMic = () => (modeRef.current === "chat" ? toggleConversation() : modeRef.current === "talk" ? pushToTalk() : dictate());
-  const switchMode = (m) => { convRef.current = false; stopListening(); stopSpeaking(); setSpeaking(false); setMode(m); };
+  const switchMode = (m) => { convRef.current = false; stopListening(); stopSay(); setSpeaking(false); setMode(m); };
   const micLabel = mode === "chat" ? (listening || convRef.current ? "Stop conversation" : "Start conversation") : mode === "talk" ? (listening ? "Stop" : "Push to talk") : (listening ? "Stop dictation" : "Dictate");
   const live = listening || thinking || speaking;
   const hasThread = turns.length > 0 || live;
