@@ -12,6 +12,8 @@
 //   { type: "unsupported", reason }              understood, but not a Phase-1 capability
 //   { type: "unknown" }                          couldn't parse
 
+import { actionFromText } from "./ai-project-actions.js";
+
 const MONEY = (s) => { const n = parseFloat(String(s).replace(/[,$\s]/g, "")); return Number.isFinite(n) ? n : null; };
 const clampQty = (n) => Math.max(1, Math.min(999, Math.round(n)));
 
@@ -115,6 +117,9 @@ export function routeCommand(text) {
     return { type: "answer", query: "project_issues", target: "this" };
   if (/\b(how long (?:has|in|at)|days in (?:this )?stage|how long (?:have we|has this) been)\b/i.test(t))
     return { type: "answer", query: "project_timeline", target: "this" };
+
+  // Phase-2 project ACTIONS (mutations) — a confirmed, guarded intent. "send the proposal" → send_proposal.
+  { const an = actionFromText(t); if (an) return { type: "action", name: an, target: "this" }; }
 
   // "take me to the proposal", "open the site survey", "go to Crazy Cars", "open up Crazy Cars",
   // "can you pull up Crazy Cars", "let's look at the car dealership project". Spoken navigation comes with a

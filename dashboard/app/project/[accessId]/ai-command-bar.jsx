@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import CommandSurface from "./command-surface";
 import { applyIntentToPayload } from "../../../lib/ai-command";
-import { aiStatusAction, aiInterpretAction, aiResolvePickAction, aiApplyNoteAction, aiAuditAction } from "./ai-actions";
+import { aiStatusAction, aiInterpretAction, aiResolvePickAction, aiApplyNoteAction, aiAuditAction, aiApplyProjectActionAction } from "./ai-actions";
 
 // Proposal-builder wiring for the reusable CommandSurface. Supplies the interpret / navigate / apply /
 // disambiguate callbacks; the surface itself is domain-agnostic and reusable elsewhere later. Proposal
@@ -29,6 +29,11 @@ export default function AiCommandBar({ accessId, projectName, payload, patchPayl
     if (res.write === "note") {
       const r = await aiApplyNoteAction(accessId, res.intent.body);
       return r?.error ? r : { ok: true, message: "Note added to the Job Log." };
+    }
+    // Phase-2 project action (send proposal, …) — dispatch against the bound project via its guarded action.
+    if (res.write === "action" && res.intent?.name) {
+      const r = await aiApplyProjectActionAction(res.intent.accessId || accessId, res.intent.name).catch(() => ({ error: "Couldn’t complete that." }));
+      return r?.error ? r : { ok: true, message: r.message || "Done." };
     }
     // proposal edit (add_items / set_discount / edit_item) — apply to the builder's live payload with the
     // SAME pure function the preview used; the builder's autosave validates + persists it server-side.

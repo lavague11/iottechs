@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import CommandSurface from "../project/[accessId]/command-surface";
-import { aiStatusAction, aiGlobalInterpretAction } from "../project/[accessId]/ai-actions";
+import { aiStatusAction, aiGlobalInterpretAction, aiApplyProjectActionAction } from "../project/[accessId]/ai-actions";
 
 // The app-wide AI assistant, rendered as a tiny floating "AI Core" (bottom-left) that expands into a slim
 // voice bar — not a dimming modal. Mounted ONCE in each staff shell; it stays mounted so a conversation
@@ -30,10 +30,21 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
     if (typeof window !== "undefined" && res.href.startsWith(window.location.pathname)) window.location.assign(res.href);
     else router.push(res.href);
   };
-  const noWrite = async () => ({ error: "Open the project to make that change." });
+  // Proposal EDITS still happen in the project's own bar, but a confirmed Phase-2 project ACTION (send
+  // proposal, …) dispatches here — against the project the preview was BOUND to (intent.accessId), so a
+  // confirm can't be replayed against whatever project is open now. The server re-derives auth + state.
+  const onApply = async (r) => {
+    if (r?.write === "action" && r.intent?.name) {
+      const acc = r.intent.accessId || currentAccessId;
+      if (!acc) return { error: "Open the project to make that change." };
+      const out = await aiApplyProjectActionAction(acc, r.intent.name).catch(() => ({ error: "Couldn’t complete that." }));
+      return out?.error ? { error: out.error } : { ok: true, message: out.message || "Done." };
+    }
+    return { error: "Open the project to make that change." };
+  };
 
   return (
     <CommandSurface enabled dock="corebar" placeholder="Ask or say a command…"
-      interpret={interpret} onNavigate={onNavigate} onApply={noWrite} onPick={noWrite} />
+      interpret={interpret} onNavigate={onNavigate} onApply={onApply} onPick={onApply} />
   );
 }
