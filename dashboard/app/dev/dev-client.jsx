@@ -477,6 +477,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
           <a href="/dev/docs/role-flow-map.html" className="dv-map-link" target="_blank" rel="noopener" title="Static briefing with reasoning + handoff chains (docs/role-flow-map.html)">Briefing ↗</a>
           <a href="/dev/docs/lifecycle-sources.md" className="dv-map-link" target="_blank" rel="noopener" title="Where every phase / stage / step count comes from, and what shipped (docs/lifecycle-sources.md)">Lifecycle trace ↗</a>
           <a href="/dev/docs/bys-white-label.md" className="dv-map-link" target="_blank" rel="noopener" title="BYS — Build Your System: the white-label quote-builder blueprint (docs/bys-white-label.md)">BYS blueprint ↗</a>
+          <a href="/dev/docs/project-ai-spec.md" className="dv-map-link" target="_blank" rel="noopener" title="Project-page AI: intents per stage × role, mapped to caps + server actions, in build order (docs/project-ai-spec.md)">Project AI spec ↗</a>
         </div>
 
         {/* Progress */}
