@@ -19,7 +19,13 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed } from "../../../lib/ai-project-actions";
-import { sendProposalAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction } from "./proposal-actions";
+import { setStage } from "./actions";
+import { stagesForType } from "../../../lib/spec";
+
+// The project's TYPE-AWARE stage order (a Type C project skips some stages) — so an action's "next stage"
+// matches what setStage will accept. Null when the type is unknown; the action then reports "final stage".
+function stageOrderFor(job) { try { return (stagesForType(job?.project_type) || []).map((s) => s.key); } catch { return null; } }
 import { resolveAppRoute, looksLikeEdit } from "../../../lib/ai-global";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
@@ -103,11 +109,11 @@ function previewAction(name, accessId, tok) {
   if (!accessId) return { ok: true, kind: "unsupported", speak: "Open a project first." };
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
-  const avail = spec.available ? spec.available(facts) : { ok: true };
-  if (!avail.ok) return { ok: true, kind: "unsupported", speak: `I can't do that yet — ${avail.why}.`, reason: "not_available" };
-  // Show WHO it goes to + the amount so the human knows exactly what they're confirming.
   const job = getJobByAccessId(accessId);
-  const prev = spec.confirm(actionContext(job, accessId));
+  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
+  if (!avail.ok) return { ok: true, kind: "unsupported", speak: `I can't do that yet — ${avail.why}.`, reason: "not_available" };
+  // Show WHO it goes to + the amount (+ any action-specific data, e.g. the target stage) before confirming.
+  const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) });
   // intent.accessId BINDS the confirm to this exact project — apply dispatches against it, never "whatever
   // project happens to be open now", so a preview can't be replayed against a different project.
   return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId }, preview: { title: prev.title, body: prev.detail } };
@@ -136,18 +142,24 @@ export async function aiApplyProjectActionAction(accessId, name) {
   if (!spec) return { error: "Unknown action." };
   if (!actionAllowed(name, { editor: aiCanEdit(g.tok.role), can: (c) => can(g.tok.role, c) }))
     return { error: "Your role can't do that action." };
-  if (!accessId || !getJobByAccessId(accessId)) return { error: "Couldn't find that project." };
+  const job = getJobByAccessId(accessId);
+  if (!accessId || !job) return { error: "Couldn't find that project." };
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
-  const avail = spec.available ? spec.available(facts) : { ok: true };
-  if (!avail.ok) return { error: `Can't do that — ${avail.why}.` };   // state changed since preview → refuse
+  // Re-check availability against CURRENT state + assignments + the TYPE-AWARE stage order (never trust the
+  // stale client intent); the action-specific data (e.g. the target stage) is recomputed here.
+  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
+  if (!avail.ok) return { error: `Can't do that — ${avail.why}.` };
 
-  let out, message;
+  let out, message, noop = false;
   if (name === "send_proposal") { out = await sendProposalAction(accessId); message = "Proposal sent."; }
+  else if (name === "request_signature") { out = await requestSignatureEmailAction(accessId); noop = out?.sent === false; message = noop ? (out.note || "Already handled.") : "Signature reminder sent."; }
+  else if (name === "advance_stage") { out = await setStage(accessId, g.tok.role, avail.data.nextStage); message = `Moved to ${avail.data.nextLabel}.`; }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
 
-  logProjectEvent(accessId, { kind: "ai", label: `AI: ${name} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
+  // Audit only when something actually happened — a no-op (already signed / debounced) isn't an "email sent".
+  if (!noop) logProjectEvent(accessId, { kind: "ai", label: `AI: ${name} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
   try { const { revalidatePath } = await import("next/cache"); revalidatePath(`/project/${accessId}`); } catch {}
   return { ok: true, message };
 }

@@ -6,6 +6,8 @@
 // re-checks authorization. Unit-tested with injected stage facts. Add a Phase-2 action by adding an entry here
 // + a dispatch case in ai-actions.js — the preview/confirm/guard plumbing is shared.
 
+import { projectIntel, stageLabel } from "./project-intel.js";
+
 export const PROJECT_ACTIONS = {
   // 2.1 — email the current (draft) proposal to the customer and move the project to Sent.
   send_proposal: {
@@ -25,6 +27,48 @@ export const PROJECT_ACTIONS = {
     confirm: ({ name, email, total }) => ({
       title: `Send ${name}'s proposal to the customer`,
       detail: `Emails ${email || "the customer"}${total ? ` · ${total}` : ""} and moves the project to Sent.`,
+    }),
+  },
+
+  // 2.2 — email the customer a reminder to review + sign the (already-sent) proposal.
+  request_signature: {
+    verb: "remind",
+    cap: null,   // STAFF_EDIT (proposal send) — same gate as send_proposal
+    available: (facts) => {
+      const s = facts?.proposal_status;
+      if (!s || s === "draft") return { ok: false, why: "the proposal hasn't been sent yet" };
+      if (facts.proposal_signed) return { ok: false, why: "the proposal is already signed" };
+      if (!["sent", "changes_requested", "accepted"].includes(s)) return { ok: false, why: "the proposal isn't in a signable state" };
+      return { ok: true };
+    },
+    confirm: ({ name, email }) => ({
+      title: `Send ${name} a signature reminder`,
+      detail: `Emails ${email || "the customer"} a link to review and sign.`,
+    }),
+  },
+
+  // 2.6 — move the project to the NEXT lifecycle stage, but only when the gate is clear. If blocked, the AI
+  // REFUSES with the blocker reason (an admin override is a deliberate manual action, never a silent AI move).
+  advance_stage: {
+    verb: "advance",
+    cap: "stage.move",   // admin/manager ONLY — a salesperson may send/remind but may NOT move a stage
+    // ctx.order = the project's TYPE-AWARE stage order (from stagesForType) — so the "next stage" we preview
+    // and dispatch matches exactly what setStage will accept. A reduced-stage (Type C) project skips stages
+    // that MASTER_ORDER has, so we must use its own order, not the global one. canAdvance (the CURRENT stage's
+    // gate) is type-independent, so projectIntel supplies it.
+    available: (facts, assignments, ctx) => {
+      const order = Array.isArray(ctx?.order) && ctx.order.length ? ctx.order : null;
+      const stage = facts?.stage;
+      const idx = order ? order.indexOf(stage) : -1;
+      const nextStage = order && idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
+      if (!nextStage) return { ok: false, why: "the project is already at the final stage" };
+      const intel = projectIntel(facts || {}, assignments || []);
+      if (!intel.canAdvance) { const b = intel.blockers[0]; return { ok: false, why: `it's blocked on "${b.label}" (${b.owner === "customer" ? "the customer's" : "the " + b.owner + "'s"} turn)` }; }
+      return { ok: true, data: { nextStage, nextLabel: stageLabel(nextStage) } };
+    },
+    confirm: ({ name, nextLabel }) => ({
+      title: `Advance ${name} to ${nextLabel}`,
+      detail: `Moves the project forward to the ${nextLabel} stage.`,
     }),
   },
 };
@@ -47,5 +91,9 @@ export function actionFromText(text) {
   if (/^(?:go ahead and |please |can you )?send (?:the |this |it |out )*(?:proposal|quote)(?: (?:out )?to (?:the )?customer)?[.?!]*$/.test(t)
     || /^send it (?:out )?to (?:the )?customer[.?!]*$/.test(t))
     return "send_proposal";
+  if (/\b(request (?:a )?signature|signature (?:request|reminder)|remind (?:the (?:customer|client)|them) to sign|ask (?:the (?:customer|client)|them) to sign|chase (?:the )?signature|nudge (?:the (?:customer|client)|them) to sign)\b/.test(t))
+    return "request_signature";
+  if (/\b(advance (?:the |this )?(?:stage|project|step)|move (?:this |the (?:project|stage|step) )?(?:to the next (?:stage|step)|forward)|next stage|push (?:this |it )?(?:to the next stage|forward)|move it forward)\b/.test(t))
+    return "advance_stage";
   return null;
 }
