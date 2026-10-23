@@ -29,6 +29,17 @@ test("proposal_total retrieves the real grand total (by name and by 'this')", ()
   assert.match(runQuery({ query: "proposal_total", target: "this" }, ctx("admin", "ASC1")).text, /\$600\.00/);
 });
 
+test("a resolved read returns the project so memory can track 'it' later", () => {
+  // Reads carry back the resolved project → the client remembers it → a later pronoun resolves via
+  // currentAccessId, even though nothing navigated.
+  const total = runQuery({ query: "proposal_total", target: "Crazy Cars" }, ctx());
+  assert.deepEqual(total.project, { accessId: "ASC1", name: "Crazy Cars" });
+  const status = runQuery({ query: "project_status", target: "Crazy Cars" }, ctx());
+  assert.deepEqual(status.project, { accessId: "ASC1", name: "Crazy Cars" });
+  // "what's going on with it" after that answer → target "this" resolves to the remembered project.
+  assert.match(runQuery({ query: "project_status", target: "it" }, ctx("admin", "ASC1")).text, /Crazy Cars/);
+});
+
 test("project_status reports stage + proposal state, never invented", () => {
   const r = runQuery({ query: "project_status", target: "Crazy Cars" }, ctx());
   assert.match(r.text, /Proposal stage/);

@@ -68,7 +68,7 @@ const QUERIES = {
     const grand = proposalGrand(prop, ctx.fin);
     if (grand == null) return { error: `I couldn't read ${name}'s proposal total.`, reason: "no_data" };
     const signed = prop.signed_name ? " (signed)" : prop.status === "accepted" ? " (accepted)" : "";
-    return { text: `${name}'s proposal total is ${money(grand)}${signed}.`, facts: [`${name} proposal total: ${money(grand)}`] };
+    return { text: `${name}'s proposal total is ${money(grand)}${signed}.`, facts: [`${name} proposal total: ${money(grand)}`], project: { accessId: r.row.access_id, name } };
   } },
 
   // "What's going on with Crazy Cars?" → stage + proposal status + the clear next step.
@@ -85,7 +85,7 @@ const QUERIES = {
     } else if (prop) bits.push("the proposal is still a draft");
     const facts = [`${name}: ${stageLabel(j.stage)}`];
     if (prop?.signed_name == null && prop?.status && prop.status !== "draft") facts.push(`${name} proposal awaiting signature`);
-    return { text: bits.join("; ") + ".", facts };
+    return { text: bits.join("; ") + ".", facts, project: { accessId: j.access_id, name } };
   } },
 
   // "Which proposals aren't signed?" → sent/accepted proposals without a signature (scoped to visible).

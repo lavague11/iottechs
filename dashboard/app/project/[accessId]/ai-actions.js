@@ -80,7 +80,9 @@ function answerFor(intent, tok, currentAccessId) {
     const kind = r.reason === "ambiguous" ? "clarify" : r.reason === "permission" ? "unsupported" : r.reason === "no_data" ? "answer" : "unanswered";
     return { ok: true, kind, speak: r.error, reason: r.reason };
   }
-  return { ok: true, kind: "answer", speak: r.text, facts: r.facts || [] };
+  // Carry the resolved project back so the client's memory can track it — a later "it"/"that customer"
+  // then resolves even though no navigation happened.
+  return { ok: true, kind: "answer", speak: r.text, facts: r.facts || [], project: r.project || null };
 }
 
 // Classify a result we couldn't turn into an action/answer, so the response is useful AND the future
@@ -123,7 +125,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return proposalPreview(accessId, intent);
   }
 
-  if (intent.type === "answer") return answerFor(intent, g.tok, accessId);
+  if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || CAPS_LINE, reason: "unsupported_action" };
   return classifyMiss(t, noKey);
@@ -183,7 +185,8 @@ export async function aiGlobalInterpretAction(text, context = {}) {
 
   const { intent, noKey } = await interpret(t, context);
   // A question → retrieve + answer directly (don't navigate). This is what makes it an assistant, not a bar.
-  if (intent.type === "answer") return answerFor(intent, g.tok, context.currentAccessId);
+  // With no page project, the last project the assistant resolved (memory) is the referent for "it"/"that".
+  if (intent.type === "answer") return answerFor(intent, g.tok, context.currentAccessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "navigate_project") {
     const hits = (searchProjects(intent.query) || []).slice(0, 5);

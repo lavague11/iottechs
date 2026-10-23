@@ -111,7 +111,11 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     // Everything else — an answer, a clarification, or a miss — renders as an assistant line (no navigation).
     const text = r.speak || r.text || (r.noKey ? "Add ANTHROPIC_API_KEY (Dev ▸ API Keys) for free-form commands." : DEFAULT_MISS);
     sysMsg(r.kind === "answer" ? "ok" : "muted", text);
-    if (r.kind === "answer") addFact(r.facts);
+    if (r.kind === "answer") {
+      addFact(r.facts);
+      // An answer that resolved a project makes it the referent for a later "it"/"that customer".
+      if (r.project?.accessId) { memRef.current.project = r.project; memRef.current.customer = r.project.name || memRef.current.customer; }
+    }
     setPending(null); memRef.current.pending = null;
     pushTurn("assistant", text);
     return r;
