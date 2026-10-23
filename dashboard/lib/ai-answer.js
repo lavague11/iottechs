@@ -88,15 +88,14 @@ const QUERIES = {
     return { text: bits.join("; ") + ".", facts, project: { accessId: j.access_id, name } };
   } },
 
-  // "Which proposals aren't signed?" → proposals sent but not yet signed (scoped to visible). getReceivables
-  // resolves the canonical per-project financial state from the latest non-superseded proposal; "awaiting_signature"
-  // means sent-and-unsigned. (The raw signed_name/declined_at aren't on this shape — filtering by status alone
-  // would wrongly list already-signed proposals, which is exactly the bug this replaced.)
+  // "Which proposals aren't signed?" → projects sitting at the proposal stage. This is the SAME canonical
+  // signal the dashboard's Action Center and the "N awaiting signature" counter use (a project is awaiting
+  // the customer's signature while its lifecycle stage is `proposal`), so the assistant agrees with every
+  // other surface. Authorization-scoped: getVisibleJobs already applies the per-role visibility rules.
   awaiting_signature: { run: (_intent, ctx) => {
-    const vis = visibleSet(ctx);
-    const rows = (ctx.db.getReceivables() || []).filter((r) => r.financialState === "awaiting_signature" && canSee(vis, r.access_id));
-    if (!rows.length) return { text: "Every sent proposal is signed — nothing awaiting signature.", facts: [] };
-    const names = rows.map((r) => r.customer || r.contact_name || r.access_id);
+    const rows = (ctx.db.getVisibleJobs(ctx.userId, ctx.role) || []).filter((j) => j.stage === "proposal");
+    if (!rows.length) return { text: "No proposals are awaiting signature right now.", facts: [] };
+    const names = rows.map((j) => j.customer || j.contact_name || j.access_id);
     return { text: `${names.length} proposal${names.length === 1 ? "" : "s"} awaiting signature: ${names.slice(0, 8).join(", ")}${names.length > 8 ? `, +${names.length - 8} more` : ""}.`, facts: [`${names.length} proposals awaiting signature`] };
   } },
 
