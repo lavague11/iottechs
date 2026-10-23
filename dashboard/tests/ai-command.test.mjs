@@ -244,6 +244,23 @@ test("router sends a known section to navigate_section, an unknown name to navig
   assert.deepEqual(routeCommand("open Crazy Cars"), { type: "navigate_project", query: "Crazy Cars" });
 });
 
+test("navigation extracts the entity, not the filler — regression for 'Open up Crazy Cars' → 'up, crazy cars'", () => {
+  const proj = (q) => ({ type: "navigate_project", query: q });
+  // The exact production failure: the particle must NOT leak into the search.
+  assert.deepEqual(routeCommand("Open up Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("pull up Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("bring up Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("can you pull up Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("could you bring up Crazy Cars for me"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("let's look at Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("take me to the Crazy Cars project"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("show me Crazy Cars"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("find the Crazy Cars proposal"), proj("Crazy Cars"));
+  assert.deepEqual(routeCommand("open up, uh, Crazy Cars"), proj("Crazy Cars"));
+  // Still routes known sections correctly even with a filler verb.
+  assert.equal(routeCommand("pull up the proposal").type, "navigate_section");
+});
+
 test("parseClaudeResult handles reorder_section + navigate_section, and resolves/declines nav targets", () => {
   const res = (input) => ({ content: [{ type: "tool_use", name: "proposal_command", input }] });
   assert.deepEqual(parseClaudeResult(res({ type: "reorder_section", match: { name: "audio" }, to: "bottom" })), { type: "reorder_section", match: { name: "audio" }, to: "bottom" });

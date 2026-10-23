@@ -103,16 +103,44 @@ export function routeCommand(text) {
   m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
   if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }
 
-  // "take me to the proposal", "open the site survey", "go to Crazy Cars". A known SECTION of THIS project
-  // wins (in-project navigation); anything else is treated as a project/customer name.
-  m = t.match(/^(?:open|go\s+to|take\s+me\s+to|pull\s+up|show\s+me|jump\s+to)\s+(.{2,})/i);
+  // "take me to the proposal", "open the site survey", "go to Crazy Cars", "open up Crazy Cars",
+  // "can you pull up Crazy Cars", "let's look at the car dealership project". Spoken navigation comes with a
+  // lot of filler — a polite lead-in, a two-word verb ("open up", "pull up", "take me to"), and trailing
+  // words ("...project", "...for me"). We strip ALL of it so only the entity name is searched; otherwise the
+  // particle leaks into the query ("up Crazy Cars") and nothing matches. A known SECTION wins (in-project
+  // nav); anything else is a project/customer name.
+  m = t.match(NAV_RE);
   if (m) {
-    const sec = resolveSection(m[1]);
-    if (sec) return { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label };
-    if (!/\b(invoice|invoices|payments?)\b/i.test(m[1])) return { type: "navigate_project", query: m[1].trim().replace(/[.?!]+$/, "") };
+    const tgt = cleanTarget(m[1]);
+    if (tgt.length >= 2) {
+      const sec = resolveSection(tgt);
+      // A bare section phrase ("the proposal") → that section. But a NAME before a section word
+      // ("Crazy Cars proposal") means open THAT project — not the current project's proposal.
+      const residue = sec ? cleanTarget(tgt.replace(SECTION_WORDS, " ")) : tgt;
+      if (sec && !residue) return { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label };
+      const name = (residue || tgt).replace(/\s+(?:project|account|job|file|customer|client)$/i, "").trim();
+      if (name.length >= 2 && !/\b(invoice|invoices|payments?)\b/i.test(name)) return { type: "navigate_project", query: name };
+      if (sec) return { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label };
+    }
   }
 
   return null;
+}
+// Section keywords, to tell "the proposal" (a section) from "Crazy Cars proposal" (a named project).
+const SECTION_WORDS = /\b(site\s*survey|survey|mock\s*ups?|proposals?|approvals?|deposits?|schedul\w*|install\w*|qc|quality\s*control|payments?|completions?|signatures?|signing)\b/ig;
+
+// Spoken navigation grammar: [optional politeness] [verb + optional particle] <target>.
+const NAV_RE = /^(?:(?:please|hey|ok|okay|so|now)\s+)*(?:(?:can|could|would|will)\s+you\s+|i(?:'?d|\s+would)?\s+(?:like|want|wanna)(?:\s+to)?\s+|let'?s\s+|lemme\s+|let\s+me\s+)?(?:open|pull|bring|take|show|go|jump|navigate|load|look|view|find)(?:\s+(?:up|to|at|into|me|me\s+to|over\s+to))*\s+(.{2,})/i;
+// Strip leading particles/filler ("up", "the", "uh,") — punctuation-aware so "up, uh, Crazy Cars" cleans to
+// "Crazy Cars" — plus trailing politeness. Keeps "proposal"/"survey" etc. so a bare section name still routes.
+const NAV_LEAD = /^(?:up|to|at|into|over\s+to|the|a|an|me|my|our|your|that|this|some|uh+|um+|er+|like|please|for\s+me)[\s,.]+/i;
+const edgePunct = (s) => s.replace(/^[\s,.?!]+|[\s,.?!]+$/g, "");
+function cleanTarget(raw) {
+  let s = edgePunct(String(raw || "").trim());
+  s = s.replace(/\s+(?:please|for\s+me|thanks|thank\s+you|real\s+quick|again)$/i, "").trim();
+  let prev;
+  do { prev = s; s = edgePunct(s.replace(NAV_LEAD, "")); } while (s !== prev);
+  return s;
 }
 
 // --- Line-item reference resolver: turn a natural-language reference ("the 8 cameras I just added",
