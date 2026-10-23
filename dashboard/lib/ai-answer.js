@@ -88,10 +88,13 @@ const QUERIES = {
     return { text: bits.join("; ") + ".", facts, project: { accessId: j.access_id, name } };
   } },
 
-  // "Which proposals aren't signed?" → sent/accepted proposals without a signature (scoped to visible).
+  // "Which proposals aren't signed?" → proposals sent but not yet signed (scoped to visible). getReceivables
+  // resolves the canonical per-project financial state from the latest non-superseded proposal; "awaiting_signature"
+  // means sent-and-unsigned. (The raw signed_name/declined_at aren't on this shape — filtering by status alone
+  // would wrongly list already-signed proposals, which is exactly the bug this replaced.)
   awaiting_signature: { run: (_intent, ctx) => {
     const vis = visibleSet(ctx);
-    const rows = (ctx.db.getReceivables() || []).filter((r) => ["sent", "changes_requested", "accepted"].includes(r.status) && !r.signed_name && !r.declined_at && canSee(vis, r.access_id));
+    const rows = (ctx.db.getReceivables() || []).filter((r) => r.financialState === "awaiting_signature" && canSee(vis, r.access_id));
     if (!rows.length) return { text: "Every sent proposal is signed — nothing awaiting signature.", facts: [] };
     const names = rows.map((r) => r.customer || r.contact_name || r.access_id);
     return { text: `${names.length} proposal${names.length === 1 ? "" : "s"} awaiting signature: ${names.slice(0, 8).join(", ")}${names.length > 8 ? `, +${names.length - 8} more` : ""}.`, facts: [`${names.length} proposals awaiting signature`] };

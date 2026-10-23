@@ -12,9 +12,11 @@ const JOBS = {
 const db = {
   getActiveProposal: (a) => a === "ASC1" ? { status: "sent", payload: JSON.stringify(PROPOSAL), tax_rate: 0, deposit_pct: 50, selected_option: "A", signed_name: null } : { status: "draft" },
   getJobByAccessId: (a) => JOBS[a] || null,
+  // Shape matches the real getReceivables: a canonical `financialState`, NOT a raw signed_name. Crazy Cars
+  // is sent-and-unsigned; Nobo is accepted & signed (financialState has moved past awaiting_signature).
   getReceivables: () => [
-    { access_id: "ASC1", customer: "Crazy Cars", status: "sent", signed_name: null, declined_at: null },
-    { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", signed_name: "Owner", declined_at: null },
+    { access_id: "ASC1", customer: "Crazy Cars", status: "sent", financialState: "awaiting_signature" },
+    { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", financialState: "due_now" },
   ],
   getVisibleJobs: (_uid, role) => (role === "admin" || role === "manager") ? Object.values(JOBS) : [JOBS.ASC1],   // sales sees only ASC1
   searchProjects: (q) => Object.values(JOBS).filter((j) => j.customer.toLowerCase().includes(String(q).toLowerCase())),

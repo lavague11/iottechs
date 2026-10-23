@@ -47,8 +47,15 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.deepEqual(routeCommand("which proposals aren't signed"), { type: "answer", query: "awaiting_signature" });
   assert.deepEqual(routeCommand("who hasn't signed their proposal"), { type: "answer", query: "awaiting_signature" });
   assert.deepEqual(routeCommand("what needs QC"), { type: "answer", query: "projects_by_stage", stage: "qc" });
+  assert.deepEqual(routeCommand("which projects still need quality control"), { type: "answer", query: "projects_by_stage", stage: "qc" });
+  // Any stage, not just QC — so the question answers instead of the word "projects" triggering a page jump.
+  assert.deepEqual(routeCommand("which projects are in install"), { type: "answer", query: "projects_by_stage", stage: "install" });
+  assert.deepEqual(routeCommand("how many projects need payment"), { type: "answer", query: "projects_by_stage", stage: "payment" });
   assert.deepEqual(routeCommand("what's going on with Crazy Cars"), { type: "answer", query: "project_status", target: "Crazy Cars" });
   assert.deepEqual(routeCommand("status of Nobo Restaurant"), { type: "answer", query: "project_status", target: "Nobo Restaurant" });
+  // A plain navigation phrasing is NOT hijacked into an answer (no stage word) — the global bar's app
+  // router still sends "show me projects" to the Projects page.
+  assert.notEqual(routeCommand("show me projects")?.type, "answer");
 });
 
 test("parseClaudeResult reads the answer + clarify intents; drops an unknown query", () => {

@@ -15,6 +15,25 @@
 const MONEY = (s) => { const n = parseFloat(String(s).replace(/[,$\s]/g, "")); return Number.isFinite(n) ? n : null; };
 const clampQty = (n) => Math.max(1, Math.min(999, Math.round(n)));
 
+// Map free text to a lifecycle stage key (the same keys ai-answer's projects_by_stage understands). Most
+// specific phrasings first; returns null when no stage word is present so a plain "projects" nav isn't stolen.
+const STAGE_WORDS = [
+  [/\b(qc|quality[\s-]*control)\b/i, "qc"],
+  [/\b(site[\s-]*survey|survey)\b/i, "site_survey"],
+  [/\b(approval|deposit)\b/i, "approval_deposit"],
+  [/\b(install(ation|ing|ed)?)\b/i, "install"],
+  [/\b(schedul(e|ed|ing))\b/i, "schedule"],
+  [/\b(payment|paid|collect(?:ing)?\s+payment)\b/i, "payment"],
+  [/\b(completion|complete[d]?|finished|done)\b/i, "completion"],
+  [/\b(inquiry|lead|leads)\b/i, "inquiry"],
+  [/\b(proposal|proposals)\b/i, "proposal"],
+];
+function stageFromText(text) {
+  const t = String(text || "");
+  for (const [re, stage] of STAGE_WORDS) if (re.test(t)) return stage;
+  return null;
+}
+
 // Deterministic router: exact enough to be safe, forgiving enough to be useful. Returns an intent or null
 // (null = hand it to Claude). Order matters — the most specific patterns first.
 export function routeCommand(text) {
@@ -75,6 +94,11 @@ export function routeCommand(text) {
   // "what needs QC", "which projects need quality control", "anything in QC"
   if (/\b(qc|quality[\s-]*control)\b/i.test(t) && /\b(need|needs|in|which|what|any|how many|require)\b/i.test(t))
     return { type: "answer", query: "projects_by_stage", stage: "qc" };
+  // "which projects are in install", "what's in the schedule stage", "how many projects need payment" — any stage.
+  if (/\bprojects?\b/i.test(t) && /\b(which|what|how many|list|show|any|anything|in|at|need|needs|require)\b/i.test(t)) {
+    const st = stageFromText(t);
+    if (st) return { type: "answer", query: "projects_by_stage", stage: st };
+  }
   // "what's going on with Crazy Cars", "status of Crazy Cars", "where is Crazy Cars at"
   m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
   if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }

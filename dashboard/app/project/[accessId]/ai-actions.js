@@ -180,6 +180,13 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   const t = String(text || "").trim();
   if (!t) return { error: "Type a command." };
 
+  // A data question the 0-token router recognizes ("which projects need QC", "how much is X's proposal")
+  // is an ANSWER, not a page jump — resolve it BEFORE the loose app-route map can grab a word like
+  // "projects". Only answer/clarify are intercepted; navigation phrasings still fall to the app routes.
+  const peek = routeCommand(t);
+  if (peek?.type === "answer") return answerFor(peek, g.tok, context.currentAccessId || context.memory?.project?.accessId);
+  if (peek?.type === "clarify") return { ok: true, kind: "clarify", speak: peek.ask };
+
   const app = resolveAppRoute(t);
   if (app) return { ok: true, kind: "navigate", href: app.href, label: app.label };
 
