@@ -162,6 +162,97 @@ export async function startMeter(bars = 5) {
   }
 }
 
+// Pick a recording container the browser supports (Chrome → webm/opus, Safari → mp4). Whisper reads all of these.
+function pickMime() {
+  if (typeof MediaRecorder === "undefined") return "";
+  for (const m of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"]) {
+    try { if (MediaRecorder.isTypeSupported(m)) return m; } catch { /* keep trying */ }
+  }
+  return "";
+}
+
+// Voice Activity Detection + segment recording for Conversation Mode and dictation. ONE mic stream drives
+// both the live level bars and the capture: when real speech starts we record, when the speaker goes quiet
+// for `silenceMs` we stop and hand the audio clip to `onUtterance` (which transcribes it with language
+// auto-detect). It never records while the assistant is speaking (no self-echo) and signals a genuine
+// barge-in from sustained energy during playback. Returns { stop() } or null when the mic is unavailable.
+// `getPhase()` tells us the conversation phase ("listening" records · "speaking" only watches for barge-in ·
+// anything else just shows levels). Thresholds are deliberately conservative so background noise is ignored.
+export async function startVoiceCapture({ onLevels, onUtterance, onSpeechStart, onBargeIn, getPhase, silenceMs = 1900, minSpeechMs = 350, bars = 5 } = {}) {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
+  let stream, ctx, raf, recorder, chunks = [], segmentActive = false, speechStartedAt = 0, lastVoiceAt = 0, bargeCount = 0;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { stream.getTracks().forEach((t) => t.stop()); return null; }
+    ctx = new AC();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512; analyser.smoothingTimeConstant = 0.6;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    const buf = new Uint8Array(analyser.frequencyBinCount);
+    const band = Math.max(1, Math.floor(buf.length / bars));
+    const mime = pickMime();
+    const START = 0.16, STOP = 0.10;   // start/keep-alive energy thresholds (0..1)
+
+    const startSegment = () => {
+      if (segmentActive) return;
+      chunks = []; segmentActive = true; speechStartedAt = Date.now();
+      try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
+      catch { try { recorder = new MediaRecorder(stream); } catch { segmentActive = false; return; } }
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      recorder.onstop = () => {
+        const dur = Date.now() - speechStartedAt; segmentActive = false;
+        const blob = new Blob(chunks, { type: mime || "audio/webm" }); chunks = [];
+        if (dur >= minSpeechMs && blob.size > 1200) onUtterance?.(blob, dur);   // too short → noise, drop it
+      };
+      try { recorder.start(); onSpeechStart?.(); } catch { segmentActive = false; }
+    };
+    const endSegment = () => { if (segmentActive && recorder) { try { recorder.stop(); } catch { segmentActive = false; } } };
+
+    const tick = () => {
+      analyser.getByteFrequencyData(buf);
+      const out = [];
+      for (let b = 0; b < bars; b++) { let s = 0; for (let i = 0; i < band; i++) s += buf[b * band + i]; out.push(Math.min(1, (s / band) / 170)); }
+      onLevels?.(out);
+      const level = Math.max(...out), now = Date.now();
+      const phase = (getPhase && getPhase()) || "listening";
+      if (phase === "speaking") {
+        if (level > 0.5) { if (++bargeCount >= 4) { bargeCount = 0; onBargeIn?.(); } } else bargeCount = Math.max(0, bargeCount - 1);
+        if (segmentActive) endSegment();
+      } else if (phase === "listening") {
+        bargeCount = 0;
+        if (level > START) { lastVoiceAt = now; if (!segmentActive) startSegment(); }
+        else if (segmentActive && level < STOP && now - lastVoiceAt > silenceMs) endSegment();
+      } else { bargeCount = 0; if (segmentActive) endSegment(); }   // processing → hold
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return { stop() {
+      try { cancelAnimationFrame(raf); } catch { /* noop */ }
+      try { if (segmentActive && recorder) recorder.stop(); } catch { /* noop */ }
+      try { stream.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+      try { ctx.close(); } catch { /* noop */ }
+    } };
+  } catch {
+    try { stream?.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
+    try { ctx?.close(); } catch { /* noop */ }
+    return null;
+  }
+}
+
+// Send a recorded clip to our transcription route; returns { text, language } (language auto-detected) or null.
+export async function transcribeClip(blob) {
+  if (typeof fetch === "undefined" || !blob) return null;
+  try {
+    const form = new FormData();
+    form.append("file", blob, "clip." + ((blob.type || "").includes("mp4") ? "mp4" : "webm"));
+    const res = await fetch("/api/transcribe", { method: "POST", body: form });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return { text: String(j?.text || "").trim(), language: j?.language || "en", duration: j?.duration ?? null };
+  } catch { return null; }
+}
+
 const usd = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Turn a CommandSurface result into a short line to SPEAK (push-to-talk / conversation replies).

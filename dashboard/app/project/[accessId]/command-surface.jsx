@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { speechSupport, createRecognizer, readRecognition, speak, speakNeural, stopSpeaking, startMeter, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
-import { CONVO, NUDGE, LANGS, endpointDelay, isNoise, parseVoiceControl } from "../../../lib/voice-convo";
+import { speechSupport, speak, speakNeural, stopSpeaking, startVoiceCapture, transcribeClip, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
+import { CONVO, NUDGE, LANGS, isNoise, parseVoiceControl } from "../../../lib/voice-convo";
 
 // Reusable AI command surface — a minimal, conversational assistant: a compact composer (mode toggle +
 // one input) that stays small at rest and grows a chat thread ABOVE it only once there's a conversation,
@@ -39,6 +39,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const [turns, setTurns] = useState([]);             // transcript: { id, role, text?, res? }
   const [pending, setPending] = useState(null);       // { id, res } — the single actionable awaiting a decision
   const [support, setSupport] = useState({ recognition: false, synthesis: false });
+  const [voiceOk, setVoiceOk] = useState(false);     // mic capture available (getUserMedia + MediaRecorder)
   const [convoOn, setConvoOn] = useState(false);      // hands-free Conversation Mode on/off (drives the UI)
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -48,8 +49,8 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const [previewing, setPreviewing] = useState(null); // voice id currently playing a sample
   const [levels, setLevels] = useState(null);         // real mic levels (array) or null when unmetered
 
-  const recRef = useRef(null);       // active SpeechRecognition
-  const meterRef = useRef(null);     // active mic meter
+  const captureRef = useRef(null);   // active Conversation-Mode voice capture (VAD + recorder)
+  const dictCapRef = useRef(null);   // active one-shot dictation capture
   const resRef = useRef(null);       // pending.res (for recognition callbacks)
   const pendRef = useRef(null);      // pending (for recognition callbacks)
   const convRef = useRef(false);     // conversation session active
@@ -74,7 +75,6 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const nudgedRef = useRef(false);        // we only nudge once per idle stretch
   const bargeRef = useRef(true);          // allow speaking to be interrupted by genuine speech (configurable)
   const bargeCountRef = useRef(0);        // consecutive loud mic frames while speaking → a real barge-in
-  const onResultRef = useRef(null);       // always points at the freshest recognition handler (no stale closure)
   const rateRef = useRef(1);              // spoken-reply playback rate ("slow down" / "speak faster")
   const langRef = useRef("en");           // active language for recognition + spoken replies
   const briefRef = useRef(false);         // "keep it short" preference
@@ -85,8 +85,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
 
   useEffect(() => {
     setSupport(speechSupport());
+    try { setVoiceOk(typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"); } catch {}
     try { const b = localStorage.getItem("iot_ai_bargein"); if (b === "off") bargeRef.current = false; } catch {}
-    return () => { convRef.current = false; clearConvoTimers(); try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSay(); };
+    return () => { convRef.current = false; clearConvoTimers(); try { captureRef.current?.stop(); } catch {} try { dictCapRef.current?.stop(); } catch {} stopSay(); };
   }, []);
   // Remember the chosen neural voice per viewer.
   useEffect(() => { try { const v = localStorage.getItem("iot_ai_voice"); if (v && VOICES.some((x) => x.id === v)) setVoice(v); } catch {} }, []);
@@ -109,7 +110,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   // Resume a conversation handed off across a navigation (persistConvo stashed it just before the reload):
   // restore the thread + memory + voice and pick listening back up, so "open a project" doesn't end the chat.
   useEffect(() => {
-    if (!support.recognition) return;
+    if (!voiceOk) return;
     let data; try { const raw = sessionStorage.getItem("iot_ai_convo"); if (!raw) return; data = JSON.parse(raw); sessionStorage.removeItem("iot_ai_convo"); } catch { return; }
     if (!data || data.mode !== "chat" || Date.now() - (data.ts || 0) > 60000) return;   // only a fresh hand-off
     if (Array.isArray(data.turns) && data.turns.length) setTurns(data.turns.map((t) => ({ id: nid(), role: t.role, text: t.text, res: t.res })));
@@ -117,7 +118,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     if (data.voice && VOICES.some((v) => v.id === data.voice)) { setVoice(data.voice); voiceRef.current = data.voice; }
     const t = setTimeout(() => startConversation(), 400);   // mic permission already granted mid-conversation
     return () => clearTimeout(t);
-  }, [support.recognition]);
+  }, [voiceOk]);
   // Keep the newest turn / live state in view, input stays anchored below.
   useEffect(() => { const el = threadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [turns, thinking, listening, speaking, interim, levels]);
   if (!enabled) return null;
@@ -191,24 +192,11 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     finally { setBusy(false); }
   }
 
-  // ---- recognition + metering ----
+  // ---- mic capture (VAD + record → transcribe) ----
   function stopListening() {
-    const r = recRef.current; recRef.current = null; if (r) { try { r.onend = null; r.stop(); } catch {} }
-    try { meterRef.current?.stop(); } catch {} meterRef.current = null;
+    try { captureRef.current?.stop(); } catch {} captureRef.current = null;
+    try { dictCapRef.current?.stop(); } catch {} dictCapRef.current = null;
     setListening(false); setLevels(null);
-  }
-  function listen({ continuous = false, toField = false, lang, onFinal, onEnd }) {
-    stopListening(); stopSay();
-    const r = createRecognizer({ continuous, interim: true, lang: lang || "en-US" });
-    if (!r) { sysMsg("err", "Voice input isn’t available in this browser."); return null; }
-    recRef.current = r; setListening(true); setInterim("");
-    // Honest levels: tap the real mic. null (blocked/denied) → the UI shows a non-reactive listening state.
-    startMeter(5).then((m) => { if (!recRef.current) { m?.stop(); return; } meterRef.current = m; if (m) { setLevels([0, 0, 0, 0, 0]); m.onLevels((lv) => setLevels(lv)); } }).catch(() => {});
-    r.onresult = (e) => { const { interim: iv, final } = readRecognition(e); if (iv) (toField ? setText(iv) : setInterim(iv)); if (final) { toField ? setText(final) : setInterim(final); onFinal?.(final); } };
-    r.onerror = (e) => { setListening(false); if (e?.error === "not-allowed" || e?.error === "service-not-allowed") sysMsg("err", "Microphone blocked — allow mic access to use voice."); };
-    r.onend = () => { setListening(false); try { meterRef.current?.stop(); } catch {} meterRef.current = null; setLevels(null); recRef.current = null; onEnd?.(); };
-    try { r.start(); } catch { setListening(false); }
-    return r;
   }
 
   // Speak a reply with the NEURAL voice (OpenAI Realtime via /api/tts); fall back to the browser voice on
@@ -226,9 +214,25 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   };
   const interrupt = () => { stopSay(); setSpeaking(false); };
 
-  // The in-input microphone DICTATES only — it fills the field for review + send, never auto-submits.
-  // Hands-free voice is the separate Conversation Mode below. Dictation follows the active language too.
-  function dictate() { if (listening) { stopListening(); return; } listen({ toField: true, lang: LANGS[langRef.current]?.bcp47 }); }
+  // The in-input microphone DICTATES only — records one utterance, transcribes it (language auto-detected)
+  // and fills the field for review + send. It NEVER auto-submits. Hands-free voice is Conversation Mode.
+  async function dictate() {
+    if (dictCapRef.current) { stopListening(); return; }
+    setListening(true); setLevels([0, 0, 0, 0, 0]);
+    const cap = await startVoiceCapture({
+      getPhase: () => "listening",
+      onLevels: (lv) => setLevels(lv),
+      onUtterance: async (blob) => {
+        stopListening(); setThinking(true);
+        const r = await transcribeClip(blob).catch(() => null);
+        setThinking(false);
+        if (r?.text) { if (LANGS[r.language]) langRef.current = r.language; setText((prev) => (prev ? prev.trim() + " " : "") + r.text); }
+      },
+      silenceMs: 1500,
+    });
+    if (!cap) { setListening(false); setLevels(null); sysMsg("err", "Microphone unavailable — allow mic access to use voice."); return; }
+    dictCapRef.current = cap;
+  }
   // ---- Conversation mode: a real lifecycle (listening → processing → speaking → listening), not a
   // one-command box. One continuous recognizer runs for the whole session; WE decide when an utterance is
   // finished (a genuine pause), ignore noise/our own voice, keep the session open across actions, and close
@@ -294,80 +298,44 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     speakReply(summarizeForSpeech(r));
   }
 
-  // The pause detector: once the speaker has been quiet for endpointDelay(), treat the buffer as a finished
-  // thought. Ignores empty/noise so silence never triggers a response.
-  async function endpointFire() {
+  // A recorded utterance → transcribe it (language auto-detected), then run the normal handler. The VAD in
+  // startVoiceCapture already did end-of-speech detection and dropped noise, so a clip here is real speech.
+  async function processClip(blob) {
     if (!convRef.current || phaseRef.current !== "listening") return;
-    const utter = ((bufferRef.current ? bufferRef.current + " " : "") + (interimRef.current || "")).trim();
-    bufferRef.current = ""; interimRef.current = "";
-    if (!utter || isNoise(utter)) { setInterim(""); return; }   // nothing real was said
-    phaseRef.current = "processing";
+    phaseRef.current = "processing"; setThinking(true); setInterim("");
     clearTimeout(nudgeTimerRef.current); clearTimeout(idleTimerRef.current); nudgeTimerRef.current = idleTimerRef.current = null;   // don't count down while thinking
-    setInterim("");
-    await handleUtterance(utter);
+    const r = await transcribeClip(blob).catch(() => null);
+    setThinking(false);
+    const text = (r?.text || "").trim();
+    if (!text || isNoise(text)) { phaseRef.current = "listening"; armIdle(true); return; }   // silence / noise → keep listening
+    if (r?.language && LANGS[r.language]) langRef.current = r.language;   // understand + reply in the detected language
+    await handleUtterance(text);
   }
 
-  // A real user voice during playback — detected on the echo-cancelled mic meter, NOT speech-to-text (the
-  // recognizer would otherwise transcribe the assistant's own words). Interrupt and hand back to listening.
+  // A genuine user voice during playback — detected on the echo-cancelled mic meter by startVoiceCapture.
   function bargeIn() {
-    if (phaseRef.current !== "speaking") return;
-    stopSay(); setSpeaking(false); phaseRef.current = "listening"; bufferRef.current = ""; interimRef.current = ""; bargeCountRef.current = 0;
+    if (!bargeRef.current || phaseRef.current !== "speaking") return;
+    stopSay(); setSpeaking(false); phaseRef.current = "listening"; bargeCountRef.current = 0;
   }
 
-  function onConvoResult(e) {
-    // Never process speech-to-text while the assistant is talking — that's how it used to transcribe its own
-    // voice and "respond to silence". Barge-in is handled separately, from the mic meter.
-    if (phaseRef.current === "speaking") return;
-    if (phaseRef.current === "processing") return;    // mid-interpret → hold
-    const { interim: iv, final } = readRecognition(e);
-    if (final) bufferRef.current = (bufferRef.current ? bufferRef.current + " " : "") + final;
-    interimRef.current = iv || "";
-    const shown = ((bufferRef.current ? bufferRef.current + " " : "") + (iv || "")).trim();
-    setInterim(shown);
-    // (Re)start the end-of-speech countdown only when there's real speech, so a brief pause mid-sentence
-    // doesn't cut the user off and background noise doesn't start a response.
-    if (shown && !isNoise(shown)) {
-      armIdle(true);   // meaningful speech → reset the idle clocks
-      clearTimeout(endpointTimerRef.current);
-      endpointTimerRef.current = setTimeout(() => { endpointFire(); }, endpointDelay(shown));
-    }
-  }
+  // Explicit language switch ("speak Spanish"). With server transcription the language is auto-detected per
+  // clip, so this just pins replies (and biases) to the chosen language until the user speaks another.
+  function setLanguage(lang) { if (LANGS[lang]) langRef.current = lang; }
 
-  // One long-lived recognizer for the whole conversation. Chrome stops it periodically (silence / ~60s) —
-  // we restart while the session is live so listening never silently dies.
-  // Switch the conversation language on command ("speak Spanish"). Browser speech recognition LOCKS its
-  // language per session, so we restart the recognizer on the new BCP-47 tag; spoken replies follow langRef.
-  function setLanguage(lang) {
-    if (!LANGS[lang] || langRef.current === lang) { langRef.current = LANGS[lang] ? lang : langRef.current; return; }
-    langRef.current = lang;
-    if (convRef.current) { try { if (recRef.current) recRef.current.onend = null; recRef.current?.stop(); } catch {} recRef.current = null; startConvoRecognizer(); }
-  }
-
-  function startConvoRecognizer() {
+  // One voice capture runs for the whole conversation: it emits level bars, records real speech, endpoints on
+  // a pause, transcribes, and never captures the assistant's own voice (barge-in comes from the meter).
+  async function startConvoCapture() {
     if (!convRef.current) return;
-    const r = createRecognizer({ continuous: true, interim: true, lang: LANGS[langRef.current]?.bcp47 || "en-US" });
-    if (!r) { sysMsg("err", "Voice input isn’t available in this browser."); convRef.current = false; return; }
-    recRef.current = r; setListening(true); setInterim("");
-    startMeter(5).then((m) => {
-      if (!recRef.current) { m?.stop(); return; }
-      meterRef.current = m;
-      if (m) { setLevels([0, 0, 0, 0, 0]); m.onLevels((lv) => {
-        setLevels(lv);
-        // Barge-in: a few consecutive loud frames while speaking = a real voice (the assistant's own audio is
-        // cancelled out of this stream), so stop and listen. Below threshold decays the counter.
-        if (phaseRef.current === "speaking" && bargeRef.current) {
-          if (Math.max(...lv) > 0.55) { if (++bargeCountRef.current >= 4) bargeIn(); } else bargeCountRef.current = Math.max(0, bargeCountRef.current - 1);
-        } else bargeCountRef.current = 0;
-      }); }
-    }).catch(() => {});
-    r.onresult = (e) => onResultRef.current?.(e);   // call the latest handler, never a closure captured at start
-    r.onerror = (e) => { if (e?.error === "not-allowed" || e?.error === "service-not-allowed") { sysMsg("err", "Microphone blocked — allow mic access to use voice."); convRef.current = false; setListening(false); } };
-    r.onend = () => {
-      try { meterRef.current?.stop(); } catch {} meterRef.current = null; setLevels(null);
-      if (convRef.current) { setTimeout(() => { if (convRef.current && recRef.current === r) startConvoRecognizer(); }, 250); }
-      else { recRef.current = null; setListening(false); }
-    };
-    try { r.start(); } catch { setListening(false); }
+    const cap = await startVoiceCapture({
+      getPhase: () => phaseRef.current,
+      onLevels: (lv) => setLevels(lv),
+      onSpeechStart: () => { if (phaseRef.current === "listening") { armIdle(true); setInterim("…"); } },
+      onBargeIn: () => bargeIn(),
+      onUtterance: (blob) => processClip(blob),
+      silenceMs: CONVO.endSilenceMs,
+    });
+    if (!cap) { sysMsg("err", "Microphone unavailable — allow mic access to use Conversation Mode."); convRef.current = false; setConvoOn(false); setListening(false); return; }
+    captureRef.current = cap; setListening(true); setLevels([0, 0, 0, 0, 0]);
   }
 
   function startConversation() {
@@ -376,7 +344,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     convRef.current = true; setConvoOn(true);
     phaseRef.current = "listening";
     bufferRef.current = ""; interimRef.current = ""; nudgedRef.current = false;
-    startConvoRecognizer();
+    startConvoCapture();
     armIdle(true);
   }
   function endConversation() {
@@ -400,7 +368,6 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const dictLabel = listening ? "Stop dictation" : "Dictate";
   const live = listening || thinking || speaking;
   const hasThread = turns.length > 0 || live;
-  onResultRef.current = onConvoResult;   // bind the recognizer to this render's handlers (fresh state/refs)
 
   return (
     <div className={`aicb${convoOn ? " aicb-convo" : ""}`}>
@@ -469,7 +436,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
         </div>
       )}
 
-      {support.recognition && (
+      {voiceOk && (
         <div className="aicb-toprow">
           {/* One dedicated hands-free control — no mode tabs. */}
           <button type="button" className={`aicb-convobtn${convoOn ? " on" : ""}`} aria-pressed={convoOn} onClick={toggleConversation}>
@@ -506,7 +473,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
         <form className="aicb-row" onSubmit={submit}>
           <span className="aicb-spark" aria-hidden="true"><Spark /></span>
           <input className="aicb-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : placeholder} aria-label="Ask the assistant" disabled={busy} />
-          {support.recognition && (
+          {voiceOk && (
             <button type="button" className={`aicb-mic${listening ? " live" : ""}`} aria-label={dictLabel} title={dictLabel} onClick={dictate} disabled={busy && !listening}><MicIcon /></button>
           )}
           <button type="submit" className="aicb-go" disabled={busy || !text.trim()} aria-label="Send"><Arrow /></button>
