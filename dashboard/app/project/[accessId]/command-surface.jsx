@@ -18,6 +18,19 @@ import { speechSupport, createRecognizer, readRecognition, speak, speakNeural, s
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DEFAULT_MISS = "I couldn’t do that one yet. Try a command, or a place to go.";
 
+// Neural-voice choices (OpenAI Realtime; the server whitelists these). Marin is OpenAI's recommended default.
+const DEFAULT_VOICE = "marin";
+const VOICES = [
+  { id: "marin", label: "Marin", note: "Warm · recommended" },
+  { id: "shimmer", label: "Shimmer", note: "Bright" },
+  { id: "coral", label: "Coral", note: "Friendly" },
+  { id: "sage", label: "Sage", note: "Calm" },
+  { id: "cedar", label: "Cedar", note: "Deeper" },
+  { id: "alloy", label: "Alloy", note: "Neutral" },
+];
+const VOICE_SAMPLE = "Hi, I'm your IOT Techs assistant. I can open projects, edit proposals, and more.";
+const voiceLabel = (id) => (VOICES.find((v) => v.id === id) || VOICES[0]).label;
+
 export default function CommandSurface({ enabled = true, placeholder = "Ask anything…", interpret, onNavigate, onApply, onPick }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,6 +42,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [interim, setInterim] = useState("");         // live recognized words (talk/chat)
+  const [voice, setVoice] = useState(DEFAULT_VOICE);  // neural voice id (per-viewer, persisted)
+  const [voiceOpen, setVoiceOpen] = useState(false);  // voice-picker popover
+  const [previewing, setPreviewing] = useState(null); // voice id currently playing a sample
   const [levels, setLevels] = useState(null);         // real mic levels (array) or null when unmetered
 
   const recRef = useRef(null);       // active SpeechRecognition
@@ -41,11 +57,29 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const threadRef = useRef(null);
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
+  const voiceRef = useRef(DEFAULT_VOICE);
   const nid = () => `t${Date.now()}_${idc.current++}`;
   // Stop any speech in flight — the neural audio AND the browser voice.
   const stopSay = () => { try { sayCtlRef.current?.stop(); } catch {} sayCtlRef.current = null; stopSpeaking(); };
 
   useEffect(() => { setSupport(speechSupport()); return () => { try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSay(); }; }, []);
+  // Remember the chosen neural voice per viewer.
+  useEffect(() => { try { const v = localStorage.getItem("iot_ai_voice"); if (v && VOICES.some((x) => x.id === v)) setVoice(v); } catch {} }, []);
+  useEffect(() => { voiceRef.current = voice; }, [voice]);
+  // Close the voice popover on an outside click.
+  useEffect(() => {
+    if (!voiceOpen) return;
+    const onDown = (e) => { if (!e.target.closest?.(".aicb-voicewrap")) setVoiceOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [voiceOpen]);
+  const chooseVoice = (id) => { setVoice(id); try { localStorage.setItem("iot_ai_voice", id); } catch {} };
+  // Play a short sample in a voice so the user can audition before choosing.
+  async function previewVoice(id) {
+    stopSay(); setPreviewing(id);
+    try { sayCtlRef.current = await speakNeural(VOICE_SAMPLE, { voice: id, onEnd: () => setPreviewing(null) }); }
+    catch { setPreviewing(null); if (support.synthesis) speak(VOICE_SAMPLE, { onEnd: () => {} }); }
+  }
   useEffect(() => { resRef.current = pending?.res || null; pendRef.current = pending; }, [pending]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
   // Keep the newest turn / live state in view, input stays anchored below.
@@ -135,7 +169,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     setSpeaking(true);
     let fired = false;
     const done = () => { if (fired) return; fired = true; setSpeaking(false); after?.(); };
-    speakNeural(t, { onEnd: done })
+    speakNeural(t, { voice: voiceRef.current, onEnd: done })
       .then((ctl) => { sayCtlRef.current = ctl; })
       .catch(() => { if (support.synthesis) speak(t, { onEnd: done }); else done(); });   // neural failed → browser voice
   };
@@ -245,10 +279,36 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
       )}
 
       {support.recognition && (
-        <div className="aicb-modes" role="tablist" aria-label="Mode">
-          {[["text", "Text", Keyboard], ["talk", "Talk", MicIcon], ["chat", "Conversation", Chat]].map(([m, lbl, Ico]) => (
-            <button key={m} type="button" role="tab" aria-selected={mode === m} className={`aicb-mode${mode === m ? " on" : ""}`} onClick={() => switchMode(m)}><Ico />{lbl}</button>
-          ))}
+        <div className="aicb-toprow">
+          <div className="aicb-modes" role="tablist" aria-label="Mode">
+            {[["text", "Text", Keyboard], ["talk", "Talk", MicIcon], ["chat", "Conversation", Chat]].map(([m, lbl, Ico]) => (
+              <button key={m} type="button" role="tab" aria-selected={mode === m} className={`aicb-mode${mode === m ? " on" : ""}`} onClick={() => switchMode(m)}><Ico />{lbl}</button>
+            ))}
+          </div>
+          {/* Neural voice picker — audition + choose the spoken voice (talk/conversation). */}
+          <div className="aicb-voicewrap">
+            <button type="button" className="aicb-voicebtn" aria-haspopup="menu" aria-expanded={voiceOpen} title="Assistant voice" onClick={() => setVoiceOpen((o) => !o)}>
+              <Speaker /><span className="aicb-voicename">{voiceLabel(voice)}</span>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            {voiceOpen && (
+              <div className="aicb-voicemenu" role="menu">
+                <div className="aicb-voicehead">Assistant voice</div>
+                {VOICES.map((v) => (
+                  <div key={v.id} className={`aicb-voiceopt${voice === v.id ? " on" : ""}`} role="menuitemradio" aria-checked={voice === v.id} onClick={() => chooseVoice(v.id)}>
+                    <span className="aicb-voicedot">{voice === v.id ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg> : null}</span>
+                    <span className="aicb-voicetx"><b>{v.label}</b><small>{v.note}</small></span>
+                    <button type="button" className="aicb-voiceplay" title={`Preview ${v.label}`} aria-label={`Preview ${v.label}`}
+                      onClick={(e) => { e.stopPropagation(); previewVoice(v.id); }}>
+                      {previewing === v.id
+                        ? <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                        : <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z" /></svg>}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -270,6 +330,7 @@ const Arrow = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const MicIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>;
 const Keyboard = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" /></svg>;
 const Chat = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
+const Speaker = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" /></svg>;
 
 const CSS = `
 .aicb{display:flex;flex-direction:column;gap:9px}
@@ -316,7 +377,24 @@ const CSS = `
 .aicb-dots i:nth-child(2){animation-delay:.18s}.aicb-dots i:nth-child(3){animation-delay:.36s}
 @keyframes aicb-blink{0%,100%{opacity:.3}50%{opacity:1}}
 /* composer */
+.aicb-toprow{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .aicb-modes{display:inline-flex;gap:2px;background:var(--dv-paper,#F1F1EE);border-radius:999px;padding:2px;align-self:flex-start}
+.aicb-voicewrap{position:relative;flex:none}
+.aicb-voicebtn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-bg,#fff);color:#6a7085;border-radius:999px;font-size:11.5px;padding:4px 9px;cursor:pointer;font-family:inherit}
+.aicb-voicebtn:hover{border-color:#C9A96E;color:var(--dv-ink,#1b1f2a)}
+.aicb-voicebtn svg:first-child{color:#C9A96E}
+.aicb-voicename{font-weight:600}
+.aicb-voicemenu{position:absolute;right:0;top:calc(100% + 6px);z-index:5;width:232px;background:var(--dv-bg,#fff);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 14px 34px rgba(14,18,30,.18);padding:6px}
+.aicb-voicehead{font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:#9aa0ab;font-weight:600;padding:5px 8px 4px}
+.aicb-voiceopt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:9px;cursor:pointer}
+.aicb-voiceopt:hover{background:var(--dv-paper,#F1F1EE)}
+.aicb-voiceopt.on{background:rgba(201,169,110,.12)}
+.aicb-voicedot{flex:none;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;color:#C9A96E}
+.aicb-voicetx{display:flex;flex-direction:column;line-height:1.25;flex:1;min-width:0}
+.aicb-voicetx b{font-size:12.5px;font-weight:600;color:var(--dv-ink,#1b1f2a)}
+.aicb-voicetx small{font-size:10.5px;color:#9aa0ab}
+.aicb-voiceplay{flex:none;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;background:var(--dv-paper,#F1F1EE);color:#10204a;border-radius:7px;cursor:pointer}
+.aicb-voiceplay:hover{background:#C9A96E;color:#fff}
 .aicb-mode{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#6a7085;border-radius:999px;font-size:11.5px;padding:5px 11px;cursor:pointer;font-family:inherit}
 .aicb-mode svg{opacity:.8}
 .aicb-mode.on{background:var(--dv-bg,#fff);color:var(--dv-ink,#10204a);box-shadow:0 1px 3px rgba(16,32,74,.12);font-weight:600}
@@ -338,5 +416,8 @@ const CSS = `
   :root:not([data-theme="light"]) .aicb-cand{background:#1a1d27;color:#e7e9ee}
   :root:not([data-theme="light"]) .aicb-modes{background:#1a1d27}
   :root:not([data-theme="light"]) .aicb-mode.on{background:#262a36;color:#fff}
+  :root:not([data-theme="light"]) .aicb-voicebtn,:root:not([data-theme="light"]) .aicb-voicemenu{background:#14171f;color:#e7e9ee}
+  :root:not([data-theme="light"]) .aicb-voicetx b{color:#e7e9ee}
+  :root:not([data-theme="light"]) .aicb-voiceopt:hover,:root:not([data-theme="light"]) .aicb-voiceplay{background:#262a36}
 }
 `;
