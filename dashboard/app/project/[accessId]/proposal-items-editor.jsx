@@ -380,9 +380,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                    onBlur={() => { setEditingId(null); writeCamName(); }}
                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingId(null); writeCamName(); } }} />
           ) : (
-            <span className="prop-item-nametext" title={readOnly ? undefined : "Double-click to rename"}
-                  style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
-                  onDoubleClick={() => { if (camName != null) startCamEdit(); else if (!readOnly) setEditingId(it.id); }}>{camName || it.name || "Item"}</span>
+            <>
+              <span className="prop-item-nametext" title={readOnly ? undefined : "Click the pencil to rename"}
+                    style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
+                    onDoubleClick={() => { if (camName != null) startCamEdit(); else if (!readOnly) setEditingId(it.id); }}>{camName || it.name || "Item"}</span>
+              {!parent && !readOnly && (
+                <button type="button" className="prop-name-edit" title="Rename"
+                        onClick={() => { if (camName != null) startCamEdit(); else setEditingId(it.id); }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                </button>
+              )}
+            </>
           )
         ) : (
           <ItemNameField

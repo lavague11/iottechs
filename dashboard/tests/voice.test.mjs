@@ -2,7 +2,7 @@
 // recognition event). The browser I/O (SpeechRecognition / speechSynthesis) is exercised live, not here.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { speechSupport, readRecognition, summarizeForSpeech, voiceDecision, startMeter } from "../lib/voice.js";
+import { speechSupport, readRecognition, summarizeForSpeech, voiceDecision, startMeter, pickPreferredVoice } from "../lib/voice.js";
 
 test("speechSupport reports nothing in a non-browser (node) env", () => {
   assert.deepEqual(speechSupport(), { recognition: false, synthesis: false });
@@ -34,6 +34,23 @@ test("voiceDecision classifies a spoken reply while a change is pending", () => 
   assert.deepEqual(voiceDecision("number 3"), { kind: "pick", index: 3 });
   assert.equal(voiceDecision("add more cameras"), null, "a real command is not a decision");
   assert.equal(voiceDecision(""), null);
+});
+
+test("pickPreferredVoice chooses a natural female English voice over a robotic male default", () => {
+  const voices = [
+    { name: "Microsoft David - English (United States)", lang: "en-US" },
+    { name: "Microsoft Zira - English (United States)", lang: "en-US" },
+    { name: "Google US English", lang: "en-US" },
+    { name: "Microsoft Aria Online (Natural) - English (United States)", lang: "en-US" },
+    { name: "Google Deutsch", lang: "de-DE" },
+  ];
+  const v = pickPreferredVoice(voices);
+  assert.ok(/aria|zira|google us english/i.test(v.name), `picked a female/natural voice, got ${v.name}`);
+  assert.ok(!/david/i.test(v.name), "never the male default");
+  // Natural/neural engines win when present (least robotic).
+  assert.match(pickPreferredVoice(voices).name, /aria|natural/i);
+  assert.equal(pickPreferredVoice([]), null);
+  assert.equal(pickPreferredVoice(), null);
 });
 
 test("startMeter returns null (honest fallback) when no mic API is present — never a fake waveform", async () => {

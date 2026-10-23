@@ -42,3 +42,11 @@ export function looksLikeNav(text) {
   const t = norm(text);
   return /^(open|go to|take me to|show( me)?|pull up|jump to|navigate to|bring up|where('?s| is| are)|find|see)\b/.test(t) || /\b(screen|page|section|tab|list)\b/.test(t);
 }
+
+// Does this read like a proposal EDIT (rename/price/description/discount/add an item)? The global bar never
+// edits, but when a project is open it can send the user to that project's proposal where the edit bar lives.
+export function looksLikeEdit(text) {
+  const t = norm(text);
+  return /\b(rename|relabel|rewrite|describe|description|discount|price|cheaper|add (a |an |\d)|remove|delete|change|edit|move)\b/.test(t)
+    && /\b(camera|cameras|item|items|line|product|proposal|price|discount|description|section|nvr|dvr|speaker|sensor)\b/.test(t);
+}

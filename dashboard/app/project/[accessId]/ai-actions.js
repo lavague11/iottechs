@@ -14,7 +14,7 @@ import {
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
 import { aiGate } from "../../../lib/ai-authz";
-import { resolveAppRoute } from "../../../lib/ai-global";
+import { resolveAppRoute, looksLikeEdit } from "../../../lib/ai-global";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
@@ -166,6 +166,9 @@ export async function aiGlobalInterpretAction(text, context = {}) {
     return { ok: true, kind: "unsupported", speak: "Open a project’s proposal to edit it." };
   }
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "I can point you somewhere — try Tickets, Inventory, Customers or Finances." };
+  // We couldn't fully parse it, but on a project an edit-ish phrasing ("rename a camera") should still take
+  // the user to the proposal — the ⌘K bar only navigates; the edit itself is done with the proposal's bar.
+  if (context.currentAccessId && looksLikeEdit(t)) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
   return { ok: true, kind: "unknown", noKey: !!noKey };
 }
 

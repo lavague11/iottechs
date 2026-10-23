@@ -172,7 +172,11 @@ const PROP_CSS = `
 .pvx .prop-item input.num{text-align:right}
 .pvx .prop-item input:not(.num){text-transform:capitalize}
 .pvx .prop-item-nametext{flex:1;min-width:0;height:30px;display:flex;align-items:center;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;padding:0 8px;border:1px solid transparent;border-radius:7px}
+.pvx .prop-item-nametext{flex:0 1 auto}
 .pvx .prop-item-nametext:hover{background:var(--dv-paper,#F4F4F2)}
+/* Visible one-click rename on a camera/block name (replaces the hidden double-click). */
+.pvx .prop-name-edit{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--dv-meta,#9aa0ab);border-radius:6px;cursor:pointer;opacity:.55}
+.pvx .prop-name-edit:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);opacity:1}
 /* Item-name field with catalog type-ahead */
 .pvx .prop-name-ac{position:relative;flex:1;min-width:0}
 .pvx .prop-name-ac input{width:100%}

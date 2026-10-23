@@ -37,12 +37,53 @@ export function readRecognition(event) {
   return { interim: interim.trim(), final: final.trim() };
 }
 
-export function speak(text, { rate = 1.02, onEnd } = {}) {
+// PURE + testable: choose the most natural FEMALE English voice from a list. The platform default is often
+// a flat, robotic (usually male) voice — we score en-US + natural/neural engines + known female names up,
+// and male names down, so the assistant speaks in a warmer, more human voice. Returns a voice or null.
+export function pickPreferredVoice(voices = []) {
+  if (!Array.isArray(voices) || !voices.length) return null;
+  const score = (v) => {
+    const n = String(v?.name || "").toLowerCase(), lang = String(v?.lang || "").toLowerCase();
+    let s = 0;
+    if (/en[-_]us/.test(lang)) s += 4; else if (/^en/.test(lang)) s += 2;
+    if (/natural|neural|online/.test(n)) s += 6;                                   // high-quality, least robotic
+    if (/\b(aria|jenny|michelle|emma|ava|nova|libby|sonia|jane|zira|susan|samantha|serena|karen|tessa|fiona|moira|female|woman)\b/.test(n)) s += 5;
+    if (/google us english|google uk english female/.test(n)) s += 4;              // Chrome's natural female-ish voice
+    else if (/google/.test(n)) s += 2;
+    if (/\b(david|mark|george|james|male|man|fred|alex|daniel|rishi|guy|ryan|oliver|thomas|paul|eric)\b/.test(n)) s -= 7;   // avoid male voices
+    return s;
+  };
+  return voices.slice().sort((a, b) => score(b) - score(a))[0] || null;
+}
+
+// Browser wrapper around pickPreferredVoice. Voices load async (Chrome fires `voiceschanged`), so cache the
+// pick and refresh when the list arrives; the very first utterance may use the default, every later one the
+// chosen voice (conversation mode speaks many times, so it settles immediately).
+let _preferredVoice = null;
+function preferredVoice() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return null;
+  try {
+    if (!_preferredVoice) {
+      _preferredVoice = pickPreferredVoice(window.speechSynthesis.getVoices() || []);
+      if (!_preferredVoice && !preferredVoice._bound) {
+        preferredVoice._bound = true;
+        window.speechSynthesis.addEventListener?.("voiceschanged", () => { _preferredVoice = pickPreferredVoice(window.speechSynthesis.getVoices() || []); });
+      }
+    }
+  } catch { /* getVoices unavailable — fall back to the default voice */ }
+  return _preferredVoice;
+}
+
+// Slightly slower rate + a touch more pitch reads as warmer and less robotic than the default monotone.
+export function speak(text, { rate = 0.97, pitch = 1.08, onEnd } = {}) {
   try {
     if (typeof window === "undefined" || !window.speechSynthesis) { onEnd?.(); return; }
     window.speechSynthesis.cancel();
     const u = new window.SpeechSynthesisUtterance(String(text || ""));
     u.rate = rate;
+    u.pitch = pitch;
+    const v = preferredVoice();
+    if (v) { u.voice = v; if (v.lang) u.lang = v.lang; }
     u.onend = () => onEnd?.();
     u.onerror = () => onEnd?.();
     window.speechSynthesis.speak(u);

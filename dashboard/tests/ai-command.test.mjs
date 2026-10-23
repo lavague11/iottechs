@@ -32,6 +32,15 @@ test("router parses the four Phase-1 commands with zero tokens", () => {
   assert.deepEqual(routeCommand("go to Crazy Cars."), { type: "navigate_project", query: "Crazy Cars" });
 });
 
+test("router renames a line item at zero tokens (rename/relabel/call … to/as …)", () => {
+  assert.deepEqual(routeCommand("rename camera 3 to Front Door"), { type: "edit_item", match: { name: "camera 3" }, set: { name: "Front Door" } });
+  assert.deepEqual(routeCommand("rename the pool camera to Backyard Cam"), { type: "edit_item", match: { name: "pool camera" }, set: { name: "Backyard Cam" } });
+  assert.deepEqual(routeCommand("call the dvr to Main Recorder"), { type: "edit_item", match: { name: "dvr" }, set: { name: "Main Recorder" } });
+  // A price edit is NOT a rename (keeps going to the $ pattern), and a rename never captures a price.
+  assert.deepEqual(routeCommand("change the cameras to $275"), { type: "edit_item", match: { name: "camera" }, set: { price: 275 } });
+  assert.equal(routeCommand("rename the camera to $20"), null, "a $ value isn't a rename");
+});
+
 test("router leaves ambiguous phrasing to Claude (returns null), and doesn't hijack 'show invoices'", () => {
   assert.equal(routeCommand("throw a couple cams on there for three hundred bucks"), null);
   assert.equal(routeCommand("schedule install Thursday"), null);

@@ -45,6 +45,15 @@ export function routeCommand(text) {
     if (price != null) return { type: "edit_item", match: { name: m[1].replace(/s$/i, "").trim() }, set: { price } };
   }
 
+  // "rename camera 3 to Front Door", "rename the pool camera to Backyard Cam", "call the dvr Main Recorder"
+  // — rename an EXISTING line item. Distinct verbs from the price edit above; refuse if the new value is a $.
+  m = t.match(/^(?:rename|relabel|call)\s+(?:the\s+)?(.{2,40}?)\s+(?:to|as)\s+(.{1,80})$/i);
+  if (m && !/\$|\bpercent\b|%/.test(m[2])) {
+    const newName = m[2].trim().replace(/^["']|["'.]+$/g, "").trim();
+    const ref = m[1].replace(/s$/i, "").trim();
+    if (newName && ref) return { type: "edit_item", match: { name: ref }, set: { name: newName } };
+  }
+
   // "move the cameras section to the top", "put audio last", "move software up" — reorder whole sections.
   m = t.match(/^(?:move|put|send|bring)\s+(?:the\s+)?(.{2,40}?)\s+(?:section\s+)?(?:to\s+(?:the\s+)?)?(top|bottom|up|down|first|last)\b/i);
   if (m) {
