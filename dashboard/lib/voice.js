@@ -171,16 +171,18 @@ function pickMime() {
   return "";
 }
 
-// Voice Activity Detection + segment recording for Conversation Mode and dictation. ONE mic stream drives
-// both the live level bars and the capture: when real speech starts we record, when the speaker goes quiet
-// for `silenceMs` we stop and hand the audio clip to `onUtterance` (which transcribes it with language
-// auto-detect). It never records while the assistant is speaking (no self-echo) and signals a genuine
-// barge-in from sustained energy during playback. Returns { stop() } or null when the mic is unavailable.
-// `getPhase()` tells us the conversation phase ("listening" records · "speaking" only watches for barge-in ·
-// anything else just shows levels). Thresholds are deliberately conservative so background noise is ignored.
-export async function startVoiceCapture({ onLevels, onUtterance, onSpeechStart, onBargeIn, getPhase, silenceMs = 1900, minSpeechMs = 350, bars = 5 } = {}) {
+// Voice Activity Detection + segment recording for Conversation Mode and dictation. ONE mic stream (never
+// restarted between turns) drives both the live level bars and the capture. To avoid clipping the first word
+// (which would feed Whisper an incomplete sentence), we keep a recorder running for the WHOLE listening
+// window — so the clip always includes the onset — and only finalize + send it once the speaker has gone
+// quiet for `silenceMs`; the leading/ambient silence is harmless to Whisper. A clip with no real speech is
+// dropped (never transcribed). The recorder never runs while the assistant speaks (no self-echo); barge-in
+// comes from sustained energy on the echo-cancelled stream. `getPhase()` → "listening" records · "speaking"
+// only watches for barge-in · anything else just shows levels. `onDiag(event, data)` receives lifecycle
+// events for dev diagnostics (no audio, no transcript — just timings/sizes). Returns { stop() } or null.
+export async function startVoiceCapture({ onLevels, onUtterance, onSpeechStart, onSpeechEnd, onBargeIn, onDiag, getPhase, silenceMs = 1900, minSpeechMs = 300, maxIdleMs = 12000, bars = 5 } = {}) {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return null;
-  let stream, ctx, raf, recorder, chunks = [], segmentActive = false, speechStartedAt = 0, lastVoiceAt = 0, bargeCount = 0;
+  let stream, ctx, raf, recorder, chunks = [], recording = false, heardSpeech = false, speechStartedAt = 0, lastVoiceAt = 0, recStartedAt = 0, bargeCount = 0;
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -192,22 +194,25 @@ export async function startVoiceCapture({ onLevels, onUtterance, onSpeechStart, 
     const buf = new Uint8Array(analyser.frequencyBinCount);
     const band = Math.max(1, Math.floor(buf.length / bars));
     const mime = pickMime();
-    const START = 0.16, STOP = 0.10;   // start/keep-alive energy thresholds (0..1)
+    const START = 0.16, STOP = 0.10;   // onset / keep-alive energy thresholds (0..1); conservative = ignore noise
 
-    const startSegment = () => {
-      if (segmentActive) return;
-      chunks = []; segmentActive = true; speechStartedAt = Date.now();
+    // Start recording the moment we're listening — BEFORE speech — so the first word is never cut off.
+    const beginRec = () => {
+      if (recording) return;
+      chunks = []; heardSpeech = false; speechStartedAt = 0; recStartedAt = Date.now();
       try { recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); }
-      catch { try { recorder = new MediaRecorder(stream); } catch { segmentActive = false; return; } }
+      catch { try { recorder = new MediaRecorder(stream); } catch { return; } }
       recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
       recorder.onstop = () => {
-        const dur = Date.now() - speechStartedAt; segmentActive = false;
+        recording = false;
+        const speechMs = heardSpeech ? lastVoiceAt - speechStartedAt : 0;
         const blob = new Blob(chunks, { type: mime || "audio/webm" }); chunks = [];
-        if (dur >= minSpeechMs && blob.size > 1200) onUtterance?.(blob, dur);   // too short → noise, drop it
+        if (heardSpeech && speechMs >= minSpeechMs && blob.size > 1200) { onSpeechEnd?.({ speechMs, bytes: blob.size }); onUtterance?.(blob, speechMs); }
+        else onDiag?.("drop", { reason: heardSpeech ? "too-short" : "no-speech", bytes: blob.size, speechMs });
       };
-      try { recorder.start(); onSpeechStart?.(); } catch { segmentActive = false; }
+      try { recorder.start(); recording = true; } catch { recording = false; }
     };
-    const endSegment = () => { if (segmentActive && recorder) { try { recorder.stop(); } catch { segmentActive = false; } } };
+    const endRec = () => { if (recording && recorder) { try { recorder.stop(); } catch { recording = false; } } };
 
     const tick = () => {
       analyser.getByteFrequencyData(buf);
@@ -216,20 +221,25 @@ export async function startVoiceCapture({ onLevels, onUtterance, onSpeechStart, 
       onLevels?.(out);
       const level = Math.max(...out), now = Date.now();
       const phase = (getPhase && getPhase()) || "listening";
-      if (phase === "speaking") {
-        if (level > 0.5) { if (++bargeCount >= 4) { bargeCount = 0; onBargeIn?.(); } } else bargeCount = Math.max(0, bargeCount - 1);
-        if (segmentActive) endSegment();
-      } else if (phase === "listening") {
+      if (phase === "listening") {
         bargeCount = 0;
-        if (level > START) { lastVoiceAt = now; if (!segmentActive) startSegment(); }
-        else if (segmentActive && level < STOP && now - lastVoiceAt > silenceMs) endSegment();
-      } else { bargeCount = 0; if (segmentActive) endSegment(); }   // processing → hold
+        if (!recording) beginRec();
+        if (level > START) {
+          lastVoiceAt = now;
+          if (!heardSpeech) { heardSpeech = true; speechStartedAt = now; onSpeechStart?.(); onDiag?.("speech_start", {}); }
+        }
+        if (heardSpeech && level < STOP && now - lastVoiceAt > silenceMs) endRec();        // end of a real utterance
+        else if (!heardSpeech && now - recStartedAt > maxIdleMs) endRec();                  // recycle a long silent clip
+      } else if (phase === "speaking") {
+        if (recording) endRec();
+        if (level > 0.5) { if (++bargeCount >= 4) { bargeCount = 0; onDiag?.("barge_in", {}); onBargeIn?.(); } } else bargeCount = Math.max(0, bargeCount - 1);
+      } else { bargeCount = 0; if (recording) endRec(); }   // processing → hold
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return { stop() {
       try { cancelAnimationFrame(raf); } catch { /* noop */ }
-      try { if (segmentActive && recorder) recorder.stop(); } catch { /* noop */ }
+      try { if (recording && recorder) { recorder.onstop = null; recorder.stop(); } } catch { /* noop */ }
       try { stream.getTracks().forEach((t) => t.stop()); } catch { /* noop */ }
       try { ctx.close(); } catch { /* noop */ }
     } };

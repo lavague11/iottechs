@@ -65,6 +65,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
   const voiceRef = useRef(DEFAULT_VOICE);
+  const debugRef = useRef(false);    // dev-only conversation diagnostics (console)
+  const t0Ref = useRef(0);           // conversation start time, for relative diag timestamps
+  // Dev-only lifecycle trace: speech start/end, transcription, command submit, AI reply, listening resume.
+  // OFF by default; on in dev or when the owner sets localStorage.iot_ai_debug="on" (so it can be enabled on
+  // a real device). Never logs audio; transcript text is logged only to help diagnose a misheard command.
+  const diag = (ev, data) => { if (!debugRef.current) return; try { console.log(`%c[convo +${t0Ref.current ? Date.now() - t0Ref.current : 0}ms] ${ev}`, "color:#C9A96E;font-weight:600", data ?? ""); } catch {} };
   // ---- Conversation-mode state machine (refs so recognition callbacks see the latest, never a stale closure).
   const phaseRef = useRef("idle");       // idle | listening | processing | speaking
   const bufferRef = useRef("");          // finalized words accumulated for the current utterance
@@ -87,6 +93,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     setSupport(speechSupport());
     try { setVoiceOk(typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"); } catch {}
     try { const b = localStorage.getItem("iot_ai_bargein"); if (b === "off") bargeRef.current = false; } catch {}
+    try { debugRef.current = (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") || localStorage.getItem("iot_ai_debug") === "on"; } catch {}
     return () => { convRef.current = false; clearConvoTimers(); try { captureRef.current?.stop(); } catch {} try { dictCapRef.current?.stop(); } catch {} stopSay(); };
   }, []);
   // Remember the chosen neural voice per viewer.
@@ -251,7 +258,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     if (reset) { clearTimeout(nudgeTimerRef.current); clearTimeout(idleTimerRef.current); nudgeTimerRef.current = idleTimerRef.current = null; nudgedRef.current = false; }
     if (nudgeTimerRef.current || idleTimerRef.current) return;   // already counting down
     nudgeTimerRef.current = setTimeout(() => {
-      if (convRef.current && phaseRef.current === "listening" && !nudgedRef.current) { nudgedRef.current = true; speakReply(NUDGE, { keepIdle: true }); }
+      if (convRef.current && phaseRef.current === "listening" && !nudgedRef.current) { nudgedRef.current = true; diag("nudge"); speakReply(NUDGE, { keepIdle: true }); }
     }, CONVO.nudgeMs);
     idleTimerRef.current = setTimeout(() => {
       if (convRef.current && phaseRef.current === "listening") { sysMsg("muted", "Conversation ended."); endConversation(); }
@@ -262,13 +269,14 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const speakReply = (t, opts = {}) => {
     clearTimeout(endpointTimerRef.current); endpointTimerRef.current = null;
     if (!t) { afterSpeak(opts); return; }
-    phaseRef.current = "speaking";
+    phaseRef.current = "speaking"; diag("ai_respond", { text: t });
     say(t, () => afterSpeak(opts));
   };
   const afterSpeak = (opts = {}) => {
     if (!convRef.current) return;
     phaseRef.current = "listening";
     bufferRef.current = ""; interimRef.current = ""; setInterim("");
+    diag("listening_resume");
     armIdle(opts.keepIdle ? false : true);
   };
 
@@ -304,11 +312,15 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     if (!convRef.current || phaseRef.current !== "listening") return;
     phaseRef.current = "processing"; setThinking(true); setInterim("");
     clearTimeout(nudgeTimerRef.current); clearTimeout(idleTimerRef.current); nudgeTimerRef.current = idleTimerRef.current = null;   // don't count down while thinking
+    diag("transcribe_start", { bytes: blob?.size });
+    const t = Date.now();
     const r = await transcribeClip(blob).catch(() => null);
     setThinking(false);
     const text = (r?.text || "").trim();
-    if (!text || isNoise(text)) { phaseRef.current = "listening"; armIdle(true); return; }   // silence / noise → keep listening
+    diag("transcribe_done", { ms: Date.now() - t, lang: r?.language, text });
+    if (!text || isNoise(text)) { diag("drop_noise", { text }); phaseRef.current = "listening"; armIdle(true); return; }   // silence / noise → keep listening
     if (r?.language && LANGS[r.language]) langRef.current = r.language;   // understand + reply in the detected language
+    diag("command_submit", { text, lang: langRef.current });
     await handleUtterance(text);
   }
 
@@ -329,9 +341,11 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     const cap = await startVoiceCapture({
       getPhase: () => phaseRef.current,
       onLevels: (lv) => setLevels(lv),
-      onSpeechStart: () => { if (phaseRef.current === "listening") { armIdle(true); setInterim("…"); } },
+      onSpeechStart: () => { if (phaseRef.current === "listening") { armIdle(true); setInterim("…"); diag("speech_start"); } },
+      onSpeechEnd: (d) => diag("speech_end", d),
       onBargeIn: () => bargeIn(),
       onUtterance: (blob) => processClip(blob),
+      onDiag: (ev, d) => diag(ev, d),
       silenceMs: CONVO.endSilenceMs,
     });
     if (!cap) { sysMsg("err", "Microphone unavailable — allow mic access to use Conversation Mode."); convRef.current = false; setConvoOn(false); setListening(false); return; }
@@ -344,10 +358,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     convRef.current = true; setConvoOn(true);
     phaseRef.current = "listening";
     bufferRef.current = ""; interimRef.current = ""; nudgedRef.current = false;
+    t0Ref.current = Date.now(); diag("mic_start");
     startConvoCapture();
     armIdle(true);
   }
   function endConversation() {
+    diag("close");
     convRef.current = false; setConvoOn(false);
     phaseRef.current = "idle";
     clearConvoTimers();
