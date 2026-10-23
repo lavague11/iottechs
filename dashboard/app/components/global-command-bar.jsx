@@ -17,6 +17,12 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
   const modalRef = useRef(null);
 
   useEffect(() => { let live = true; aiStatusAction().then((s) => live && setEnabled(!!s?.enabled)).catch(() => {}); return () => { live = false; }; }, []);
+  // A conversation that navigated here (persistConvo) left a fresh hand-off — reopen the assistant so it can
+  // resume listening. We only PEEK; CommandSurface consumes the stash and restores the thread.
+  useEffect(() => {
+    if (!enabled) return;
+    try { const raw = sessionStorage.getItem("iot_ai_convo"); if (!raw) return; const d = JSON.parse(raw); if (d && d.mode === "chat" && Date.now() - (d.ts || 0) < 60000) setOpen(true); } catch {}
+  }, [enabled]);
   useEffect(() => {
     if (!enabled) return;
     const onKey = (e) => {

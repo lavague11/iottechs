@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { speechSupport, createRecognizer, readRecognition, speak, speakNeural, stopSpeaking, startMeter, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
+import { CONVO, NUDGE, LANGS, endpointDelay, isNoise, parseVoiceControl } from "../../../lib/voice-convo";
 
 // Reusable AI command surface — a minimal, conversational assistant: a compact composer (mode toggle +
 // one input) that stays small at rest and grows a chat thread ABOVE it only once there's a conversation,
@@ -38,7 +39,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const [turns, setTurns] = useState([]);             // transcript: { id, role, text?, res? }
   const [pending, setPending] = useState(null);       // { id, res } — the single actionable awaiting a decision
   const [support, setSupport] = useState({ recognition: false, synthesis: false });
-  const [mode, setMode] = useState("text");           // text | talk | chat
+  const [convoOn, setConvoOn] = useState(false);      // hands-free Conversation Mode on/off (drives the UI)
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [interim, setInterim] = useState("");         // live recognized words (talk/chat)
@@ -51,7 +52,6 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const meterRef = useRef(null);     // active mic meter
   const resRef = useRef(null);       // pending.res (for recognition callbacks)
   const pendRef = useRef(null);      // pending (for recognition callbacks)
-  const modeRef = useRef("text");
   const convRef = useRef(false);     // conversation session active
   const recentRef = useRef(null);    // last command summary → follow-up context
   // Rolling conversation memory: sticky context (active project, last customer, retrieved facts, pending
@@ -64,11 +64,30 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
   const voiceRef = useRef(DEFAULT_VOICE);
+  // ---- Conversation-mode state machine (refs so recognition callbacks see the latest, never a stale closure).
+  const phaseRef = useRef("idle");       // idle | listening | processing | speaking
+  const bufferRef = useRef("");          // finalized words accumulated for the current utterance
+  const interimRef = useRef("");          // the latest not-yet-final words (merged in when we endpoint)
+  const endpointTimerRef = useRef(null);  // fires when the speaker has gone quiet long enough → process
+  const nudgeTimerRef = useRef(null);     // 15s idle → "Anything else?"
+  const idleTimerRef = useRef(null);      // 30s idle → end the conversation
+  const nudgedRef = useRef(false);        // we only nudge once per idle stretch
+  const bargeRef = useRef(true);          // allow speaking to be interrupted by genuine speech (configurable)
+  const bargeCountRef = useRef(0);        // consecutive loud mic frames while speaking → a real barge-in
+  const onResultRef = useRef(null);       // always points at the freshest recognition handler (no stale closure)
+  const rateRef = useRef(1);              // spoken-reply playback rate ("slow down" / "speak faster")
+  const langRef = useRef("en");           // active language for recognition + spoken replies
+  const briefRef = useRef(false);         // "keep it short" preference
+  const lastReplyRef = useRef("");        // last spoken reply, for "repeat that"
   const nid = () => `t${Date.now()}_${idc.current++}`;
   // Stop any speech in flight — the neural audio AND the browser voice.
   const stopSay = () => { try { sayCtlRef.current?.stop(); } catch {} sayCtlRef.current = null; stopSpeaking(); };
 
-  useEffect(() => { setSupport(speechSupport()); return () => { try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSay(); }; }, []);
+  useEffect(() => {
+    setSupport(speechSupport());
+    try { const b = localStorage.getItem("iot_ai_bargein"); if (b === "off") bargeRef.current = false; } catch {}
+    return () => { convRef.current = false; clearConvoTimers(); try { recRef.current?.stop(); } catch {} try { meterRef.current?.stop(); } catch {} stopSay(); };
+  }, []);
   // Remember the chosen neural voice per viewer.
   useEffect(() => { try { const v = localStorage.getItem("iot_ai_voice"); if (v && VOICES.some((x) => x.id === v)) setVoice(v); } catch {} }, []);
   useEffect(() => { voiceRef.current = voice; }, [voice]);
@@ -87,7 +106,18 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     catch { setPreviewing(null); if (support.synthesis) speak(VOICE_SAMPLE, { onEnd: () => {} }); }
   }
   useEffect(() => { resRef.current = pending?.res || null; pendRef.current = pending; }, [pending]);
-  useEffect(() => { modeRef.current = mode; }, [mode]);
+  // Resume a conversation handed off across a navigation (persistConvo stashed it just before the reload):
+  // restore the thread + memory + voice and pick listening back up, so "open a project" doesn't end the chat.
+  useEffect(() => {
+    if (!support.recognition) return;
+    let data; try { const raw = sessionStorage.getItem("iot_ai_convo"); if (!raw) return; data = JSON.parse(raw); sessionStorage.removeItem("iot_ai_convo"); } catch { return; }
+    if (!data || data.mode !== "chat" || Date.now() - (data.ts || 0) > 60000) return;   // only a fresh hand-off
+    if (Array.isArray(data.turns) && data.turns.length) setTurns(data.turns.map((t) => ({ id: nid(), role: t.role, text: t.text, res: t.res })));
+    if (data.memory) memRef.current = { project: null, customer: null, facts: [], turns: [], ...data.memory, pending: null };
+    if (data.voice && VOICES.some((v) => v.id === data.voice)) { setVoice(data.voice); voiceRef.current = data.voice; }
+    const t = setTimeout(() => startConversation(), 400);   // mic permission already granted mid-conversation
+    return () => clearTimeout(t);
+  }, [support.recognition]);
   // Keep the newest turn / live state in view, input stays anchored below.
   useEffect(() => { const el = threadRef.current; if (el) el.scrollTop = el.scrollHeight; }, [turns, thinking, listening, speaking, interim, levels]);
   if (!enabled) return null;
@@ -167,9 +197,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     try { meterRef.current?.stop(); } catch {} meterRef.current = null;
     setListening(false); setLevels(null);
   }
-  function listen({ continuous = false, toField = false, onFinal, onEnd }) {
+  function listen({ continuous = false, toField = false, lang, onFinal, onEnd }) {
     stopListening(); stopSay();
-    const r = createRecognizer({ continuous, interim: true });
+    const r = createRecognizer({ continuous, interim: true, lang: lang || "en-US" });
     if (!r) { sysMsg("err", "Voice input isn’t available in this browser."); return null; }
     recRef.current = r; setListening(true); setInterim("");
     // Honest levels: tap the real mic. null (blocked/denied) → the UI shows a non-reactive listening state.
@@ -186,54 +216,194 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   // runs. sayCtlRef (declared above) holds the active neural controller so interrupt()/Stop can abort it.
   const say = (t, after) => {
     if (!t) { after?.(); return; }
+    lastReplyRef.current = t;   // remember for "repeat that"
     setSpeaking(true);
     let fired = false;
     const done = () => { if (fired) return; fired = true; setSpeaking(false); after?.(); };
-    speakNeural(t, { voice: voiceRef.current, onEnd: done })
+    speakNeural(t, { voice: voiceRef.current, rate: rateRef.current, lang: langRef.current, onEnd: done })
       .then((ctl) => { sayCtlRef.current = ctl; })
-      .catch(() => { if (support.synthesis) speak(t, { onEnd: done }); else done(); });   // neural failed → browser voice
+      .catch(() => { if (support.synthesis) speak(t, { rate: 0.97 * rateRef.current, onEnd: done }); else done(); });   // neural failed → browser voice
   };
   const interrupt = () => { stopSay(); setSpeaking(false); };
 
-  // text mode: dictation fills the field for review + send. talk/chat: interim shows in the live bubble.
-  function dictate() { if (listening) { stopListening(); return; } listen({ toField: true }); }
-  function pushToTalk() {
-    if (listening) { stopListening(); return; }
-    listen({ onFinal: async (t) => { const r = await runInterpret(t); say(summarizeForSpeech(r), () => { if (r && (r.kind === "write" || r.kind === "navigate" || r.kind === "disambiguate")) confirmListen(); }); } });
-  }
-  function confirmListen() {
-    listen({ onFinal: async (t) => {
-      const d = voiceDecision(t); if (!d) return;
-      if (d.kind === "confirm") { const out = await apply(); say(out?.message || "Done"); }
-      else if (d.kind === "cancel") { dismiss(); say("Cancelled"); }
-      else if (d.kind === "pick") { const r = resRef.current; const cand = r?.candidates?.[d.index - 1]; if (cand) { const nr = await pick(cand.id); say(summarizeForSpeech(nr), () => nr?.kind === "write" && confirmListen()); } }
-    } });
-  }
-  function toggleConversation() {
-    if (convRef.current) { convRef.current = false; stopListening(); stopSay(); setSpeaking(false); return; }
-    convRef.current = true;
-    const loop = () => {
-      if (!convRef.current) return;
-      listen({ continuous: false, onEnd: () => { if (convRef.current && !speaking && !busy) setTimeout(loop, 250); }, onFinal: async (t) => {
-        const p = pendRef.current;
-        const d = p ? voiceDecision(t) : null;
-        if (d?.kind === "confirm") { const out = await apply(); say(out?.message || "Done"); return; }
-        if (d?.kind === "cancel") { dismiss(); say("Cancelled"); return; }
-        if (d?.kind === "pick") { const cand = p?.res?.candidates?.[d.index - 1]; if (cand) { const nr = await pick(cand.id); say(summarizeForSpeech(nr)); } return; }
-        const r = await runInterpret(t); say(summarizeForSpeech(r));
-      } });
-    };
-    loop();
+  // The in-input microphone DICTATES only — it fills the field for review + send, never auto-submits.
+  // Hands-free voice is the separate Conversation Mode below. Dictation follows the active language too.
+  function dictate() { if (listening) { stopListening(); return; } listen({ toField: true, lang: LANGS[langRef.current]?.bcp47 }); }
+  // ---- Conversation mode: a real lifecycle (listening → processing → speaking → listening), not a
+  // one-command box. One continuous recognizer runs for the whole session; WE decide when an utterance is
+  // finished (a genuine pause), ignore noise/our own voice, keep the session open across actions, and close
+  // only on an explicit stop or after a real idle timeout.
+  const clearConvoTimers = () => {
+    clearTimeout(endpointTimerRef.current); endpointTimerRef.current = null;
+    clearTimeout(nudgeTimerRef.current); nudgeTimerRef.current = null;
+    clearTimeout(idleTimerRef.current); idleTimerRef.current = null;
+  };
+
+  // Arm the "still there?" nudge (15s) + auto-close (30s). `reset` (after real speech or a finished reply)
+  // restarts both clocks; otherwise (resuming after the nudge itself) we leave the close clock running so a
+  // silent user still times out. Timers only run while we're idly LISTENING — never mid-think or mid-speech.
+  const armIdle = (reset) => {
+    if (!convRef.current) return;
+    if (reset) { clearTimeout(nudgeTimerRef.current); clearTimeout(idleTimerRef.current); nudgeTimerRef.current = idleTimerRef.current = null; nudgedRef.current = false; }
+    if (nudgeTimerRef.current || idleTimerRef.current) return;   // already counting down
+    nudgeTimerRef.current = setTimeout(() => {
+      if (convRef.current && phaseRef.current === "listening" && !nudgedRef.current) { nudgedRef.current = true; speakReply(NUDGE, { keepIdle: true }); }
+    }, CONVO.nudgeMs);
+    idleTimerRef.current = setTimeout(() => {
+      if (convRef.current && phaseRef.current === "listening") { sysMsg("muted", "Conversation ended."); endConversation(); }
+    }, CONVO.closeMs);
+  };
+
+  // Speak a reply, then return to listening. Pauses the idle clocks while speaking; re-arms them after.
+  const speakReply = (t, opts = {}) => {
+    clearTimeout(endpointTimerRef.current); endpointTimerRef.current = null;
+    if (!t) { afterSpeak(opts); return; }
+    phaseRef.current = "speaking";
+    say(t, () => afterSpeak(opts));
+  };
+  const afterSpeak = (opts = {}) => {
+    if (!convRef.current) return;
+    phaseRef.current = "listening";
+    bufferRef.current = ""; interimRef.current = ""; setInterim("");
+    armIdle(opts.keepIdle ? false : true);
+  };
+
+  // A completed utterance → first the LOCAL conversation controls (no Claude call), then confirm/pick on a
+  // pending action, then the interpreter. Keeps the common "slow down / repeat / speak Spanish" off the API.
+  async function handleUtterance(t) {
+    const ctl = parseVoiceControl(t);
+    if (ctl) {
+      if (ctl.kind === "stop") { stopSay(); setSpeaking(false); phaseRef.current = "listening"; armIdle(true); return; }
+      if (ctl.kind === "wait") { stopSay(); setSpeaking(false); phaseRef.current = "listening"; armIdle(true); return; }
+      if (ctl.kind === "repeat") { speakReply(lastReplyRef.current || "There's nothing to repeat yet."); return; }
+      if (ctl.kind === "rate") { rateRef.current = Math.max(0.6, Math.min(1.6, rateRef.current + ctl.delta)); speakReply(ctl.delta < 0 ? "Okay, slower." : "Okay, faster."); return; }
+      if (ctl.kind === "brief") { briefRef.current = ctl.on; speakReply(ctl.on ? "Got it — I'll keep it short." : "Okay, more detail."); return; }
+      if (ctl.kind === "continue") { speakReply("Go ahead."); return; }
+      if (ctl.kind === "back") { persistConvo(); phaseRef.current = "speaking"; say("Going back.", () => { try { window.history.back(); } catch {} }); return; }
+      if (ctl.kind === "lang") { setLanguage(ctl.lang); const nm = LANGS[ctl.lang]?.label || "that language"; speakReply(`Okay, ${nm}.`); return; }
+    }
+    const p = pendRef.current;
+    const d = p ? voiceDecision(t) : null;
+    if (d?.kind === "confirm") { const out = await apply(); speakReply(out?.message || "Done."); return; }
+    if (d?.kind === "cancel") { dismiss(); speakReply("Cancelled."); return; }
+    if (d?.kind === "pick") { const cand = p?.res?.candidates?.[d.index - 1]; if (cand) { const nr = await pick(cand.id); speakReply(summarizeForSpeech(nr)); } else speakReply("Which one — say the number."); return; }
+    const r = await runInterpret(t);
+    // Keep the conversation open THROUGH an action: in conversation mode a navigation auto-opens (no "say
+    // yes" needed) and we persist the session so the page load doesn't end the conversation.
+    if (r?.kind === "navigate") { persistConvo(); phaseRef.current = "speaking"; say(`Opening ${r.label}.`, () => {}); onNavigate?.(r); return; }
+    speakReply(summarizeForSpeech(r));
   }
 
-  const onMic = () => (modeRef.current === "chat" ? toggleConversation() : modeRef.current === "talk" ? pushToTalk() : dictate());
-  const switchMode = (m) => { convRef.current = false; stopListening(); stopSay(); setSpeaking(false); setMode(m); };
-  const micLabel = mode === "chat" ? (listening || convRef.current ? "Stop conversation" : "Start conversation") : mode === "talk" ? (listening ? "Stop" : "Push to talk") : (listening ? "Stop dictation" : "Dictate");
+  // The pause detector: once the speaker has been quiet for endpointDelay(), treat the buffer as a finished
+  // thought. Ignores empty/noise so silence never triggers a response.
+  async function endpointFire() {
+    if (!convRef.current || phaseRef.current !== "listening") return;
+    const utter = ((bufferRef.current ? bufferRef.current + " " : "") + (interimRef.current || "")).trim();
+    bufferRef.current = ""; interimRef.current = "";
+    if (!utter || isNoise(utter)) { setInterim(""); return; }   // nothing real was said
+    phaseRef.current = "processing";
+    clearTimeout(nudgeTimerRef.current); clearTimeout(idleTimerRef.current); nudgeTimerRef.current = idleTimerRef.current = null;   // don't count down while thinking
+    setInterim("");
+    await handleUtterance(utter);
+  }
+
+  // A real user voice during playback — detected on the echo-cancelled mic meter, NOT speech-to-text (the
+  // recognizer would otherwise transcribe the assistant's own words). Interrupt and hand back to listening.
+  function bargeIn() {
+    if (phaseRef.current !== "speaking") return;
+    stopSay(); setSpeaking(false); phaseRef.current = "listening"; bufferRef.current = ""; interimRef.current = ""; bargeCountRef.current = 0;
+  }
+
+  function onConvoResult(e) {
+    // Never process speech-to-text while the assistant is talking — that's how it used to transcribe its own
+    // voice and "respond to silence". Barge-in is handled separately, from the mic meter.
+    if (phaseRef.current === "speaking") return;
+    if (phaseRef.current === "processing") return;    // mid-interpret → hold
+    const { interim: iv, final } = readRecognition(e);
+    if (final) bufferRef.current = (bufferRef.current ? bufferRef.current + " " : "") + final;
+    interimRef.current = iv || "";
+    const shown = ((bufferRef.current ? bufferRef.current + " " : "") + (iv || "")).trim();
+    setInterim(shown);
+    // (Re)start the end-of-speech countdown only when there's real speech, so a brief pause mid-sentence
+    // doesn't cut the user off and background noise doesn't start a response.
+    if (shown && !isNoise(shown)) {
+      armIdle(true);   // meaningful speech → reset the idle clocks
+      clearTimeout(endpointTimerRef.current);
+      endpointTimerRef.current = setTimeout(() => { endpointFire(); }, endpointDelay(shown));
+    }
+  }
+
+  // One long-lived recognizer for the whole conversation. Chrome stops it periodically (silence / ~60s) —
+  // we restart while the session is live so listening never silently dies.
+  // Switch the conversation language on command ("speak Spanish"). Browser speech recognition LOCKS its
+  // language per session, so we restart the recognizer on the new BCP-47 tag; spoken replies follow langRef.
+  function setLanguage(lang) {
+    if (!LANGS[lang] || langRef.current === lang) { langRef.current = LANGS[lang] ? lang : langRef.current; return; }
+    langRef.current = lang;
+    if (convRef.current) { try { if (recRef.current) recRef.current.onend = null; recRef.current?.stop(); } catch {} recRef.current = null; startConvoRecognizer(); }
+  }
+
+  function startConvoRecognizer() {
+    if (!convRef.current) return;
+    const r = createRecognizer({ continuous: true, interim: true, lang: LANGS[langRef.current]?.bcp47 || "en-US" });
+    if (!r) { sysMsg("err", "Voice input isn’t available in this browser."); convRef.current = false; return; }
+    recRef.current = r; setListening(true); setInterim("");
+    startMeter(5).then((m) => {
+      if (!recRef.current) { m?.stop(); return; }
+      meterRef.current = m;
+      if (m) { setLevels([0, 0, 0, 0, 0]); m.onLevels((lv) => {
+        setLevels(lv);
+        // Barge-in: a few consecutive loud frames while speaking = a real voice (the assistant's own audio is
+        // cancelled out of this stream), so stop and listen. Below threshold decays the counter.
+        if (phaseRef.current === "speaking" && bargeRef.current) {
+          if (Math.max(...lv) > 0.55) { if (++bargeCountRef.current >= 4) bargeIn(); } else bargeCountRef.current = Math.max(0, bargeCountRef.current - 1);
+        } else bargeCountRef.current = 0;
+      }); }
+    }).catch(() => {});
+    r.onresult = (e) => onResultRef.current?.(e);   // call the latest handler, never a closure captured at start
+    r.onerror = (e) => { if (e?.error === "not-allowed" || e?.error === "service-not-allowed") { sysMsg("err", "Microphone blocked — allow mic access to use voice."); convRef.current = false; setListening(false); } };
+    r.onend = () => {
+      try { meterRef.current?.stop(); } catch {} meterRef.current = null; setLevels(null);
+      if (convRef.current) { setTimeout(() => { if (convRef.current && recRef.current === r) startConvoRecognizer(); }, 250); }
+      else { recRef.current = null; setListening(false); }
+    };
+    try { r.start(); } catch { setListening(false); }
+  }
+
+  function startConversation() {
+    if (convRef.current) return;
+    if (listening) stopListening();   // a dictation mic can't run at the same time
+    convRef.current = true; setConvoOn(true);
+    phaseRef.current = "listening";
+    bufferRef.current = ""; interimRef.current = ""; nudgedRef.current = false;
+    startConvoRecognizer();
+    armIdle(true);
+  }
+  function endConversation() {
+    convRef.current = false; setConvoOn(false);
+    phaseRef.current = "idle";
+    clearConvoTimers();
+    stopListening();
+    stopSay(); setSpeaking(false);
+  }
+  function toggleConversation() { if (convRef.current) endConversation(); else startConversation(); }
+
+  // Keep the conversation alive across a navigation (the hard reload a deep-link needs): stash the thread,
+  // memory and voice so the surface re-opens listening on the next page. Read back in the mount effect.
+  function persistConvo() {
+    try {
+      const slim = turns.slice(-12).map((t) => ({ role: t.role, text: t.text, res: t.res }));
+      sessionStorage.setItem("iot_ai_convo", JSON.stringify({ ts: Date.now(), mode: "chat", turns: slim, memory: memRef.current, voice: voiceRef.current }));
+    } catch {}
+  }
+
+  const dictLabel = listening ? "Stop dictation" : "Dictate";
   const live = listening || thinking || speaking;
   const hasThread = turns.length > 0 || live;
+  onResultRef.current = onConvoResult;   // bind the recognizer to this render's handlers (fresh state/refs)
 
   return (
-    <div className={`aicb aicb-${mode}`}>
+    <div className={`aicb${convoOn ? " aicb-convo" : ""}`}>
       <style>{CSS}</style>
 
       {hasThread && (
@@ -290,7 +460,8 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
               ) : (
                 <>
                   {levels ? <span className="aicb-bars">{(levels.length ? levels : [0, 0, 0, 0, 0]).map((v, i) => <i key={i} style={{ transform: `scaleY(${0.16 + Math.min(1, v) * 0.84})` }} />)}</span> : <span className="aicb-livedot" aria-hidden="true" />}
-                  <span className="aicb-vslbl">{interim || (mode === "chat" ? "Listening — say a command…" : "Listening…")}</span>
+                  <span className="aicb-vslbl">{interim || (convoOn ? "Listening…" : "Listening — dictating…")}</span>
+                  {convoOn && <button type="button" className="aicb-vstop" onClick={endConversation}>End</button>}
                 </>
               )}
             </div>
@@ -300,12 +471,11 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
 
       {support.recognition && (
         <div className="aicb-toprow">
-          <div className="aicb-modes" role="tablist" aria-label="Mode">
-            {[["text", "Text", Keyboard], ["talk", "Talk", MicIcon], ["chat", "Conversation", Chat]].map(([m, lbl, Ico]) => (
-              <button key={m} type="button" role="tab" aria-selected={mode === m} className={`aicb-mode${mode === m ? " on" : ""}`} onClick={() => switchMode(m)}><Ico />{lbl}</button>
-            ))}
-          </div>
-          {/* Neural voice picker — audition + choose the spoken voice (talk/conversation). */}
+          {/* One dedicated hands-free control — no mode tabs. */}
+          <button type="button" className={`aicb-convobtn${convoOn ? " on" : ""}`} aria-pressed={convoOn} onClick={toggleConversation}>
+            <Chat />{convoOn ? "End conversation" : "Conversation"}
+          </button>
+          {/* Neural voice picker — audition + choose the spoken voice. */}
           <div className="aicb-voicewrap">
             <button type="button" className="aicb-voicebtn" aria-haspopup="menu" aria-expanded={voiceOpen} title="Assistant voice" onClick={() => setVoiceOpen((o) => !o)}>
               <Speaker /><span className="aicb-voicename">{voiceLabel(voice)}</span>
@@ -332,14 +502,16 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
         </div>
       )}
 
-      <form className="aicb-row" onSubmit={submit}>
-        <span className="aicb-spark" aria-hidden="true"><Spark /></span>
-        <input className="aicb-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening && mode === "text" ? "Listening…" : placeholder} aria-label="Ask the assistant" disabled={busy} />
-        {support.recognition && (
-          <button type="button" className={`aicb-mic${listening ? " live" : ""}${speaking ? " speaking" : ""}`} aria-label={micLabel} title={micLabel} onClick={onMic} disabled={busy && !listening}><MicIcon /></button>
-        )}
-        <button type="submit" className="aicb-go" disabled={busy || !text.trim()} aria-label="Send"><Arrow /></button>
-      </form>
+      {!convoOn && (
+        <form className="aicb-row" onSubmit={submit}>
+          <span className="aicb-spark" aria-hidden="true"><Spark /></span>
+          <input className="aicb-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : placeholder} aria-label="Ask the assistant" disabled={busy} />
+          {support.recognition && (
+            <button type="button" className={`aicb-mic${listening ? " live" : ""}`} aria-label={dictLabel} title={dictLabel} onClick={dictate} disabled={busy && !listening}><MicIcon /></button>
+          )}
+          <button type="submit" className="aicb-go" disabled={busy || !text.trim()} aria-label="Send"><Arrow /></button>
+        </form>
+      )}
     </div>
   );
 }
@@ -348,7 +520,6 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
 const Spark = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /></svg>;
 const Arrow = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11l5-5 5 5M12 6v13" /></svg>;
 const MicIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>;
-const Keyboard = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" /></svg>;
 const Chat = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
 const Speaker = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" /></svg>;
 
@@ -398,7 +569,6 @@ const CSS = `
 @keyframes aicb-blink{0%,100%{opacity:.3}50%{opacity:1}}
 /* composer */
 .aicb-toprow{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.aicb-modes{display:inline-flex;gap:2px;background:var(--dv-paper,#F1F1EE);border-radius:999px;padding:2px;align-self:flex-start}
 .aicb-voicewrap{position:relative;flex:none}
 .aicb-voicebtn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-bg,#fff);color:#6a7085;border-radius:999px;font-size:11.5px;padding:4px 9px;cursor:pointer;font-family:inherit}
 .aicb-voicebtn:hover{border-color:#C9A96E;color:var(--dv-ink,#1b1f2a)}
@@ -415,9 +585,11 @@ const CSS = `
 .aicb-voicetx small{font-size:10.5px;color:#9aa0ab}
 .aicb-voiceplay{flex:none;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;border:0;background:var(--dv-paper,#F1F1EE);color:#10204a;border-radius:7px;cursor:pointer}
 .aicb-voiceplay:hover{background:#C9A96E;color:#fff}
-.aicb-mode{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;color:#6a7085;border-radius:999px;font-size:11.5px;padding:5px 11px;cursor:pointer;font-family:inherit}
-.aicb-mode svg{opacity:.8}
-.aicb-mode.on{background:var(--dv-bg,#fff);color:var(--dv-ink,#10204a);box-shadow:0 1px 3px rgba(16,32,74,.12);font-weight:600}
+.aicb-convobtn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-bg,#fff);color:#6a7085;border-radius:999px;font-size:11.5px;font-weight:600;padding:5px 12px;cursor:pointer;font-family:inherit}
+.aicb-convobtn svg{opacity:.85}
+.aicb-convobtn:hover{border-color:#C9A96E;color:var(--dv-ink,#1b1f2a)}
+.aicb-convobtn.on{background:#D64545;border-color:#D64545;color:#fff}
+.aicb-convobtn.on svg{opacity:1}
 .aicb-row{display:flex;align-items:center;gap:8px;background:var(--dv-bg,#fff);border:1px solid var(--dv-line,#E4E4DF);border-radius:13px;padding:7px 9px 7px 12px;transition:border-color .15s,box-shadow .15s}
 .aicb-row:focus-within{border-color:#C9A96E;box-shadow:0 0 0 3px rgba(201,169,110,.14)}
 .aicb-spark{color:#C9A96E;display:flex}
@@ -434,8 +606,7 @@ const CSS = `
   :root:not([data-theme="light"]) .aicb-user{background:#2a52b8}
   :root:not([data-theme="light"]) .aicb-asst,:root:not([data-theme="light"]) .aicb-in,:root:not([data-theme="light"]) .aicb-prev{color:#e7e9ee}
   :root:not([data-theme="light"]) .aicb-cand{background:#1a1d27;color:#e7e9ee}
-  :root:not([data-theme="light"]) .aicb-modes{background:#1a1d27}
-  :root:not([data-theme="light"]) .aicb-mode.on{background:#262a36;color:#fff}
+  :root:not([data-theme="light"]) .aicb-convobtn{background:#14171f;color:#e7e9ee;border-color:#2a2f3a}
   :root:not([data-theme="light"]) .aicb-voicebtn,:root:not([data-theme="light"]) .aicb-voicemenu{background:#14171f;color:#e7e9ee}
   :root:not([data-theme="light"]) .aicb-voicetx b{color:#e7e9ee}
   :root:not([data-theme="light"]) .aicb-voiceopt:hover,:root:not([data-theme="light"]) .aicb-voiceplay{background:#262a36}

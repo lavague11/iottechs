@@ -79,18 +79,19 @@ function preferredVoice() {
 // so the caller can fall back to the browser voice. Returns a controller with stop() for interrupt/Stop.
 // onEnd fires once, when playback finishes (or stop() is called). Never calls onEnd on failure — the throw
 // is the signal. `text` is the finished reply; the server caps its length.
-export async function speakNeural(text, { voice, onEnd } = {}) {
+export async function speakNeural(text, { voice, rate, lang, onEnd } = {}) {
   if (typeof window === "undefined" || !String(text || "").trim()) throw new Error("no-neural");
   const controller = new AbortController();
   const res = await fetch("/api/tts", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text: String(text), ...(voice ? { voice } : {}) }), signal: controller.signal,
+    body: JSON.stringify({ text: String(text), ...(voice ? { voice } : {}), ...(lang ? { lang } : {}) }), signal: controller.signal,
   });
   if (!res.ok) throw new Error("tts-" + res.status);
   const blob = await res.blob();
   if (!blob || blob.size < 128) throw new Error("tts-empty");
   const url = URL.createObjectURL(blob);
   const audio = new Audio(url);
+  if (rate && rate > 0) { try { audio.playbackRate = Math.max(0.6, Math.min(1.6, rate)); } catch {} }   // "slow down" / "speak faster"
   let done = false;
   const finish = () => { if (done) return; done = true; try { URL.revokeObjectURL(url); } catch {} onEnd?.(); };
   audio.onended = finish;
@@ -123,7 +124,8 @@ export async function startMeter(bars = 5) {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) return null;
   let stream, ctx, raf;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // echoCancellation keeps the assistant's own spoken reply out of the mic levels (less false "speech").
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { stream.getTracks().forEach((t) => t.stop()); return null; }
     ctx = new AC();
