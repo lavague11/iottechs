@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { speechSupport, speak, speakNeural, stopSpeaking, startVoiceCapture, transcribeClip, summarizeForSpeech, voiceDecision } from "../../../lib/voice";
 import { CONVO, NUDGE, LANGS, isNoise, parseVoiceControl } from "../../../lib/voice-convo";
+import AICore from "../../components/ai-core";
 
 // Reusable AI command surface — a minimal, conversational assistant: a compact composer (mode toggle +
 // one input) that stays small at rest and grows a chat thread ABOVE it only once there's a conversation,
@@ -32,7 +33,10 @@ const VOICES = [
 const VOICE_SAMPLE = "Hi, I'm your IOT Techs assistant. I can open projects, edit proposals, and more.";
 const voiceLabel = (id) => (VOICES.find((v) => v.id === id) || VOICES[0]).label;
 
-export default function CommandSurface({ enabled = true, placeholder = "Ask anything…", interpret, onNavigate, onApply, onPick }) {
+export default function CommandSurface({ enabled = true, placeholder = "Ask anything…", dock = "panel", projectName = "", interpret, onNavigate, onApply, onPick }) {
+  const corebar = dock === "corebar";
+  const [expanded, setExpanded] = useState(false);   // corebar: slim bar open vs collapsed to the core
+  const [typing, setTyping] = useState(false);        // corebar: text input vs voice status
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [thinking, setThinking] = useState(false);   // interpret in flight → "Thinking…"
@@ -62,6 +66,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const pushTurn = (role, text) => { const t = String(text || "").slice(0, 200); if (!t) return; const m = memRef.current; m.turns.push({ role, text: t }); if (m.turns.length > 16) m.turns = m.turns.slice(-16); };
   const addFact = (f) => { const m = memRef.current; for (const x of [].concat(f || [])) if (x && !m.facts.includes(x)) m.facts.push(x); if (m.facts.length > 8) m.facts = m.facts.slice(-8); };
   const threadRef = useRef(null);
+  const barInRef = useRef(null);     // corebar text input
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
   const voiceRef = useRef(DEFAULT_VOICE);
@@ -114,6 +119,16 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     catch { setPreviewing(null); if (support.synthesis) speak(VOICE_SAMPLE, { onEnd: () => {} }); }
   }
   useEffect(() => { resRef.current = pending?.res || null; pendRef.current = pending; }, [pending]);
+  // corebar: ⌘K / Ctrl-K toggles the slim bar open/closed (Esc minimizes). Self-contained so the shell stays thin.
+  useEffect(() => {
+    if (!corebar || !enabled) return;
+    const onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "k" || e.key === "K")) { e.preventDefault(); setExpanded((o) => !o); }
+      else if (e.key === "Escape" && expanded) setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [corebar, enabled, expanded]);
   // Resume a conversation handed off across a navigation (persistConvo stashed it just before the reload):
   // restore the thread + memory + voice and pick listening back up, so "open a project" doesn't end the chat.
   useEffect(() => {
@@ -123,6 +138,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     if (Array.isArray(data.turns) && data.turns.length) setTurns(data.turns.map((t) => ({ id: nid(), role: t.role, text: t.text, res: t.res })));
     if (data.memory) memRef.current = { project: null, customer: null, facts: [], turns: [], ...data.memory, pending: null };
     if (data.voice && VOICES.some((v) => v.id === data.voice)) { setVoice(data.voice); voiceRef.current = data.voice; }
+    if (corebar) setExpanded(true);   // reopen the slim bar on the new page
     const t = setTimeout(() => startConversation(), 400);   // mic permission already granted mid-conversation
     return () => clearTimeout(t);
   }, [voiceOk]);
@@ -137,13 +153,22 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   function present(r) {
     if (!r) return null;
     if (r.error) { sysMsg("err", r.error); setPending(null); memRef.current.pending = null; pushTurn("assistant", r.error); return r; }
-    if (r.kind === "navigate" || r.kind === "write" || r.kind === "disambiguate") {
+    // Safe navigation executes immediately in the corebar (no "open?" card); writes still confirm.
+    if (r.kind === "navigate") {
+      const mm = String(r.href || "").match(/\/project\/([A-Za-z0-9]+)/); if (mm) { memRef.current.project = { accessId: mm[1], name: r.label || mm[1] }; memRef.current.customer = r.label || memRef.current.customer; }
+      memRef.current.pending = null;
+      if (corebar) { if (convRef.current) persistConvo(); sysMsg("ok", `Opening ${r.label}.`); pushTurn("assistant", `(open ${r.label})`); onNavigate?.(r); return r; }
+      const id = nid();
+      setTurns((ts) => [...ts, { id, role: "assistant", res: r }]); setPending({ id, res: r });
+      pushTurn("assistant", `(open ${r.label})`);
+      return r;
+    }
+    if (r.kind === "write" || r.kind === "disambiguate") {
       const id = nid();
       setTurns((ts) => [...ts, { id, role: "assistant", res: r }]);
       setPending({ id, res: r });
-      memRef.current.pending = r.kind === "navigate" ? null : (r.preview?.title || "a pending change");
-      if (r.kind === "navigate") { const mm = String(r.href || "").match(/\/project\/([A-Za-z0-9]+)/); if (mm) { memRef.current.project = { accessId: mm[1], name: r.label || mm[1] }; memRef.current.customer = r.label || memRef.current.customer; } }
-      pushTurn("assistant", r.kind === "navigate" ? `(open ${r.label})` : (r.preview?.title || "(pending change)"));
+      memRef.current.pending = r.preview?.title || "a pending change";
+      pushTurn("assistant", r.preview?.title || "(pending change)");
       return r;
     }
     // Everything else — an answer, a clarification, or a miss — renders as an assistant line (no navigation).
@@ -244,11 +269,11 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   // one-command box. One continuous recognizer runs for the whole session; WE decide when an utterance is
   // finished (a genuine pause), ignore noise/our own voice, keep the session open across actions, and close
   // only on an explicit stop or after a real idle timeout.
-  const clearConvoTimers = () => {
+  function clearConvoTimers() {   // function declaration (hoisted) — the mount-cleanup effect runs before this line
     clearTimeout(endpointTimerRef.current); endpointTimerRef.current = null;
     clearTimeout(nudgeTimerRef.current); nudgeTimerRef.current = null;
     clearTimeout(idleTimerRef.current); idleTimerRef.current = null;
-  };
+  }
 
   // Arm the "still there?" nudge (15s) + auto-close (30s). `reset` (after real speech or a finished reply)
   // restarts both clocks; otherwise (resuming after the nudge itself) we leave the close clock running so a
@@ -384,6 +409,78 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const dictLabel = listening ? "Stop dictation" : "Dictate";
   const live = listening || thinking || speaking;
   const hasThread = turns.length > 0 || live;
+  // Core/bar derivations (corebar dock): one word of status + the latest assistant line.
+  const coreState = speaking ? "speaking" : thinking ? "thinking" : (listening || convoOn) ? "listening" : "idle";
+  const lastMsg = [...turns].reverse().find((t) => t.role === "assistant" && t.res?.kind === "message");
+  const statusLine = speaking ? "Speaking…" : thinking ? "Thinking…" : listening ? (interim && interim !== "…" ? interim : "Listening…") : (lastMsg?.res?.text || "");
+
+  // corebar controls — reuse the existing conversation lifecycle; no second system.
+  const coreTap = () => {
+    if (!expanded) { setExpanded(true); if (!convRef.current && !typing) startConversation(); return; }
+    if (typing) { setTyping(false); if (!convRef.current) startConversation(); return; }
+    if (convRef.current) endConversation(); else startConversation();
+  };
+  const toType = () => { setTyping(true); if (convRef.current) endConversation(); setTimeout(() => barInRef.current?.focus(), 60); };
+  const toVoice = () => { setTyping(false); if (!convRef.current) startConversation(); };
+  const minimizeBar = () => setExpanded(false);                                  // keep the conversation alive
+  const closeBar = () => { endConversation(); setTyping(false); setExpanded(false); };
+
+  // The ultra-minimal floating assistant: a tiny animated AI Core that expands into a slim horizontal bar.
+  // Reuses every handler above — same interpreter, voice lifecycle, memory, auth. No second system.
+  function renderCorebar() {
+    const pend = pending?.res;
+    return (
+      <div className={`aicore-dock${expanded ? " open" : ""}`} data-state={coreState}>
+        <style>{COREBAR_CSS}</style>
+        <div className="aicore-shell">
+          <button type="button" className="aicore-btn" onClick={coreTap}
+            aria-label={expanded ? (convoOn ? "Stop listening" : "Start conversation") : "Open the assistant"} title="Assistant (⌘K)">
+            <AICore state={coreState} levels={levels} active={expanded || coreState !== "idle"} size={36} />
+            {convoOn && !expanded && <span className="aicore-dot" aria-hidden="true" />}
+          </button>
+
+          {expanded && (
+            <div className="aicore-bar" role="region" aria-label="Assistant">
+              {typing ? (
+                <form className="aicore-type" onSubmit={submit}>
+                  <input ref={barInRef} className="aicore-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} aria-label="Ask the assistant" disabled={busy} />
+                  <button type="submit" className="aicore-ic" disabled={busy || !text.trim()} aria-label="Send"><Arrow /></button>
+                </form>
+              ) : (
+                <div className="aicore-live">
+                  {projectName && coreState === "idle" && !statusLine ? <span className="aicore-ctx">{projectName}</span> : null}
+                  <span className={`aicore-status s-${coreState}`}>{statusLine || (convoOn ? "Listening…" : "Tap the core to talk")}</span>
+                </div>
+              )}
+              <div className="aicore-ctrls">
+                {typing
+                  ? <button type="button" className="aicore-ic" onClick={toVoice} aria-label="Voice" title="Voice"><MicIcon /></button>
+                  : <button type="button" className="aicore-ic" onClick={toType} aria-label="Type" title="Type"><Keyboard /></button>}
+                <button type="button" className="aicore-ic" onClick={minimizeBar} aria-label="Minimize" title="Minimize"><Minus /></button>
+                <button type="button" className="aicore-ic" onClick={closeBar} aria-label="End" title="End">×</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Compact confirm — only when a sensitive write/disambiguation is pending. */}
+        {expanded && pend && (pend.kind === "write" || pend.kind === "disambiguate") && (
+          <div className="aicore-confirm">
+            {pend.kind === "write" ? (
+              <>
+                <div className="aicore-cprev"><b>{pend.preview.title}</b>{pend.preview.before != null && pend.preview.after != null && <span> · {money(pend.preview.before)} → <b>{money(pend.preview.after)}</b></span>}</div>
+                <div className="aicore-cacts"><button type="button" className="aicore-apply" onClick={apply} disabled={busy}>Apply</button><button type="button" className="aicore-cancel" onClick={dismiss} disabled={busy}>Cancel</button></div>
+              </>
+            ) : (
+              <div className="aicore-cands">{pend.candidates.map((c, i) => <button key={c.id} type="button" className="aicore-cand" onClick={() => pick(c.id)} disabled={busy}><span>{i + 1}</span>{c.label}</button>)}</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (corebar) return renderCorebar();
 
   return (
     <div className={`aicb${convoOn ? " aicb-convo" : ""}`}>
@@ -504,8 +601,47 @@ const Spark = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" 
 const Arrow = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11l5-5 5 5M12 6v13" /></svg>;
 const MicIcon = () => <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>;
 const Chat = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>;
+const Keyboard = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8" /></svg>;
+const Minus = () => <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M5 12h14" /></svg>;
 const Speaker = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 5 6 9H2v6h4l5 4z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14" /></svg>;
 
+// ---- Ultra-minimal floating "AI Core" dock (bottom-left) ----
+const COREBAR_CSS = `
+.aicore-dock{position:fixed;left:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-family:inherit}
+.aicore-shell{display:flex;align-items:center;gap:0}
+.aicore-btn{position:relative;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:#0B0F1A;box-shadow:0 6px 20px rgba(11,15,26,.45),0 0 0 1px rgba(201,169,110,.32);cursor:pointer;display:grid;place-items:center;overflow:hidden;transition:transform .16s,box-shadow .16s}
+.aicore-btn:hover{transform:translateY(-1px) scale(1.04);box-shadow:0 10px 26px rgba(11,15,26,.5),0 0 0 1px rgba(201,169,110,.55)}
+.aicore-btn:focus-visible{outline:2px solid #C9A96E;outline-offset:2px}
+.aicore-dot{position:absolute;top:3px;right:3px;width:8px;height:8px;border-radius:50%;background:#D64545;box-shadow:0 0 0 2px #0B0F1A;animation:aicore-pulse 1.3s ease-in-out infinite}
+@keyframes aicore-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+.aicore-bar{display:flex;align-items:center;gap:6px;margin-left:8px;min-width:220px;max-width:min(78vw,300px);height:40px;padding:0 6px 0 12px;background:#0B0F1A;color:#EDE4D3;border-radius:999px;box-shadow:0 8px 24px rgba(11,15,26,.45),0 0 0 1px rgba(201,169,110,.3);animation:aicore-grow .2s ease}
+@keyframes aicore-grow{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+.aicore-live{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;line-height:1.15}
+.aicore-ctx{font-size:9.5px;letter-spacing:.4px;text-transform:uppercase;color:#C9A96E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aicore-status{font-size:12.5px;color:#EDE4D3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aicore-status.s-listening{color:#EDE4D3}.aicore-status.s-thinking,.aicore-status.s-speaking{color:#C9A96E}
+.aicore-type{flex:1;min-width:0;display:flex;align-items:center;gap:4px}
+.aicore-in{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:13px;color:#FAF8F4;font-family:inherit}
+.aicore-in::placeholder{color:#7b8296}
+.aicore-ctrls{flex:none;display:flex;align-items:center;gap:1px}
+.aicore-ic{flex:none;width:28px;height:28px;border:0;background:transparent;color:#9aa6bd;border-radius:7px;display:grid;place-items:center;cursor:pointer;font-size:17px;line-height:1}
+.aicore-ic:hover:not(:disabled){background:rgba(201,169,110,.16);color:#EDE4D3}
+.aicore-ic:disabled{opacity:.4;cursor:default}
+.aicore-confirm{max-width:min(82vw,320px);margin-left:52px;background:#0B0F1A;color:#EDE4D3;border-radius:12px;padding:9px 11px;box-shadow:0 8px 24px rgba(11,15,26,.5),0 0 0 1px rgba(201,169,110,.3);display:flex;flex-direction:column;gap:7px}
+.aicore-cprev{font-size:12px}.aicore-cprev b{color:#FAF8F4}
+.aicore-cacts{display:flex;gap:6px}
+.aicore-apply{border:0;border-radius:7px;background:#1d7a3a;color:#fff;font-size:12px;font-weight:600;padding:6px 14px;cursor:pointer}
+.aicore-cancel{border:0;background:transparent;color:#9aa6bd;font-size:12px;padding:6px 8px;cursor:pointer}
+.aicore-cands{display:flex;flex-direction:column;gap:4px}
+.aicore-cand{display:flex;align-items:center;gap:7px;border:1px solid rgba(201,169,110,.25);background:transparent;color:#EDE4D3;border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;text-align:left}
+.aicore-cand span{flex:none;width:17px;height:17px;border-radius:50%;background:#C9A96E;color:#0B0F1A;font-size:10px;display:grid;place-items:center}
+.aicore-cand:hover:not(:disabled){border-color:#C9A96E}
+@media (max-width:560px){
+  .aicore-dock{left:12px;bottom:calc(12px + env(safe-area-inset-bottom))}
+  .aicore-bar{max-width:calc(100vw - 92px)}
+}
+@media (prefers-reduced-motion: reduce){.aicore-btn,.aicore-bar,.aicore-dot{animation:none;transition:none}}
+`;
 const CSS = `
 .aicb{display:flex;flex-direction:column;gap:9px}
 .aicb-thread{display:flex;flex-direction:column;gap:9px;max-height:min(46vh,340px);overflow-y:auto;padding:2px 1px 3px;scroll-behavior:smooth}
