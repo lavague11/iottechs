@@ -32,6 +32,19 @@ const VOICES = [
 ];
 const VOICE_SAMPLE = "Hi, I'm your IOT Techs assistant. I can open projects, edit proposals, and more.";
 const voiceLabel = (id) => (VOICES.find((v) => v.id === id) || VOICES[0]).label;
+// Compact one-line detail for the diagnostics overlay (transcript already truncated upstream).
+function diagDetail(d) {
+  if (d == null) return "";
+  if (typeof d !== "object") return String(d);
+  const p = [];
+  if (d.lang) p.push(d.lang);
+  if (d.speechMs != null) p.push(d.speechMs + "ms");
+  else if (d.ms != null) p.push(d.ms + "ms");
+  if (d.bytes != null) p.push(Math.round(d.bytes / 1024) + "KB");
+  if (d.reason) p.push(d.reason);
+  if (d.text) p.push(`"${d.text}"`);
+  return p.join(" ");
+}
 
 export default function CommandSurface({ enabled = true, placeholder = "Ask anything…", dock = "panel", projectName = "", interpret, onNavigate, onApply, onPick }) {
   const corebar = dock === "corebar";
@@ -48,6 +61,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [interim, setInterim] = useState("");         // live recognized words (talk/chat)
+  const [diagLog, setDiagLog] = useState([]);         // on-screen diagnostics ring buffer (opt-in, mobile)
   const [voice, setVoice] = useState(DEFAULT_VOICE);  // neural voice id (per-viewer, persisted)
   const [voiceOpen, setVoiceOpen] = useState(false);  // voice-picker popover
   const [previewing, setPreviewing] = useState(null); // voice id currently playing a sample
@@ -70,12 +84,20 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
   const voiceRef = useRef(DEFAULT_VOICE);
-  const debugRef = useRef(false);    // dev-only conversation diagnostics (console)
+  const debugRef = useRef(false);    // conversation diagnostics → console
+  const overlayRef = useRef(false);  // conversation diagnostics → on-screen overlay (mobile testing)
   const t0Ref = useRef(0);           // conversation start time, for relative diag timestamps
-  // Dev-only lifecycle trace: speech start/end, transcription, command submit, AI reply, listening resume.
-  // OFF by default; on in dev or when the owner sets localStorage.iot_ai_debug="on" (so it can be enabled on
-  // a real device). Never logs audio; transcript text is logged only to help diagnose a misheard command.
-  const diag = (ev, data) => { if (!debugRef.current) return; try { console.log(`%c[convo +${t0Ref.current ? Date.now() - t0Ref.current : 0}ms] ${ev}`, "color:#C9A96E;font-weight:600", data ?? ""); } catch {} };
+  // Lifecycle trace: speech start/end, transcription, command submit, AI reply, listening resume. OFF by
+  // default; enabled in dev, or on a real device via ?aidebug=1 (overlay) / ?aidebug=console. Never logs
+  // audio; a transcript is truncated so a misheard command is diagnosable without dumping sensitive text.
+  const diag = (ev, data) => {
+    if (!debugRef.current && !overlayRef.current) return;
+    const ms = t0Ref.current ? Date.now() - t0Ref.current : 0;
+    const d = data && typeof data === "object" ? { ...data } : data;
+    if (d && typeof d.text === "string") d.text = d.text.slice(0, 48) + (d.text.length > 48 ? "…" : "");   // truncate — never dump full transcripts
+    try { if (debugRef.current) console.log(`%c[convo +${ms}ms] ${ev}`, "color:#C9A96E;font-weight:600", d ?? ""); } catch {}
+    if (overlayRef.current) setDiagLog((L) => [...L.slice(-11), { ms, ev, d }]);
+  };
   // ---- Conversation-mode state machine (refs so recognition callbacks see the latest, never a stale closure).
   const phaseRef = useRef("idle");       // idle | listening | processing | speaking
   const bufferRef = useRef("");          // finalized words accumulated for the current utterance
@@ -98,7 +120,17 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     setSupport(speechSupport());
     try { setVoiceOk(typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== "undefined"); } catch {}
     try { const b = localStorage.getItem("iot_ai_bargein"); if (b === "off") bargeRef.current = false; } catch {}
-    try { debugRef.current = (typeof process !== "undefined" && process.env?.NODE_ENV !== "production") || localStorage.getItem("iot_ai_debug") === "on"; } catch {}
+    // Diagnostics: ?aidebug=1 → on-screen overlay (persisted, for iPhone testing); =console → console only;
+    // =0 → off. Falls back to localStorage, and console is always on in dev. Staff-gated via the whole assistant.
+    try {
+      const p = new URLSearchParams(window.location.search).get("aidebug");
+      if (p != null) { localStorage.setItem("iot_ai_debug", p === "0" ? "off" : p === "console" ? "on" : "overlay"); }
+      const flag = localStorage.getItem("iot_ai_debug");
+      const dev = typeof process !== "undefined" && process.env?.NODE_ENV !== "production";
+      overlayRef.current = flag === "overlay";
+      debugRef.current = dev || flag === "on" || flag === "overlay";
+      if (overlayRef.current) setDiagLog((L) => (L.length ? L : [{ ms: 0, ev: "diagnostics_on", d: null }]));
+    } catch {}
     return () => { convRef.current = false; clearConvoTimers(); try { captureRef.current?.stop(); } catch {} try { dictCapRef.current?.stop(); } catch {} stopSay(); };
   }, []);
   // Remember the chosen neural voice per viewer.
@@ -432,6 +464,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     return (
       <div className={`aicore-dock${expanded ? " open" : ""}`} data-state={coreState}>
         <style>{COREBAR_CSS}</style>
+        {overlayRef.current && (
+          <div className="aicore-diag" role="log" aria-label="Voice diagnostics">
+            <div className="aicore-diaghd"><span>voice trace · {coreState}</span><button type="button" onClick={() => { try { localStorage.setItem("iot_ai_debug", "off"); } catch {} overlayRef.current = false; setDiagLog([]); }} aria-label="Close diagnostics">×</button></div>
+            {diagLog.map((e, i) => <div key={i} className="aicore-diagln"><span className="t">+{e.ms}ms</span> <b>{e.ev}</b>{e.d != null ? <span className="d"> {diagDetail(e.d)}</span> : null}</div>)}
+          </div>
+        )}
         <div className="aicore-shell">
           <button type="button" className="aicore-btn" onClick={coreTap}
             aria-label={expanded ? (convoOn ? "Stop listening" : "Start conversation") : "Open the assistant"} title="Assistant (⌘K)">
@@ -636,9 +674,15 @@ const COREBAR_CSS = `
 .aicore-cand{display:flex;align-items:center;gap:7px;border:1px solid rgba(201,169,110,.25);background:transparent;color:#EDE4D3;border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;text-align:left}
 .aicore-cand span{flex:none;width:17px;height:17px;border-radius:50%;background:#C9A96E;color:#0B0F1A;font-size:10px;display:grid;place-items:center}
 .aicore-cand:hover:not(:disabled){border-color:#C9A96E}
+.aicore-diag{position:fixed;left:12px;bottom:70px;width:min(84vw,340px);max-height:42vh;overflow-y:auto;background:rgba(11,15,26,.95);color:#d7dce6;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 1px rgba(201,169,110,.3);padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;line-height:1.5;z-index:61}
+.aicore-diaghd{display:flex;align-items:center;justify-content:space-between;color:#C9A96E;font-size:9.5px;letter-spacing:.4px;text-transform:uppercase;padding-bottom:3px;margin-bottom:3px;border-bottom:1px solid rgba(201,169,110,.2)}
+.aicore-diaghd button{border:0;background:transparent;color:#9aa6bd;font-size:15px;line-height:1;cursor:pointer;padding:0 2px}
+.aicore-diagln{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aicore-diagln .t{color:#7b8296}.aicore-diagln b{color:#EDE4D3;font-weight:600}.aicore-diagln .d{color:#9aecb0}
 @media (max-width:560px){
   .aicore-dock{left:12px;bottom:calc(12px + env(safe-area-inset-bottom))}
   .aicore-bar{max-width:calc(100vw - 92px)}
+  .aicore-diag{bottom:calc(66px + env(safe-area-inset-bottom))}
 }
 @media (prefers-reduced-motion: reduce){.aicore-btn,.aicore-bar,.aicore-dot{animation:none;transition:none}}
 `;
