@@ -464,6 +464,10 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     return (
       <div className={`aicore-dock${expanded ? " open" : ""}`} data-state={coreState}>
         <style>{COREBAR_CSS}</style>
+        {/* The latest answer, shown above the bar so a TYPED question's reply is visible (voice speaks it too). */}
+        {expanded && !thinking && lastMsg?.res?.text && (
+          <div className={`aicore-answer ${lastMsg.res.tone || "ok"}`}>{lastMsg.res.text}</div>
+        )}
         {overlayRef.current && (
           <div className="aicore-diag" role="log" aria-label="Voice diagnostics">
             <div className="aicore-diaghd"><span>voice trace · {coreState}</span><button type="button" onClick={() => { try { localStorage.setItem("iot_ai_debug", "off"); } catch {} overlayRef.current = false; setDiagLog([]); }} aria-label="Close diagnostics">×</button></div>
@@ -665,6 +669,8 @@ const COREBAR_CSS = `
 .aicore-ic{flex:none;width:28px;height:28px;border:0;background:transparent;color:#9aa6bd;border-radius:7px;display:grid;place-items:center;cursor:pointer;font-size:17px;line-height:1}
 .aicore-ic:hover:not(:disabled){background:rgba(201,169,110,.16);color:#EDE4D3}
 .aicore-ic:disabled{opacity:.4;cursor:default}
+.aicore-answer{max-width:min(82vw,360px);margin-left:4px;margin-bottom:2px;background:#0B0F1A;color:#EDE4D3;border-radius:12px;padding:8px 12px;font-size:12.5px;line-height:1.4;box-shadow:0 8px 24px rgba(11,15,26,.45),0 0 0 1px rgba(201,169,110,.3);animation:aicore-grow .18s ease}
+.aicore-answer.err{color:#f0a9a9}.aicore-answer.muted{color:#aab2c4}
 .aicore-confirm{max-width:min(82vw,320px);margin-left:52px;background:#0B0F1A;color:#EDE4D3;border-radius:12px;padding:9px 11px;box-shadow:0 8px 24px rgba(11,15,26,.5),0 0 0 1px rgba(201,169,110,.3);display:flex;flex-direction:column;gap:7px}
 .aicore-cprev{font-size:12px}.aicore-cprev b{color:#FAF8F4}
 .aicore-cacts{display:flex;gap:6px}
