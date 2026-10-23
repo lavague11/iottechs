@@ -71,7 +71,48 @@ export const PROJECT_ACTIONS = {
       detail: `Moves the project forward to the ${nextLabel} stage.`,
     }),
   },
+
+  // 2.3 — record a payment the business has RECEIVED (cash / check / Zelle / card-on-file receipt). This does
+  // NOT charge a card. Parameterized: the amount (+ kind) is parsed from the command and shown EXACTLY in the
+  // confirm, re-validated server-side on apply. cap="install.pay.edit" → admin/manager only (sales refused).
+  record_payment: {
+    verb: "record",
+    cap: "install.pay.edit",
+    available: (facts) => {
+      const s = facts?.proposal_status;
+      if (!s || s === "draft") return { ok: false, why: "there's no sent proposal to bill against yet" };
+      return { ok: true };
+    },
+    // confirm(ctx, args): args = { amount, kind, label }. Amount + clean label shown; states it records, never charges.
+    confirm: ({ name }, args) => ({
+      title: `Record a ${moneyStr(args?.amount)} ${args?.label || "payment"} for ${name}`,
+      detail: "Records a payment you've RECEIVED (cash / check / Zelle). It does not charge a card.",
+    }),
+  },
 };
+
+const moneyStr = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Parse a payment command → { amount, kind } or null. Requires a record/log verb (or deposit/balance noun)
+// AND a positive dollar amount, so plain talk about money isn't misread as a command.
+export function parsePayment(text) {
+  const t = String(text || "").toLowerCase();
+  const verbish = /\b(record|log|mark|enter|take|received|collected|got)\b/.test(t);
+  const payword = /\b(payment|deposit|balance|paid)\b/.test(t);
+  if (!(verbish && (payword || /\$/.test(t)))) return null;
+  // Prefer a $-prefixed amount; only then fall back to the first bare number — so "invoice 7 for $500"
+  // records $500, not $7.
+  const m = t.match(/\$\s*([\d,]+(?:\.\d{1,2})?)/) || t.match(/\b([\d,]+(?:\.\d{1,2})?)\b/);
+  if (!m) return null;
+  const amount = parseFloat(m[1].replace(/,/g, ""));
+  if (!(amount > 0)) return null;
+  // DB kinds are { deposit, final, partial, other }; keep a clean user-facing label separate from the stored
+  // kind so a "balance"/generic payment isn't silently coerced to "deposit".
+  let kind = "partial", label = "payment";
+  if (/\bdeposit\b/.test(t)) { kind = "deposit"; label = "deposit"; }
+  else if (/\b(balance|final)\b/.test(t)) { kind = "final"; label = "final balance"; }
+  return { amount, kind, label };
+}
 
 export const ACTION_NAMES = Object.keys(PROJECT_ACTIONS);
 
@@ -95,5 +136,15 @@ export function actionFromText(text) {
     return "request_signature";
   if (/\b(advance (?:the |this )?(?:stage|project|step)|move (?:this |the (?:project|stage|step) )?(?:to the next (?:stage|step)|forward)|next stage|push (?:this |it )?(?:to the next stage|forward)|move it forward)\b/.test(t))
     return "advance_stage";
+  return null;
+}
+
+// Unified action detector for the router: a param-less action name, OR a parameterized action with args.
+// Returns { name, args? } | null.
+export function detectAction(text) {
+  const name = actionFromText(text);
+  if (name) return { name };
+  const pay = parsePayment(text);
+  if (pay) return { name: "record_payment", args: pay };
   return null;
 }

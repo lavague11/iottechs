@@ -32,7 +32,7 @@ export default function AiCommandBar({ accessId, projectName, payload, patchPayl
     }
     // Phase-2 project action (send proposal, …) — dispatch against the bound project via its guarded action.
     if (res.write === "action" && res.intent?.name) {
-      const r = await aiApplyProjectActionAction(res.intent.accessId || accessId, res.intent.name).catch(() => ({ error: "Couldn’t complete that." }));
+      const r = await aiApplyProjectActionAction(res.intent.accessId || accessId, res.intent.name, res.intent.args).catch(() => ({ error: "Couldn’t complete that." }));
       return r?.error ? r : { ok: true, message: r.message || "Done." };
     }
     // proposal edit (add_items / set_discount / edit_item) — apply to the builder's live payload with the

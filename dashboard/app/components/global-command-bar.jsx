@@ -37,7 +37,7 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
     if (r?.write === "action" && r.intent?.name) {
       const acc = r.intent.accessId || currentAccessId;
       if (!acc) return { error: "Open the project to make that change." };
-      const out = await aiApplyProjectActionAction(acc, r.intent.name).catch(() => ({ error: "Couldn’t complete that." }));
+      const out = await aiApplyProjectActionAction(acc, r.intent.name, r.intent.args).catch(() => ({ error: "Couldn’t complete that." }));
       return out?.error ? { error: out.error } : { ok: true, message: out.message || "Done." };
     }
     return { error: "Open the project to make that change." };

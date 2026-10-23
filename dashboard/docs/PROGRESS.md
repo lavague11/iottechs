@@ -18,9 +18,16 @@ Resumable log. If a session stops, the next one reads this + PLAN.md and continu
   - Framework change: `available(facts, assignments)` may return `{ok,why,data}`; previewAction threads `data` into confirm + apply recomputes it. send_proposal/request_signature unaffected.
 - **838 tests pass.** Batched independent QA+Security review of 2.2 + 2.6 delegated to code-reviewer (in flight). On PASS → commit → Needs Review → continue.
 
-## Deferred (next, with notes)
-- **2.3 record_payment** — PARAMETERIZED (needs an amount). The framework has no arg mechanism yet; add `args` to the intent + an amount parser, and the confirm MUST show the exact amount. recordPaymentAction(accessId, {amount, kind, method}) RECORDS received money (emails a confirmation) — NOT a card charge. cap="install.pay.edit" (admin/manager). Highest-care increment.
-- **2.4 assign_tech** — parameterized (resolve tech by name → user). **2.5 raise_issue** — verify the CREATE path for a new flag (installIssueAction adjudicates EXISTING issues).
+## 2026-10-23 — Phase 2.3 record_payment + parameterized args mechanism — built, in QA
+- **Committed so far:** 2.1 (8d95bc0), 2.2 + 2.6 (4e9ac2e) — all Needs Review, QA+Security verified.
+- **2.3 record_payment (built, 840 tests):** the money action. cap="install.pay.edit" (admin/manager; **sales refused** — 3rd per-action-cap proof). RECORDS a received payment (recordPaymentAction; emails a confirmation) — **NOT a card charge**; the registry/confirm say so explicitly. Amount re-validated server-side (Math.round, >0) and recordPaymentAction re-checks — client amount not trusted. available = a sent (non-draft) proposal.
+- **Parameterized ARGS mechanism (reusable for 2.4/2.5):** `parsePayment(text)` (needs a record/log verb + positive $, so plain money talk isn't a command) + `detectAction(text)` → `{name, args?}`; router carries `args`; previewAction(name,accessId,tok,args) refuses with a "How much?" clarify when missing; intent binds args; apply re-validates + dispatches. Param-less actions unaffected.
+- **QA+Security review: money-safe PASS** (no charge/capture path, amount re-validated server-side, admin/manager-only at both layers, low false-positive parsing). Two MEDIUM parser bugs FIXED: (1) kind now maps to the DB whitelist (deposit/final/partial) with a separate clean label — was silently coercing "balance"/generic to "deposit"; (2) amount parser now prefers the $-anchored number — "record invoice 7 for $500" was capturing 7. Unit-tested. 840 tests. → committing as Needs Review.
+
+## Deferred (next)
+- **2.4 assign_tech** — parameterized (resolve tech by name → user via the args mechanism + a staff/tech lookup).
+- **2.5 raise_issue** — installIssueAction adjudicates EXISTING issues; verify/locate the CREATE path for a new flag first.
+- **Phase 3–6** per PLAN.md (customer intelligence, survey integration, sales intelligence, customer-facing last).
 - **Phase 3–6** per PLAN.md (customer intelligence, survey integration, sales intelligence, customer-facing last).
 
 ## (superseded) 2026-10-23 — Phase 2.1 built → Needs Review

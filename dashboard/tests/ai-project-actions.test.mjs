@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, detectAction } from "../lib/ai-project-actions.js";
 import { routeCommand } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -96,4 +96,30 @@ test("2.6 per-action cap keeps stage moves to admin/manager — a salesperson (e
   assert.equal(actionAllowed("advance_stage", { editor: true, can: (c) => c === "stage.move" }), true);    // admin/manager
   assert.equal(actionAllowed("advance_stage", { editor: true, can: () => false }), false);                  // sales: editor but no stage.move
   assert.deepEqual(routeCommand("move it to the next stage"), { type: "action", name: "advance_stage", target: "this" });
+});
+
+test("2.3 record_payment: parses amount + DB kind + clean label; needs a verb (not plain money talk)", () => {
+  assert.deepEqual(parsePayment("record a $1,530 deposit"), { amount: 1530, kind: "deposit", label: "deposit" });
+  assert.deepEqual(parsePayment("log a payment of 500"), { amount: 500, kind: "partial", label: "payment" });            // generic → DB "partial"
+  assert.deepEqual(parsePayment("mark the final balance 2,750.50 paid"), { amount: 2750.5, kind: "final", label: "final balance" });  // balance → DB "final"
+  // $-anchored amount wins over a leading non-money number (the money mis-parse fix).
+  assert.equal(parsePayment("record invoice 7 for $500 deposit").amount, 500);
+  assert.equal(parsePayment("how much is the balance"), null);          // a question, not a command
+  assert.equal(parsePayment("the deposit is 1530"), null);              // no record/log verb → not a command
+  assert.equal(parsePayment("record a note"), null);                    // no amount
+  // Router carries the args; the confirm shows the EXACT amount + label; records money, never charges a card.
+  assert.deepEqual(routeCommand("record a $1,530 deposit"), { type: "action", name: "record_payment", args: { amount: 1530, kind: "deposit", label: "deposit" }, target: "this" });
+  assert.deepEqual(detectAction("send the proposal"), { name: "send_proposal" });
+  const c = PROJECT_ACTIONS.record_payment.confirm({ name: "Crazy Cars" }, { amount: 1530, label: "deposit" });
+  assert.match(c.title, /Record a \$1,530\.00 deposit for Crazy Cars/);
+  assert.match(c.detail, /does not charge a card/i);
+});
+
+test("2.3 record_payment cap = install.pay.edit — admin/manager only; a salesperson is refused", () => {
+  assert.equal(PROJECT_ACTIONS.record_payment.cap, "install.pay.edit");
+  assert.equal(actionAllowed("record_payment", { editor: true, can: (c) => c === "install.pay.edit" }), true);   // admin/manager
+  assert.equal(actionAllowed("record_payment", { editor: true, can: () => false }), false);                       // sales: editor but no install.pay.edit
+  // available only against a sent proposal (not a draft).
+  assert.equal(PROJECT_ACTIONS.record_payment.available({ proposal_status: "sent" }).ok, true);
+  assert.equal(PROJECT_ACTIONS.record_payment.available({ proposal_status: "draft" }).ok, false);
 });

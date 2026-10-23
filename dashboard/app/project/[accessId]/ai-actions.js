@@ -19,7 +19,7 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed } from "../../../lib/ai-project-actions";
-import { sendProposalAction, requestSignatureEmailAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction } from "./proposal-actions";
 import { setStage } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
@@ -100,23 +100,25 @@ function answerFor(intent, tok, currentAccessId) {
 // Preview a Phase-2 project ACTION: editor-only, and AVAILABLE given the project's CURRENT state (so we show
 // "can't yet, because…" instead of letting the real action fail). Returns a confirmable write — the mutation
 // runs only on explicit human apply, through the existing self-authorizing server action.
-function previewAction(name, accessId, tok) {
+function previewAction(name, accessId, tok, args) {
   const spec = PROJECT_ACTIONS[name];
   if (!spec) return { ok: true, kind: "unsupported", speak: "I can't do that action yet.", reason: "unsupported_action" };
   // Editor role AND the action's specific capability (sending ≠ paying ≠ moving a stage).
   if (!actionAllowed(name, { editor: aiCanEdit(tok.role), can: (c) => can(tok.role, c) }))
     return { ok: true, kind: "unsupported", speak: "Your role can't do that action.", reason: "permission" };
   if (!accessId) return { ok: true, kind: "unsupported", speak: "Open a project first." };
+  // Parameterized actions need valid args before we can preview a confirmable amount.
+  if (name === "record_payment" && !(args && +args.amount > 0)) return { ok: true, kind: "clarify", speak: "How much should I record? Say the amount." };
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
   const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
   if (!avail.ok) return { ok: true, kind: "unsupported", speak: `I can't do that yet — ${avail.why}.`, reason: "not_available" };
   // Show WHO it goes to + the amount (+ any action-specific data, e.g. the target stage) before confirming.
-  const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) });
-  // intent.accessId BINDS the confirm to this exact project — apply dispatches against it, never "whatever
-  // project happens to be open now", so a preview can't be replayed against a different project.
-  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId }, preview: { title: prev.title, body: prev.detail } };
+  const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) }, args);
+  // intent.accessId BINDS the confirm to this exact project; intent.args binds the exact amount — apply
+  // dispatches against both, never "whatever project is open now" or a different amount.
+  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, ...(args ? { args } : {}) }, preview: { title: prev.title, body: prev.detail } };
 }
 
 // Recipient + amount for an action's confirm copy (retail total of the current proposal, for the human).
@@ -135,7 +137,7 @@ function actionContext(job, accessId) {
 // Apply a confirmed Phase-2 action. Re-derives the caller, re-checks editor role + the action's capability AND
 // current-state availability (never trusts a stale client intent), dispatches the EXISTING guarded server
 // action, audits. `accessId` is the intent's bound project (the one previewed), re-validated here.
-export async function aiApplyProjectActionAction(accessId, name) {
+export async function aiApplyProjectActionAction(accessId, name, args) {
   const g = await authorize();
   if (!g.ok) return { error: g.error };
   const spec = PROJECT_ACTIONS[name];
@@ -150,11 +152,15 @@ export async function aiApplyProjectActionAction(accessId, name) {
   // stale client intent); the action-specific data (e.g. the target stage) is recomputed here.
   const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
   if (!avail.ok) return { error: `Can't do that — ${avail.why}.` };
+  // Re-validate args server-side (never trust the client amount). recordPaymentAction clamps + re-checks too.
+  const amount = Math.round((+args?.amount || 0) * 100) / 100;
+  if (name === "record_payment" && !(amount > 0)) return { error: "Enter an amount." };
 
   let out, message, noop = false;
   if (name === "send_proposal") { out = await sendProposalAction(accessId); message = "Proposal sent."; }
   else if (name === "request_signature") { out = await requestSignatureEmailAction(accessId); noop = out?.sent === false; message = noop ? (out.note || "Already handled.") : "Signature reminder sent."; }
   else if (name === "advance_stage") { out = await setStage(accessId, g.tok.role, avail.data.nextStage); message = `Moved to ${avail.data.nextLabel}.`; }
+  else if (name === "record_payment") { out = await recordPaymentAction(accessId, { amount, kind: args?.kind || "partial" }); message = `Recorded $${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`; }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
 
@@ -209,7 +215,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return proposalPreview(accessId, intent);
   }
 
-  if (intent.type === "action") return previewAction(intent.name, accessId, g.tok);
+  if (intent.type === "action") return previewAction(intent.name, accessId, g.tok, intent.args);
 
   if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
@@ -284,7 +290,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   if (intent.type === "action") {
     const acc = context.currentAccessId || context.memory?.project?.accessId;
     if (!acc) return { ok: true, kind: "unsupported", speak: "Open a project first, then I can do that." };
-    return previewAction(intent.name, acc, g.tok);
+    return previewAction(intent.name, acc, g.tok, intent.args);
   }
   if (intent.type === "navigate_project") {
     const hits = (searchProjects(intent.query) || []).slice(0, 5);
