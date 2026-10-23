@@ -11,7 +11,7 @@ import {
   getActiveProposal, addProjectNote, logProjectEvent,
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
-  buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues,
+  buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
 } from "../../../lib/db";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
@@ -20,7 +20,7 @@ import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed } from "../../../lib/ai-project-actions";
 import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction } from "./proposal-actions";
-import { setStage } from "./actions";
+import { setStage, addAssignmentAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
 // The project's TYPE-AWARE stage order (a Type C project skips some stages) — so an action's "next stage"
@@ -107,18 +107,26 @@ function previewAction(name, accessId, tok, args) {
   if (!actionAllowed(name, { editor: aiCanEdit(tok.role), can: (c) => can(tok.role, c) }))
     return { ok: true, kind: "unsupported", speak: "Your role can't do that action.", reason: "permission" };
   if (!accessId) return { ok: true, kind: "unsupported", speak: "Open a project first." };
-  // Parameterized actions need valid args before we can preview a confirmable amount.
+  // Parameterized actions need valid args before we can preview a confirmable card.
   if (name === "record_payment" && !(args && +args.amount > 0)) return { ok: true, kind: "clarify", speak: "How much should I record? Say the amount." };
+  let eff = args;
+  if (name === "assign_tech") {
+    // Tolerant resolve (exact → prefix → first name): clarify if none, disambiguate if several.
+    const r = resolveTechByName(args?.techName || "");
+    if (r.candidates) return { ok: true, kind: "clarify", speak: `Which one — ${r.candidates.map((c) => c.name).join(", ")}?` };
+    if (!r.user) return { ok: true, kind: "clarify", speak: `I couldn't find a technician named "${args?.techName || "that"}". Who should I assign?` };
+    eff = { ...args, resolvedName: r.user.name, userId: r.user.id };
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
   const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
   if (!avail.ok) return { ok: true, kind: "unsupported", speak: `I can't do that yet — ${avail.why}.`, reason: "not_available" };
-  // Show WHO it goes to + the amount (+ any action-specific data, e.g. the target stage) before confirming.
-  const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) }, args);
+  // Show WHO it goes to / which tech (+ any action-specific data, e.g. the target stage) before confirming.
+  const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) }, eff);
   // intent.accessId BINDS the confirm to this exact project; intent.args binds the exact amount — apply
   // dispatches against both, never "whatever project is open now" or a different amount.
-  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, ...(args ? { args } : {}) }, preview: { title: prev.title, body: prev.detail } };
+  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, ...(eff ? { args: eff } : {}) }, preview: { title: prev.title, body: prev.detail } };
 }
 
 // Recipient + amount for an action's confirm copy (retail total of the current proposal, for the human).
@@ -161,6 +169,15 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
   else if (name === "request_signature") { out = await requestSignatureEmailAction(accessId); noop = out?.sent === false; message = noop ? (out.note || "Already handled.") : "Signature reminder sent."; }
   else if (name === "advance_stage") { out = await setStage(accessId, g.tok.role, avail.data.nextStage); message = `Moved to ${avail.data.nextLabel}.`; }
   else if (name === "record_payment") { out = await recordPaymentAction(accessId, { amount, kind: args?.kind || "partial" }); message = `Recorded $${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`; }
+  else if (name === "assign_tech") {
+    const r = resolveTechByName(args?.techName || "");   // RE-resolve fresh — never trust a client-supplied userId
+    if (!r.user) return { error: r.candidates ? "Name the exact technician — more than one matched." : "I couldn't find that technician." };
+    const u = r.user;
+    out = await addAssignmentAction(accessId, { userId: u.id, userName: u.name, userEmail: u.email, role: "tech" });
+    // The certification gate is the business's, not the AI's — refuse with the reason, never auto-override.
+    if (out?.gate) return { error: `${out.techName || u.name} isn't certified for this service${out.missing?.length ? ` (missing: ${out.missing.join(", ")})` : ""}. An admin can assign them manually.` };
+    message = out?.existed ? `${u.name} is already assigned.` : `Assigned ${u.name}.`;
+  }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
 

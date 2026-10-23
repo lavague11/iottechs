@@ -24,10 +24,15 @@ Resumable log. If a session stops, the next one reads this + PLAN.md and continu
 - **Parameterized ARGS mechanism (reusable for 2.4/2.5):** `parsePayment(text)` (needs a record/log verb + positive $, so plain money talk isn't a command) + `detectAction(text)` → `{name, args?}`; router carries `args`; previewAction(name,accessId,tok,args) refuses with a "How much?" clarify when missing; intent binds args; apply re-validates + dispatches. Param-less actions unaffected.
 - **QA+Security review: money-safe PASS** (no charge/capture path, amount re-validated server-side, admin/manager-only at both layers, low false-positive parsing). Two MEDIUM parser bugs FIXED: (1) kind now maps to the DB whitelist (deposit/final/partial) with a separate clean label — was silently coercing "balance"/generic to "deposit"; (2) amount parser now prefers the $-anchored number — "record invoice 7 for $500" was capturing 7. Unit-tested. 840 tests. → committing as Needs Review.
 
+## 2026-10-23 — Phase 2.4 assign_tech — built, in QA
+- **Committed:** 2.1 (8d95bc0), 2.2+2.6 (4e9ac2e), 2.3 (edb6701) — all Needs Review, verified.
+- **2.4 assign_tech (built + VERIFIED, 841 tests):** reuses the args mechanism. **NEW cap `assignment.edit`:["admin","manager"]** (sales refused at preview+apply). Cert gate RESPECTED (AI refuses an uncertified tech with the reason, never auto-overrides). apply RE-resolves by name (ignores any client userId → no injection). **QA+Security PASS** (no vuln; no test breakage — lifecycle.test enumerators satisfied). Review finding fixed: name resolution was EXACT-full-name only ("assign Dave" dead-ended against "Dave Smith") → new `db.resolveTechByName` is tolerant (exact → prefix → first name → contains) + disambiguates on multiple matches + "already assigned" on idempotent re-assign. Fails closed. → committing as Needs Review.
+
 ## Deferred (next)
-- **2.4 assign_tech** — parameterized (resolve tech by name → user via the args mechanism + a staff/tech lookup).
-- **2.5 raise_issue** — installIssueAction adjudicates EXISTING issues; verify/locate the CREATE path for a new flag first.
+- **2.5 raise_issue** — installIssueAction ADJUDICATES existing issues (rework/resolve/dismiss); the CREATE path for a NEW flag is elsewhere (install checklist) — locate it before wiring. Could scope 2.5 to adjudicate-existing first.
 - **Phase 3–6** per PLAN.md (customer intelligence, survey integration, sales intelligence, customer-facing last).
+
+## Phase-2 status: 5 of 6 actions built (2.1 send · 2.2 request_sig · 2.3 record_payment · 2.4 assign_tech · 2.6 advance_stage). Only 2.5 raise_issue remains. All verified-or-in-review; none auto-executes a real business action (preview → human confirm). Three distinct per-action caps proven (editor; stage.move; install.pay.edit; assignment.edit).
 - **Phase 3–6** per PLAN.md (customer intelligence, survey integration, sales intelligence, customer-facing last).
 
 ## (superseded) 2026-10-23 — Phase 2.1 built → Needs Review

@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, detectAction } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, detectAction } from "../lib/ai-project-actions.js";
 import { routeCommand } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -122,4 +122,17 @@ test("2.3 record_payment cap = install.pay.edit — admin/manager only; a salesp
   // available only against a sent proposal (not a draft).
   assert.equal(PROJECT_ACTIONS.record_payment.available({ proposal_status: "sent" }).ok, true);
   assert.equal(PROJECT_ACTIONS.record_payment.available({ proposal_status: "draft" }).ok, false);
+});
+
+test("2.4 assign_tech: extracts the tech name; router carries it; cap=assignment.edit (admin/manager only)", () => {
+  assert.deepEqual(parseAssign("assign Jess to this project"), { techName: "Jess" });
+  assert.deepEqual(parseAssign("put Mike on this job"), { techName: "Mike" });
+  assert.deepEqual(parseAssign("assign technician Sarah Lee"), { techName: "Sarah Lee" });
+  assert.equal(parseAssign("assign it to me"), null);            // filler, not a name
+  assert.equal(parseAssign("how is the project"), null);
+  assert.deepEqual(routeCommand("assign Jess to this"), { type: "action", name: "assign_tech", args: { techName: "Jess" }, target: "this" });
+  assert.equal(PROJECT_ACTIONS.assign_tech.cap, "assignment.edit");
+  assert.equal(actionAllowed("assign_tech", { editor: true, can: (c) => c === "assignment.edit" }), true);   // admin/manager
+  assert.equal(actionAllowed("assign_tech", { editor: true, can: () => false }), false);                      // sales refused
+  assert.match(PROJECT_ACTIONS.assign_tech.confirm({ name: "Crazy Cars" }, { resolvedName: "Jess Tech" }).title, /Assign Jess Tech to Crazy Cars/);
 });

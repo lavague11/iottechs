@@ -6746,6 +6746,22 @@ export function findTechUserByName(name) {
   return r ? { ...r } : null;
 }
 
+// Tolerant tech resolver for the AI assign flow: exact full name → prefix → first name → contains. Returns
+// { user } for a single confident match, { candidates } (<=5) when more than one plausibly matches (so the
+// caller can ask which one), or { none:true }. Fails closed — never guesses between same-named/ambiguous techs.
+export function resolveTechByName(name) {
+  const n = String(name || "").trim().toLowerCase();
+  if (!n) return { none: true };
+  const techs = db.prepare("SELECT id, name, email FROM users WHERE role='tech' AND (disabled IS NULL OR disabled != 1)").all().map((r) => ({ ...r }));
+  const nm = (t) => String(t.name || "").trim().toLowerCase();
+  const pick = (pool) => (pool.length === 1 ? { user: pool[0] } : pool.length > 1 ? { candidates: pool.slice(0, 5) } : null);
+  const exact = pick(techs.filter((t) => nm(t) === n)); if (exact) return exact;
+  const prefix = pick(techs.filter((t) => nm(t).startsWith(n))); if (prefix) return prefix;
+  const first = pick(techs.filter((t) => nm(t).split(/\s+/)[0] === n)); if (first) return first;
+  const contains = pick(techs.filter((t) => nm(t).includes(n))); if (contains) return contains;
+  return { none: true };
+}
+
 // QC sign-offs: both must be current (fingerprint matches the checklist as it stands) AND every
 // device must pass — an approval recorded on a checklist that later regressed doesn't count.
 export function qcSignoffFacts(accessId, meta = getToolMeta(accessId), acc = getStageAcceptances(accessId)) {

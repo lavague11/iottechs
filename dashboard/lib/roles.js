@@ -34,6 +34,7 @@ const CAPS = {
   "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
   // Money / lifecycle
   "stage.move":          ["admin", "manager"],
+  "assignment.edit":     ["admin", "manager"],                              // add/remove a tech on a project (matches addAssignmentAction)
   "customer.contact.view": ["admin", "manager", "sales", "tech", "readonly"], // name / phone / email
   "customer.financials.view": ["admin", "manager", "sales", "customer", "readonly"],
   // CRM (New Project → Existing / New client). Customers never search the CRM.

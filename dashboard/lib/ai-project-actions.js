@@ -89,6 +89,19 @@ export const PROJECT_ACTIONS = {
       detail: "Records a payment you've RECEIVED (cash / check / Zelle). It does not charge a card.",
     }),
   },
+
+  // 2.4 — assign a technician to the project. Parameterized (tech name → resolved to a user in ai-actions).
+  // cap="assignment.edit" (admin/manager only). The CERTIFICATION gate stays enforced by addAssignmentAction:
+  // if the tech lacks the required badge the AI REFUSES with the reason — it never auto-overrides.
+  assign_tech: {
+    verb: "assign",
+    cap: "assignment.edit",
+    available: () => ({ ok: true }),   // admin/manager may assign at any point; the cert gate runs on apply
+    confirm: ({ name }, args) => ({
+      title: `Assign ${args?.resolvedName || args?.techName || "a technician"} to ${name}`,
+      detail: "Adds them to the project as the assigned technician.",
+    }),
+  },
 };
 
 const moneyStr = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -139,6 +152,17 @@ export function actionFromText(text) {
   return null;
 }
 
+// Parse an "assign a tech" command → { techName } or null. Captures the person's name after assign/put/add;
+// ai-actions resolves it to a real user (and refuses if there's no such tech).
+export function parseAssign(text) {
+  const t = String(text || "").trim();
+  const m = t.match(/\b(?:assign|put|add)\s+(?:the\s+)?(?:tech(?:nician)?\s+)?([A-Za-z][A-Za-z.'-]+(?:\s+[A-Za-z][A-Za-z.'-]+)?)/i);
+  if (!m) return null;
+  let techName = m[1].replace(/\s+(to|on|this|the|that|for|as)$/i, "").trim();
+  if (techName.length < 2 || /^(it|me|this|the|them|someone|a|an|tech|technician)$/i.test(techName)) return null;
+  return { techName };
+}
+
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
 // Returns { name, args? } | null.
 export function detectAction(text) {
@@ -146,5 +170,7 @@ export function detectAction(text) {
   if (name) return { name };
   const pay = parsePayment(text);
   if (pay) return { name: "record_payment", args: pay };
+  const asn = parseAssign(text);
+  if (asn) return { name: "assign_tech", args: asn };
   return null;
 }
