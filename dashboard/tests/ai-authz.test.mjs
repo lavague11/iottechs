@@ -5,16 +5,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { aiGate, aiStaff, AI_STAFF } from "../lib/ai-authz.js";
+import { aiGate, aiStaff, aiCanEdit, AI_STAFF } from "../lib/ai-authz.js";
 
-const STAFF = ["admin", "manager", "sales"];
-const NON_STAFF = ["customer", "tech", "readonly", "vendor"];
+const STAFF = ["admin", "manager", "sales", "tech"];
+const NON_STAFF = ["customer", "readonly", "vendor"];
 
-test("only admin/manager/sales count as AI staff", () => {
+test("admin/manager/sales/tech count as AI staff (tech may ask; customer/vendor/readonly may not)", () => {
   for (const r of STAFF) assert.ok(aiStaff(r), `${r} is staff`);
   for (const r of NON_STAFF) assert.ok(!aiStaff(r), `${r} is NOT staff`);
   assert.ok(!aiStaff(null) && !aiStaff("") && !aiStaff("ADMIN"), "null/blank/mismatched-case are not staff");
-  assert.deepEqual([...AI_STAFF].sort(), ["admin", "manager", "sales"]);
+  assert.deepEqual([...AI_STAFF].sort(), ["admin", "manager", "sales", "tech"]);
+});
+
+test("being in the assistant ≠ being allowed to edit — only admin/manager/sales may run a WRITE intent", () => {
+  for (const r of ["admin", "manager", "sales"]) assert.ok(aiCanEdit(r), `${r} may edit`);
+  for (const r of ["tech", "customer", "readonly", "vendor", null]) assert.ok(!aiCanEdit(r), `${r} may NOT edit`);
 });
 
 test("aiGate: staff + flag on → allowed", () => {
@@ -46,7 +51,7 @@ test("drift: every exported AI server action authorizes before doing anything", 
   const src = readFileSync(new URL("../app/project/[accessId]/ai-actions.js", import.meta.url), "utf8");
   // the funnel is defined once and is the only authority
   assert.ok(/async function authorize\(\)\s*\{[\s\S]*?aiGate\(tok, flagOn\(\)\)/.test(src), "authorize() funnels through aiGate");
-  assert.ok(/import \{ aiGate \} from "\.\.\/\.\.\/\.\.\/lib\/ai-authz"/.test(src), "imports the shared gate");
+  assert.ok(/import \{[^}]*\baiGate\b[^}]*\} from "\.\.\/\.\.\/\.\.\/lib\/ai-authz"/.test(src), "imports the shared gate");
   assert.ok(!/new Set\(\["admin", "manager", "sales"\]\)/.test(src), "no ad-hoc role set left in the actions");
 
   // each exported action must gate: aiStatusAction via aiGate(...), the rest via authorize()

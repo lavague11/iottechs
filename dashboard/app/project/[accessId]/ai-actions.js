@@ -11,15 +11,18 @@ import {
   getActiveProposal, addProjectNote, logProjectEvent,
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
+  buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues,
 } from "../../../lib/db";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
 import { runQuery } from "../../../lib/ai-answer";
-import { aiGate } from "../../../lib/ai-authz";
+import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { resolveAppRoute, looksLikeEdit } from "../../../lib/ai-global";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
+// Intents that MUTATE — only AI_EDITORS (admin/manager/sales) may run them; a tech in the assistant is read-only.
+const WRITE_INTENTS = new Set(["add_items", "set_discount", "edit_item", "set_desc", "reorder_section", "add_note"]);
 
 // Same session-role resolution the proposal actions use (cookie token, then PIN-scoped access cookie).
 async function getSessionRole() {
@@ -71,8 +74,9 @@ async function interpret(text, context) {
 // `reason` for the (future) training loop. Shared by the proposal bar and the global ⌘K bar.
 function answerFor(intent, tok, currentAccessId) {
   const ctx = {
-    role: tok.role, userId: tok.id, currentAccessId: currentAccessId || null, can,
-    db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects },
+    role: tok.role, userId: tok.id, userName: actorName(tok), currentAccessId: currentAccessId || null, can,
+    db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects,
+          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues },
     fin: { optionTotals },
   };
   const r = runQuery(intent, ctx);
@@ -104,6 +108,11 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   if (!t) return { error: "Type a command." };
 
   const { intent, noKey } = await interpret(t, context);
+
+  // A write intent from a role that may be IN the assistant but may not EDIT (e.g. a technician) is refused
+  // with a clear reason — never silently attempted. Reads/navigation below stay available to them.
+  if (WRITE_INTENTS.has(intent.type) && !aiCanEdit(g.tok.role))
+    return { ok: true, kind: "unsupported", speak: "You can view this project, but editing the proposal is limited to sales and managers.", reason: "permission" };
 
   if (intent.type === "navigate_project") {
     const hits = (searchProjects(intent.query) || []).slice(0, 5);
@@ -205,7 +214,8 @@ export async function aiGlobalInterpretAction(text, context = {}) {
     if (!context.currentAccessId) return { ok: true, kind: "unsupported", speak: "Open a project first, then jump to its sections." };
     return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=${intent.stage}${intent.open ? `&open=${intent.open}` : ""}`, label: intent.label };
   }
-  if (["add_items", "edit_item", "set_desc", "set_discount", "reorder_section", "add_note"].includes(intent.type)) {
+  if (WRITE_INTENTS.has(intent.type)) {
+    if (!aiCanEdit(g.tok.role)) return { ok: true, kind: "unsupported", speak: "Editing a proposal is limited to sales and managers.", reason: "permission" };
     // A real target exists → offer to open the proposal (where the edit bar lives), rather than telling
     // them to open a project they may already be viewing. No project in context → a concise nudge.
     if (context.currentAccessId) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };

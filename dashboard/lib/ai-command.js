@@ -103,6 +103,19 @@ export function routeCommand(text) {
   m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
   if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }
 
+  // Project-page intelligence (default to THIS project). "what's next / holding us up / whose turn /
+  // what else can we do / what should I focus on" → the operational brain. The rest are scoped reads.
+  if (/\b(what'?s? next|next step|what should (?:i|we) (?:do|focus on)|what(?:'?s| is) (?:holding|blocking)|what'?s the blocker|why (?:is|are) (?:this|we|it) (?:stuck|blocked|waiting)|whose turn|who('?s| is| are we)?\s*(?:waiting|up|owe)|what else can we do|what can we (?:do|work on)|move this forward)\b/i.test(t))
+    return { type: "answer", query: "project_next", target: "this" };
+  if (/\b(balance|owed|how much (?:is )?(?:left|paid|remaining)|amount due|paid so far)\b/i.test(t) && !/\b(proposal|invoices?|receivables?)\b/i.test(t))
+    return { type: "answer", query: "project_money", target: "this" };
+  if (/\b(my payout|what(?:'?s| is) my (?:pay|payout|cut)|what do i (?:get paid|make)|my pay on)\b/i.test(t))
+    return { type: "answer", query: "project_payout", target: "this" };
+  if (/\b(open issues|any (?:issues|problems)|issues? (?:on|with) (?:this|it)|any flags)\b/i.test(t))
+    return { type: "answer", query: "project_issues", target: "this" };
+  if (/\b(how long (?:has|in|at)|days in (?:this )?stage|how long (?:have we|has this) been)\b/i.test(t))
+    return { type: "answer", query: "project_timeline", target: "this" };
+
   // "take me to the proposal", "open the site survey", "go to Crazy Cars", "open up Crazy Cars",
   // "can you pull up Crazy Cars", "let's look at the car dealership project". Spoken navigation comes with a
   // lot of filler — a polite lead-in, a two-word verb ("open up", "pull up", "take me to"), and trailing
@@ -316,7 +329,7 @@ const TOOL = {
     type: "object",
     properties: {
       type: { type: "string", enum: ["add_items", "edit_item", "set_desc", "reorder_section", "set_discount", "add_note", "answer", "clarify", "navigate_project", "navigate_section", "unsupported", "unknown"] },
-      query: { type: "string", enum: ["proposal_total", "project_status", "awaiting_signature", "projects_by_stage"], description: "answer: which read-only business fact to RETRIEVE and tell the user (don't navigate). proposal_total/project_status take a `target`; projects_by_stage takes a `stage`." },
+      query: { type: "string", enum: ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "awaiting_signature", "projects_by_stage"], description: "answer: which read-only fact to RETRIEVE (don't navigate). project_next = what's blocking / whose turn / what to do next / what else can proceed. project_money = balance/paid. project_payout = the tech's own pay. project_issues = open install issues. project_timeline = days in stage. These + proposal_total/project_status take a `target` (a project name, or 'this'); projects_by_stage takes a `stage`." },
       target: { type: "string", description: "answer: which project the question is about — a name (\"Crazy Cars\"), an access id, or \"this\"/\"that\" for the current/last project in context." },
       stage: { type: "string", description: "answer projects_by_stage: survey, proposal, approval, schedule, install, qc, payment or completion." },
       ask: { type: "string", description: "clarify: ONE short question to get a missing detail (e.g. which project, how many), instead of refusing." },
@@ -432,7 +445,7 @@ export function parseClaudeResult(json) {
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "answer": {
-        const query = ["proposal_total", "project_status", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
+        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
         if (!query) return { type: "unknown" };
         const out = { type: "answer", query };
         if (i.target) out.target = String(i.target).slice(0, 80);

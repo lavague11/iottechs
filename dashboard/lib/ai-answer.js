@@ -9,6 +9,8 @@
 // A read returns { text, facts } on success, or { error, reason } on a handled miss (reason feeds the
 // future training loop: "no_data" | "permission" | "unsupported_read" | "ambiguous").
 
+import { projectIntel } from "./project-intel.js";
+
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const STAGE_LABEL = {
@@ -37,6 +39,13 @@ function visibleSet(ctx) {
 }
 const canSee = (vis, accessId) => vis == null || vis.has(String(accessId || "").toLowerCase());
 
+// Capability gates for money (checked IN ADDITION to project-level visibility above, never instead of it):
+//   financials = retail totals / balance (customer.financials.view) · cost = COGS (cost.view) ·
+//   payout = technician pay (install.pay.view; a tech additionally only ever sees their OWN, on their jobs).
+const canFinancials = (ctx) => !ctx.can || ctx.can(ctx.role, "customer.financials.view");
+const canPayout = (ctx) => !!ctx.can && ctx.can(ctx.role, "install.pay.view");
+const internalRole = (ctx) => !["customer", "vendor"].includes(ctx.role);   // sees ops/parallel-prep detail
+
 // Resolve a target reference ("Crazy Cars", an access id, "this"/"that"/null) to a project row the caller is
 // allowed to see. Null/"this" → the current project context; otherwise search by name. { row } | { error }.
 function resolveProject(target, ctx) {
@@ -59,8 +68,9 @@ function resolveProject(target, ctx) {
 }
 
 const QUERIES = {
-  // "How much is the Crazy Cars proposal?" → the selected option's grand total.
-  proposal_total: { run: (intent, ctx) => {
+  // "How much is the Crazy Cars proposal?" → the selected option's grand total. Retail price → financials cap
+  // (a technician / vendor is refused; they never see retail).
+  proposal_total: { cap: "customer.financials.view", run: (intent, ctx) => {
     const r = resolveProject(intent.target, ctx); if (r.error) return r;
     const name = r.row.customer || r.row.access_id;
     const prop = ctx.db.getActiveProposal(r.row.access_id);
@@ -78,10 +88,11 @@ const QUERIES = {
     const prop = ctx.db.getActiveProposal(j.access_id);
     const bits = [`${name} is at the ${stageLabel(j.stage)} stage`];
     if (prop && prop.status !== "draft") {
-      const grand = proposalGrand(prop, ctx.fin);
       const st = prop.signed_name ? "signed" : prop.status === "accepted" ? "accepted, awaiting signature"
         : prop.status === "changes_requested" ? "changes requested" : prop.status === "declined" ? "declined" : "sent, awaiting signature";
-      bits.push(`the proposal (${grand != null ? money(grand) : "—"}) is ${st}`);
+      // Money only for roles allowed to see retail (a tech sees the stage + proposal state, never the total).
+      const grand = canFinancials(ctx) ? proposalGrand(prop, ctx.fin) : null;
+      bits.push(grand != null ? `the proposal (${money(grand)}) is ${st}` : `the proposal is ${st}`);
     } else if (prop) bits.push("the proposal is still a draft");
     const facts = [`${name}: ${stageLabel(j.stage)}`];
     if (prop?.signed_name == null && prop?.status && prop.status !== "draft") facts.push(`${name} proposal awaiting signature`);
@@ -97,6 +108,81 @@ const QUERIES = {
     if (!rows.length) return { text: "No proposals are awaiting signature right now.", facts: [] };
     const names = rows.map((j) => j.customer || j.contact_name || j.access_id);
     return { text: `${names.length} proposal${names.length === 1 ? "" : "s"} awaiting signature: ${names.slice(0, 8).join(", ")}${names.length > 8 ? `, +${names.length - 8} more` : ""}.`, facts: [`${names.length} proposals awaiting signature`] };
+  } },
+
+  // "What's next / what's holding us up / whose turn is it / what else can we do / what should I focus on?"
+  // The operational brain: blocker vs recommended action vs parallel prep, with owners. No money here.
+  project_next: { run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const facts = ctx.db.buildStageFacts(j.access_id);
+    if (!facts) return { error: `I couldn't read ${name}'s status.`, reason: "no_data" };
+    const assignments = ctx.db.getProjectAssignments ? ctx.db.getProjectAssignments(j.access_id) : [];
+    const intel = projectIntel(facts, assignments);
+    const parts = [`${name} is at the ${intel.stageLabel} stage`];
+    if (intel.canAdvance) {
+      parts.push(intel.nextStage ? `nothing is blocking it — it's ready to move to ${intel.nextStageLabel}` : "every stage is complete");
+    } else {
+      const b = intel.blockers[0];
+      parts.push(`the blocker is "${b.label}" — ${b.owner === "customer" ? "the customer's turn" : "the " + b.owner + "'s turn"}`);
+      if (intel.recommended) parts.push(`recommended: ${intel.recommended.action}`);
+      if (internalRole(ctx) && intel.parallel.length) parts.push(`meanwhile you can ${intel.parallel.slice(0, 3).join(", ")}`);
+    }
+    const fx = [`${name}: ${intel.stageLabel}${intel.blockers.length ? ` — blocked (${intel.blockers[0].owner})` : " — clear"}`];
+    return { text: parts.join(". ") + ".", facts: fx, project: { accessId: j.access_id, name } };
+  } },
+
+  // "What's the balance / how much has been paid?" → retail financials, cap-gated (never a tech/vendor).
+  project_money: { cap: "customer.financials.view", run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const fs = ctx.db.getProjectFinancialState ? ctx.db.getProjectFinancialState(j.access_id) : null;
+    if (!fs || !fs.total) return { text: `${name} has no billable proposal yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const bal = fs.balance != null ? fs.balance : (fs.total - fs.paid);
+    const bits = [`${name}: total ${money(fs.total)}`, `paid ${money(fs.paid)}`, `balance ${money(bal)}`];
+    if (fs.pendingPayments > 0) bits.push(`${money(fs.pendingPayments)} pending confirmation`);
+    return { text: bits.join(" · ") + ".", facts: [`${name} balance ${money(bal)}`], project: { accessId: j.access_id, name } };
+  } },
+
+  // "What's my payout?" → payout cap AND project-level access; a technician only ever sees their OWN, and
+  // only on a job they're actually assigned to (no cross-job leak).
+  project_payout: { cap: "install.pay.view", run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    if (ctx.role === "tech") {
+      const assignments = ctx.db.getProjectAssignments ? ctx.db.getProjectAssignments(j.access_id) : [];
+      const mine = (j.tech && ctx.userName && String(j.tech).toLowerCase() === String(ctx.userName).toLowerCase())
+        || assignments.some((a) => a.role === "tech" && String(a.user_id) === String(ctx.userId));
+      if (!mine) return { error: "That isn't a job you're assigned to.", reason: "permission" };
+    }
+    const amt = +j.payout_amount || 0;
+    if (!amt) return { text: `${name} doesn't have a payout set yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const who = ctx.role === "tech" ? "Your payout" : `${name} payout`;
+    return { text: `${who} is ${money(amt)} (${j.payout_status || "pending"}).`, facts: [`${name} payout ${money(amt)}`], project: { accessId: j.access_id, name } };
+  } },
+
+  // "Any open issues?" → open install/QC issue flags (install_issues state machine).
+  project_issues: { cap: "issue.view", run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const issues = (ctx.db.listInstallIssues ? ctx.db.listInstallIssues(j.access_id) : []) || [];
+    const open = issues.filter((i) => !["RESOLVED", "DISMISSED"].includes(String(i.status || "").toUpperCase()));
+    if (!open.length) return { text: `${name} has no open issues.`, facts: [], project: { accessId: j.access_id, name } };
+    const labels = open.map((i) => i.title || i.label || i.summary || i.note || String(i.status)).filter(Boolean);
+    return { text: `${name} has ${open.length} open issue${open.length === 1 ? "" : "s"}${labels.length ? ": " + labels.slice(0, 6).join(", ") : ""}.`, facts: [`${name} ${open.length} open issues`], project: { accessId: j.access_id, name } };
+  } },
+
+  // "How long has this been in this stage?" → days at the current stage (from the project's own timestamps).
+  project_timeline: { run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const facts = ctx.db.buildStageFacts ? ctx.db.buildStageFacts(j.access_id) : null;
+    const stage = facts?.stage || j.stage;
+    const since = j.stage_changed_at || j.updated_at || j.created_at;
+    const ms = since ? Date.now() - new Date(since).getTime() : null;
+    const days = ms != null && ms >= 0 ? Math.floor(ms / 86400000) : null;
+    const t = days == null ? `${name} is at the ${stageLabel(stage)} stage.` : `${name} has been at the ${stageLabel(stage)} stage for ${days} day${days === 1 ? "" : "s"}.`;
+    return { text: t, facts: [`${name}: ${stageLabel(stage)}${days != null ? ` ${days}d` : ""}`], project: { accessId: j.access_id, name } };
   } },
 
   // "Which projects need QC?" / "…are in <stage>?" → authorized project list filtered by lifecycle stage.
