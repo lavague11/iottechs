@@ -54,6 +54,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const modeRef = useRef("text");
   const convRef = useRef(false);     // conversation session active
   const recentRef = useRef(null);    // last command summary → follow-up context
+  // Rolling conversation memory: sticky context (active project, last customer, retrieved facts, pending
+  // change) is always kept; the transcript is trimmed server-side to a char budget. Per-viewer only — it
+  // never leaves this session, and the server re-authorizes every read against the signed-in user.
+  const memRef = useRef({ project: null, customer: null, facts: [], pending: null, turns: [] });
+  const pushTurn = (role, text) => { const t = String(text || "").slice(0, 200); if (!t) return; const m = memRef.current; m.turns.push({ role, text: t }); if (m.turns.length > 16) m.turns = m.turns.slice(-16); };
+  const addFact = (f) => { const m = memRef.current; for (const x of [].concat(f || [])) if (x && !m.facts.includes(x)) m.facts.push(x); if (m.facts.length > 8) m.facts = m.facts.slice(-8); };
   const threadRef = useRef(null);
   const idc = useRef(0);
   const sayCtlRef = useRef(null);    // active neural-voice controller (for interrupt/Stop)
@@ -89,18 +95,25 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   const addTurn = (turn) => setTurns((ts) => [...ts, { id: nid(), ...turn }]);
   const sysMsg = (tone, text) => addTurn({ role: "assistant", res: { kind: "message", tone, text } });
 
-  // Render a raw result into the thread + set/clear the actionable pending.
+  // Render a raw result into the thread + set/clear the actionable pending, and keep memory current.
   function present(r) {
     if (!r) return null;
-    if (r.error) { sysMsg("err", r.error); setPending(null); return r; }
+    if (r.error) { sysMsg("err", r.error); setPending(null); memRef.current.pending = null; pushTurn("assistant", r.error); return r; }
     if (r.kind === "navigate" || r.kind === "write" || r.kind === "disambiguate") {
       const id = nid();
       setTurns((ts) => [...ts, { id, role: "assistant", res: r }]);
       setPending({ id, res: r });
+      memRef.current.pending = r.kind === "navigate" ? null : (r.preview?.title || "a pending change");
+      if (r.kind === "navigate") { const mm = String(r.href || "").match(/\/project\/([A-Za-z0-9]+)/); if (mm) { memRef.current.project = { accessId: mm[1], name: r.label || mm[1] }; memRef.current.customer = r.label || memRef.current.customer; } }
+      pushTurn("assistant", r.kind === "navigate" ? `(open ${r.label})` : (r.preview?.title || "(pending change)"));
       return r;
     }
-    sysMsg("muted", r.speak || (r.noKey ? "Add ANTHROPIC_API_KEY (Dev ▸ API Keys) for free-form commands." : DEFAULT_MISS));
-    setPending(null);
+    // Everything else — an answer, a clarification, or a miss — renders as an assistant line (no navigation).
+    const text = r.speak || r.text || (r.noKey ? "Add ANTHROPIC_API_KEY (Dev ▸ API Keys) for free-form commands." : DEFAULT_MISS);
+    sysMsg(r.kind === "answer" ? "ok" : "muted", text);
+    if (r.kind === "answer") addFact(r.facts);
+    setPending(null); memRef.current.pending = null;
+    pushTurn("assistant", text);
     return r;
   }
 
@@ -109,9 +122,12 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     const q = String(t || "").trim();
     if (!q || busy) return null;
     addTurn({ role: "user", text: q });
+    pushTurn("user", q);
     setText(""); setInterim("");
     setBusy(true); setThinking(true);
-    const r = await interpret(q, { recent: recentRef.current }).catch(() => ({ error: "Couldn’t reach the assistant." }));
+    const m = memRef.current;
+    const memory = { project: m.project, customer: m.customer, facts: m.facts.slice(-6), pending: m.pending, turns: m.turns.slice(-16) };
+    const r = await interpret(q, { recent: recentRef.current, memory }).catch(() => ({ error: "Couldn’t reach the assistant." }));
     setBusy(false); setThinking(false);
     recentRef.current = (r && !r.error && (r.preview?.title || r.label)) ? (r.preview?.title || `open ${r.label}`) : recentRef.current;
     return present(r);
@@ -123,16 +139,16 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
     const r = p.res;
     setBusy(true);
     try {
-      if (r.kind === "navigate") { onNavigate?.(r); setPending(null); sysMsg("ok", `Opening ${r.label}.`); return { ok: true, message: `Opening ${r.label}` }; }
+      if (r.kind === "navigate") { onNavigate?.(r); setPending(null); memRef.current.pending = null; sysMsg("ok", `Opening ${r.label}.`); return { ok: true, message: `Opening ${r.label}` }; }
       const out = await onApply(r).catch(() => ({ error: "Couldn’t apply that." }));
-      setPending(null);
+      setPending(null); memRef.current.pending = null;
       if (out?.error) { sysMsg("err", out.error); return out; }
       sysMsg("ok", out?.message || "Done.");
       return out;
     } finally { setBusy(false); }
   }
 
-  function dismiss() { setPending(null); setText(""); setInterim(""); sysMsg("muted", "Cancelled."); }
+  function dismiss() { setPending(null); memRef.current.pending = null; setText(""); setInterim(""); sysMsg("muted", "Cancelled."); }
 
   async function pick(id) {
     if (busy) return;

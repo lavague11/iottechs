@@ -29,7 +29,7 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
   useEffect(() => { if (open) setTimeout(() => modalRef.current?.querySelector(".aicb-in")?.focus(), 30); }, [open]);
   if (!enabled) return null;
 
-  const interpret = (text, opts) => aiGlobalInterpretAction(text, { currentAccessId, recent: opts?.recent });
+  const interpret = (text, opts) => aiGlobalInterpretAction(text, { currentAccessId, recent: opts?.recent, memory: opts?.memory });
   const onNavigate = (res) => {
     setOpen(false);
     // In-project deep links (?stage=/?open=) need a hard nav so the deck re-reads them; everything else is a push.

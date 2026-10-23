@@ -2,7 +2,7 @@
 // the Claude tool-result parser are all isomorphic and validated here; the server action + UI are thin.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { routeCommand, applyIntentToPayload, parseClaudeResult, buildClaudeBody, AI_MODEL, resolveItems, resolveSection, resolveServiceIndex } from "../lib/ai-command.js";
+import { routeCommand, applyIntentToPayload, parseClaudeResult, buildClaudeBody, buildMemoryBlock, AI_MODEL, resolveItems, resolveSection, resolveServiceIndex } from "../lib/ai-command.js";
 
 // A multi-section proposal for the reorder / navigation tests.
 const sectioned = () => ({ options: [{ id: "A", services: [
@@ -39,6 +39,36 @@ test("router renames a line item at zero tokens (rename/relabel/call â€¦ to/as â
   // A price edit is NOT a rename (keeps going to the $ pattern), and a rename never captures a price.
   assert.deepEqual(routeCommand("change the cameras to $275"), { type: "edit_item", match: { name: "camera" }, set: { price: 275 } });
   assert.equal(routeCommand("rename the camera to $20"), null, "a $ value isn't a rename");
+});
+
+test("router answers questions at zero tokens (retrieve, don't navigate)", () => {
+  assert.deepEqual(routeCommand("how much is the Crazy Cars proposal"), { type: "answer", query: "proposal_total", target: "Crazy Cars" });
+  assert.deepEqual(routeCommand("how much is the proposal"), { type: "answer", query: "proposal_total", target: "this" });
+  assert.deepEqual(routeCommand("which proposals aren't signed"), { type: "answer", query: "awaiting_signature" });
+  assert.deepEqual(routeCommand("who hasn't signed their proposal"), { type: "answer", query: "awaiting_signature" });
+  assert.deepEqual(routeCommand("what needs QC"), { type: "answer", query: "projects_by_stage", stage: "qc" });
+  assert.deepEqual(routeCommand("what's going on with Crazy Cars"), { type: "answer", query: "project_status", target: "Crazy Cars" });
+  assert.deepEqual(routeCommand("status of Nobo Restaurant"), { type: "answer", query: "project_status", target: "Nobo Restaurant" });
+});
+
+test("parseClaudeResult reads the answer + clarify intents; drops an unknown query", () => {
+  assert.deepEqual(parseClaudeResult({ content: [{ type: "tool_use", name: "proposal_command", input: { type: "answer", query: "proposal_total", target: "Crazy Cars" } }] }), { type: "answer", query: "proposal_total", target: "Crazy Cars" });
+  assert.deepEqual(parseClaudeResult({ content: [{ type: "tool_use", name: "proposal_command", input: { type: "clarify", ask: "Which project?" } }] }), { type: "clarify", ask: "Which project?" });
+  assert.deepEqual(parseClaudeResult({ content: [{ type: "tool_use", name: "proposal_command", input: { type: "answer", query: "made_up" } }] }), { type: "unknown" });
+});
+
+test("buildMemoryBlock keeps sticky context (project/customer/facts/pending) and a trimmed transcript", () => {
+  const block = buildMemoryBlock({ memory: {
+    project: { accessId: "ASC1", name: "Crazy Cars" }, customer: "Crazy Cars",
+    facts: ["Crazy Cars proposal total: $1,200.00"], pending: "Set discount to 10%",
+    turns: Array.from({ length: 30 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", text: `msg ${i}` })),
+  } });
+  assert.match(block, /Active project: Crazy Cars \(ASC1\)/);
+  assert.match(block, /\$1,200\.00/);
+  assert.match(block, /PENDING.*Set discount to 10%/);
+  assert.match(block, /make it 15% instead/);     // tells the model a correction updates the pending change
+  assert.ok(block.length < 2200, "transcript is trimmed to a budget, not dumped whole");
+  assert.match(buildMemoryBlock({}), /No project is open/);
 });
 
 test("router leaves ambiguous phrasing to Claude (returns null), and doesn't hijack 'show invoices'", () => {
@@ -188,9 +218,9 @@ test("parseClaudeResult handles set_desc (match + desc), and the prompt enforces
   assert.deepEqual(parseClaudeResult(res({ type: "set_desc", match: {}, desc: "" })), { type: "unknown" }, "needs a match + text");
   // the grounding rule must be in the system prompt the model receives
   const sys = buildClaudeBody("x", {}).system;
-  assert.match(sys, /ONLY on the product name/);
+  assert.match(sys, /ONLY (on|in) the product name/);
   assert.match(sys, /Never invent/i);
-  assert.match(sys, /set_desc NEVER changes the product name/);
+  assert.match(sys, /[Nn]ever changes name|set_desc NEVER changes the product name/);
 });
 
 test("resolveSection maps phrases to the deck's stage + open slug", () => {

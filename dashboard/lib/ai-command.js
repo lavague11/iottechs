@@ -65,6 +65,20 @@ export function routeCommand(text) {
   m = t.match(/^(?:add\s+a\s+)?(?:note|log)\b(?:\s+that\b|\s*[:\-])?\s*(.+)/i);
   if (m && m[1].trim().length > 1) return { type: "add_note", body: m[1].trim() };
 
+  // ---- Questions → RETRIEVE + answer (never navigate). High-confidence phrasings only; the rest go to Claude.
+  // "how much is the Crazy Cars proposal", "what's the proposal total", "how much is their proposal"
+  m = t.match(/^how much(?:'s|\s+is|\s+are)?\s+(?:the\s+)?(.*?)\s*(?:proposal|quote|total|cost)\b/i);
+  if (m) { const tg = m[1].replace(/\b(the|their|this|that|project|customer|'s)\b/gi, "").replace(/\s+/g, " ").trim(); return { type: "answer", query: "proposal_total", ...(tg ? { target: tg } : { target: "this" }) }; }
+  // "which proposals aren't signed", "who hasn't signed", "unsigned proposals", "what's awaiting signature"
+  if (/\b(unsigned|not signed|aren'?t signed|haven'?t signed|hasn'?t signed|awaiting (?:a )?signature|still need(?:s)? (?:a )?signature|need(?:s)? to sign)\b/i.test(t) && /\b(proposal|proposals|sign|signed|signature|who|which|how many)\b/i.test(t))
+    return { type: "answer", query: "awaiting_signature" };
+  // "what needs QC", "which projects need quality control", "anything in QC"
+  if (/\b(qc|quality[\s-]*control)\b/i.test(t) && /\b(need|needs|in|which|what|any|how many|require)\b/i.test(t))
+    return { type: "answer", query: "projects_by_stage", stage: "qc" };
+  // "what's going on with Crazy Cars", "status of Crazy Cars", "where is Crazy Cars at"
+  m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
+  if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }
+
   // "take me to the proposal", "open the site survey", "go to Crazy Cars". A known SECTION of THIS project
   // wins (in-project navigation); anything else is treated as a project/customer name.
   m = t.match(/^(?:open|go\s+to|take\s+me\s+to|pull\s+up|show\s+me|jump\s+to)\s+(.{2,})/i);
@@ -249,7 +263,11 @@ const TOOL = {
   input_schema: {
     type: "object",
     properties: {
-      type: { type: "string", enum: ["add_items", "edit_item", "set_desc", "reorder_section", "set_discount", "add_note", "navigate_project", "navigate_section", "unsupported", "unknown"] },
+      type: { type: "string", enum: ["add_items", "edit_item", "set_desc", "reorder_section", "set_discount", "add_note", "answer", "clarify", "navigate_project", "navigate_section", "unsupported", "unknown"] },
+      query: { type: "string", enum: ["proposal_total", "project_status", "awaiting_signature", "projects_by_stage"], description: "answer: which read-only business fact to RETRIEVE and tell the user (don't navigate). proposal_total/project_status take a `target`; projects_by_stage takes a `stage`." },
+      target: { type: "string", description: "answer: which project the question is about — a name (\"Crazy Cars\"), an access id, or \"this\"/\"that\" for the current/last project in context." },
+      stage: { type: "string", description: "answer projects_by_stage: survey, proposal, approval, schedule, install, qc, payment or completion." },
+      ask: { type: "string", description: "clarify: ONE short question to get a missing detail (e.g. which project, how many), instead of refusing." },
       name: { type: "string", description: "line-item name for add_items, e.g. Camera" },
       qty: { type: "integer", description: "quantity for add_items" },
       price: { type: ["number", "null"], description: "unit price for add_items; null to use the price book" },
@@ -268,24 +286,50 @@ const TOOL = {
   },
 };
 
+// Compact rolling memory for the model: the sticky context (active project, last customer, retrieved facts,
+// pending change) is ALWAYS kept; the raw transcript is trimmed to a char budget — so a long chat about one
+// customer never "forgets" who. `context.memory` is preferred; `context.projectName`/`recent` still work.
+export function buildMemoryBlock(context = {}) {
+  const m = context.memory || null;
+  const lines = [];
+  const projName = m?.project?.name || context.projectName || null;
+  const projId = m?.project?.accessId || null;
+  if (projName) lines.push(`Active project: ${projName}${projId ? ` (${projId})` : ""}. "this"/"the proposal"/"them" refer to it.`);
+  else lines.push("No project is open.");
+  if (m?.customer && m.customer !== projName) lines.push(`Most recent customer referenced: ${m.customer}. "that customer"/"their proposal" mean this one.`);
+  if (Array.isArray(m?.facts) && m.facts.length) lines.push(`Facts already retrieved this chat: ${m.facts.slice(-6).join("; ")}.`);
+  const pending = m?.pending || null;
+  if (pending) lines.push(`A change is PENDING (previewed, not yet applied): ${pending}. A correction like "make it 15% instead" / "actually 10" updates THIS pending change — don't start over.`);
+  else if (context.recent) lines.push(`Previous command: "${String(context.recent).slice(0, 160)}". A follow-up like "make it 10" refers to the same item(s).`);
+  if (Array.isArray(m?.turns) && m.turns.length) {
+    let budget = 1200, conv = [];
+    for (let k = m.turns.length - 1; k >= 0; k--) {
+      const x = m.turns[k]; const line = `${x.role === "user" ? "User" : "Assistant"}: ${String(x.text || "").slice(0, 200)}`;
+      if (budget - line.length < 0) break;
+      budget -= line.length + 1; conv.unshift(line);
+    }
+    if (conv.length) lines.push(`Recent conversation:\n${conv.join("\n")}`);
+  }
+  return lines.join("\n");
+}
+
 export function buildClaudeBody(text, context = {}) {
-  const ctx = (context.projectName ? `The user is currently viewing project "${context.projectName}". "this"/"them"/"the proposal" refer to it.` : "No project is open.")
-    + (context.recent ? ` The user's PREVIOUS command was: "${String(context.recent).slice(0, 160)}". A follow-up like "make it 10", "change that to $250" or "undo" refers to the SAME item(s)/section from that command.` : "");
   return {
     model: AI_MODEL,
     max_tokens: 300,
     system:
-      "You convert a security-install company staff member's command into ONE structured action via the proposal_command tool. Supported:\n" +
+      "You are the assistant for a security-install company's staff dashboard. Turn the user's message into ONE structured action via the proposal_command tool. Be genuinely helpful: if they ASK for information, retrieve it; if a command is missing one detail, ask; only refuse when there's truly no supported path. Actions:\n" +
+      "- answer: the user is ASKING for a business fact, not giving a command — RETRIEVE it and tell them; do NOT navigate or open anything unless they explicitly say to. Set `query`: proposal_total (\"how much is X's proposal\", \"what's the total\"), project_status (\"what's going on with X\", \"status of X\"), awaiting_signature (\"which proposals aren't signed\", \"who hasn't signed\"), projects_by_stage (\"what needs QC\", \"which jobs are in install\" → set `stage`). Put the project in `target` (a name, or \"this\" for the current one).\n" +
       "- add_items: add line items like cameras.\n" +
-      "- edit_item: change an EXISTING line item's price/qty, MOVE it to another section, or RENAME the product. A rename sets `set.name` to the exact new name the USER gave (e.g. \"rename the camera to Front Door Camera\"). Put the user's reference in `match` and only the changes in `set`. A rename is a product-name change — it is NOT a description.\n" +
-      "- set_desc: write or improve the customer-facing DESCRIPTION of a line item (\"rewrite the description\", \"describe the cameras\", \"add a description to all cameras\", \"explain this to the customer\"). Match the item(s) and put the blurb in `desc`. CRITICAL grounding rule: base the description ONLY on the product name/type. Never invent or state specs, resolution/megapixels, warranty, night-vision, IP rating, codecs, or features that are not literally in the product name. A set_desc NEVER changes the product name, price or qty.\n" +
-      "- reorder_section: move a whole section/service (match it by name) to the `to` position (top/bottom/up/down).\n" +
-      "- set_discount: percent off.\n" +
-      "- add_note: save a project log note.\n" +
-      "- navigate_project: open a different customer/project (by name) in `query`.\n" +
-      "- navigate_section: open a section of THE CURRENT project — set `target` to survey, mockups, proposal, approval, schedule, install, qc, payment or completion.\n" +
-      "Anything else (sending messages, recording payments, booking real appointments) → \"unsupported\" with a short reason. Not a command → \"unknown\". " +
-      ctx + " Never invent a price; omit it unless the user stated one.",
+      "- edit_item: change an EXISTING line item's price/qty, MOVE it to another section, or RENAME the product (set.name = the exact new name). match = the user's reference, set = only the changes. A rename is NOT a description.\n" +
+      "- set_desc: write/improve a line item's customer-facing DESCRIPTION (match + desc). Ground it ONLY in the product name — never invent specs, resolution, warranty, night-vision, IP rating or codecs. Never changes name/price/qty.\n" +
+      "- reorder_section: move a whole section (match by name) to top/bottom/up/down.\n" +
+      "- set_discount: percent off. - add_note: save a project log note.\n" +
+      "- navigate_project: OPEN a different customer/project by name (`query`) — only when they ask to open/go/pull up. - navigate_section: open a section of the current project (`target`: survey, mockups, proposal, approval, schedule, install, qc, payment, completion).\n" +
+      "- clarify: a command missing ONE key detail (which project, how many) → ask a short question in `ask` instead of refusing.\n" +
+      "- unsupported: understood, but no supported action/read fits (sending messages, recording payments, booking appointments, or a company question like warranty/policy you can't retrieve) → a short honest `reason`; suggest a real alternative when one exists. - unknown: not a command.\n" +
+      "RULES: Prefer answer/edit over navigate. NEVER invent data — totals, names, counts, dates or outcomes must come from a real read; if you can't get it, use clarify or unsupported, never a guess. Never invent a price; omit it unless the user stated one.\n" +
+      buildMemoryBlock(context),
     tools: [TOOL],
     tool_choice: { type: "tool", name: "proposal_command" },
     messages: [{ role: "user", content: String(text || "").slice(0, 400) }],
@@ -335,6 +379,15 @@ export function parseClaudeResult(json) {
         return sec ? { type: "navigate_section", stage: sec.stage, open: sec.open, label: sec.label }
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
+      case "answer": {
+        const query = ["proposal_total", "project_status", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
+        if (!query) return { type: "unknown" };
+        const out = { type: "answer", query };
+        if (i.target) out.target = String(i.target).slice(0, 80);
+        if (i.stage) out.stage = String(i.stage).slice(0, 40);
+        return out;
+      }
+      case "clarify": return i.ask ? { type: "clarify", ask: String(i.ask).slice(0, 200) } : { type: "unknown" };
       case "set_discount": return { type: "set_discount", pct: Math.max(0, Math.min(100, +i.pct || 0)) };
       case "add_note": return i.body ? { type: "add_note", body: String(i.body).slice(0, 2000) } : { type: "unknown" };
       case "navigate_project": return i.query ? { type: "navigate_project", query: String(i.query).slice(0, 120) } : { type: "unknown" };

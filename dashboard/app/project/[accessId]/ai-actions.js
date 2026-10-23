@@ -10,9 +10,12 @@ import { headers } from "next/headers";
 import {
   getActiveProposal, addProjectNote, logProjectEvent,
   searchProjects, actorName, secretValue,
+  getJobByAccessId, getReceivables, getVisibleJobs,
 } from "../../../lib/db";
 import { optionTotals, priceOf } from "../../../lib/proposal";
+import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
+import { runQuery } from "../../../lib/ai-answer";
 import { aiGate } from "../../../lib/ai-authz";
 import { resolveAppRoute, looksLikeEdit } from "../../../lib/ai-global";
 
@@ -63,6 +66,34 @@ async function interpret(text, context) {
   } catch { return { intent: { type: "unknown" } }; }
 }
 
+// Run a read-only "answer" intent: retrieve real data (authorized, via existing db functions) and return
+// the answer TEXT — never invented. Ambiguous → a clarify question; permission/no-data/error carry a
+// `reason` for the (future) training loop. Shared by the proposal bar and the global ⌘K bar.
+function answerFor(intent, tok, currentAccessId) {
+  const ctx = {
+    role: tok.role, userId: tok.id, currentAccessId: currentAccessId || null, can,
+    db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects },
+    fin: { optionTotals },
+  };
+  const r = runQuery(intent, ctx);
+  if (r.error) {
+    const kind = r.reason === "ambiguous" ? "clarify" : r.reason === "permission" ? "unsupported" : r.reason === "no_data" ? "answer" : "unanswered";
+    return { ok: true, kind, speak: r.error, reason: r.reason };
+  }
+  return { ok: true, kind: "answer", speak: r.text, facts: r.facts || [] };
+}
+
+// Classify a result we couldn't turn into an action/answer, so the response is useful AND the future
+// self-improvement system has a signal. A QUESTION we couldn't retrieve → "unanswered" (company knowledge,
+// Phase 2); anything else → "unknown". Never a bare "I don't know" when we can say what we CAN do.
+const CAPS_LINE = "I can look up a proposal total, a project's status, which proposals are unsigned, or what's in QC — or edit a proposal and open a project.";
+function classifyMiss(text, noKey) {
+  const t = String(text || "").trim();
+  const isQuestion = /\?\s*$/.test(t) || /^(what|how|why|when|who|which|where|is|are|does|do|can|could|should|will|would|has|have)\b/i.test(t);
+  if (isQuestion) return { ok: true, kind: "unanswered", reason: "company_knowledge", speak: `I don't have that answer yet. ${CAPS_LINE}` };
+  return { ok: true, kind: "unknown", noKey: !!noKey };
+}
+
 // Read-only: text → a validated intent + a human preview. Writes nothing.
 export async function aiInterpretAction(accessId, text, context = {}) {
   const g = await authorize();
@@ -92,8 +123,10 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return proposalPreview(accessId, intent);
   }
 
-  if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || "That's a later phase — Phase 1 covers proposal edits, notes and opening a project." };
-  return { ok: true, kind: "unknown", noKey: !!noKey };
+  if (intent.type === "answer") return answerFor(intent, g.tok, accessId);
+  if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
+  if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || CAPS_LINE, reason: "unsupported_action" };
+  return classifyMiss(t, noKey);
 }
 
 // Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
@@ -148,7 +181,10 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   const app = resolveAppRoute(t);
   if (app) return { ok: true, kind: "navigate", href: app.href, label: app.label };
 
-  const { intent, noKey } = await interpret(t, { recent: context.recent });
+  const { intent, noKey } = await interpret(t, context);
+  // A question → retrieve + answer directly (don't navigate). This is what makes it an assistant, not a bar.
+  if (intent.type === "answer") return answerFor(intent, g.tok, context.currentAccessId);
+  if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "navigate_project") {
     const hits = (searchProjects(intent.query) || []).slice(0, 5);
     if (!hits.length) return { ok: true, kind: "none", speak: `No project matching "${intent.query}".` };
@@ -169,7 +205,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   // We couldn't fully parse it, but on a project an edit-ish phrasing ("rename a camera") should still take
   // the user to the proposal — the ⌘K bar only navigates; the edit itself is done with the proposal's bar.
   if (context.currentAccessId && looksLikeEdit(t)) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
-  return { ok: true, kind: "unknown", noKey: !!noKey };
+  return classifyMiss(t, noKey);
 }
 
 // Apply an add_note command.
