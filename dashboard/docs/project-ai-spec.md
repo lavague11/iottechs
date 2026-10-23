@@ -25,7 +25,8 @@ utterance/text
 ```
 
 Rules that hold for every write:
-- **Preview + confirm** always; **irreversible** actions (payments, sends, voids, stage moves, signatures) always confirm with an explicit summary.
+- **Every mutation previews.** **Irreversible or outward-facing** actions (payments, sends, voids, stage moves, signatures) require an **explicit confirm** with a summary. A low-risk **internal note** (`add_note`) is shown inline and committed on tap — it is never a silent *outward* action, and that is the only "no explicit confirm" case.
+- **`record_payment` records a payment already received** (cash / check / Zelle / card-on-file receipt). It does **NOT** charge a customer's card — initiating a charge is out of scope and would be a separate, explicitly-built action.
 - **Gate violations are explained, never bypassed.** Only `stage.move` roles may override, and the override is logged (`setStage` already logs it).
 - Reads are **role-stripped server-side** (sanitize), not just hidden in the UI.
 - Audit: every applied intent writes a Job-Log line (`logProjectEvent kind:"ai"`), as today.
@@ -77,7 +78,7 @@ Manual (human verifies field work): `schedule, install, qc, completion`.
 | completion | completion docs (internal) | Generate docs; set warranty; close | `complete_project` · `set_warranty` · `close_project` | `completeProjectAction` · `setWarrantyAction` · `closeProjectAction` | stage.move |
 | any → next | gate passes | Advance the stage (with gate check) | `advance_stage` | `acceptStageAction` / `techAdvanceStageAction` | stage.move |
 
-‡ survey submit is office/tech; confirm the exact cap when wiring (`install.edit` placeholder).
+‡ `submit_survey` carries no new capability of its own — it routes through `submitToolAction`, whose own guard authorizes the submit (office/tech). No placeholder cap to resolve.
 
 ---
 
@@ -146,9 +147,8 @@ New AI intents, each: **cap required**, **server action**, **confirm?**. Reads e
 
 ## 7. Build order
 
-### Phase 1 — Know + Next, staff, read-only *(start here)*
-Add `project_next`, `project_money` (role-stripped), `project_issues`, `project_timeline`, `project_payout` to `runQuery`. Router phrases: "what's next", "what's blocking", "what's the balance", "any open issues", "how long in this stage". Zero write surface.
-**Done when:** on any project, any staff role, the AI states the stage, the single next move + who owes it, and money the role may see — all from `buildStageFacts`/`phaseGate`, matching the deck. Unit-tested with injected facts + per-role visibility (a tech never gets retail; a sales never gets payout/cost).
+### Phase 1 — Know + Next, staff, read-only — ✅ SHIPPED (c4249a4)
+`lib/project-intel.js` + the `runQuery` reads `project_next` / `project_money` / `project_payout` / `project_issues` / `project_timeline`. **Not just the first incomplete requirement:** `projectIntel()` distinguishes **blockers** (`blockingReqs` — check-backed, gate-locking) from the **recommended** next action (a *nudge* when the customer owes it, the *step* when the office does) from **parallel prep** that can safely proceed meanwhile, each with an **owner** (customer / sales / office / operations / technician). Authz is **capability AND project-level visibility**; a technician sees only their **own** payout, only on an assigned job; retail is stripped from tech. Tech is admitted to the assistant but stays **read-only** (`AI_EDITORS` guard). Verified live on prod + 16 unit tests.
 
 ### Phase 2 — Do, one safe action at a time (value order)
 `send_proposal → request_signature → record_payment → assign_tech → raise_issue → advance_stage`. Each: new intent + `ai-actions.js` preview (checks `can`) + apply → existing action + confirm + audit. `advance_stage` must run `phaseGate` and refuse with the reason when locked (admin override logged).
