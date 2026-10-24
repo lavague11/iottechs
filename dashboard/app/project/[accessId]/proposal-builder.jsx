@@ -684,8 +684,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
       {err && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
+      {/* Staff AI "Conversation" bar renders only when the AI_COMMANDS flag is on; it returns null otherwise,
+          so this stays an additive, flag-controlled surface (toggle at /dev → API Keys → AI_COMMANDS). */}
       {!readOnly && <AiCommandBar accessId={accessId} projectName={customerName} payload={payload} patchPayload={patchPayload} />}
-      {!readOnly && canReuse && !hasItems && !startHidden && (
+      {/* Start From (Blank / Previous Project / Import) reuse picker — hidden on the proposal page per owner
+          request (not needed here; proposal reuse is still available from the New Project modal's Start From
+          step). Reversible: remove the `false &&` guard to restore it. */}
+      {false && !readOnly && canReuse && !hasItems && !startHidden && (
         <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
       )}
       {!readOnly && reviewDiffs.length > 0 && (
