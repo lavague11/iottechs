@@ -24,6 +24,7 @@ import InfoConfirmModal  from "./info-confirm-modal";
 import MockupWidget      from "./mockup-widget";
 import ProposalPanel     from "./proposal-panel";
 import GlobalCommandBar   from "../../components/global-command-bar";
+import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
 import ApprovalPanel     from "./approval-panel";
@@ -4029,6 +4030,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
         <style>{PV_CSS}</style>
         {body}
         <GlobalCommandBar currentAccessId={project.access_id} />
+        {view === "customer" && <CustomerAssistant accessId={project.access_id} />}
       </div>
     );
   }
@@ -4049,6 +4051,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
         )}
         {body}
       </div>
+      {view === "customer" && <CustomerAssistant accessId={project.access_id} />}
     </div>
   );
 }
