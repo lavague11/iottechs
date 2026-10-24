@@ -58,6 +58,16 @@ export function parseFeedback(text) {
   return { kind: classifyFeedback(t), body: String(text).trim().slice(0, 1000), ref: String(text), wantsDevice: mentionsDevice(t) };
 }
 
+// #7 — the staff next-step a DEVICE-BOUND objection suggests, so a captured concern becomes a ready-to-confirm
+// revision: a "don't need it" / "too much" objection → drop the line (remove_line); a price objection → revise
+// the price (propose_change). Other kinds have no obvious one-click change. Pure.
+export function suggestedActionFor(kind) {
+  const k = String(kind || "");
+  if (k === "objection:need" || k === "objection:scope") return "remove";
+  if (k === "objection:price") return "revise";
+  return null;
+}
+
 // A short human label for a kind ("Price objection", "Concern", "Request"). Pure display.
 export function feedbackLabel(kind) {
   const [type, cat] = String(kind || "feedback:other").split(":");

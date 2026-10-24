@@ -104,11 +104,55 @@ test("feedback_summary summarizes captured objections/feedback (open items + dev
   const r = runQuery({ query: "feedback_summary", target: "this" }, ctx("admin", "ASC1"));
   assert.match(r.text, /Crazy Cars: 2 open feedback items/);
   assert.match(r.text, /Need objection \(C2 Camera \(Front Entrance\)\)/);   // bound device shown
+  assert.match(r.text, /consider dropping it/);   // #7 — a device-bound need objection suggests remove_line
   assert.match(r.text, /Price objection/);
   assert.match(r.text, /1 resolved\./);
   assert.deepEqual(r.project, { accessId: "ASC1", name: "Crazy Cars" });
   // No feedback on ASC2 → says so, never invents.
   assert.match(runQuery({ query: "feedback_summary", target: "Nobo Restaurant" }, ctx()).text, /no logged feedback/);
+});
+
+test("#6 explain_item: glossary definition, GROUNDED against the customer's own package; never a cap", () => {
+  // A line that IS in their proposal → grounded with the real qty.
+  const cam = runQuery({ query: "explain_item", target: "this", ref: "what's the camera" }, ctx("customer", "ASC1"));
+  assert.match(cam.text, /Security camera/);
+  assert.match(cam.text, /includes 4 of these/);
+  // A known term NOT in their proposal → still explained, no invented grounding.
+  const nvr = runQuery({ query: "explain_item", target: "this", ref: "what's the nvr" }, ctx("customer", "ASC1"));
+  assert.match(nvr.text, /NVR \(the recorder\)/);
+  assert.doesNotMatch(nvr.text, /includes \d+ of these/);
+  // Unknown term → a gentle no_data miss (so the customer path can fall to the FAQ).
+  assert.equal(runQuery({ query: "explain_item", target: "this", ref: "what's the flux capacitor" }, ctx("customer", "ASC1")).reason, "no_data");
+});
+
+test("#6 compare_options: retail-gated; single vs multiple options; grounded totals", () => {
+  // Single-option proposal (the shared fake) → says so, with headline gear + the real total.
+  const one = runQuery({ query: "compare_options", target: "this" }, ctx("admin", "ASC1"));
+  assert.match(one.text, /one recommended package at \$600\.00/);
+  assert.match(one.text, /4 × Camera/);
+  // Retail cap — a tech/vendor never sees option totals.
+  assert.equal(runQuery({ query: "compare_options", target: "this" }, ctx("tech", "ASC1")).reason, "permission");
+  // Two-option proposal → both compared with their totals.
+  const TWO = { options: [
+    { id: "A", name: "Premium", services: [{ key: "camera", items: [{ id: "i1", name: "Camera", qty: 8, price: 150 }] }] },
+    { id: "B", name: "Essential", services: [{ key: "camera", items: [{ id: "i2", name: "Camera", qty: 4, price: 150 }] }] },
+  ] };
+  const db2 = { ...db, getActiveProposal: () => ({ status: "sent", payload: JSON.stringify(TWO), tax_rate: 0, deposit_pct: 50, selected_option: "A" }) };
+  const r = runQuery({ query: "compare_options", target: "this" }, { role: "admin", userId: 1, userName: "A", currentAccessId: "ASC1", can, db: db2, fin });
+  assert.match(r.text, /Premium \(\$1,200\.00\): 8 × Camera/);
+  assert.match(r.text, /Essential \(\$600\.00\): 4 × Camera/);
+});
+
+test("#6 explain_terms: deposit % from their plan + PCP; retail-gated; never invented", () => {
+  // No payment_plan on the fake → falls back to the deposit %; balance on completion.
+  const dep = runQuery({ query: "explain_terms", target: "this", ref: "how does the deposit work" }, ctx("customer", "ASC1"));
+  assert.match(dep.text, /50% deposit is due before work begins/);
+  // PCP branch — the fake proposal has no credit applied → says so (never invents an amount).
+  const pcp = runQuery({ query: "explain_terms", target: "this", ref: "what's the pcp credit" }, ctx("customer", "ASC1"));
+  assert.match(pcp.text, /PCP .*credit/);
+  assert.match(pcp.text, /doesn't have a PCP credit applied/);
+  // Retail cap — a tech is refused.
+  assert.equal(runQuery({ query: "explain_terms", target: "this", ref: "deposit" }, ctx("tech", "ASC1")).reason, "permission");
 });
 
 test("ownedAccessId lets a customer read their OWN project even when it's outside the visible set (#3 L2 fix)", () => {

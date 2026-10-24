@@ -67,6 +67,24 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.deepEqual(routeCommand("what does camera 3 cover"), { type: "answer", query: "device_coverage", ref: "what does camera 3 cover", target: "this" });
   assert.deepEqual(routeCommand("where is the entrance camera aimed"), { type: "answer", query: "device_coverage", ref: "where is the entrance camera aimed", target: "this" });
   assert.equal(routeCommand("why is there a camera at the entrance")?.query, "device_coverage");
+  // #6 explain-the-quote — AFTER device_coverage, so "what does camera 3 cover" stays a coverage read above.
+  assert.deepEqual(routeCommand("what's the nvr"), { type: "answer", query: "explain_item", ref: "what's the nvr", target: "this" });
+  assert.equal(routeCommand("why do I need the drop")?.query, "explain_item");
+  assert.equal(routeCommand("what does the labor cover")?.query, "explain_item");
+  assert.equal(routeCommand("what's the difference between the options")?.query, "compare_options");
+  assert.equal(routeCommand("compare option a and b")?.query, "compare_options");
+  assert.equal(routeCommand("how does the deposit work")?.query, "explain_terms");
+  assert.equal(routeCommand("what's the pcp credit")?.query, "explain_terms");
+  assert.equal(routeCommand("explain the payment plan")?.query, "explain_terms");
+  // "what does camera 3 cover" is coverage, NOT explain_item (device_coverage wins).
+  assert.equal(routeCommand("what does camera 3 cover")?.query, "device_coverage");
+  // A bare doubt about a device is NOT an explain/coverage READ — for staff it's the capture_feedback action
+  // (logging the objection); on the CUSTOMER path that action isn't a customer read, so customerActionIntent
+  // turns it into the device-bound objection capture (#7). Either way it never gets a generic glossary answer.
+  assert.equal(routeCommand("I'm not sure we need the entrance camera")?.name, "capture_feedback");
+  assert.equal(routeCommand("do we really need the nvr")?.name, "capture_feedback");
+  // explain_terms must not steal the balance/owed phrasings (those are project_money).
+  assert.equal(routeCommand("what's my balance")?.query, "project_money");
   // A device flag ("flag camera 3") is still an ACTION, not a coverage read.
   assert.equal(routeCommand("flag camera 3 as damaged")?.name, "raise_issue");
   // Even a verbose flag that mentions "covering" is an action, not a coverage read (action-verb exclusion).

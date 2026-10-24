@@ -12,9 +12,11 @@
 import { projectIntel } from "./project-intel.js";
 import { resolveDevice } from "./device-resolver.js";
 import { describeCoverage } from "./device-coverage.js";
-import { feedbackLabel } from "./feedback-model.js";
+import { feedbackLabel, suggestedActionFor } from "./feedback-model.js";
 import { signatureNudge } from "./signature-cadence.js";
 import { paymentNudge } from "./collections-cadence.js";
+import { glossaryFor } from "./quote-glossary.js";
+import { planScheduleRows, planDepositPct, fmtPct } from "./proposal.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -33,6 +35,30 @@ function proposalGrand(row, fin) {
   const opt = opts.find((o) => o.id === row.selected_option) || opts[0];
   try { return fin.optionTotals(opt, +row.tax_rate || 0, payload.discount, +row.deposit_pct || 50, payload.pcp_credit).grand; }
   catch { return null; }
+}
+
+// #6 Explain-the-quote helpers — parse the stored payload once, pick the customer-facing option, flatten its
+// lines, and summarize its headline gear. Pure; used by explain_item / compare_options / explain_terms.
+function readPayload(row) {
+  if (!row?.payload) return null;
+  try { return typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload; } catch { return null; }
+}
+function selectedOption(payload, row) {
+  const opts = payload?.options || [];
+  return opts.find((o) => o.id === row?.selected_option) || opts[0] || null;
+}
+const optionLines = (opt) => (opt?.services || []).flatMap((s) => s.items || []);
+function optTotal(opt, row, payload, ctx) {
+  try { return ctx.fin.optionTotals(opt, +row.tax_rate || 0, payload.discount, +row.deposit_pct || 50, payload.pcp_credit).grand; }
+  catch { return null; }
+}
+// The main equipment in an option, qty-prefixed, with bundled labor (drops/mounts/keystone) left out so the
+// summary reads like a system, not a parts list. Never prices here.
+function headlineGear(opt) {
+  const items = optionLines(opt).filter((l) => (+l.qty || 0) > 0 && !/\b(drop|labor|labour|mount|keystone)\b/i.test(l.name || ""));
+  if (!items.length) return "equipment still being finalized";
+  const top = items.slice(0, 4).map((l) => `${+l.qty || 1} × ${l.name}`);
+  return top.join(", ") + (items.length > 4 ? ", and more" : "");
 }
 
 // Admin/manager see everything; everyone else is scoped to the projects they can see (getVisibleJobs
@@ -208,6 +234,76 @@ const QUERIES = {
     return { text, facts: [text], project: { accessId: j.access_id, name }, device: { id: d.id, cid: d.cid || null, floor: d.floor, code: d.code, label: d.label, accessId: j.access_id } };
   } },
 
+  // #6 — "why an NVR?" / "what's the $150 drop?" / "what does the labor cover?" → explain ONE line item from a
+  // fixed, generic industry glossary (quote-glossary.js: never a price, never company-specific), GROUNDED against
+  // the customer's own package ("your package includes 8 of these"). Non-financial → no cap (a customer can ask
+  // this about their own quote; staff too). Unknown term → a gentle no_data so the customer path falls to FAQ.
+  explain_item: { run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const g = glossaryFor(intent.ref || "");
+    if (!g) return { error: "I can explain any item on your quote — ask about a specific one, like \"what's the NVR\" or \"what does the labor cover\".", reason: "no_data" };
+    let grounding = "";
+    const prop = ctx.db.getActiveProposal(j.access_id);
+    const payload = readPayload(prop);
+    if (payload) {
+      const match = optionLines(selectedOption(payload, prop)).find((l) => g.match.test(String(l.name || "").toLowerCase()));
+      if (match) { const qty = +match.qty || 0; grounding = qty > 1 ? ` Your package includes ${qty} of these.` : " It's included in your package."; }
+    }
+    return { text: `${g.title}: ${g.body}${grounding}`, facts: [`${name}: explained ${g.id}`], project: { accessId: j.access_id, name } };
+  } },
+
+  // #6 — "what's the difference between the options?" / "compare A and B" → each option's name, headline gear,
+  // and RETAIL total (financials cap — a tech/vendor never sees retail). Single option → says so. Grounded in
+  // the stored payload + optionTotals; never invents a package or a price.
+  compare_options: { cap: "customer.financials.view", run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const prop = ctx.db.getActiveProposal(j.access_id);
+    const payload = readPayload(prop);
+    const opts = payload?.options || [];
+    if (!opts.length || !prop || prop.status === "draft") return { text: `${name} doesn't have a sent proposal to compare yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const withData = opts.filter((o) => (o.services || []).some((s) => (s.items || []).length));
+    const use = withData.length ? withData : opts;
+    if (use.length === 1) {
+      const total = optTotal(use[0], prop, payload, ctx);
+      return { text: `There's one recommended package${total != null ? ` at ${money(total)}` : ""} — ${headlineGear(use[0])}.`, facts: [`${name}: single option`], project: { accessId: j.access_id, name } };
+    }
+    const bits = use.slice(0, 4).map((o, i) => {
+      const total = optTotal(o, prop, payload, ctx);
+      const label = o.name || `Option ${String.fromCharCode(65 + i)}`;
+      return `${label}${total != null ? ` (${money(total)})` : ""}: ${headlineGear(o)}`;
+    });
+    return { text: `Your options — ${bits.join(" · ")}.`, facts: [`${name}: ${use.length} options`], project: { accessId: j.access_id, name } };
+  } },
+
+  // #6 — "how does the deposit work?" / "what's the PCP credit?" / "payment terms?" → explain the deposit +
+  // payment schedule from the customer's OWN plan (planScheduleRows / planDepositPct) and the PCP credit if one
+  // is applied. All numbers are real (financials cap); never invents a schedule or a credit.
+  explain_terms: { cap: "customer.financials.view", run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const ref = String(intent.ref || "").toLowerCase();
+    const prop = ctx.db.getActiveProposal(j.access_id);
+    const payload = readPayload(prop);
+    // PCP credit branch (only when they asked about PCP, not the deposit/plan).
+    if (/\b(pcp|community credit|labor credit|credit back)\b/.test(ref) && !/\b(deposit|payment plan|schedule|up ?front)\b/.test(ref)) {
+      const pcp = +(payload?.pcp_credit) || 0;
+      const base = "The PCP (Partner Community Program) credit is a discretionary credit applied back toward your labor — it lowers your total.";
+      return { text: pcp > 0 ? `${base} Your proposal includes a ${money(pcp)} PCP credit.` : `${base} Your proposal doesn't have a PCP credit applied.`, facts: [`${name}: PCP ${pcp > 0 ? money(pcp) : "none"}`], project: { accessId: j.access_id, name } };
+    }
+    if (!payload) return { text: `${name} doesn't have a proposal with payment terms yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const fs = ctx.db.getProjectFinancialState ? ctx.db.getProjectFinancialState(j.access_id) : null;
+    const total = fs?.total || 0;
+    const rows = planScheduleRows(payload.payment_plan || "custom", payload.custom_plan?.rows, total, payload.full_date || null);
+    if (!rows.length) {
+      const pct = planDepositPct(payload, +prop?.deposit_pct || 50);
+      return { text: `A ${fmtPct(pct)}% deposit is due before work begins; the balance is due on completion.`, facts: [`${name}: deposit ${fmtPct(pct)}%`], project: { accessId: j.access_id, name } };
+    }
+    const sched = rows.map((row) => `${row.pctLabel}${row.amount != null ? ` (${money(row.amount)})` : ""} ${row.when}`).join(", then ");
+    return { text: `Your payment plan: ${sched}.`, facts: [`${name}: ${rows.length}-step plan`], project: { accessId: j.access_id, name } };
+  } },
+
   // "What's the feedback / any objections / open concerns" → summarize captured feedback (Phase 3.2) for the
   // project: open items (by kind, with the bound device) + reviewed/resolved counts. Sales intelligence; reads
   // only what was logged, never invented. No cost/margin/payout here (feedback carries none).
@@ -219,7 +315,13 @@ const QUERIES = {
     const open = items.filter((i) => (i.feedback_status || "open") === "open");
     const reviewed = items.filter((i) => i.feedback_status === "reviewed").length;
     const resolved = items.filter((i) => i.feedback_status === "resolved").length;
-    const labels = open.slice(0, 6).map((i) => feedbackLabel(i.feedback_kind) + (i.feedback_device_label ? ` (${i.feedback_device_label})` : ""));
+    // #7 — a DEVICE-BOUND objection carries a suggested one-click revision (drop / revise price) staff can
+    // confirm through remove_line / propose_change; surface it inline so the concern is actionable.
+    const labels = open.slice(0, 6).map((i) => {
+      const base = feedbackLabel(i.feedback_kind) + (i.feedback_device_label ? ` (${i.feedback_device_label})` : "");
+      const sa = i.feedback_device_label ? suggestedActionFor(i.feedback_kind) : null;
+      return base + (sa === "remove" ? " — consider dropping it" : sa === "revise" ? " — consider revising the price" : "");
+    });
     let text = `${name}: ${open.length} open feedback item${open.length === 1 ? "" : "s"}`;
     if (labels.length) text += ` — ${labels.join(", ")}`;
     const tail = [reviewed ? `${reviewed} reviewed` : null, resolved ? `${resolved} resolved` : null].filter(Boolean).join(", ");

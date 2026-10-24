@@ -6,7 +6,8 @@ import assert from "node:assert/strict";
 import { CUSTOMER_READS, customerReadAllowed, customerReadIntent, customerActionIntent } from "../lib/ai-customer.js";
 
 test("the allowlist is the customer-safe read set — no staff/internal reads", () => {
-  for (const q of ["project_status", "proposal_total", "project_money", "device_coverage", "project_timeline"])
+  for (const q of ["project_status", "proposal_total", "project_money", "device_coverage", "project_timeline",
+    "explain_item", "compare_options", "explain_terms"])   // #6 explain-the-quote reads are customer-safe
     assert.equal(customerReadAllowed(q), true, q);
   // Staff / internal / cross-project reads are NOT customer-allowed.
   for (const q of ["project_payout", "project_issues", "project_next", "feedback_summary", "projects_by_stage", "awaiting_signature"])
@@ -49,4 +50,31 @@ test("#3 slice 3 customerActionIntent: comment = the one write; sign/pay = guide
   assert.equal(customerActionIntent("tell me my balance"), null);   // "tell me" is not a relay lead-in
   assert.equal(customerActionIntent("how's my project"), null);
   assert.equal(customerActionIntent(""), null);
+});
+
+test("#6 customerReadIntent resolves the explain-the-quote reads", () => {
+  assert.equal(customerReadIntent("what's the nvr")?.query, "explain_item");
+  assert.ok(customerReadIntent("what's the nvr").ref);                       // carries the phrase for the glossary
+  assert.equal(customerReadIntent("what does the labor cover")?.query, "explain_item");
+  assert.equal(customerReadIntent("what's the difference between the options")?.query, "compare_options");
+  assert.equal(customerReadIntent("how does the deposit work")?.query, "explain_terms");
+  assert.equal(customerReadIntent("what's the pcp credit")?.query, "explain_terms");
+});
+
+test("#7 customerActionIntent: an objection/change-request → a captured concern (device resolved server-side)", () => {
+  // The headline — a device-need objection.
+  const o = customerActionIntent("I'm not sure we need the entrance camera");
+  assert.equal(o?.kind, "objection");
+  assert.equal(o.feedbackKind, "objection:need");
+  assert.match(o.body, /entrance camera/i);
+  assert.equal(o.ref, "I'm not sure we need the entrance camera");          // full phrase → server resolves the device
+  // A change-request to drop gear is a captured concern, never an executed change.
+  assert.equal(customerActionIntent("can we drop the lobby camera")?.kind, "objection");
+  assert.equal(customerActionIntent("that seems like too many cameras")?.kind, "objection");
+  assert.equal(customerActionIntent("this is too expensive")?.feedbackKind, "objection:price");
+  // A plain relay comment is still a comment, not an objection; a neutral question is neither.
+  assert.equal(customerActionIntent("tell the team the gate code is 1234")?.kind, "comment");
+  assert.equal(customerActionIntent("what's my balance"), null);
+  // Deliberate acts still win over the objection branch (ordered first).
+  assert.equal(customerActionIntent("I'm ready to sign the proposal")?.kind, "nav");
 });

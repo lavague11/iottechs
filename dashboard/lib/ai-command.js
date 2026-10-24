@@ -13,6 +13,7 @@
 //   { type: "unknown" }                          couldn't parse
 
 import { detectAction } from "./ai-project-actions.js";
+import { isExplainItem } from "./quote-glossary.js";
 
 const MONEY = (s) => { const n = parseFloat(String(s).replace(/[,$\s]/g, "")); return Number.isFinite(n) ? n : null; };
 const clampQty = (n) => Math.max(1, Math.min(999, Math.round(n)));
@@ -125,6 +126,21 @@ export function routeCommand(text) {
       && /\b(cover|covers|coverage|aim|aimed|facing|field of view|fov|range|reach|what (?:area|part|direction)|why (?:is|are|do|does) (?:there|we|they))\b/i.test(t)
       && !/\b(flag|report|raise|resolve|dismiss|assign|send|record|pay|add|remove)\b/i.test(t))   // an action verb → not a coverage read (e.g. "flag the camera covering X" → raise_issue)
     return { type: "answer", query: "device_coverage", ref: t, target: "this" };
+
+  // #6 Explain-the-quote — AFTER device_coverage so "what does camera 3 cover" stays a coverage read.
+  // "what's an NVR", "why do I need the drop", "what does the labor cover" → explain ONE line from the glossary,
+  // grounded in their package. isExplainItem = an explain cue AND a known glossary term (so it never hijacks FAQ).
+  if (isExplainItem(t)) return { type: "answer", query: "explain_item", ref: t, target: "this" };
+  // "compare the options", "difference between A and B", "what are my options" → compare the proposal's options.
+  if (/\b(compare|difference|differ|versus|vs\.?|which (?:option|package) (?:is|should)|what(?:'?s| is| are)?\s+(?:my|the)\s+options?|two options|both options|other option|option\s+[ab]\b)\b/i.test(t)
+      && /\b(option|options|package|packages|quote|proposal|a and b|a or b)\b/i.test(t))
+    return { type: "answer", query: "compare_options", target: "this" };
+  // "how does the deposit work", "payment terms", "what's the PCP credit", "how much up front" → explain terms.
+  // Excludes the balance/owed phrasings (those are project_money, handled below).
+  if (/\b(deposit|payment (?:plan|terms|schedule)|pcp|up ?front|financing|how much (?:to start|down))\b/i.test(t)
+      && /\b(how|what|explain|work|works|mean|means|terms|plan|schedule|credit|do i|is the|are the)\b/i.test(t)
+      && !/\b(balance|owed|owe|left to pay|amount due|paid so far|remaining)\b/i.test(t))
+    return { type: "answer", query: "explain_terms", ref: t, target: "this" };
 
   // "what's the feedback", "any objections", "open concerns", "feedback summary" → summarize captured feedback.
   // (Capturing — "log the objection …" — is handled earlier in the note branch as an action, not here.)
@@ -493,7 +509,7 @@ export function parseClaudeResult(json) {
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "answer": {
-        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "feedback_summary", "awaiting_signature", "signature_nudges", "collections_queue", "projects_by_stage"].includes(i.query) ? i.query : null;
+        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "explain_item", "compare_options", "explain_terms", "feedback_summary", "awaiting_signature", "signature_nudges", "collections_queue", "projects_by_stage"].includes(i.query) ? i.query : null;
         if (!query) return { type: "unknown" };
         const out = { type: "answer", query };
         if (i.target) out.target = String(i.target).slice(0, 80);

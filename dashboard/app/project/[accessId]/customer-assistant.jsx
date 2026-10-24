@@ -4,7 +4,7 @@
 // It renders NOTHING unless the server says the feature is on AND the caller owns this project (flag
 // AI_CUSTOMER, default off) — so there is zero exposure until the owner enables it. No writes, no voice.
 import { useState, useEffect, useRef } from "react";
-import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction } from "./ai-actions";
+import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction, aiCustomerFeedbackAction } from "./ai-actions";
 
 const CSS = `
 .cust-ai{position:fixed;right:18px;bottom:18px;z-index:60;font:14px/1.45 system-ui,-apple-system,sans-serif}
@@ -64,7 +64,11 @@ export default function CustomerAssistant({ accessId }) {
       if (r?.kind === "navigate") {
         setMsgs((m) => [...m, { role: "ai", text: r.speak || "Here you go.", link: { href: r.href, label: r.label, nav: true } }]);
       } else if (r?.kind === "write" && r.write === "comment") {
-        setMsgs((m) => [...m, { role: "ai", text: r.preview?.title || "Send this to your project team?", confirm: { body: r.body } }]);
+        setMsgs((m) => [...m, { role: "ai", text: r.preview?.title || "Send this to your project team?", confirm: { kind: "comment", body: r.body } }]);
+      } else if (r?.kind === "write" && r.write === "objection") {
+        // #7 — a concern/change-request. Show the coverage explanation (if any) + offer to share it with the team.
+        setMsgs((m) => [...m, { role: "ai", text: r.speak || r.preview?.title || "Share this concern with your team?",
+          confirm: { kind: "objection", body: r.body, feedbackKind: r.feedbackKind, deviceId: r.deviceId, deviceLabel: r.deviceLabel } }]);
       } else {
         setMsgs((m) => [...m, { role: "ai", text: r?.speak || r?.error || "I didn't catch that — try rephrasing.", link: r?.link || null }]);
       }
@@ -73,18 +77,21 @@ export default function CustomerAssistant({ accessId }) {
     } finally { setBusy(false); }
   }
 
-  // Confirm/cancel a relayed comment (the one customer write).
-  async function sendComment(body, idx) {
-    if (busy) return;
+  // Confirm/cancel a customer write — a relayed comment or (#7) a captured objection/concern. The server action
+  // re-gates and is the real boundary; this just dispatches the one the preview asked for.
+  async function sendConfirm(confirm, idx) {
+    if (busy || !confirm) return;
     setBusy(true);
     try {
-      const r = await aiCustomerCommentAction(accessId, body);
+      const r = confirm.kind === "objection"
+        ? await aiCustomerFeedbackAction(accessId, { body: confirm.body, feedbackKind: confirm.feedbackKind, deviceId: confirm.deviceId, deviceLabel: confirm.deviceLabel })
+        : await aiCustomerCommentAction(accessId, confirm.body);
       setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: r?.message || r?.error || "Done." } : x)));
     } catch {
       setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: "Couldn't send — please try again." } : x)));
     } finally { setBusy(false); }
   }
-  function cancelComment(idx) { setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: "Okay — I won't send that." } : x))); }
+  function cancelConfirm(idx) { setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: "Okay — I won't send that." } : x))); }
 
   return (
     <div className="cust-ai">
@@ -108,8 +115,8 @@ export default function CustomerAssistant({ accessId }) {
                   <div className="cust-ai-confirm">
                     <div className="cust-ai-confirm-body">“{m.confirm.body}”</div>
                     <div className="cust-ai-confirm-btns">
-                      <button type="button" disabled={busy} onClick={() => sendComment(m.confirm.body, i)}>Send</button>
-                      <button type="button" className="ghost" disabled={busy} onClick={() => cancelComment(i)}>Cancel</button>
+                      <button type="button" disabled={busy} onClick={() => sendConfirm(m.confirm, i)}>Send</button>
+                      <button type="button" className="ghost" disabled={busy} onClick={() => cancelConfirm(i)}>Cancel</button>
                     </div>
                   </div>
                 )}

@@ -3,7 +3,7 @@
 // on other action verbs or plain statements, and the display label.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyFeedback, parseFeedback, mentionsDevice, feedbackLabel, FEEDBACK_KINDS, FEEDBACK_STATUS } from "../lib/feedback-model.js";
+import { classifyFeedback, parseFeedback, mentionsDevice, feedbackLabel, suggestedActionFor, FEEDBACK_KINDS, FEEDBACK_STATUS } from "../lib/feedback-model.js";
 
 test("classifyFeedback maps utterances to the taxonomy (specific objection wins)", () => {
   assert.equal(classifyFeedback("the price is too expensive for our budget"), "objection:price");
@@ -42,4 +42,13 @@ test("mentionsDevice detects a device reference (to decide whether to bind one)"
   assert.equal(mentionsDevice("the entrance camera"), true);
   assert.equal(mentionsDevice("c3"), true);
   assert.equal(mentionsDevice("the overall price"), false);
+});
+
+test("#7 suggestedActionFor maps a device-bound objection to a one-click revision", () => {
+  assert.equal(suggestedActionFor("objection:need"), "remove");    // "don't need it" → drop the line
+  assert.equal(suggestedActionFor("objection:scope"), "remove");   // "too much equipment" → drop
+  assert.equal(suggestedActionFor("objection:price"), "revise");   // "too expensive" → revise the price
+  assert.equal(suggestedActionFor("objection:timeline"), null);    // no obvious one-click change
+  assert.equal(suggestedActionFor("feedback:praise"), null);
+  assert.equal(suggestedActionFor(""), null);
 });

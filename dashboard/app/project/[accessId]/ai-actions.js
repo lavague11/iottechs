@@ -13,11 +13,13 @@ import {
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
-  customerOwnsProjectAccount,
+  customerOwnsProjectAccount, addFeedbackNote,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
+import { describeCoverage } from "../../../lib/device-coverage";
+import { FEEDBACK_KINDS } from "../../../lib/feedback-model";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
@@ -668,6 +670,26 @@ export async function aiCustomerInterpretAction(accessId, text) {
     return { ok: true, kind: "write", write: "comment", body: act.body,
       preview: { title: "Send this to your project team?", body: act.body } };
   }
+  // #7 headline — an objection/change-request. If they named a device, EXPLAIN its coverage from the survey
+  // first (so they get the "here's what it's for" answer), then offer to record the concern against that exact
+  // device. The write is confirmed (Send/Cancel) and goes through aiCustomerFeedbackAction (re-gated there).
+  if (act?.kind === "objection") {
+    let deviceId = null, deviceLabel = null, previewDevice = null, coverage = "";
+    const devices = getProjectDevices(accessId) || [];
+    if (devices.length) {
+      const hit = resolveDevice(act.ref || "", devices);
+      if (hit.device) {
+        deviceId = hit.device.id; deviceLabel = candidateView(hit.device).display;
+        coverage = describeCoverage(hit.device);
+        previewDevice = { id: hit.device.id, cid: hit.device.cid || null, floor: hit.device.floor, code: hit.device.code, label: hit.device.label, accessId };
+      }
+    }
+    const lead = coverage ? `${coverage} ` : "";
+    return { ok: true, kind: "write", write: "objection", body: act.body, feedbackKind: act.feedbackKind,
+      deviceId, deviceLabel, device: previewDevice,
+      speak: `${lead}Want me to share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your project team?`,
+      preview: { title: `Share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your team?`, body: act.body } };
+  }
   if (act?.kind === "nav") {
     return { ok: true, kind: "navigate", href: `/project/${accessId}?stage=proposal`, label: act.label,
       speak: `I'll take you to ${act.label}.` };
@@ -699,4 +721,29 @@ export async function aiCustomerCommentAction(accessId, body) {
   const r = await addNoteAction(accessId, text, true);   // isPublic:true — visible to the project team (explicit, not relying on another module's default)
   if (r?.error) return { error: r.error };
   return { ok: true, message: "Sent to your project team." };
+}
+
+// #7 — apply a customer's captured OBJECTION/concern (the second customer-facing write). Like the comment
+// action, the Send/Cancel confirm is UX only — THIS action is the real boundary: it re-gates (customer +
+// own-project + AI_CUSTOMER), re-validates the taxonomy, and RE-RESOLVES the device server-side (a client id
+// must be a real device on THIS project or the binding is dropped — no cross-project id). It records an
+// internal, non-destructive review item (addFeedbackNote, role=customer → visible to the team, status 'open').
+// It NEVER changes the proposal — staff turn it into a revision later (propose_change / remove_line).
+export async function aiCustomerFeedbackAction(accessId, { body, feedbackKind, deviceId, deviceLabel } = {}) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "customer") return { error: "Unavailable." };
+  if (!customerAiOn()) return { error: "Unavailable." };
+  const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+  if (!owns) return { error: "Unavailable." };
+  const text = String(body || "").trim().slice(0, 500);
+  if (text.length < 2) return { error: "Nothing to send." };
+  const kind = FEEDBACK_KINDS.includes(String(feedbackKind)) ? String(feedbackKind) : "feedback:concern";
+  let did = null, dlabel = null;
+  if (deviceId != null) {
+    const dev = (getProjectDevices(accessId) || []).find((d) => String(d.id) === String(deviceId));
+    if (dev) { did = dev.id; dlabel = candidateView(dev).display; }
+  }
+  addFeedbackNote(accessId, { role: "customer", name: actorName(tok), body: text, kind, deviceId: did, deviceLabel: dlabel });
+  logProjectEvent(accessId, { kind: "feedback", label: `Customer concern${dlabel ? ` on ${dlabel}` : ""} — ${kind}`, actor: actorName(tok) });
+  return { ok: true, message: "Shared with your project team." };
 }
