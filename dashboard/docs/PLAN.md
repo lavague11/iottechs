@@ -32,7 +32,7 @@ Device resolver + `getProjectDevices` shipped; concerns associate to a device vi
 `feedback_summary` SHIPPED (afae14d): open objections/feedback by kind + bound device + status counts. Outstanding approvals = existing `awaiting_signature`; likely blockers / next action = existing `project_next` / `projectIntel`. Never cost/margin/payout. Reads, staff-scoped via resolveProject. (Optional future: a one-shot "sales brief" composing next+feedback+approvals.)
 
 ## Remaining (owner-steer — bigger or higher-risk)
-1. **Floor-plan highlight** (UI): **SHIPPED a91e9fe** — AI-resolved device rings on the planner via a window event + widget `highlight` cmd.
+1. **Floor-plan highlight** (UI): **DONE — a91e9fe + fix 962e096**, independently reviewed + re-verified. AI-resolved device rings on the planner (window event → widget `highlight` by cid). The review uncovered + fixed a CRITICAL latent bug: device `id` was `undefined` on real data (stripDevs persists none), which had silently killed resolver/coverage/raise/feedback in production too — now `surveyDevices` keys on cid/code and a non-mocked test guards it. Non-camera visual highlight is a no-op pending a persisted per-device uid (deferred).
 2. **Proposed equipment changes for approval** (write): AI drafts a change as a proposal/addendum the human approves — bounded by "never auto-remove gear / change pricing / alter a signed agreement from conversation." Needs design + sign-off.
 3. **Customer-facing AI (Phase 6)**: LAST, highest injection risk; owner sign-off before starting.
 (Optional polish for #1: also highlight on the customer "Your System Layout" React render, and auto-clear on a new question.)
