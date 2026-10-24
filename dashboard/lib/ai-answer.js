@@ -12,6 +12,7 @@
 import { projectIntel } from "./project-intel.js";
 import { resolveDevice } from "./device-resolver.js";
 import { describeCoverage } from "./device-coverage.js";
+import { feedbackLabel } from "./feedback-model.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -200,6 +201,25 @@ const QUERIES = {
     if (!hit.device) return { error: `I couldn't tell which device you mean on ${name}. Try its number or location — e.g. "camera 3" or "the entrance camera".`, reason: "no_data" };
     const text = describeCoverage(hit.device);
     return { text, facts: [text], project: { accessId: j.access_id, name } };
+  } },
+
+  // "What's the feedback / any objections / open concerns" → summarize captured feedback (Phase 3.2) for the
+  // project: open items (by kind, with the bound device) + reviewed/resolved counts. Sales intelligence; reads
+  // only what was logged, never invented. No cost/margin/payout here (feedback carries none).
+  feedback_summary: { run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const items = (ctx.db.listFeedback ? ctx.db.listFeedback(j.access_id) : []) || [];
+    if (!items.length) return { text: `${name} has no logged feedback yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const open = items.filter((i) => (i.feedback_status || "open") === "open");
+    const reviewed = items.filter((i) => i.feedback_status === "reviewed").length;
+    const resolved = items.filter((i) => i.feedback_status === "resolved").length;
+    const labels = open.slice(0, 6).map((i) => feedbackLabel(i.feedback_kind) + (i.feedback_device_label ? ` (${i.feedback_device_label})` : ""));
+    let text = `${name}: ${open.length} open feedback item${open.length === 1 ? "" : "s"}`;
+    if (labels.length) text += ` — ${labels.join(", ")}`;
+    const tail = [reviewed ? `${reviewed} reviewed` : null, resolved ? `${resolved} resolved` : null].filter(Boolean).join(", ");
+    text += tail ? `. ${tail}.` : ".";
+    return { text, facts: [`${name} ${open.length} open feedback`], project: { accessId: j.access_id, name } };
   } },
 
   // "Which projects need QC?" / "…are in <stage>?" → authorized project list filtered by lifecycle stage.

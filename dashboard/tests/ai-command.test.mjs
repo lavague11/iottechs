@@ -61,6 +61,11 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.equal(routeCommand("flag camera 3 as damaged")?.name, "raise_issue");
   // Even a verbose flag that mentions "covering" is an action, not a coverage read (action-verb exclusion).
   assert.equal(routeCommand("flag the camera covering the front door")?.name, "raise_issue");
+  // Feedback summary reads.
+  assert.deepEqual(routeCommand("what objections do we have"), { type: "answer", query: "feedback_summary", target: "this" });
+  assert.equal(routeCommand("any open feedback")?.query, "feedback_summary");
+  // "log the objection about price" is still the capture ACTION, not the summary read.
+  assert.equal(routeCommand("log the customer's objection about price")?.name, "capture_feedback");
   // A plain navigation phrasing is NOT hijacked into an answer (no stage word) — the global bar's app
   // router still sends "show me projects" to the Projects page.
   assert.notEqual(routeCommand("show me projects")?.type, "answer");

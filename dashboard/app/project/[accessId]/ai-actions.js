@@ -12,7 +12,7 @@ import {
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
-  getSupportArticles, getProjectDevices, openInstallIssues, getToolData,
+  getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
@@ -113,7 +113,7 @@ function answerFor(intent, tok, currentAccessId) {
   const ctx = {
     role: tok.role, userId: tok.id, userName: actorName(tok), currentAccessId: currentAccessId || null, can,
     db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects,
-          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices },
+          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices, listFeedback },
     fin: { optionTotals },
   };
   const r = runQuery(intent, ctx);

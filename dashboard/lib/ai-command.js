@@ -115,6 +115,11 @@ export function routeCommand(text) {
       && !/\b(flag|report|raise|resolve|dismiss|assign|send|record|pay|add|remove)\b/i.test(t))   // an action verb → not a coverage read (e.g. "flag the camera covering X" → raise_issue)
     return { type: "answer", query: "device_coverage", ref: t, target: "this" };
 
+  // "what's the feedback", "any objections", "open concerns", "feedback summary" → summarize captured feedback.
+  // (Capturing — "log the objection …" — is handled earlier in the note branch as an action, not here.)
+  if (/\b(feedback|objections?|concerns?)\b/i.test(t) && /\b(summary|summarize|open|outstanding|any|what|which|list|show|logged|review|so far)\b/i.test(t))
+    return { type: "answer", query: "feedback_summary", target: "this" };
+
   // "what's going on with Crazy Cars", "status of Crazy Cars", "where is Crazy Cars at"
   m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
   if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }
@@ -465,7 +470,7 @@ export function parseClaudeResult(json) {
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "answer": {
-        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
+        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "feedback_summary", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
         if (!query) return { type: "unknown" };
         const out = { type: "answer", query };
         if (i.target) out.target = String(i.target).slice(0, 80);

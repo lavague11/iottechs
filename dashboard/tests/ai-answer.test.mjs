@@ -23,6 +23,11 @@ const db = {
   getProjectAssignments: () => [{ role: "tech", user_id: 7 }],
   getProjectFinancialState: (a) => a === "ASC1" ? { total: 600, paid: 100, balance: 500, pendingPayments: 0 } : null,
   listInstallIssues: (a) => a === "ASC1" ? [{ status: "NEEDS_REVIEW", title: "Camera 3 offline" }, { status: "RESOLVED", title: "Old flag" }] : [],
+  listFeedback: (a) => a === "ASC1" ? [
+    { feedback_kind: "objection:need", feedback_status: "open", feedback_device_label: "C2 Camera (Front Entrance)", body: "not sure we need it" },
+    { feedback_kind: "objection:price", feedback_status: "open", body: "too expensive" },
+    { feedback_kind: "feedback:praise", feedback_status: "resolved", body: "love the layout" },
+  ] : [],
   getProjectDevices: (a) => a === "ASC1" ? [
     { id: "d1", k: "cam", kindName: "Camera", code: "C1", identity: "Camera 1", label: "Lobby", loc: "Lobby", floor: 0, floorName: "Floor 1", x: 20, y: 30, cone: true, aimed: true, aim: 45, fov: 30, range: 40 },
     { id: "d2", k: "cam", kindName: "Camera", code: "C2", identity: "Camera 2", label: "Front Entrance", loc: "Front Entrance", floor: 0, floorName: "Floor 1", x: 82, y: 68, cone: true, aimed: true, aim: 92, fov: 30, range: 40, placementType: "outside" },
@@ -66,6 +71,17 @@ test("device_coverage explains a resolved device from survey facts (the headline
   assert.equal(runQuery({ query: "device_coverage", target: "this", ref: "what does the kiosk cover" }, ctx("admin", "ASC1")).reason, "no_data");
   // No survey devices on ASC2 → says so (never invents).
   assert.match(runQuery({ query: "device_coverage", target: "Nobo Restaurant", ref: "camera 1" }, ctx()).text, /no placed survey devices/);
+});
+
+test("feedback_summary summarizes captured objections/feedback (open items + device + status counts)", () => {
+  const r = runQuery({ query: "feedback_summary", target: "this" }, ctx("admin", "ASC1"));
+  assert.match(r.text, /Crazy Cars: 2 open feedback items/);
+  assert.match(r.text, /Need objection \(C2 Camera \(Front Entrance\)\)/);   // bound device shown
+  assert.match(r.text, /Price objection/);
+  assert.match(r.text, /1 resolved\./);
+  assert.deepEqual(r.project, { accessId: "ASC1", name: "Crazy Cars" });
+  // No feedback on ASC2 → says so, never invents.
+  assert.match(runQuery({ query: "feedback_summary", target: "Nobo Restaurant" }, ctx()).text, /no logged feedback/);
 });
 
 test("project_status reports stage + proposal state, never invented", () => {
