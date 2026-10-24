@@ -665,9 +665,12 @@ export async function aiCustomerInterpretAction(accessId, text) {
   return { ok: true, kind: "answer", speak: "I can tell you your project's status, your quote total and balance, and what your cameras cover — and answer common questions. What would you like to know?" };
 }
 
-// Apply a customer's confirmed COMMENT (the one customer-facing write). Re-gates (customer + own-project +
-// AI_CUSTOMER), then writes through addNoteAction, which independently re-checks customer ownership. A
-// customer's note is public to their project team. No other write is reachable from the customer path.
+// Apply a customer's COMMENT (the one customer-facing write). The Send/Cancel confirm in the UI is UX only —
+// THIS server action is the real boundary: it re-gates (customer + own-project + AI_CUSTOMER) and writes
+// through addNoteAction, which independently re-checks customer ownership. So a direct/forged call with an
+// arbitrary body is still safe (fully gated + length-capped; author/role/visibility forced server-side). A
+// customer's note is public to their project team (isPublic:true passed explicitly). No other write is
+// reachable from the customer path.
 export async function aiCustomerCommentAction(accessId, body) {
   const tok = await getSessionRole();
   if (!tok || tok.role !== "customer") return { error: "Unavailable." };
@@ -676,7 +679,7 @@ export async function aiCustomerCommentAction(accessId, body) {
   if (!owns) return { error: "Unavailable." };
   const text = String(body || "").trim().slice(0, 500);
   if (text.length < 2) return { error: "Nothing to send." };
-  const r = await addNoteAction(accessId, text);   // self-re-checks customer ownership; customer note is public to staff
+  const r = await addNoteAction(accessId, text, true);   // isPublic:true — visible to the project team (explicit, not relying on another module's default)
   if (r?.error) return { error: r.error };
   return { ok: true, message: "Sent to your project team." };
 }
