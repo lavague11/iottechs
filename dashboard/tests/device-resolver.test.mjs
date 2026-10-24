@@ -53,6 +53,26 @@ test("unknown / missing → none; empty list → none; no discriminator → none
   assert.deepEqual(resolveDevice("the keypad", DEVICES), { none: true });
 });
 
+test("never-guess: a device number that matches NO code clarifies (no positional fallback)", () => {
+  // Codes are per-group and non-contiguous: NVR=C1, cameras C2/C3. "camera 1" matches no CAMERA code →
+  // must clarify among the cameras, NOT return the first camera by position.
+  const mixed = [
+    { id: "n1", k: "nvr", kindName: "NVR", code: "C1", identity: "NVR 1", label: "Closet", loc: "Closet", floor: 0, floorName: "Floor 1", x: 10, y: 10 },
+    { id: "c2", k: "cam", kindName: "Camera", code: "C2", identity: "Camera 2", label: "Lobby", loc: "Lobby", floor: 0, floorName: "Floor 1", x: 30, y: 30 },
+    { id: "c3", k: "cam", kindName: "Camera", code: "C3", identity: "Camera 3", label: "Dining", loc: "Dining", floor: 0, floorName: "Floor 1", x: 70, y: 70 },
+  ];
+  const r = resolveDevice("flag camera 1 as damaged", mixed);
+  assert.ok(r.candidates && r.candidates.length === 2, "camera 1 (no C-camera match) → clarify, not a guess");
+  assert.ok(!r.device);
+});
+
+test("quantity is not an ordinal: '2 cameras' doesn't resolve to camera #2", () => {
+  // "2 cameras" is a count, not device #2 → clarify among the cameras rather than silently pick C2.
+  const r = resolveDevice("flag 2 cameras as damaged", DEVICES);
+  assert.ok(r.candidates && r.candidates.length === 3);
+  assert.ok(!r.device);
+});
+
 test("candidateView gives a human label for a clarify prompt (code + kind + location)", () => {
   const v = candidateView(DEVICES[1]);
   assert.equal(v.id, "d2");

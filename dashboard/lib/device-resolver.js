@@ -60,7 +60,15 @@ export function resolveDevice(reference, devices) {
   if (!list.length) return { none: true };
   const refTokens = tokensOf(reference);
   const words = refTokens.filter((w) => w.length >= 2 && !REF_STOP.has(w)).map(sing);
-  const numbers = refTokens.filter((w) => /^\d+$/.test(w)).map(Number);
+  // Kinds present in THIS project + all their words — used for the kind filter AND quantity detection.
+  const presentKinds = [...new Set(list.map((d) => d.k))];
+  const allKindWords = new Set();
+  for (const k of presentKinds) for (const w of [...tokensOf(kindOf(k).name), ...(KIND_SYN[k] || [])]) allKindWords.add(sing(w));
+  // ORDINAL numbers = a number NOT immediately followed by a kind word: "camera 3" is a selector; "3
+  // cameras" is a QUANTITY, not device #3. Keeps a count from being mistaken for a device number.
+  const ordinals = [];
+  for (let i = 0; i < refTokens.length; i++)
+    if (/^\d+$/.test(refTokens[i]) && !allKindWords.has(sing(refTokens[i + 1] || ""))) ordinals.push(Number(refTokens[i]));
 
   // 0) EXACT code token ("c3", "s1") → that device (the deterministic survey code).
   const codeHit = list.filter((d) => d.code && refTokens.includes(norm(d.code)));
@@ -68,7 +76,6 @@ export function resolveDevice(reference, devices) {
   if (codeHit.length > 1) return { candidates: codeHit.map(candidateView) };
 
   // 1) KIND filter — only kinds that actually exist in THIS project (never invent a type).
-  const presentKinds = [...new Set(list.map((d) => d.k))];
   const matchedKinds = new Set();
   for (const k of presentKinds) {
     const kw = new Set([...tokensOf(kindOf(k).name), ...(KIND_SYN[k] || [])].map(sing));
@@ -80,18 +87,17 @@ export function resolveDevice(reference, devices) {
   for (const k of matchedKinds) for (const w of [...tokensOf(kindOf(k).name), ...(KIND_SYN[k] || [])].map(sing)) kindWords.add(w);
   const nameWords = words.filter((w) => !kindWords.has(w));
 
-  // 2) ORDINAL — "camera 3" → the pooled device whose code trailing number is 3 (stable code, not position).
-  if (numbers.length) {
-    for (const n of numbers) {
+  // 2) ORDINAL — "camera 3" → the pooled device whose code trailing number is 3 (the STABLE code, never an
+  // array position: survey codes are per-group and non-contiguous after deletes, so position would lie). A
+  // number that matches no code is NOT resolved to a neighbour — we clarify instead (never guess).
+  let ordinalUnmatched = false;
+  if (ordinals.length) {
+    for (const n of ordinals) {
       const byCode = pool.filter((d) => codeNum(d.code) === n);
       if (byCode.length === 1) return { device: byCode[0] };
       if (byCode.length > 1) return { candidates: byCode.map(candidateView) };
     }
-    // No code hit: fall back to the Nth device in the (kind) pool ONLY when the pool is a stable ordered set
-    // and the number is in range — still a real device id, not a fabricated one.
-    if (matchedKinds.size) {
-      for (const n of numbers) { if (n >= 1 && n <= pool.length) return { device: pool[n - 1] }; }
-    }
+    ordinalUnmatched = true;
   }
 
   // 3) NAME / LOCATION score over the remaining content words (identity, label, loc, floorName).
@@ -110,8 +116,12 @@ export function resolveDevice(reference, devices) {
   // 5) DECIDE — one is confident; several is a clarify; zero (with a real discriminator) is none. If nothing
   // discriminated at all (no kind, no name hit, no region) we refuse rather than guess, UNLESS there is
   // exactly one device of the matched kind ("the camera" with a single camera).
-  const hadDiscriminator = matchedKinds.size || maxS > 0 || !!region || numbers.length;
+  const hadDiscriminator = matchedKinds.size || maxS > 0 || !!region || ordinals.length;
   if (!hadDiscriminator) return { none: true };
+  // A named device number that matched no code, with nothing else narrowing, is not a confident single hit —
+  // clarify among the kind pool rather than guess a neighbour.
+  if (ordinalUnmatched && maxS === 0 && !region)
+    return pool.length ? { candidates: pool.slice(0, 6).map(candidateView) } : { none: true };
   if (pool.length === 1) return { device: pool[0] };
   if (pool.length > 1) return { candidates: pool.slice(0, 6).map(candidateView) };
   return { none: true };

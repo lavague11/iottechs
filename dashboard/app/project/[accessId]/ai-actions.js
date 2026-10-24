@@ -12,7 +12,7 @@ import {
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
-  getSupportArticles, getProjectDevices, openInstallIssues,
+  getSupportArticles, getProjectDevices, openInstallIssues, getToolData,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
@@ -32,6 +32,20 @@ function openInstallIssuesFor(accessId) {
   try { return (listInstallIssues(accessId) || []).filter((i) => OPEN_ISSUE.has(String(i.status || "").toUpperCase())); }
   catch { return []; }
 }
+// Is this caller scoped to THIS project? Mirrors issueTok/techOnProject (actions.js): a PIN caller is bound
+// to the PIN's accessId; a logged-in technician must be on the roster, the work-order crew, or the signing
+// tech. Used to stop a tech's ACTION PREVIEW from reading a project they aren't assigned to (the write path
+// re-enforces this independently via issueTok). Synchronous (all reads are sync db calls).
+function tokScopedToProject(accessId, tok) {
+  const norm = (s) => String(s || "").trim().toLowerCase();
+  if (tok.viaPin) return String(tok.accessId) === String(accessId);
+  const roster = getProjectAssignments(accessId) || [];
+  if (roster.some((a) => a.role === "tech" && ((tok.id != null && Number(a.user_id) === Number(tok.id)) || (tok.email && norm(a.user_email) === norm(tok.email))))) return true;
+  try { const crew = JSON.parse(getToolData(accessId, "techs")?.data || "{}").names || []; if (crew.some((n) => norm(n) === norm(tok.name))) return true; } catch { /* no crew */ }
+  const prop = getActiveProposal(accessId);
+  return !!(prop?.tech_signed_name && norm(prop.tech_signed_name) === norm(tok.name));
+}
+
 // A short human reference for an issue in a confirm/clarify line (never a raw id alone).
 function issueLabel(i) {
   const where = i?.target_kind === "order" ? "work order" : (i?.target_label || "line item");
@@ -122,6 +136,10 @@ function previewAction(name, accessId, tok, args) {
   if (!actionAllowed(name, { editor: aiCanEdit(tok.role), can: (c) => can(tok.role, c) }))
     return { ok: true, kind: "unsupported", speak: "Your role can't do that action.", reason: "permission" };
   if (!accessId) return { ok: true, kind: "unsupported", speak: "Open a project first." };
+  // A TECHNICIAN is scoped to the jobs they're on — mirror issueTok so the preview (which reads project
+  // data like the device layout) can't disclose a project a tech isn't assigned to. Editors see all projects.
+  if (tok.role === "tech" && !tokScopedToProject(accessId, tok))
+    return { ok: true, kind: "unsupported", speak: "That isn't a project you're assigned to.", reason: "permission" };
   // Parameterized actions need valid args before we can preview a confirmable card.
   if (name === "record_payment" && !(args && +args.amount > 0)) return { ok: true, kind: "clarify", speak: "How much should I record? Say the amount." };
   let eff = args;
