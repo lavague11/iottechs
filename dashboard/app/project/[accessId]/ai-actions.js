@@ -16,7 +16,7 @@ import {
   customerOwnsProjectAccount,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
-import { customerReadIntent } from "../../../lib/ai-customer";
+import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
@@ -24,7 +24,7 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
-import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction, addNoteAction } from "./proposal-actions";
 import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
@@ -644,11 +644,39 @@ export async function aiCustomerInterpretAction(accessId, text) {
   const read = customerReadIntent(t);
   if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId, { ownedAccessId: accessId });
 
-  // 2) Approved customer FAQ (admin-authored; never invented). knowledgeAnswer scopes a customer to the
+  // 2) A customer WRITE/ACTION (slice 3): a comment to relay (confirmed write), or a deliberate act
+  //    (sign/accept/pay) → GUIDED NAVIGATION to their proposal section (the AI never signs/pays).
+  const act = customerActionIntent(t);
+  if (act?.kind === "comment") {
+    return { ok: true, kind: "write", write: "comment", body: act.body,
+      preview: { title: "Send this to your project team?", body: act.body } };
+  }
+  if (act?.kind === "nav") {
+    return { ok: true, kind: "navigate", href: `/project/${accessId}?stage=proposal`, label: act.label,
+      speak: `I'll take you to ${act.label}.` };
+  }
+
+  // 3) Approved customer FAQ (admin-authored; never invented). knowledgeAnswer scopes a customer to the
   //    "customer" library only.
   const k = knowledgeAnswer(t, tok);
   if (k) return k;
 
-  // 3) Safe fallback — no staff capabilities, no writes, nothing invented.
+  // 4) Safe fallback — no staff capabilities, no writes, nothing invented.
   return { ok: true, kind: "answer", speak: "I can tell you your project's status, your quote total and balance, and what your cameras cover — and answer common questions. What would you like to know?" };
+}
+
+// Apply a customer's confirmed COMMENT (the one customer-facing write). Re-gates (customer + own-project +
+// AI_CUSTOMER), then writes through addNoteAction, which independently re-checks customer ownership. A
+// customer's note is public to their project team. No other write is reachable from the customer path.
+export async function aiCustomerCommentAction(accessId, body) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "customer") return { error: "Unavailable." };
+  if (!customerAiOn()) return { error: "Unavailable." };
+  const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+  if (!owns) return { error: "Unavailable." };
+  const text = String(body || "").trim().slice(0, 500);
+  if (text.length < 2) return { error: "Nothing to send." };
+  const r = await addNoteAction(accessId, text);   // self-re-checks customer ownership; customer note is public to staff
+  if (r?.error) return { error: r.error };
+  return { ok: true, message: "Sent to your project team." };
 }

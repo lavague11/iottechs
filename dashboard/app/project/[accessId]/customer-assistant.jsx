@@ -4,7 +4,7 @@
 // It renders NOTHING unless the server says the feature is on AND the caller owns this project (flag
 // AI_CUSTOMER, default off) — so there is zero exposure until the owner enables it. No writes, no voice.
 import { useState, useEffect, useRef } from "react";
-import { aiCustomerStatusAction, aiCustomerInterpretAction } from "./ai-actions";
+import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction } from "./ai-actions";
 
 const CSS = `
 .cust-ai{position:fixed;right:18px;bottom:18px;z-index:60;font:14px/1.45 system-ui,-apple-system,sans-serif}
@@ -23,6 +23,12 @@ const CSS = `
 .cust-ai-msg.you{align-self:flex-end;background:#2a2118;color:#f2d9a8}
 .cust-ai-msg.ai{align-self:flex-start;background:#181d22;color:rgba(255,255,255,.9)}
 .cust-ai-msg a{color:#e8c061;font-weight:600;text-decoration:none}
+.cust-ai-confirm{margin-top:8px}
+.cust-ai-confirm-body{font-style:italic;color:rgba(255,255,255,.75);margin-bottom:7px}
+.cust-ai-confirm-btns{display:flex;gap:7px}
+.cust-ai-confirm-btns button{padding:6px 13px;border-radius:8px;border:0;background:#b98a2e;color:#101418;font-weight:600;cursor:pointer}
+.cust-ai-confirm-btns button.ghost{background:transparent;border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8)}
+.cust-ai-confirm-btns button:disabled{opacity:.5;cursor:default}
 .cust-ai-input{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(255,255,255,.08)}
 .cust-ai-input input{flex:1;min-width:0;background:#0b0e11;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 11px;color:#fff}
 .cust-ai-input input:focus{outline:none;border-color:rgba(185,138,46,.6)}
@@ -55,11 +61,30 @@ export default function CustomerAssistant({ accessId }) {
     setQ(""); setBusy(true);
     try {
       const r = await aiCustomerInterpretAction(accessId, text);
-      setMsgs((m) => [...m, { role: "ai", text: r?.speak || r?.error || "I didn't catch that — try rephrasing.", link: r?.link || null }]);
+      if (r?.kind === "navigate") {
+        setMsgs((m) => [...m, { role: "ai", text: r.speak || "Here you go.", link: { href: r.href, label: r.label, nav: true } }]);
+      } else if (r?.kind === "write" && r.write === "comment") {
+        setMsgs((m) => [...m, { role: "ai", text: r.preview?.title || "Send this to your project team?", confirm: { body: r.body } }]);
+      } else {
+        setMsgs((m) => [...m, { role: "ai", text: r?.speak || r?.error || "I didn't catch that — try rephrasing.", link: r?.link || null }]);
+      }
     } catch {
       setMsgs((m) => [...m, { role: "ai", text: "Something went wrong — please try again." }]);
     } finally { setBusy(false); }
   }
+
+  // Confirm/cancel a relayed comment (the one customer write).
+  async function sendComment(body, idx) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await aiCustomerCommentAction(accessId, body);
+      setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: r?.message || r?.error || "Done." } : x)));
+    } catch {
+      setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: "Couldn't send — please try again." } : x)));
+    } finally { setBusy(false); }
+  }
+  function cancelComment(idx) { setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: "Okay — I won't send that." } : x))); }
 
   return (
     <div className="cust-ai">
@@ -78,7 +103,16 @@ export default function CustomerAssistant({ accessId }) {
             {msgs.map((m, i) => (
               <div key={i} className={`cust-ai-msg ${m.role}`}>
                 {m.text}
-                {m.link && <> <a href={m.link.href} target="_blank" rel="noopener">{m.link.label} →</a></>}
+                {m.link && <> <a href={m.link.href} {...(m.link.nav ? {} : { target: "_blank", rel: "noopener" })}>{m.link.label} →</a></>}
+                {m.confirm && (
+                  <div className="cust-ai-confirm">
+                    <div className="cust-ai-confirm-body">“{m.confirm.body}”</div>
+                    <div className="cust-ai-confirm-btns">
+                      <button type="button" disabled={busy} onClick={() => sendComment(m.confirm.body, i)}>Send</button>
+                      <button type="button" className="ghost" disabled={busy} onClick={() => cancelComment(i)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
             {busy && <div className="cust-ai-msg ai" aria-live="polite">…</div>}

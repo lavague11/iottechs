@@ -32,3 +32,26 @@ export function customerReadIntent(text) {
   }
   return null;   // anything not on the allowlist (incl. every write/action/navigation) → caller falls to knowledge/fallback
 }
+
+// Slice 3 — a customer WRITE/ACTION intent. Two shapes only:
+//   { kind:"comment", body } — the ONE true customer write: relay a message to the project team (addNoteAction,
+//                              confirmed). Fires only on an explicit comment/relay phrasing, never a question.
+//   { kind:"nav", label }    — a DELIBERATE act (sign / accept / pay). The AI never performs it; the caller
+//                              routes the customer to the real flow (their proposal section). Guided nav only.
+// Returns null otherwise. Pure.
+export function customerActionIntent(text) {
+  const raw = String(text || "").trim();
+  const t = raw.toLowerCase();
+  if (!t) return null;
+  // Deliberate acts → guided navigation (the AI routes, it does not sign/accept/pay).
+  if (/\b(sign|e-?sign|accept|approve)\b[\s\S]*\b(proposal|quote|contract|agreement|option|it|this)\b/.test(t)
+    || /\b(ready to (sign|accept|approve)|let'?s sign|go ahead and sign|i'?m in|i'?ll take it)\b/.test(t))
+    return { kind: "nav", label: "review & sign your proposal" };
+  if (/\b(how (do i|to)|where (do i|can i))\b[\s\S]*\b(pay|payment|deposit|balance|invoice)\b/.test(t)
+    || /\b(make|submit|send)\b[\s\S]*\b(payment|deposit)\b/.test(t) || /\bpay (my|the|this) (deposit|balance|invoice|proposal|quote)\b/.test(t))
+    return { kind: "nav", label: "your proposal and payment details" };
+  // A message to relay to the team → the one true write. Requires an explicit relay lead-in + something to say.
+  const m = raw.match(/^\s*(?:(?:please\s+)?(?:leave|add|post)\s+(?:a\s+)?(?:comment|note|message)|comment|note|message|tell\s+(?:them|the team|my installer|you|us)|let\s+(?:them|the team|my installer|us)\s+know|ask\s+(?:them|the team|my installer|you))\b[:,\-]?\s*(?:that\s+|about\s+)?(.{2,}?)\s*$/i);
+  if (m && m[1].trim().length >= 2) return { kind: "comment", body: m[1].trim().slice(0, 500) };
+  return null;
+}
