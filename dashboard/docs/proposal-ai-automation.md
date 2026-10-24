@@ -19,11 +19,13 @@ guarded action; nothing auto-fires money/signatures without a human; customer te
 
 ## Opportunities — ROI-ranked
 
-### 1. Collections cadence (deposit + balance chasing) — HIGHEST ROI, directly accelerates cash
-Today nothing auto-reminds about an unpaid **deposit** or **final balance** — those financial states (`receivables-model.js`: Awaiting Deposit / Due Now) explicitly never auto-close, and `agingDays` is computed but acted on only by eyeball on the AR page. Build a scheduled sweep that, per aging receivable, has the AI **draft a reminder** (personalized from the project + balance) and either queue it for one-click staff send or auto-send via the existing `email.js`. Cadence by state (e.g. deposit: day 2/5/10; balance: on completion + 7/14).
-- **Reuses:** `getReceivables`/`receivables-model` (state + aging already computed), `email.js` (payment-received/signature emails already exist), the AI drafting layer.
+### 1. Collections cadence (deposit + balance chasing) — ✅ SHIPPED (226d074, reviewed clean)
+Today nothing auto-reminds about an unpaid **deposit** or **final balance** — those financial states (`receivables-model.js`: Awaiting Deposit / Due Now) explicitly never auto-close, and `agingDays` is computed but acted on only by eyeball on the AR page.
+
+**Built (queue-for-confirm, never auto-send):** `collections-cadence.js` `paymentNudge()` (first reminder day 3, ≥5 days apart, max 4, no hard deadline — a balance never auto-closes) + a `collections_queue` read (cap `install.pay.edit` = admin/manager; filters `getReceivables` to awaiting-deposit/due-now and lists who is due) + a `request_payment` action: `emailPaymentReminder` (grounded in the real `amountDueNow` from `getProjectFinancialState`, Zelle preferred, no-op without `RESEND_API_KEY`) dispatched by `requestPaymentReminderAction` (admin/manager, 90s debounce, logs the reminder event). Preview computes the amount server-side and clarifies when nothing is due; apply flows through the guarded action. Deliberately stricter than #2 (sales excluded — collections exposes amounts owed). Chose queue-for-confirm over the auto-send option: no customer email fires without a human click.
+- **Reuses:** `getReceivables`/`receivables-model`, `getProjectFinancialState`, `email.js`, the AI preview→confirm→action layer; mirrors the #2 signature cadence twin.
 - **Metric:** days-sales-outstanding (time-to-deposit, time-to-final), % deposits collected within N days.
-- **Effort:** Medium. **Gap.**
+- **Deferred:** a scheduled background sweep (today the queue surfaces on ask, not on a cron) and citing a real invoice number (waits on #4 invoices-as-records).
 
 ### 2. Signature-chasing cadence — ✅ SHIPPED (8a2fde1 + fixes 878fb34, 1df9817; reviewed clean)
 `signature_nudges` read: a queue-for-confirm list of sent-but-unsigned proposals DUE for a reminder (first at day 2, ≥4 days apart, max 3, stops at the 30-day deadline), from aging + logged reminder events (no new storage). Staff send via the existing `request_signature` (preview→confirm); never auto-sends. Gated to `proposal.reuse` (admin/manager/sales). Router: "who needs a signature nudge / who should I chase for signatures". — original note below —

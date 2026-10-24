@@ -102,8 +102,9 @@ export function routeCommand(text) {
   // request_signature ACTION (handled later in detectAction), not this list read.
   if (/\b(who|which|any|list|show|how many)\b/i.test(t) && /\b(nudge|nudges|chase|chasing|remind|reminder|reminders|follow[-\s]?up)\b/i.test(t) && /\b(sign|signature|signatures|proposal|proposals)\b/i.test(t))
     return { type: "answer", query: "signature_nudges" };
-  // "who owes money", "which deposits are unpaid", "who's due for a payment reminder", "collections due" →
-  // the collections QUEUE (unpaid deposit/balance due for a reminder). Query-cue-gated like the nudge read.
+  // "who owes money", "which deposits are unpaid", "who's due for a payment reminder" → the collections
+  // QUEUE (unpaid deposit/balance due for a reminder). Query-cue-gated like the nudge read. Needs all three
+  // groups (cue + collections verb + money noun); bare "collections due" falls to the Haiku whitelist.
   if (/\b(who|which|any|list|show|how many|collections?)\b/i.test(t) && /\b(owe|owes|owing|outstanding|unpaid|overdue|collect|collections|chase|nudge|remind|reminder|reminders)\b/i.test(t) && /\b(deposit|deposits|balance|balances|payment|payments|pay|money)\b/i.test(t))
     return { type: "answer", query: "collections_queue" };
   // "which proposals aren't signed", "who hasn't signed", "unsigned proposals", "what's awaiting signature"
