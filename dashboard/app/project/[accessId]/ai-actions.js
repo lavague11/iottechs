@@ -13,8 +13,10 @@ import {
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
+  customerOwnsProjectAccount,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
+import { customerReadIntent } from "../../../lib/ai-customer";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
@@ -608,4 +610,39 @@ export async function aiApplyNoteAction(accessId, body) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };
+}
+
+// ---- #3 Phase 6: CUSTOMER-facing assistant (read-only slice) --------------------------------------------
+// A SEPARATE entry from the staff bar — a customer never reaches aiGate/the staff assistant. Gated behind its
+// OWN flag (AI_CUSTOMER), restricted to role="customer" who owns THIS project, and answers ONLY an allowlisted
+// read on their own project (role="customer" → the answer layer strips cost/payout/internal) or the approved
+// customer FAQ. Customer text is UNTRUSTED: deterministic router only (no model fallback), and NO writes.
+// Customer-facing writes (accept / sign / pay / comment) are a later slice, gated separately.
+const customerAiOn = () => secretValue("AI_CUSTOMER") === "on";
+export async function aiCustomerStatusAction(accessId) {
+  const tok = await getSessionRole();
+  const owns = !!tok && tok.role === "customer" && ((tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email }));
+  return { enabled: !!(owns && customerAiOn()) };
+}
+export async function aiCustomerInterpretAction(accessId, text) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "customer") return { error: "Unavailable." };
+  if (!customerAiOn()) return { error: "Unavailable." };
+  // Own-project gate: a PIN customer is bound to the PIN's accessId; a logged-in customer must own this project.
+  const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+  if (!owns) return { error: "Unavailable." };
+  const t = String(text || "").trim();
+  if (!t) return { ok: true, kind: "answer", speak: "Ask me about your project — its status, your quote, your balance, or what your cameras cover." };
+
+  // 1) An ALLOWLISTED read, FORCED to the customer's own project, run as the customer (sanitize/caps apply).
+  const read = customerReadIntent(t);
+  if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId);
+
+  // 2) Approved customer FAQ (admin-authored; never invented). knowledgeAnswer scopes a customer to the
+  //    "customer" library only.
+  const k = knowledgeAnswer(t, tok);
+  if (k) return k;
+
+  // 3) Safe fallback — no staff capabilities, no writes, nothing invented.
+  return { ok: true, kind: "answer", speak: "I can tell you your project's status, your quote total and balance, and what your cameras cover — and answer common questions. What would you like to know?" };
 }

@@ -61,7 +61,12 @@ test("drift: every exported AI server action authorizes before doing anything", 
     const start = src.indexOf(`export async function ${name}`);
     const after = src.indexOf("export async function ", start + 1);
     const body = src.slice(start, after === -1 ? src.length : after);
-    const gated = name === "aiStatusAction" ? /aiGate\(tok, flagOn\(\)\)/.test(body) : /const g = await authorize\(\);\s*\n\s*if \(!g\.ok\) return \{ error: g\.error \};/.test(body);
+    let gated;
+    if (name === "aiStatusAction") gated = /aiGate\(tok, flagOn\(\)\)/.test(body);
+    // #3: the CUSTOMER-facing actions use a SEPARATE gate on purpose (never aiGate/staff) — they must enforce
+    // role==="customer", own-project (customerOwnsProjectAccount), and the customer flag before acting.
+    else if (name.startsWith("aiCustomer")) gated = /tok\.role (===|!==) "customer"/.test(body) && /customerOwnsProjectAccount/.test(body) && /customerAiOn\(\)/.test(body);
+    else gated = /const g = await authorize\(\);\s*\n\s*if \(!g\.ok\) return \{ error: g\.error \};/.test(body);
     assert.ok(gated, `${name} authorizes before acting`);
   }
 });
