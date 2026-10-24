@@ -145,6 +145,29 @@ export const PROJECT_ACTIONS = {
     }),
   },
 
+  // #2 (8a) — propose a change to a DRAFT proposal line, resolved to a device ("bump the entrance camera to 2",
+  // "change camera 3 to 4K"). PROPOSES only: preview → human confirm → the existing guarded draft save. cap:null
+  // → editor (admin/manager/sales), matching today's draft proposal edits; remove + revising a sent/signed
+  // proposal (8b/8c) will carry the stricter proposal.revise cap. Draft-only here — a sent/signed proposal needs
+  // a revision (8c), surfaced as a clear "can't yet". Never invents a price; a model swap renames the line and
+  // leaves the price for a human to set.
+  propose_change: {
+    verb: "update",
+    cap: null,
+    available: (facts) => {
+      const s = facts?.proposal_status;
+      if (!s) return { ok: false, why: "there's no proposal to change yet" };
+      if (s !== "draft") return { ok: false, why: "that proposal has already been sent — revising a sent or signed proposal is coming soon" };
+      return { ok: true };
+    },
+    // confirm(ctx, args): args = { lineLabel, change }. The before/after total rides on the preview object
+    // (computed in ai-actions), like a normal proposal edit.
+    confirm: ({ name }, args) => ({
+      title: `Update ${args?.lineLabel || "a line"} on ${name}'s proposal`,
+      detail: `${args?.change || "Updates the draft line"} — draft only; nothing is sent. Review in the proposal before sending.`,
+    }),
+  },
+
   // 3.2 — capture a categorized customer objection/feedback item, optionally bound to a specific device. The
   // device reference (if any) is resolved in ai-actions. cap:null → editor (admin/manager/sales own customer
   // conversations). Non-destructive internal note that enters an open→reviewed→resolved review lifecycle.
@@ -274,6 +297,33 @@ export function parseRaiseIssue(text) {
   return { ref: String(text), reason: reasonFromText(text), note: String(text).trim().slice(0, 500) };
 }
 
+// Parse a DEVICE-REFERENCED change to a DRAFT proposal line → { ref, set:{qty}|{name} } | null. Focused on
+// the phrasings the router's earlier patterns DON'T already cover: a QUANTITY change, or a MODEL SWAP (rename
+// to a spec'd model). A $-price ("set X to $250") and a plain rename are left to those earlier patterns, and a
+// customer-reported "wants to change…" is left to feedback — so this fires only on a staff change command.
+const MODEL_SPEC = /\b(\d(?:\.\d)?\s?k|\d{3,4}p|\d{1,2}\s?mp|dome|bullet|turret|ptz|fisheye|varifocal|panoramic|thermal)\b/i;
+export function parseProposeChange(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (/^(is|are|was|were|did|do|does|has|have|which|what|how|why|when|can|could|should|would)\b/.test(t) || /\?\s*$/.test(t)) return null;
+  if (!/\b(change|set|update|make|swap|switch|bump|upgrade|downgrade|adjust|increase|decrease)\b/.test(t)) return null;
+  if (/\$|\b(discount|percent)\b|%/.test(t)) return null;   // a $-price / discount → the router's existing edit patterns
+  const deviceish = /\b(camera|cam|cctv|nvr|recorder|speaker|amp|display|monitor|sensor|motion|keypad|device)\b/.test(t)
+    || /\b[csatm]\d+\b/i.test(t) || /\b(entrance|front|back|lobby|dining|left|right)\b/.test(t);
+  if (!deviceish) return null;
+  // QUANTITY: "to 2 units", "to qty 2", "bump … to 2", "make it 2" — a small integer that is NOT a spec number.
+  const qm = t.match(/\b(?:qty|a\s+quantity\s+of)\s+(\d{1,3})\b/)
+    || t.match(/\b(?:to\s+)?(\d{1,3})\s*(?:units?|cameras?|pcs?|pieces?|each)\b/)
+    || t.match(/\b(?:bump|increase|decrease|set|change|make|update)\b[^$]*\bto\s+(\d{1,3})\b(?!\s*(?:k\b|p\b|mp\b|mm\b|ft\b))/);
+  if (qm) { const q = parseInt(qm[1], 10); if (q >= 1 && q <= 999) return { ref: String(text), set: { qty: q } }; }
+  // MODEL SWAP: "to/for a 4K dome", "switch … to PTZ" — requires a real spec token so it can't grab noise.
+  const nm = t.match(/\b(?:to|for|into)\s+(?:an?\s+)?([a-z0-9][a-z0-9 .\-]{1,48})$/);
+  if (nm && MODEL_SPEC.test(nm[1])) {
+    const model = nm[1].trim().replace(/\b\w/g, (c) => c.toUpperCase()).replace(/(\d)\s*k\b/gi, "$1K").replace(/\bmp\b/gi, "MP").replace(/\bptz\b/gi, "PTZ");
+    return { ref: String(text), set: { name: model } };
+  }
+  return null;
+}
+
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
 // Returns { name, args? } | null. Order: adjudicate (resolve/dismiss) is tried before raise (flag) so a
 // "resolve the issue" never reads as a new flag; raise_issue is last so it doesn't shadow the others.
@@ -292,5 +342,7 @@ export function detectAction(text) {
   if (fb) return { name: "capture_feedback", args: fb };
   const raise = parseRaiseIssue(text);
   if (raise) return { name: "raise_issue", args: raise };
+  const chg = parseProposeChange(text);
+  if (chg) return { name: "propose_change", args: chg };
   return null;
 }

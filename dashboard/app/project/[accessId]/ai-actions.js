@@ -22,7 +22,7 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
-import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction } from "./proposal-actions";
 import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
@@ -44,6 +44,16 @@ function tokScopedToProject(accessId, tok) {
   try { const crew = JSON.parse(getToolData(accessId, "techs")?.data || "{}").names || []; if (crew.some((n) => norm(n) === norm(tok.name))) return true; } catch { /* no crew */ }
   const prop = getActiveProposal(accessId);
   return !!(prop?.tech_signed_name && norm(prop.tech_signed_name) === norm(tok.name));
+}
+
+// Find a proposal line by its own id, or by the survey camera's stable cid (camera_id — the camera↔line
+// bridge). Used by propose_change to map a resolved device to the exact line.
+function findProposalLine(payload, { cid, id } = {}) {
+  for (const o of (payload?.options || [])) for (const s of (o.services || [])) for (const it of (s.items || [])) {
+    if (id != null && it.id === id) return it;
+    if (cid && it.camera_id === cid) return it;
+  }
+  return null;
 }
 
 // A short human reference for an issue in a confirm/clarify line (never a raw id alone).
@@ -188,6 +198,31 @@ function previewAction(name, accessId, tok, args) {
       if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; previewDevice = { id: r.device.id, cid: r.device.cid || null, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId }; }
     }
   }
+  // propose_change (#2, 8a): a DEVICE-REFERENCED change to a DRAFT proposal line. Resolves the device, maps it
+  // to the line via camera_id===cid, applies the edit to a CLONE for the before/after preview, and returns a
+  // confirmable write — nothing persists until apply. Draft-only; a sent/signed proposal defers to 8c.
+  if (name === "propose_change") {
+    const row = getActiveProposal(accessId);
+    if (!row || !row.payload) return { ok: true, kind: "unsupported", speak: "There's no proposal to change yet.", reason: "not_available" };
+    if (row.status !== "draft") return { ok: true, kind: "unsupported", speak: "That proposal has already been sent — revising a sent or signed proposal is coming soon.", reason: "not_available" };
+    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
+    const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
+    if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device — ${r.candidates.map((c) => c.display).join(", ")}?` };
+    const dev = r.device || null;
+    const line = dev && dev.cid ? findProposalLine(payload, { cid: dev.cid }) : null;
+    if (!line) return { ok: true, kind: "clarify", speak: dev ? `${candidateView(dev).display} isn't a line on this proposal yet — add it first, or edit the proposal directly.` : `I couldn't tell which proposal line you mean — name the camera, e.g. "camera 3".` };
+    const curQty = +line.qty || 0, curName = line.name;
+    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: line.id }, set: args.set });
+    if (applied.error) return { ok: true, kind: "clarify", speak: applied.error };
+    const before = grandOf(payload, row), after = grandOf(applied.payload, row);
+    const change = args.set.qty != null ? `qty ${curQty} → ${args.set.qty}` : `"${curName}" → "${args.set.name}" (price unchanged — set it in the proposal)`;
+    const prev = PROJECT_ACTIONS.propose_change.confirm(actionContext(getJobByAccessId(accessId), accessId), { lineLabel: curName, change });
+    const device = dev ? { id: dev.id, cid: dev.cid || null, floor: dev.floor, code: dev.code, label: dev.label, accessId } : null;
+    return { ok: true, kind: "write", write: "action",
+      intent: { type: "action", name, accessId, args: { lineId: line.id, set: args.set, lineLabel: curName, change } },
+      preview: { title: prev.title, body: prev.detail, ...(before !== after ? { before, after } : {}) },
+      ...(device ? { device } : {}) };
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
@@ -286,6 +321,19 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     }
     out = await captureFeedbackAction(accessId, { body: args?.body || "", kind: args?.kind || "feedback:other", deviceId, deviceLabel });
     message = out?.error ? null : `Logged ${deviceLabel ? `feedback on ${deviceLabel}` : "the feedback"} for review.`;
+  }
+  else if (name === "propose_change") {
+    // Re-load the DRAFT and re-apply the edit server-side (never trust a client payload). Draft-only; the line
+    // must still exist. saveProposalDraftAction re-checks the role, strips cost for sales, and refuses a sent row.
+    const row = getActiveProposal(accessId);
+    if (!row || !row.payload) return { error: "There's no proposal to change." };
+    if (row.status !== "draft") return { error: "That proposal isn't a draft anymore — revise it in the proposal editor." };
+    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
+    if (!findProposalLine(payload, { id: args?.lineId })) return { error: "That proposal line is no longer there." };
+    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: args.lineId }, set: args.set });
+    if (applied.error) return { error: applied.error };
+    out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
+    message = out?.error ? null : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`;
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };

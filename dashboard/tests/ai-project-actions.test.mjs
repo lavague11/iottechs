@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, detectAction } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, parseProposeChange, detectAction } from "../lib/ai-project-actions.js";
 import { routeCommand } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -211,6 +211,34 @@ test("3.2 capture_feedback: router classifies objection/feedback; feedback wins 
   assert.equal(d.args.wantsDevice, true);
   // …but a genuine install flag still routes to raise_issue (parseFeedback excludes "flag").
   assert.equal(routeCommand("flag the entrance camera as damaged").name, "raise_issue");
+});
+
+test("#2 8a propose_change: parses a device-referenced qty change / model swap; defers $-price + questions", () => {
+  assert.deepEqual(parseProposeChange("bump the entrance camera to 2 units"), { ref: "bump the entrance camera to 2 units", set: { qty: 2 } });
+  assert.deepEqual(parseProposeChange("make camera 3 qty 4"), { ref: "make camera 3 qty 4", set: { qty: 4 } });
+  assert.deepEqual(parseProposeChange("change the entrance camera to 4K"), { ref: "change the entrance camera to 4K", set: { name: "4K" } });
+  assert.equal(parseProposeChange("switch camera 3 to a dome").set.name, "Dome");
+  assert.equal(parseProposeChange("set the entrance camera to $250"), null);   // a $-price → the router's existing edit path
+  assert.equal(parseProposeChange("give them 15% off"), null);                 // discount → existing path
+  assert.equal(parseProposeChange("what camera is at the entrance?"), null);   // a question
+  assert.equal(parseProposeChange("change the schedule"), null);               // no device reference
+  assert.equal(parseProposeChange("change the entrance camera to blue"), null);// no spec token → not a model swap
+  // Router carries it as an action.
+  const r = routeCommand("bump the entrance camera to 2 units");
+  assert.equal(r.type, "action"); assert.equal(r.name, "propose_change"); assert.deepEqual(r.args.set, { qty: 2 });
+});
+
+test("#2 8a propose_change: DRAFT-only availability; cap-less editor gate (tech refused)", () => {
+  const a = PROJECT_ACTIONS.propose_change;
+  assert.equal(a.available({ proposal_status: "draft" }).ok, true);
+  assert.equal(a.available({ proposal_status: "sent" }).ok, false);
+  assert.match(a.available({ proposal_status: "sent" }).why, /already been sent|revising/i);
+  assert.equal(a.available({ proposal_status: null }).ok, false);
+  assert.equal(a.cap, null);
+  assert.equal(actionAllowed("propose_change", { editor: true, can: () => false }), true);    // admin/manager/sales
+  assert.equal(actionAllowed("propose_change", { editor: false, can: () => true }), false);   // tech refused (non-editor)
+  assert.match(a.confirm({ name: "Crazy Cars" }, { lineLabel: "Camera 2", change: "qty 1 → 2" }).title, /Update Camera 2 on Crazy Cars'?s proposal/);
+  assert.match(a.confirm({ name: "Crazy Cars" }, { change: "qty 1 → 2" }).detail, /draft only; nothing is sent/i);
 });
 
 test("3.2 capture_feedback: cap-less → editor gate (admin/manager/sales), a technician is refused", () => {
