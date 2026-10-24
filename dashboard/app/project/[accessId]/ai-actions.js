@@ -8,7 +8,7 @@
 // command is written to the Job Log (kind "ai"). Gated behind the AI_COMMANDS vault flag + ANTHROPIC_API_KEY.
 import { headers } from "next/headers";
 import {
-  getActiveProposal, addProjectNote, logProjectEvent,
+  getActiveProposal, addProjectNote, logProjectEvent, getProjectEvents,
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
@@ -145,7 +145,7 @@ function answerFor(intent, tok, currentAccessId, opts = {}) {
     // instead of being filtered out by getVisibleJobs (which isn't a per-customer filter). Staff omit it.
     ownedAccessId: opts.ownedAccessId || null,
     db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects,
-          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices, listFeedback },
+          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices, listFeedback, getProjectEvents },
     fin: { optionTotals },
   };
   const r = runQuery(intent, ctx);

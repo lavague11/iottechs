@@ -14,9 +14,10 @@ const db = {
   getActiveProposal: (a) => a === "ASC1" ? { status: "sent", payload: JSON.stringify(PROPOSAL), tax_rate: 0, deposit_pct: 50, selected_option: "A", signed_name: null } : { status: "draft" },
   getJobByAccessId: (a) => JOBS[a] || null,
   getReceivables: () => [
-    { access_id: "ASC1", customer: "Crazy Cars", status: "sent", financialState: "awaiting_signature" },
+    { access_id: "ASC1", customer: "Crazy Cars", status: "sent", financialState: "awaiting_signature", agingDays: 5, signatureDeadline: new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 19).replace("T", " ") },
     { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", financialState: "due_now" },
   ],
+  getProjectEvents: (a) => a === "ASC1" ? [{ kind: "email", label: "Signature request emailed to the customer", created_at: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 19).replace("T", " ") }] : [],
   getVisibleJobs: (_uid, role) => (role === "admin" || role === "manager") ? Object.values(JOBS) : [JOBS.ASC1],   // non-privileged see only ASC1
   searchProjects: (q) => Object.values(JOBS).filter((j) => j.customer.toLowerCase().includes(String(q).toLowerCase())),
   buildStageFacts: (a) => a === "ASC1" ? { stage: "proposal", proposal_status: "sent" } : { stage: "qc" },   // ASC1: sent, not accepted → customer must accept
@@ -73,6 +74,15 @@ test("device_coverage explains a resolved device from survey facts (the headline
   assert.equal(runQuery({ query: "device_coverage", target: "this", ref: "what does the kiosk cover" }, ctx("admin", "ASC1")).reason, "no_data");
   // No survey devices on ASC2 → says so (never invents).
   assert.match(runQuery({ query: "device_coverage", target: "Nobo Restaurant", ref: "camera 1" }, ctx()).text, /no placed survey devices/);
+});
+
+test("signature_nudges queues sent-but-unsigned proposals due for a reminder (never auto-sends)", () => {
+  // ASC1: awaiting signature 5 days, only the initial send email → first reminder is due.
+  const r = runQuery({ query: "signature_nudges" }, ctx());
+  assert.match(r.text, /due for a signature nudge/i);
+  assert.match(r.text, /Crazy Cars \(5d\)/);
+  assert.match(r.text, /remind/i);   // tells the human how to send (queue-for-confirm)
+  assert.ok(r.facts.some((f) => /nudges due/.test(f)));
 });
 
 test("feedback_summary summarizes captured objections/feedback (open items + device + status counts)", () => {

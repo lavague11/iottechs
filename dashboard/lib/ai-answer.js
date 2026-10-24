@@ -13,6 +13,7 @@ import { projectIntel } from "./project-intel.js";
 import { resolveDevice } from "./device-resolver.js";
 import { describeCoverage } from "./device-coverage.js";
 import { feedbackLabel } from "./feedback-model.js";
+import { signatureNudge } from "./signature-cadence.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -223,6 +224,36 @@ const QUERIES = {
     const tail = [reviewed ? `${reviewed} reviewed` : null, resolved ? `${resolved} resolved` : null].filter(Boolean).join(", ");
     text += tail ? `. ${tail}.` : ".";
     return { text, facts: [`${name} ${open.length} open feedback`], project: { accessId: j.access_id, name } };
+  } },
+
+  // "Who needs a signature nudge?" → sent-but-unsigned proposals DUE for a reminder per the cadence. A QUEUE
+  // for a human to send (via request_signature); it NEVER auto-sends. Reads aging/deadline from getReceivables
+  // and the count/recency of "signature request emailed" events — no new storage.
+  signature_nudges: { run: (intent, ctx) => {
+    const now = Date.now(), DAY = 86400000;
+    const vis = visibleSet(ctx);
+    const awaiting = ((ctx.db.getReceivables ? ctx.db.getReceivables() : []) || [])
+      .filter((r) => r.financialState === "awaiting_signature" && canSee(vis, r.access_id));
+    if (!awaiting.length) return { text: "No proposals are awaiting signature right now.", facts: [] };
+    const due = [];
+    for (const r of awaiting) {
+      const events = ctx.db.getProjectEvents ? (ctx.db.getProjectEvents(r.access_id) || []) : [];
+      const times = events.filter((e) => e.kind === "email" && /signature request/i.test(e.label || ""))
+        .map((e) => new Date(String(e.created_at || "").replace(" ", "T")).getTime()).filter(Number.isFinite);
+      const lastAt = times.length ? Math.max(...times) : null;
+      const dl = r.signatureDeadline ? new Date(String(r.signatureDeadline).replace(" ", "T")).getTime() : null;
+      const n = signatureNudge({
+        daysWaiting: r.agingDays,
+        signatureEmailCount: times.length,
+        daysSinceLastEmail: lastAt != null ? Math.floor((now - lastAt) / DAY) : null,
+        daysToDeadline: dl != null ? Math.floor((dl - now) / DAY) : null,
+      });
+      if (n.due) due.push({ name: r.customer || r.access_id, daysWaiting: Math.max(0, Math.floor(+r.agingDays || 0)), remindersSent: n.remindersSent });
+    }
+    if (!due.length) return { text: `${awaiting.length} proposal${awaiting.length === 1 ? "" : "s"} awaiting signature, but none are due for a nudge yet.`, facts: [`0 of ${awaiting.length} nudges due`] };
+    due.sort((a, b) => b.daysWaiting - a.daysWaiting);
+    const list = due.slice(0, 8).map((d) => `${d.name} (${d.daysWaiting}d${d.remindersSent ? `, ${d.remindersSent} sent` : ""})`).join(", ");
+    return { text: `${due.length} customer${due.length === 1 ? "" : "s"} due for a signature nudge: ${list}${due.length > 8 ? ", +more" : ""}. Say "remind <name>" to send one.`, facts: [`${due.length} signature nudges due`] };
   } },
 
   // "Which projects need QC?" / "…are in <stage>?" → authorized project list filtered by lifecycle stage.
