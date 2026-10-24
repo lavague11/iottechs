@@ -199,3 +199,23 @@ test("2.5 raise_issue: router carries args; cap=issue.report admits a TECHNICIAN
     assert.equal(actionAllowed(n, { editor: false, can: techCan }), false, `${n} refused for a reporter-only role`);
   assert.match(PROJECT_ACTIONS.raise_issue.confirm({ name: "Crazy Cars" }, { deviceLabel: "C3 Camera (Dining)", reason: "Damaged" }).title, /Flag C3 Camera \(Dining\) on Crazy Cars — Damaged/);
 });
+
+test("3.2 capture_feedback: router classifies objection/feedback; feedback wins over raise for a device concern", () => {
+  const r = routeCommand("log the customer's objection about the price");
+  assert.equal(r.type, "action");
+  assert.equal(r.name, "capture_feedback");
+  assert.equal(r.args.kind, "objection:price");
+  // "log the objection about the entrance camera" → feedback (a device concern), NOT an install flag.
+  const d = routeCommand("log the objection about the entrance camera");
+  assert.equal(d.name, "capture_feedback");
+  assert.equal(d.args.wantsDevice, true);
+  // …but a genuine install flag still routes to raise_issue (parseFeedback excludes "flag").
+  assert.equal(routeCommand("flag the entrance camera as damaged").name, "raise_issue");
+});
+
+test("3.2 capture_feedback: cap-less → editor gate (admin/manager/sales), a technician is refused", () => {
+  assert.equal(PROJECT_ACTIONS.capture_feedback.cap, null);   // no extra cap → editor gate
+  assert.equal(actionAllowed("capture_feedback", { editor: true, can: () => false }), true);   // sales/admin/manager
+  assert.equal(actionAllowed("capture_feedback", { editor: false, can: () => true }), false);  // tech (non-editor) refused
+  assert.match(PROJECT_ACTIONS.capture_feedback.confirm({ name: "Crazy Cars" }, { kind: "objection:need", deviceLabel: "C2 Camera (Front Entrance)", body: "not sure we need it" }).title, /Log Need objection on C2 Camera \(Front Entrance\) for Crazy Cars/);
+});

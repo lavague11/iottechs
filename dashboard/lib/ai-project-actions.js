@@ -7,6 +7,7 @@
 // + a dispatch case in ai-actions.js — the preview/confirm/guard plumbing is shared.
 
 import { projectIntel, stageLabel } from "./project-intel.js";
+import { parseFeedback, feedbackLabel } from "./feedback-model.js";
 
 export const PROJECT_ACTIONS = {
   // 2.1 — email the current (draft) proposal to the customer and move the project to Sent.
@@ -143,6 +144,20 @@ export const PROJECT_ACTIONS = {
       detail: "Raises an install issue on this device for admin/manager review. Nothing is changed on the device.",
     }),
   },
+
+  // 3.2 — capture a categorized customer objection/feedback item, optionally bound to a specific device. The
+  // device reference (if any) is resolved in ai-actions. cap:null → editor (admin/manager/sales own customer
+  // conversations). Non-destructive internal note that enters an open→reviewed→resolved review lifecycle.
+  capture_feedback: {
+    verb: "log",
+    cap: null,
+    available: () => ({ ok: true }),
+    // confirm(ctx, args): args = { kind, body, deviceId?, deviceLabel? }.
+    confirm: ({ name }, args) => ({
+      title: `Log ${feedbackLabel(args?.kind)}${args?.deviceLabel ? ` on ${args.deviceLabel}` : ""} for ${name}`,
+      detail: args?.body ? `"${String(args.body).slice(0, 140)}" — recorded for review (open).` : "Records this for review (open).",
+    }),
+  },
 };
 
 // Issue-reason keywords → the canonical ISSUE_REASONS taxonomy (install-checklist-model). Order matters:
@@ -271,6 +286,10 @@ export function detectAction(text) {
   if (asn) return { name: "assign_tech", args: asn };
   const adj = parseAdjudicate(text);
   if (adj) return { name: "adjudicate_issue", args: adj };
+  // Feedback BEFORE raise: "log the objection about the entrance camera" is feedback, not an install flag;
+  // parseFeedback excludes flag/raise phrasings, so "flag camera 3" still falls through to raise_issue.
+  const fb = parseFeedback(text);
+  if (fb) return { name: "capture_feedback", args: fb };
   const raise = parseRaiseIssue(text);
   if (raise) return { name: "raise_issue", args: raise };
   return null;

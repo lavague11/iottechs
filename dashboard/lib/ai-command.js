@@ -82,9 +82,15 @@ export function routeCommand(text) {
     return { type: "reorder_section", match: { name: m[1].replace(/\s+section$/i, "").trim() }, to };
   }
 
-  // "note: wants two more cameras", "add a note that ...", "log that ..."
+  // "note: wants two more cameras", "add a note that ...", "log that ..." — but a STRUCTURED capture/flag/
+  // payment phrased as "log …" (e.g. "log the customer's objection about price", "log a $500 payment") is an
+  // ACTION, not a plain note, so detectAction wins here before we fall back to a free-text note.
   m = t.match(/^(?:add\s+a\s+)?(?:note|log)\b(?:\s+that\b|\s*[:\-])?\s*(.+)/i);
-  if (m && m[1].trim().length > 1) return { type: "add_note", body: m[1].trim() };
+  if (m && m[1].trim().length > 1) {
+    const a = detectAction(t);
+    if (a) return { type: "action", name: a.name, ...(a.args ? { args: a.args } : {}), target: "this" };
+    return { type: "add_note", body: m[1].trim() };
+  }
 
   // ---- Questions → RETRIEVE + answer (never navigate). High-confidence phrasings only; the rest go to Claude.
   // "how much is the Crazy Cars proposal", "what's the proposal total", "how much is their proposal"

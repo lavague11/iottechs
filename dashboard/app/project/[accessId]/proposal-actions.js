@@ -10,6 +10,7 @@ import {
   getStageAcceptances, notifyRoles, createNotification, getCustomerUserForProject, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
   getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, requestNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
+  addFeedbackNote, listFeedback, setFeedbackStatus,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -858,6 +859,31 @@ export async function addNoteAction(accessId, body, isPublic = false) {
   const notes = addProjectNote(accessId, { role: tok.role, name: actorName(tok), body: body.trim(), isPublic });
   await revalidate(accessId);
   return { ok: true, notes };
+}
+// Phase 3.2 — capture a categorized feedback/objection item (optionally bound to a device). Staff only
+// (admin/manager/sales — the roles that handle customer conversations). Self-authorizing: re-derives the
+// caller, enforces the role, writes through addFeedbackNote, audits. The AI path calls this on apply.
+export async function captureFeedbackAction(accessId, { body, kind, deviceId, deviceLabel } = {}) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (!["admin", "manager", "sales"].includes(tok.role)) return { error: "Only sales and managers can log feedback." };
+  const text = String(body || "").trim();
+  if (text.length < 2) return { error: "Nothing to capture." };
+  const feedback = addFeedbackNote(accessId, { role: tok.role, name: actorName(tok), body: text, kind, deviceId, deviceLabel });
+  logProjectEvent(accessId, { kind: "feedback", label: `Feedback captured${deviceLabel ? ` on ${deviceLabel}` : ""}${kind ? ` — ${kind}` : ""}`, actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, feedback };
+}
+// Advance a captured item's review status (open → reviewed → resolved). Admin/manager only.
+export async function setFeedbackStatusAction(accessId, id, status) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (!["admin", "manager"].includes(tok.role)) return { error: "Only admin or manager can review feedback." };
+  const feedback = setFeedbackStatus(accessId, id, status);
+  if (!feedback) return { error: "Couldn't update that item." };
+  logProjectEvent(accessId, { kind: "feedback", label: `Feedback marked ${status}`, actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, feedback };
 }
 // Change a note's visibility. Admin/manager set it outright; a tech/sales rep can only REQUEST
 // public (→ pending) and never un-publish. Customers can't touch visibility.

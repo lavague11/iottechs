@@ -1239,6 +1239,13 @@ function init() {
   // `anchor` tags a comment to the specific ITEM the customer tapped (e.g. "Camera 3", "Front Door")
   // within a scope, so tap-to-comment threads read against the thing they're about.
   if (!noteCols.includes("anchor")) db.exec("ALTER TABLE project_notes ADD COLUMN anchor TEXT");
+  // Phase 3.2 — structured feedback capture. A note with scope='feedback' carries a taxonomy kind
+  // ("objection:price"…), a review lifecycle status (open→reviewed→resolved) and, when the concern is about
+  // a specific survey device, its STABLE device id + a display label. Ordinary notes leave these NULL.
+  if (!noteCols.includes("feedback_kind"))         db.exec("ALTER TABLE project_notes ADD COLUMN feedback_kind TEXT");
+  if (!noteCols.includes("feedback_status"))       db.exec("ALTER TABLE project_notes ADD COLUMN feedback_status TEXT");
+  if (!noteCols.includes("feedback_device_id"))    db.exec("ALTER TABLE project_notes ADD COLUMN feedback_device_id TEXT");
+  if (!noteCols.includes("feedback_device_label")) db.exec("ALTER TABLE project_notes ADD COLUMN feedback_device_label TEXT");
 
   // ---- Job Log events ----  append-only activity beyond stage acceptances (calls placed, etc.).
   db.exec(`
@@ -6577,6 +6584,35 @@ export function addProjectNote(accessId, { role, name, body, scope, anchor, isPu
     .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null, String(body || "").slice(0, 2000), String(scope || "general").slice(0, 20), anchor ? String(anchor).slice(0, 80) : null, pub);
   return scope ? getScopedNotes(accessId, scope) : getProjectNotes(accessId);
 }
+
+// ---- Phase 3.2 structured feedback capture (scope='feedback' notes) ----
+// Record a categorized feedback/objection item, optionally bound to a specific survey device. Starts
+// 'open'. Reuses project_notes (so it rides the existing visibility machinery); the feedback_* columns
+// carry the taxonomy + review status + device link. Returns the refreshed feedback list.
+export function addFeedbackNote(accessId, { role, name, body, kind, deviceId, deviceLabel }) {
+  const pub = role === "customer" ? 1 : 0;   // staff-captured feedback is internal by default
+  db.prepare(`INSERT INTO project_notes
+    (project_access_id, author_role, author_name, body, scope, public, feedback_kind, feedback_status, feedback_device_id, feedback_device_label)
+    VALUES (?,?,?,?,'feedback',?,?,'open',?,?)`)
+    .run(String(accessId), String(role || "").slice(0, 30) || null, String(name || "").slice(0, 120) || null,
+      String(body || "").slice(0, 2000), pub, String(kind || "feedback:other").slice(0, 40),
+      deviceId != null ? String(deviceId).slice(0, 80) : null, deviceLabel ? String(deviceLabel).slice(0, 120) : null);
+  return listFeedback(accessId);
+}
+export function listFeedback(accessId) {
+  return db.prepare("SELECT * FROM project_notes WHERE project_access_id=? AND scope='feedback' ORDER BY id DESC LIMIT 200")
+    .all(String(accessId)).map((r) => ({ ...r }));
+}
+// Advance a feedback item's review status (open → reviewed → resolved). Caller enforces the role.
+export function setFeedbackStatus(accessId, id, status) {
+  const ok = ["open", "reviewed", "resolved"].includes(String(status));
+  if (!ok) return null;
+  const row = db.prepare("SELECT * FROM project_notes WHERE id=? AND project_access_id=? AND scope='feedback'").get(Number(id), String(accessId));
+  if (!row) return null;
+  db.prepare("UPDATE project_notes SET feedback_status=? WHERE id=?").run(String(status), Number(id));
+  return listFeedback(accessId);
+}
+
 // Set a note public/internal outright (admin/manager). Always clears any pending request.
 export function setNotePublic(accessId, id, isPublic) {
   db.prepare("UPDATE project_notes SET public=?, pending_public=0 WHERE id=? AND project_access_id=?")

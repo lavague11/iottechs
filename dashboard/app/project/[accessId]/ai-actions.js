@@ -22,7 +22,7 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
-import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction } from "./proposal-actions";
 import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
@@ -175,6 +175,17 @@ function previewAction(name, accessId, tok, args) {
     if (!r.device) return { ok: true, kind: "clarify", speak: `I couldn't tell which device you mean. Try its number or location — e.g. "camera 3" or "the front entrance camera".` };
     eff = { deviceId: r.device.id, deviceLabel: candidateView(r.device).display, reason: args?.reason || "Other", note: args?.note || "" };
   }
+  // capture_feedback optionally BINDS a device (owner's headline: "not sure we need that entrance camera" →
+  // concern recorded against that camera). Ambiguous device → clarify; unknown/none → still capture, unbound
+  // (feedback is never lost just because the device couldn't be pinned).
+  if (name === "capture_feedback") {
+    eff = { kind: args?.kind || "feedback:other", body: args?.body || args?.ref || "" };
+    if (args?.wantsDevice) {
+      const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
+      if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device is that about — ${r.candidates.map((c) => c.display).join(", ")}?` };
+      if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; }
+    }
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
@@ -262,6 +273,17 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
       out = await reportInstallIssueAction(accessId, { targetKind: "device", targetId: dev.id, targetLabel: label, reason, note: args?.note || "" });
       message = out?.error ? null : `Flagged ${label}${reason !== "Other" ? ` — ${reason}` : ""}.`;
     }
+  }
+  else if (name === "capture_feedback") {
+    // Re-bind the device server-side if one was referenced (never trust a client device id); drop it if it's
+    // gone rather than failing — the feedback still gets captured.
+    let deviceId = null, deviceLabel = null;
+    if (args?.deviceId != null) {
+      const dev = getProjectDevices(accessId).find((d) => String(d.id) === String(args.deviceId));
+      if (dev) { deviceId = dev.id; deviceLabel = candidateView(dev).display; }
+    }
+    out = await captureFeedbackAction(accessId, { body: args?.body || "", kind: args?.kind || "feedback:other", deviceId, deviceLabel });
+    message = out?.error ? null : `Logged ${deviceLabel ? `feedback on ${deviceLabel}` : "the feedback"} for review.`;
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
