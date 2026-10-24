@@ -33,8 +33,17 @@ test("findKnowledge weights title over body; single incidental word does NOT ans
   assert.equal(findKnowledge("password", { articles: ARTICLES }).id, 1);
   // "button" appears only in article 1's body as one word of an unrelated 1-term query → no title/cat hit → null.
   assert.equal(findKnowledge("button", { articles: ARTICLES }), null);
-  // A 3-term question that only grazes one incidental body word stays null (coverage guard).
+  // A question that only grazes incidental body words stays null (no title/category = not on-topic).
   assert.equal(findKnowledge("where is the cover screw", { articles: ARTICLES }), null);
+});
+
+test("ON-TOPIC guard: multi-term question matching only incidental BODY words does NOT answer (regression)", () => {
+  // "completion", "date", "labor", "project" all appear in the Warranty article's BODY but none is its
+  // subject (title "Warranty coverage" / category "Billing"). Before the topical guard this wrongly returned
+  // the Warranty FAQ; it must now return null so the assistant says "I don't have that".
+  assert.equal(findKnowledge("what is the completion date for the labor on this project", { articles: ARTICLES }), null);
+  // A genuinely on-topic warranty question still answers (warranty hits the title).
+  assert.equal(findKnowledge("how long is the warranty", { articles: ARTICLES }).id, 2);
 });
 
 test("unrelated question → null (assistant says 'I don't have that', never invents)", () => {

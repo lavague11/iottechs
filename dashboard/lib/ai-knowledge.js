@@ -10,8 +10,8 @@ const STOP = new Set((
   "the a an of to for and or is are am was were be been being do does did can could would should will " +
   "how what when where why which who whom whose this that these those it its my our your their his her " +
   "with on in at as by from into onto about over under out up down off again then than too very just " +
-  "i you we they he she me us them not no yes if so but of'f have has had get got need want please " +
-  "there here any some all more most much many one two"
+  "i you we they he she me us them not no yes if so but have has had get got need want please " +
+  "there here any some all more most much many one two off"
 ).split(/\s+/).filter(Boolean));
 
 // Lowercase → alphanumeric word tokens ≥3 chars, minus stopwords. Deduped (a term counts once).
@@ -34,20 +34,23 @@ export function bodyText(article) {
 }
 
 // Overlap score for one article against the query terms. Title hits weigh most, then category, then body.
-// Each query term scores once (its best location), so a long body can't inflate the score.
+// Each query term scores once (its best location), so a long body can't inflate the score. `topical` counts
+// the terms that hit the TITLE or CATEGORY — i.e. terms about what the article actually IS, not words that
+// merely appear somewhere in its body. findKnowledge requires topical ≥ 1 so scattered incidental body words
+// can never "answer" an unrelated question.
 export function scoreArticle(article, terms) {
   const inTitle = new Set(tokenize(article.title));
   const inCat = new Set(tokenize(article.category));
   const inBody = new Set(tokenize(bodyText(article)));
-  let score = 0, matched = 0;
+  let score = 0, matched = 0, topical = 0;
   for (const t of terms) {
     let hit = 0;
     if (inTitle.has(t)) hit = 3;
     else if (inCat.has(t)) hit = 2;
     else if (inBody.has(t)) hit = 1;
-    if (hit) { score += hit; matched++; }
+    if (hit) { score += hit; matched++; if (hit >= 2) topical++; }
   }
-  return { score, matched };
+  return { score, matched, topical };
 }
 
 // A short, plain-text snippet from the body around the first matched term (so the answer shows WHY it matched),
@@ -74,19 +77,17 @@ export function findKnowledge(query, { articles = [] } = {}) {
   if (!terms.length) return null;
   let best = null;
   for (const a of articles) {
-    const { score, matched } = scoreArticle(a, terms);
+    const { score, matched, topical } = scoreArticle(a, terms);
     if (!matched) continue;
-    // Strong = at least two matched terms, OR a single-term query that hit the title/category (score ≥ 2).
-    const strong = matched >= 2 || (terms.length === 1 && score >= 2);
-    if (!strong) continue;
+    // ON-TOPIC bar: at least one query term must hit the TITLE or CATEGORY (what the article is ABOUT).
+    // That single topical hit is the strong signal; scattered BODY-only words (even several of them) never
+    // answer on their own, so an off-topic question that merely shares incidental words → null, and the
+    // assistant says "I don't have that". (A topical hit always scores ≥2, so no extra score floor is needed.)
+    if (topical < 1) continue;
     const pinned = a.pinned ? 1 : 0;
     if (!best || score > best.score || (score === best.score && pinned > best.pinned)) best = { a, score, matched, pinned };
   }
   if (!best) return null;
-  // Final guard: a multi-term query must cover a reasonable fraction of its terms, so one incidental word in a
-  // long article doesn't "answer" an unrelated question.
-  const coverage = best.matched / terms.length;
-  if (terms.length >= 3 && best.matched < 2 && coverage < 0.34) return null;
   const a = best.a;
   return { id: a.id, title: a.title, category: a.category, kind: a.kind || "article", audience: a.audience || null, score: best.score, matched: best.matched, snippet: snippetOf(a, terms) };
 }
