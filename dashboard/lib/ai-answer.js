@@ -199,8 +199,9 @@ const QUERIES = {
     const hit = resolveDevice(intent.ref || "", devices);
     if (hit.candidates) return { error: `Which device — ${hit.candidates.map((c) => c.display).join(", ")}?`, reason: "ambiguous" };
     if (!hit.device) return { error: `I couldn't tell which device you mean on ${name}. Try its number or location — e.g. "camera 3" or "the entrance camera".`, reason: "no_data" };
-    const text = describeCoverage(hit.device);
-    return { text, facts: [text], project: { accessId: j.access_id, name } };
+    const d = hit.device, text = describeCoverage(d);
+    // device locator → the client highlights it on the planner/layout (floor-plan highlight).
+    return { text, facts: [text], project: { accessId: j.access_id, name }, device: { id: d.id, floor: d.floor, code: d.code, label: d.label, accessId: j.access_id } };
   } },
 
   // "What's the feedback / any objections / open concerns" → summarize captured feedback (Phase 3.2) for the

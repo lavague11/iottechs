@@ -215,6 +215,20 @@ export default function SystemPlanner({
     else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });
     // views / review: shell state only — both iframes stay mounted
   };
+  // Floor-plan highlight: when the AI resolves a device (coverage answer, or a device-bound flag/feedback),
+  // it dispatches `iot-highlight-device`. Surface the survey pane on devices and tell the widget to switch to
+  // the device's floor and ring it. Scoped to THIS project; decoupled from the AI bar (a window event).
+  useEffect(() => {
+    const onHighlight = (e) => {
+      const d = e.detail || {};
+      if (d.id == null || String(d.accessId || "") !== String(accessId)) return;
+      goRail("cameras");
+      surveyCmd({ cmd: "highlight", id: d.id, floor: d.floor });
+    };
+    window.addEventListener("iot-highlight-device", onHighlight);
+    return () => window.removeEventListener("iot-highlight-device", onHighlight);
+  }, [accessId]);   // eslint-disable-line react-hooks/exhaustive-deps -- goRail/surveyCmd use refs + stable setters
+
   const camsPlaced = sig.camCount || camCount;
   const steps = [
     { key: "background", label: "Background", done: sig.bgReady, enabled: true },

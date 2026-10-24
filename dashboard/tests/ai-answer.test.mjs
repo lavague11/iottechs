@@ -63,6 +63,8 @@ test("device_coverage explains a resolved device from survey facts (the headline
   assert.match(r.text, /aimed about 92°/);
   assert.match(r.text, /~40 ft/);
   assert.deepEqual(r.project, { accessId: "ASC1", name: "Crazy Cars" });
+  // Carries the device locator so the client can highlight it on the planner (floor-plan highlight).
+  assert.deepEqual(r.device, { id: "d2", floor: 0, code: "C2", label: "Front Entrance", accessId: "ASC1" });
   // Ambiguous ("the camera" with two) → clarify, not a guess.
   const amb = runQuery({ query: "device_coverage", target: "this", ref: "what does the camera cover" }, ctx("admin", "ASC1"));
   assert.equal(amb.reason, "ambiguous");

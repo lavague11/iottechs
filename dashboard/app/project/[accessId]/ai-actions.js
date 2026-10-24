@@ -122,8 +122,9 @@ function answerFor(intent, tok, currentAccessId) {
     return { ok: true, kind, speak: r.error, reason: r.reason };
   }
   // Carry the resolved project back so the client's memory can track it — a later "it"/"that customer"
-  // then resolves even though no navigation happened.
-  return { ok: true, kind: "answer", speak: r.text, facts: r.facts || [], project: r.project || null };
+  // then resolves even though no navigation happened. `device` (when a read resolved one) lets the client
+  // highlight it on the planner/layout.
+  return { ok: true, kind: "answer", speak: r.text, facts: r.facts || [], project: r.project || null, device: r.device || null };
 }
 
 // Preview a Phase-2 project ACTION: editor-only, and AVAILABLE given the project's CURRENT state (so we show
@@ -142,7 +143,7 @@ function previewAction(name, accessId, tok, args) {
     return { ok: true, kind: "unsupported", speak: "That isn't a project you're assigned to.", reason: "permission" };
   // Parameterized actions need valid args before we can preview a confirmable card.
   if (name === "record_payment" && !(args && +args.amount > 0)) return { ok: true, kind: "clarify", speak: "How much should I record? Say the amount." };
-  let eff = args;
+  let eff = args, previewDevice = null;   // previewDevice → client highlights it on the planner (floor-plan highlight)
   if (name === "assign_tech") {
     // Tolerant resolve (exact → prefix → first name): clarify if none, disambiguate if several.
     const r = resolveTechByName(args?.techName || "");
@@ -174,6 +175,7 @@ function previewAction(name, accessId, tok, args) {
     if (r.candidates) return { ok: true, kind: "clarify", speak: `Which one — ${r.candidates.map((c) => c.display).join(", ")}?` };
     if (!r.device) return { ok: true, kind: "clarify", speak: `I couldn't tell which device you mean. Try its number or location — e.g. "camera 3" or "the front entrance camera".` };
     eff = { deviceId: r.device.id, deviceLabel: candidateView(r.device).display, reason: args?.reason || "Other", note: args?.note || "" };
+    previewDevice = { id: r.device.id, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId };
   }
   // capture_feedback optionally BINDS a device (owner's headline: "not sure we need that entrance camera" →
   // concern recorded against that camera). Ambiguous device → clarify; unknown/none → still capture, unbound
@@ -183,7 +185,7 @@ function previewAction(name, accessId, tok, args) {
     if (args?.wantsDevice) {
       const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
       if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device is that about — ${r.candidates.map((c) => c.display).join(", ")}?` };
-      if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; }
+      if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; previewDevice = { id: r.device.id, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId }; }
     }
   }
   const facts = buildStageFacts(accessId);
@@ -195,7 +197,7 @@ function previewAction(name, accessId, tok, args) {
   const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) }, eff);
   // intent.accessId BINDS the confirm to this exact project; intent.args binds the exact amount — apply
   // dispatches against both, never "whatever project is open now" or a different amount.
-  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, ...(eff ? { args: eff } : {}) }, preview: { title: prev.title, body: prev.detail } };
+  return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, ...(eff ? { args: eff } : {}) }, preview: { title: prev.title, body: prev.detail }, ...(previewDevice ? { device: previewDevice } : {}) };
 }
 
 // Recipient + amount for an action's confirm copy (retail total of the current proposal, for the human).

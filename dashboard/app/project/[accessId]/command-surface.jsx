@@ -185,6 +185,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
   function present(r) {
     if (!r) return null;
     if (r.error) { sysMsg("err", r.error); setPending(null); memRef.current.pending = null; pushTurn("assistant", r.error); return r; }
+    // If the result resolved a specific survey device (coverage answer, or a device-bound action preview),
+    // highlight it on the planner — decoupled via a window event the System Planner listens for.
+    if (r.device?.id != null) { try { window.dispatchEvent(new CustomEvent("iot-highlight-device", { detail: r.device })); } catch { /* no-op */ } }
     // Safe navigation executes immediately in the corebar (no "open?" card); writes still confirm.
     if (r.kind === "navigate") {
       const mm = String(r.href || "").match(/\/project\/([A-Za-z0-9]+)/); if (mm) { memRef.current.project = { accessId: mm[1], name: r.label || mm[1] }; memRef.current.customer = r.label || memRef.current.customer; }

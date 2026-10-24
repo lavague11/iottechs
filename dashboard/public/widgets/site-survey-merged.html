@@ -2219,6 +2219,21 @@
       if(m.cmd==="selectCid"){ var cd=null; for(var ci=0;ci<devices.length;ci++){ if(devices[ci].cid&&devices[ci].cid===m.cid){ cd=devices[ci]; break; } } if(cd){ if(curStep!==1) goStep(1); _suppressSelPost=true; select(cd.id); } return; }
       // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
       if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
+      // Floor-plan HIGHLIGHT (from the AI): locate the device across ALL floors by its stable id, switch to
+      // its floor, focus it (reveals its cone/coverage) and ring it for a few seconds so the user sees exactly
+      // which device the assistant meant. Works even on a submitted/frozen survey (view/select only). Returns
+      // before the frozen/edit guards below.
+      if(m.cmd==="highlight"){
+        var hf=-1; for(var hi=0; hi<floors.length && hf<0; hi++){ var hd=(floors[hi]&&floors[hi].devices)||[]; for(var hj=0;hj<hd.length;hj++){ if(hd[hj].id===m.id){ hf=hi; break; } } }
+        if(hf<0) return;
+        if(hf!==curFloor) switchFloor(hf);
+        if(curStep!==1) goStep(1);
+        _suppressSelPost=true; select(m.id);
+        var hn=document.getElementById("dev-"+m.id);
+        if(hn){ hn.classList.add("hl"); try{ hn.scrollIntoView({block:"center",inline:"center"}); }catch(e){}
+          setTimeout(function(){ var e3=document.getElementById("dev-"+m.id); if(e3) e3.classList.remove("hl"); }, 4000); }
+        return;
+      }
       // Rename by STABLE cid — the host relays a rename made in the mockup so the survey stays in sync
       // (the name lives once; a rename anywhere shows everywhere). Current floor only; other floors were
       // already updated server-side and re-hydrate on reload.
