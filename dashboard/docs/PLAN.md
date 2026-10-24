@@ -23,10 +23,10 @@ Each: intent → **preview** → **human confirm** → existing self-authorizing
 
 ## Phase 3 — customer conversation intelligence (knowledge + feedback capture)
 - **3.1 approved-knowledge (FAQ) retrieval — Needs Review (efd903b + fix a887bee).** Pure scored retriever over `support_articles`; answers only on an ON-TOPIC match (title/category hit), snippet sliced from the stored body (never invented); audience-scoped (no customer↔tech leak); staff-first.
-- **3.2 structured feedback / objection capture — NEXT.** Capture an objection/feedback utterance as a categorized `project_notes` row (taxonomy + open→reviewed→resolved status; small ensure-column add). **Reuse the device resolver** so feedback can bind to a specific device ("not sure we need that entrance camera" → concern recorded against that camera). Staff-first; customer-submitted feedback folds into Phase 6.
+- **3.2 structured feedback / objection capture — Needs Review (30aeb1f).** Categorized `project_notes` (scope='feedback') with open→reviewed→resolved status, device-bound via the resolver. Staff-first; customer-submitted feedback → Phase 6.
 
 ## Phase 4 — site-survey integration (staged, read-first) — device resolver DONE (9525346); rest Open
-Device resolver + `getProjectDevices` shipped as 2.5 groundwork. Remaining: answer placement/coverage questions from verified survey info ("explain this camera's intended coverage"), associate concerns with specific cameras (via 3.2), highlight on the floor plan, prepare proposed changes for approval. **Never auto-remove gear / change pricing / alter a signed agreement from conversation.**
+Device resolver + `getProjectDevices` shipped as 2.5 groundwork; concerns associate to a device via 3.2. **NEXT: device coverage/placement answers (read)** — "what does camera 3 cover / why is it at the entrance" explained from verified survey info (survey2-model: loc, aim°, fov°, range ft, floor), completing the headline (recognize → explain coverage → record concern). Remaining after: highlight on the floor plan, prepare proposed changes for approval. **Never auto-remove gear / change pricing / alter a signed agreement from conversation.**
 
 ## Phase 5 — sales intelligence — Open
 Objections, product Q&A, outstanding approvals, follow-ups, likely blockers, feedback summaries. Never cost/margin/payout.
