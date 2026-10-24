@@ -32,6 +32,7 @@ const CAPS = {
   "qc.view":             ["admin", "manager", "sales", "tech", "readonly"],
   // Proposals
   "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
+  "proposal.revise":     ["admin", "manager"],                             // AI #2: remove a line, or revise a sent/signed proposal (supersede → v+1)
   // Money / lifecycle
   "stage.move":          ["admin", "manager"],
   "assignment.edit":     ["admin", "manager"],                              // add/remove a tech on a project (matches addAssignmentAction)

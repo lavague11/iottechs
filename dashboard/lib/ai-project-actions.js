@@ -168,6 +168,25 @@ export const PROJECT_ACTIONS = {
     }),
   },
 
+  // #2 (8b) — propose REMOVING a line from a DRAFT proposal, resolved to a device ("drop the entrance camera").
+  // cap="proposal.revise" (admin/manager) — removing gear is weightier than a draft tweak, so sales is refused.
+  // PROPOSES only: preview (which line, and the total drop) → human confirm → the guarded draft save. Nothing is
+  // hard-deleted irreversibly — the draft is versioned and re-editable. Draft-only; sent/signed → 8c.
+  remove_line: {
+    verb: "remove",
+    cap: "proposal.revise",
+    available: (facts) => {
+      const s = facts?.proposal_status;
+      if (!s) return { ok: false, why: "there's no proposal to change yet" };
+      if (s !== "draft") return { ok: false, why: "that proposal has already been sent — revising a sent or signed proposal is coming soon" };
+      return { ok: true };
+    },
+    confirm: ({ name }, args) => ({
+      title: `Remove ${args?.lineLabel || "a line"} from ${name}'s proposal`,
+      detail: "Takes it off the draft proposal. Draft only — nothing is sent; review before sending.",
+    }),
+  },
+
   // 3.2 — capture a categorized customer objection/feedback item, optionally bound to a specific device. The
   // device reference (if any) is resolved in ai-actions. cap:null → editor (admin/manager/sales own customer
   // conversations). Non-destructive internal note that enters an open→reviewed→resolved review lifecycle.
@@ -324,6 +343,18 @@ export function parseProposeChange(text) {
   return null;
 }
 
+// Parse a "remove/drop a line from the proposal" command → { ref } | null. Requires a remove verb AND a
+// device/line reference; not a question. ai-actions resolves the device → line and previews the total drop.
+export function parseRemoveLine(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (/\?\s*$/.test(t)) return null;
+  if (!/\b(drop|remove|delete|take out|get rid of|eliminate|scrap|cut)\b/.test(t)) return null;
+  // Must reference a device/line and be about the proposal scope (a camera/device word or a code).
+  const deviceish = /\b(camera|cam|cctv|nvr|recorder|speaker|amp|display|monitor|sensor|motion|keypad|device)\b/.test(t) || /\b[csatm]\d+\b/i.test(t) || /\b(entrance|front|back|lobby|dining)\b/.test(t);
+  if (!deviceish) return null;
+  return { ref: String(text) };
+}
+
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
 // Returns { name, args? } | null. Order: adjudicate (resolve/dismiss) is tried before raise (flag) so a
 // "resolve the issue" never reads as a new flag; raise_issue is last so it doesn't shadow the others.
@@ -342,6 +373,8 @@ export function detectAction(text) {
   if (fb) return { name: "capture_feedback", args: fb };
   const raise = parseRaiseIssue(text);
   if (raise) return { name: "raise_issue", args: raise };
+  const rm = parseRemoveLine(text);
+  if (rm) return { name: "remove_line", args: rm };
   const chg = parseProposeChange(text);
   if (chg) return { name: "propose_change", args: chg };
   return null;

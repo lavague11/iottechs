@@ -243,6 +243,30 @@ function previewAction(name, accessId, tok, args) {
       preview: { title: prev.title, body: prev.detail, ...(before !== after ? { before, after } : {}) },
       ...(device ? { device } : {}) };
   }
+  // remove_line (#2, 8b): propose REMOVING a device's line from a DRAFT proposal. Resolves the device → line,
+  // applies remove to a CLONE for the total drop, returns a confirmable write. proposal.revise-gated (checked
+  // above via actionAllowed). Draft-only; a sent/signed proposal defers to 8c.
+  if (name === "remove_line") {
+    const row = getActiveProposal(accessId);
+    if (!row || !row.payload) return { ok: true, kind: "unsupported", speak: "There's no proposal to change yet.", reason: "not_available" };
+    if (row.status !== "draft") return { ok: true, kind: "unsupported", speak: "That proposal has already been sent — revising a sent or signed proposal is coming soon.", reason: "not_available" };
+    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
+    const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
+    if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device — ${r.candidates.map((c) => c.display).join(", ")}?` };
+    const dev = r.device || null;
+    const line = dev && dev.cid ? findProposalLine(payload, { cid: dev.cid }) : null;
+    if (!line) return { ok: true, kind: "clarify", speak: dev ? `${candidateView(dev).display} isn't a line on this proposal, so there's nothing to remove.` : `I couldn't tell which line to remove — name the camera, e.g. "camera 3".` };
+    const curName = line.name || "the line";
+    const applied = applyIntentToPayload(payload, { type: "remove_item", match: { id: line.id } });
+    if (applied.error) return { ok: true, kind: "clarify", speak: applied.error };
+    const before = grandOf(payload, row), after = grandOf(applied.payload, row);
+    const prev = PROJECT_ACTIONS.remove_line.confirm(actionContext(getJobByAccessId(accessId), accessId), { lineLabel: curName });
+    const device = dev ? { id: dev.id, cid: dev.cid || null, floor: dev.floor, code: dev.code, label: dev.label, accessId } : null;
+    return { ok: true, kind: "write", write: "action",
+      intent: { type: "action", name, accessId, args: { lineId: line.id, lineLabel: curName } },
+      preview: { title: prev.title, body: prev.detail, ...(before !== after ? { before, after } : {}) },
+      ...(device ? { device } : {}) };
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
@@ -361,6 +385,17 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     if (applied.error) return { error: applied.error };
     out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
     message = out?.error ? null : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`;
+  }
+  else if (name === "remove_line") {
+    const row = getActiveProposal(accessId);
+    if (!row || !row.payload) return { error: "There's no proposal to change." };
+    if (row.status !== "draft") return { error: "That proposal isn't a draft anymore — revise it in the proposal editor." };
+    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
+    if (!findProposalLine(payload, { id: args?.lineId })) return { error: "That proposal line is no longer there." };
+    const applied = applyIntentToPayload(payload, { type: "remove_item", match: { id: args.lineId } });
+    if (applied.error) return { error: applied.error };
+    out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
+    message = out?.error ? null : `Removed ${args?.lineLabel || "the line"} from the proposal.`;
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };

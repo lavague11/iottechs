@@ -341,6 +341,18 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
     return { payload: p, summary: `Move "${name}" ${to === "top" || to === "bottom" ? "to the " : ""}${to}`, reorder: true };
   }
 
+  if (intent.type === "remove_item") {
+    const opt = p.options[0];
+    const matches = resolveItems(p, intent.match || {}, { optionId: opt.id });
+    if (!matches.length) return { error: `No line item matching ${describeMatch(intent.match)}.` };
+    // A remove must target exactly ONE line unless the caller passed a specific id — otherwise disambiguate.
+    if (matches.length > 1 && !intent.match?.id) return { ambiguous: matches.map((m) => ({ id: m.id, label: `${m.name} · qty ${m.qty} · $${m.price.toFixed(2)}` })), action: "remove" };
+    const ids = new Set(matches.map((m) => m.id));
+    const removed = matches.map((m) => m.name);
+    opt.services.forEach((s) => { s.items = (s.items || []).filter((it) => !ids.has(it.id)); });
+    return { payload: p, summary: `Remove ${removed.join(", ")}`, removed };
+  }
+
   return { error: "That isn't a proposal edit." };
 }
 

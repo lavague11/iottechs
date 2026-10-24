@@ -3,8 +3,8 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, parseProposeChange, detectAction } from "../lib/ai-project-actions.js";
-import { routeCommand } from "../lib/ai-command.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, parseProposeChange, parseRemoveLine, detectAction } from "../lib/ai-project-actions.js";
+import { routeCommand, applyIntentToPayload } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
 test("send_proposal is available only for a DRAFT proposal — not missing, not already sent", () => {
@@ -239,6 +239,39 @@ test("#2 8a propose_change: DRAFT-only availability; cap-less editor gate (tech 
   assert.equal(actionAllowed("propose_change", { editor: false, can: () => true }), false);   // tech refused (non-editor)
   assert.match(a.confirm({ name: "Crazy Cars" }, { lineLabel: "Camera 2", change: "qty 1 → 2" }).title, /Update Camera 2 on Crazy Cars'?s proposal/);
   assert.match(a.confirm({ name: "Crazy Cars" }, { change: "qty 1 → 2" }).detail, /draft only; nothing is sent/i);
+});
+
+test("#2 8b remove_line: parses a remove command; cap=proposal.revise (admin/manager, sales refused)", () => {
+  assert.deepEqual(parseRemoveLine("drop the entrance camera"), { ref: "drop the entrance camera" });
+  assert.deepEqual(parseRemoveLine("remove camera 3 from the proposal"), { ref: "remove camera 3 from the proposal" });
+  assert.equal(parseRemoveLine("drop me a line sometime"), null);     // no device/line reference
+  assert.equal(parseRemoveLine("how do I remove a camera?"), null);   // a question
+  assert.equal(parseRemoveLine("add a camera"), null);                // not a remove verb
+  const r = routeCommand("drop the entrance camera");
+  assert.equal(r.type, "action"); assert.equal(r.name, "remove_line");
+  const a = PROJECT_ACTIONS.remove_line;
+  assert.equal(a.cap, "proposal.revise");
+  assert.equal(a.available({ proposal_status: "draft" }).ok, true);
+  assert.equal(a.available({ proposal_status: "sent" }).ok, false);
+  assert.equal(actionAllowed("remove_line", { editor: true, can: (c) => c === "proposal.revise" }), true);  // admin/manager
+  assert.equal(actionAllowed("remove_line", { editor: true, can: () => false }), false);                     // sales refused
+  assert.match(a.confirm({ name: "Crazy Cars" }, { lineLabel: "Camera 1 (Entrance)" }).title, /Remove Camera 1 \(Entrance\) from Crazy Cars'?s proposal/);
+});
+
+test("#2 8b remove_item applies to the payload (pure): the matched line is gone, original untouched", () => {
+  const payload = { options: [{ id: "A", services: [{ key: "camera", label: "Cameras", items: [
+    { id: "x1", name: "Camera 1 (Entrance)", qty: 1, price: 0, camera_id: "cBBB222", sub: [{ id: "s1", name: "Drop", qty: 1, price: 150 }] },
+    { id: "x2", name: "NVR", qty: 1, price: 400 },
+  ] }] }] };
+  const out = applyIntentToPayload(payload, { type: "remove_item", match: { id: "x1" } });
+  assert.ok(!out.error);
+  assert.deepEqual(out.removed, ["Camera 1 (Entrance)"]);
+  const items = out.payload.options[0].services[0].items;
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, "x2");
+  assert.equal(payload.options[0].services[0].items.length, 2);   // structuredClone → original intact
+  // An unmatched id is a handled error, not a crash.
+  assert.match(applyIntentToPayload(payload, { type: "remove_item", match: { id: "nope" } }).error, /No line item/);
 });
 
 test("3.2 capture_feedback: cap-less → editor gate (admin/manager/sales), a technician is refused", () => {
