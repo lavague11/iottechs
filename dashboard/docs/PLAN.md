@@ -28,8 +28,13 @@ Each: intent → **preview** → **human confirm** → existing self-authorizing
 ## Phase 4 — site-survey integration (staged, read-first) — device resolver DONE (9525346); rest Open
 Device resolver + `getProjectDevices` shipped; concerns associate to a device via 3.2; **device coverage read SHIPPED (4da3cf9)** — "what does camera 3 cover / why is it at the entrance" from verified survey facts. **The headline now runs end to end** (recognize → explain coverage → record concern). Remaining after sales intelligence: highlight on the floor plan, prepare proposed changes for approval. **Never auto-remove gear / change pricing / alter a signed agreement from conversation.**
 
-## Phase 5 — sales intelligence (reads) — NEXT
-Objections, outstanding approvals, follow-ups, likely blockers, feedback summaries. Never cost/margin/payout. **NEXT: `feedback_summary`** (open objections/feedback for a project from listFeedback, grouped by kind+status — feeds off 3.2); then reuse awaiting_signature (approvals) + projectIntel/project_next (blockers/next). Reads, staff-scoped via resolveProject.
+## Phase 5 — sales intelligence (reads) — substantially DONE
+`feedback_summary` SHIPPED (afae14d): open objections/feedback by kind + bound device + status counts. Outstanding approvals = existing `awaiting_signature`; likely blockers / next action = existing `project_next` / `projectIntel`. Never cost/margin/payout. Reads, staff-scoped via resolveProject. (Optional future: a one-shot "sales brief" composing next+feedback+approvals.)
+
+## Remaining (owner-steer — bigger or higher-risk)
+1. **Floor-plan highlight** (UI): highlight a resolved device on the planner/customer layout.
+2. **Proposed equipment changes for approval** (write): AI drafts a change as a proposal/addendum the human approves — bounded by "never auto-remove gear / change pricing / alter a signed agreement from conversation." Needs design + sign-off.
+3. **Customer-facing AI (Phase 6)**: LAST, highest injection risk; owner sign-off before starting.
 
 ## Phase 6 — customer-facing AI — Open (LAST, highest injection risk)
 Only after internal + knowledge paths are secure. Own-records + approved knowledge + specifically-authorized actions only.
