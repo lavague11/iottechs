@@ -17,7 +17,9 @@ const db = {
     { access_id: "ASC1", customer: "Crazy Cars", status: "sent", financialState: "awaiting_signature", agingDays: 5, signatureDeadline: new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 19).replace("T", " ") },
     { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", financialState: "due_now" },
   ],
-  getProjectEvents: (a) => a === "ASC1" ? [{ kind: "email", label: "Signature request emailed to the customer", created_at: new Date(Date.now() - 5 * 86400000).toISOString().slice(0, 19).replace("T", " ") }] : [],
+  // No reminder events yet on ASC1 — the initial proposal-send email is NOT logged as a "signature request"
+  // event (only requestSignatureEmailAction logs that), so a 5-day-old unsigned proposal is due for reminder #1.
+  getProjectEvents: () => [],
   getVisibleJobs: (_uid, role) => (role === "admin" || role === "manager") ? Object.values(JOBS) : [JOBS.ASC1],   // non-privileged see only ASC1
   searchProjects: (q) => Object.values(JOBS).filter((j) => j.customer.toLowerCase().includes(String(q).toLowerCase())),
   buildStageFacts: (a) => a === "ASC1" ? { stage: "proposal", proposal_status: "sent" } : { stage: "qc" },   // ASC1: sent, not accepted → customer must accept

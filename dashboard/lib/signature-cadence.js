@@ -10,13 +10,15 @@ export const MAX_REMINDERS = 3;       // at most 3 reminders AFTER the initial s
 
 // input: { daysWaiting, daysSinceLastEmail, signatureEmailCount, daysToDeadline }
 //   daysWaiting        — days since the proposal was sent (receivable agingDays)
-//   signatureEmailCount — total "signature request emailed" events (the initial send counts as the first)
-//   daysSinceLastEmail — days since the most recent such email (null = none yet / unknown)
+//   signatureEmailCount — count of "signature request emailed" events = reminders ALREADY SENT. The initial
+//     proposal-send email (sendProposalAction) does NOT log this event — only requestSignatureEmailAction
+//     does — so every such event is a reminder (no off-by-one for the initial send).
+//   daysSinceLastEmail — days since the most recent such reminder (null = none yet / unknown)
 //   daysToDeadline     — days until the 30-day unsigned auto-close (null = unknown)
 // Returns { due, remindersSent, reason?, nextReminder? }.
 export function signatureNudge({ daysWaiting = 0, daysSinceLastEmail = null, signatureEmailCount = 0, daysToDeadline = null } = {}) {
   const dw = Math.max(0, Math.floor(+daysWaiting || 0));
-  const remindersSent = Math.max(0, Math.floor(+signatureEmailCount || 0) - 1);   // the first email is the initial send, not a reminder
+  const remindersSent = Math.max(0, Math.floor(+signatureEmailCount || 0));   // each logged signature-request event is a reminder
   if (remindersSent >= MAX_REMINDERS) return { due: false, remindersSent, reason: "reminder limit reached" };
   if (daysToDeadline != null && daysToDeadline <= 1) return { due: false, remindersSent, reason: "at the signature deadline" };
   if (dw < FIRST_NUDGE_DAY) return { due: false, remindersSent, reason: `too soon (nudge from day ${FIRST_NUDGE_DAY})` };
