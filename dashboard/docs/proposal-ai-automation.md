@@ -25,7 +25,8 @@ Today nothing auto-reminds about an unpaid **deposit** or **final balance** — 
 - **Metric:** days-sales-outstanding (time-to-deposit, time-to-final), % deposits collected within N days.
 - **Effort:** Medium. **Gap.**
 
-### 2. Signature-chasing cadence — HIGH ROI, low effort, lifts win rate
+### 2. Signature-chasing cadence — ✅ SHIPPED (8a2fde1 + fixes 878fb34, 1df9817; reviewed clean)
+`signature_nudges` read: a queue-for-confirm list of sent-but-unsigned proposals DUE for a reminder (first at day 2, ≥4 days apart, max 3, stops at the 30-day deadline), from aging + logged reminder events (no new storage). Staff send via the existing `request_signature` (preview→confirm); never auto-sends. Gated to `proposal.reuse` (admin/manager/sales). Router: "who needs a signature nudge / who should I chase for signatures". — original note below —
 `awaiting_signature` is known but nudging is manual/debounced with no schedule; the only automated event is the 30-day auto-close (which *loses* the deal). Add an AI-drafted nudge sequence (day 2/7/14) BEFORE the close, personalized, with the Review & Sign link.
 - **Reuses:** the `awaiting_signature` read + `requestSignatureEmailAction` + a schedule.
 - **Metric:** sent→signed conversion, time-to-sign, fewer 30-day auto-closes.
