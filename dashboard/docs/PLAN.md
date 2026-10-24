@@ -26,10 +26,10 @@ Each: intent → **preview** → **human confirm** → existing self-authorizing
 - **3.2 structured feedback / objection capture — Needs Review (30aeb1f).** Categorized `project_notes` (scope='feedback') with open→reviewed→resolved status, device-bound via the resolver. Staff-first; customer-submitted feedback → Phase 6.
 
 ## Phase 4 — site-survey integration (staged, read-first) — device resolver DONE (9525346); rest Open
-Device resolver + `getProjectDevices` shipped as 2.5 groundwork; concerns associate to a device via 3.2. **NEXT: device coverage/placement answers (read)** — "what does camera 3 cover / why is it at the entrance" explained from verified survey info (survey2-model: loc, aim°, fov°, range ft, floor), completing the headline (recognize → explain coverage → record concern). Remaining after: highlight on the floor plan, prepare proposed changes for approval. **Never auto-remove gear / change pricing / alter a signed agreement from conversation.**
+Device resolver + `getProjectDevices` shipped; concerns associate to a device via 3.2; **device coverage read SHIPPED (4da3cf9)** — "what does camera 3 cover / why is it at the entrance" from verified survey facts. **The headline now runs end to end** (recognize → explain coverage → record concern). Remaining after sales intelligence: highlight on the floor plan, prepare proposed changes for approval. **Never auto-remove gear / change pricing / alter a signed agreement from conversation.**
 
-## Phase 5 — sales intelligence — Open
-Objections, product Q&A, outstanding approvals, follow-ups, likely blockers, feedback summaries. Never cost/margin/payout.
+## Phase 5 — sales intelligence (reads) — NEXT
+Objections, outstanding approvals, follow-ups, likely blockers, feedback summaries. Never cost/margin/payout. **NEXT: `feedback_summary`** (open objections/feedback for a project from listFeedback, grouped by kind+status — feeds off 3.2); then reuse awaiting_signature (approvals) + projectIntel/project_next (blockers/next). Reads, staff-scoped via resolveProject.
 
 ## Phase 6 — customer-facing AI — Open (LAST, highest injection risk)
 Only after internal + knowledge paths are secure. Own-records + approved knowledge + specifically-authorized actions only.
