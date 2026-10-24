@@ -49,7 +49,11 @@ function tokScopedToProject(accessId, tok) {
 // Find a proposal line by its own id, or by the survey camera's stable cid (camera_id — the camera↔line
 // bridge). Used by propose_change to map a resolved device to the exact line.
 function findProposalLine(payload, { cid, id } = {}) {
-  for (const o of (payload?.options || [])) for (const s of (o.services || [])) for (const it of (s.items || [])) {
+  // Scope to the FIRST option — applyIntentToPayload's edit_item resolves against options[0], so a line we
+  // could only find in option[1] would be uneditable; keep the mapper and the editor in the same scope.
+  const opt = (payload?.options || [])[0];
+  if (!opt) return null;
+  for (const s of (opt.services || [])) for (const it of (s.items || [])) {
     if (id != null && it.id === id) return it;
     if (cid && it.camera_id === cid) return it;
   }
@@ -211,15 +215,31 @@ function previewAction(name, accessId, tok, args) {
     const dev = r.device || null;
     const line = dev && dev.cid ? findProposalLine(payload, { cid: dev.cid }) : null;
     if (!line) return { ok: true, kind: "clarify", speak: dev ? `${candidateView(dev).display} isn't a line on this proposal yet — add it first, or edit the proposal directly.` : `I couldn't tell which proposal line you mean — name the camera, e.g. "camera 3".` };
-    const curQty = +line.qty || 0, curName = line.name;
-    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: line.id }, set: args.set });
+    // A camera line is a zero-price GROUP HEADER whose hardware/labor live in sub[]; changing the header qty
+    // does NOT scale the camera (it would silently no-op). So a QTY change on a camera block is refused with
+    // guidance; a model SWAP renames the header (annotation), appended to keep the existing location label.
+    const isCameraBlock = !!line.camera_id || (Array.isArray(line.sub) && line.sub.length > 0);
+    const curQty = +line.qty || 0, curName = line.name || "";
+    let set, change;
+    if (args?.set?.qty != null) {
+      if (isCameraBlock) return { ok: true, kind: "clarify", speak: `A camera is quoted as one block per location, so I can't just change its quantity. To add another, say "add a camera"; I can also switch this one's model or remove it.` };
+      set = { qty: Math.max(1, Math.min(999, parseInt(args.set.qty, 10) || 1)) };
+      change = `qty ${curQty} → ${set.qty}`;
+    } else if (args?.set?.name != null) {
+      const spec = String(args.set.name).slice(0, 48).trim();
+      const finalName = (curName ? `${curName} — ${spec}` : spec).slice(0, 80);   // append the spec; keep the location label
+      set = { name: finalName };
+      change = `"${curName || "the line"}" → "${finalName}" (price unchanged — set it in the proposal)`;
+    } else {
+      return { ok: true, kind: "clarify", speak: `Tell me what to change — a quantity or a model.` };
+    }
+    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: line.id }, set });
     if (applied.error) return { ok: true, kind: "clarify", speak: applied.error };
     const before = grandOf(payload, row), after = grandOf(applied.payload, row);
-    const change = args.set.qty != null ? `qty ${curQty} → ${args.set.qty}` : `"${curName}" → "${args.set.name}" (price unchanged — set it in the proposal)`;
     const prev = PROJECT_ACTIONS.propose_change.confirm(actionContext(getJobByAccessId(accessId), accessId), { lineLabel: curName, change });
     const device = dev ? { id: dev.id, cid: dev.cid || null, floor: dev.floor, code: dev.code, label: dev.label, accessId } : null;
     return { ok: true, kind: "write", write: "action",
-      intent: { type: "action", name, accessId, args: { lineId: line.id, set: args.set, lineLabel: curName, change } },
+      intent: { type: "action", name, accessId, args: { lineId: line.id, set, lineLabel: curName, change } },
       preview: { title: prev.title, body: prev.detail, ...(before !== after ? { before, after } : {}) },
       ...(device ? { device } : {}) };
   }
@@ -329,8 +349,15 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     if (!row || !row.payload) return { error: "There's no proposal to change." };
     if (row.status !== "draft") return { error: "That proposal isn't a draft anymore — revise it in the proposal editor." };
     let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
-    if (!findProposalLine(payload, { id: args?.lineId })) return { error: "That proposal line is no longer there." };
-    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: args.lineId }, set: args.set });
+    const tgt = findProposalLine(payload, { id: args?.lineId });
+    if (!tgt) return { error: "That proposal line is no longer there." };
+    // Whitelist the edit server-side to qty/name ONLY — a change from conversation can NEVER move price, even
+    // via a forged/replayed args.set.price (the parser never emits one; this makes it structural, not trust).
+    const set = {};
+    if (args?.set?.qty != null) { if (tgt.camera_id || (Array.isArray(tgt.sub) && tgt.sub.length)) return { error: "A camera is quoted as a block — add or remove a camera instead of changing its quantity." }; set.qty = Math.max(1, Math.min(999, parseInt(args.set.qty, 10) || 1)); }
+    if (args?.set?.name != null) set.name = String(args.set.name).slice(0, 80);
+    if (!Object.keys(set).length) return { error: "Nothing to change." };
+    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: args.lineId }, set });
     if (applied.error) return { error: applied.error };
     out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
     message = out?.error ? null : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`;
