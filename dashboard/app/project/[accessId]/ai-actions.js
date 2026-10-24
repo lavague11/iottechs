@@ -175,7 +175,7 @@ function previewAction(name, accessId, tok, args) {
     if (r.candidates) return { ok: true, kind: "clarify", speak: `Which one — ${r.candidates.map((c) => c.display).join(", ")}?` };
     if (!r.device) return { ok: true, kind: "clarify", speak: `I couldn't tell which device you mean. Try its number or location — e.g. "camera 3" or "the front entrance camera".` };
     eff = { deviceId: r.device.id, deviceLabel: candidateView(r.device).display, reason: args?.reason || "Other", note: args?.note || "" };
-    previewDevice = { id: r.device.id, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId };
+    previewDevice = { id: r.device.id, cid: r.device.cid || null, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId };
   }
   // capture_feedback optionally BINDS a device (owner's headline: "not sure we need that entrance camera" →
   // concern recorded against that camera). Ambiguous device → clarify; unknown/none → still capture, unbound
@@ -185,7 +185,7 @@ function previewAction(name, accessId, tok, args) {
     if (args?.wantsDevice) {
       const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
       if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device is that about — ${r.candidates.map((c) => c.display).join(", ")}?` };
-      if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; previewDevice = { id: r.device.id, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId }; }
+      if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; previewDevice = { id: r.device.id, cid: r.device.cid || null, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId }; }
     }
   }
   const facts = buildStageFacts(accessId);

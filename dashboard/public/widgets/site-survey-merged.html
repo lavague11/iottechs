@@ -2224,14 +2224,22 @@
       // which device the assistant meant. Works even on a submitted/frozen survey (view/select only). Returns
       // before the frozen/edit guards below.
       if(m.cmd==="highlight"){
-        var hf=-1; for(var hi=0; hi<floors.length && hf<0; hi++){ var hd=(floors[hi]&&floors[hi].devices)||[]; for(var hj=0;hj<hd.length;hj++){ if(hd[hj].id===m.id){ hf=hi; break; } } }
+        // Match by the STABLE cross-boundary key the persisted blob carries: a camera's cid (primary; the
+        // same key selectCid uses), falling back to the runtime id when it happens to match (live session).
+        // The server's device id is cid for cameras and a positional code for others, so cid is what aligns.
+        var hf=-1, hd2=null;
+        for(var hi=0; hi<floors.length && hf<0; hi++){ var hd=(floors[hi]&&floors[hi].devices)||[];
+          for(var hj=0;hj<hd.length;hj++){ if((m.cid && hd[hj].cid===m.cid) || (m.id!=null && hd[hj].id===m.id)){ hf=hi; hd2=hd[hj]; break; } } }
         if(hf<0) return;
         if(hf!==curFloor) switchFloor(hf);
         if(curStep!==1) goStep(1);
-        _suppressSelPost=true; select(m.id);
-        var hn=document.getElementById("dev-"+m.id);
+        // After a floor switch the live `devices` array is this floor's; find the live device to get its id.
+        var live=null; for(var li=0; li<devices.length; li++){ if((m.cid && devices[li].cid===m.cid) || (m.id!=null && devices[li].id===m.id)){ live=devices[li]; break; } }
+        if(!live) return;
+        _suppressSelPost=true; select(live.id);
+        var hn=document.getElementById("dev-"+live.id);
         if(hn){ hn.classList.add("hl"); try{ hn.scrollIntoView({block:"center",inline:"center"}); }catch(e){}
-          setTimeout(function(){ var e3=document.getElementById("dev-"+m.id); if(e3) e3.classList.remove("hl"); }, 4000); }
+          setTimeout(function(){ var e3=document.getElementById("dev-"+live.id); if(e3) e3.classList.remove("hl"); }, 4000); }
         return;
       }
       // Rename by STABLE cid — the host relays a rename made in the mockup so the survey stays in sync

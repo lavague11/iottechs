@@ -201,7 +201,7 @@ const QUERIES = {
     if (!hit.device) return { error: `I couldn't tell which device you mean on ${name}. Try its number or location — e.g. "camera 3" or "the entrance camera".`, reason: "no_data" };
     const d = hit.device, text = describeCoverage(d);
     // device locator → the client highlights it on the planner/layout (floor-plan highlight).
-    return { text, facts: [text], project: { accessId: j.access_id, name }, device: { id: d.id, floor: d.floor, code: d.code, label: d.label, accessId: j.access_id } };
+    return { text, facts: [text], project: { accessId: j.access_id, name }, device: { id: d.id, cid: d.cid || null, floor: d.floor, code: d.code, label: d.label, accessId: j.access_id } };
   } },
 
   // "What's the feedback / any objections / open concerns" → summarize captured feedback (Phase 3.2) for the

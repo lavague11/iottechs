@@ -223,7 +223,7 @@ export default function SystemPlanner({
       const d = e.detail || {};
       if (d.id == null || String(d.accessId || "") !== String(accessId)) return;
       goRail("cameras");
-      surveyCmd({ cmd: "highlight", id: d.id, floor: d.floor });
+      surveyCmd({ cmd: "highlight", cid: d.cid || null, id: d.id, floor: d.floor });
     };
     window.addEventListener("iot-highlight-device", onHighlight);
     return () => window.removeEventListener("iot-highlight-device", onHighlight);

@@ -30,7 +30,7 @@ const db = {
   ] : [],
   getProjectDevices: (a) => a === "ASC1" ? [
     { id: "d1", k: "cam", kindName: "Camera", code: "C1", identity: "Camera 1", label: "Lobby", loc: "Lobby", floor: 0, floorName: "Floor 1", x: 20, y: 30, cone: true, aimed: true, aim: 45, fov: 30, range: 40 },
-    { id: "d2", k: "cam", kindName: "Camera", code: "C2", identity: "Camera 2", label: "Front Entrance", loc: "Front Entrance", floor: 0, floorName: "Floor 1", x: 82, y: 68, cone: true, aimed: true, aim: 92, fov: 30, range: 40, placementType: "outside" },
+    { id: "d2", cid: "cBBB222", k: "cam", kindName: "Camera", code: "C2", identity: "Camera 2", label: "Front Entrance", loc: "Front Entrance", floor: 0, floorName: "Floor 1", x: 82, y: 68, cone: true, aimed: true, aim: 92, fov: 30, range: 40, placementType: "outside" },
   ] : [],
 };
 const fin = { optionTotals: (opt) => ({ grand: (opt.services || []).reduce((s, sv) => s + (sv.items || []).reduce((a, it) => a + it.qty * it.price, 0), 0) }) };
@@ -64,7 +64,7 @@ test("device_coverage explains a resolved device from survey facts (the headline
   assert.match(r.text, /~40 ft/);
   assert.deepEqual(r.project, { accessId: "ASC1", name: "Crazy Cars" });
   // Carries the device locator so the client can highlight it on the planner (floor-plan highlight).
-  assert.deepEqual(r.device, { id: "d2", floor: 0, code: "C2", label: "Front Entrance", accessId: "ASC1" });
+  assert.deepEqual(r.device, { id: "d2", cid: "cBBB222", floor: 0, code: "C2", label: "Front Entrance", accessId: "ASC1" });
   // Ambiguous ("the camera" with two) → clarify, not a guess.
   const amb = runQuery({ query: "device_coverage", target: "this", ref: "what does the camera cover" }, ctx("admin", "ASC1"));
   assert.equal(amb.reason, "ambiguous");

@@ -100,7 +100,11 @@ export function surveyDevices(floors) {
     perGroup[g.key] = (perGroup[g.key] || 0) + 1;
     const code = String(d.tag || "").replace(/^I/, "") || `${g.letter}${perGroup[g.key]}`;
     out.push({
-      id: d.id, floor: fi, floorName: f.name, k: d.k, kindName: it.name, ic: it.ic || "dot", group: g.key, color: d.color || g.color,
+      // Stable id for cross-boundary use (AI resolver / highlight): the persisted blob carries no per-device
+      // `id` (stripDevs drops it), so fall back to the camera's stable `cid`, then the deterministic `code`
+      // ("C2"). Without this every real device's id is undefined and the resolver filters them all out.
+      id: d.id != null ? d.id : (d.cid || code), cid: d.cid || null,
+      floor: fi, floorName: f.name, k: d.k, kindName: it.name, ic: it.ic || "dot", group: g.key, color: d.color || g.color,
       // label = WHERE it is (geometry-derived location "Dining 1"), falling back to identity; identity + placement ride alongside for detail/selection.
       code, label: cap((d.locName && String(d.locName).trim()) || (d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`),
       identity: cap((d.name && String(d.name).trim()) || d.tag || `${it.name} ${perGroup[g.key]}`), placementType: d.placementType || "",

@@ -4,6 +4,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { resolveDevice, candidateView } from "../lib/device-resolver.js";
+import { parseSurveyFloors, surveyDevices } from "../lib/survey2-model.js";
 
 const DEVICES = [
   { id: "d1", k: "cam", kindName: "Camera", code: "C1", identity: "Camera 1", label: "Lobby 1", loc: "Lobby", floor: 0, floorName: "Floor 1", x: 20, y: 30 },
@@ -71,6 +72,25 @@ test("quantity is not an ordinal: '2 cameras' doesn't resolve to camera #2", () 
   const r = resolveDevice("flag 2 cameras as damaged", DEVICES);
   assert.ok(r.candidates && r.candidates.length === 3);
   assert.ok(!r.device);
+});
+
+test("REAL survey blob (no per-device id persisted) → surveyDevices yields non-null ids so the resolver works", () => {
+  // Shape mirrors the widget's stripDevs() output: NO `id`, NO `tag`; cameras carry a stable cid, others don't.
+  // Before the id fallback (d.id ?? cid ?? code), every id was undefined and resolveDevice's `d.id != null`
+  // filter emptied the list — silently breaking coverage / raise_issue / feedback on real data.
+  const blob = { floors: [{ name: "Floor 1", bg: "data:image/x,x", devices: [
+    { k: "cam", x: 20, y: 30, aimed: true, aim: 45, fov: 30, range: 40, name: "", locName: "Lobby", cid: "cAAA111" },
+    { k: "cam", x: 80, y: 70, aimed: true, aim: 92, fov: 30, range: 40, name: "", locName: "Front Entrance", cid: "cBBB222" },
+    { k: "spk", x: 50, y: 50, locName: "Dining" },
+  ] }] };
+  const devices = surveyDevices(parseSurveyFloors(blob));
+  assert.equal(devices.length, 3);
+  assert.ok(devices.every((d) => d.id != null), "every device has a non-null id");
+  assert.equal(devices[0].id, "cAAA111");              // camera → its stable cid
+  assert.equal(devices[2].id, devices[2].code);        // non-camera → deterministic code
+  assert.equal(resolveDevice("the front entrance camera", devices).device?.id, "cBBB222");
+  assert.equal(resolveDevice("camera 2", devices).device?.id, "cBBB222");   // 2nd camera (code C2) → cid cBBB222
+  assert.ok(resolveDevice("the speaker", devices).device);
 });
 
 test("candidateView gives a human label for a clarify prompt (code + kind + location)", () => {
