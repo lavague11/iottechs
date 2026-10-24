@@ -10,6 +10,8 @@
 // future training loop: "no_data" | "permission" | "unsupported_read" | "ambiguous").
 
 import { projectIntel } from "./project-intel.js";
+import { resolveDevice } from "./device-resolver.js";
+import { describeCoverage } from "./device-coverage.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -183,6 +185,21 @@ const QUERIES = {
     const days = ms != null && ms >= 0 ? Math.floor(ms / 86400000) : null;
     const t = days == null ? `${name} is at the ${stageLabel(stage)} stage.` : `${name} has been at the ${stageLabel(stage)} stage for ${days} day${days === 1 ? "" : "s"}.`;
     return { text: t, facts: [`${name}: ${stageLabel(stage)}${days != null ? ` ${days}d` : ""}`], project: { accessId: j.access_id, name } };
+  } },
+
+  // "What does camera 3 cover?" / "why is there a camera at the entrance?" / "where is camera 3 aimed?" →
+  // explain ONE device's coverage from the Site Survey (device-resolver + survey facts). Read-only; the text
+  // states only stored survey facts (location, aim°, FOV°, reach ft), never invented. Ambiguous → clarify.
+  device_coverage: { run: (intent, ctx) => {
+    const r = resolveProject(intent.target, ctx); if (r.error) return r;
+    const j = r.row, name = j.customer || j.access_id;
+    const devices = ctx.db.getProjectDevices ? (ctx.db.getProjectDevices(j.access_id) || []) : [];
+    if (!devices.length) return { text: `${name} has no placed survey devices yet.`, facts: [], project: { accessId: j.access_id, name } };
+    const hit = resolveDevice(intent.ref || "", devices);
+    if (hit.candidates) return { error: `Which device — ${hit.candidates.map((c) => c.display).join(", ")}?`, reason: "ambiguous" };
+    if (!hit.device) return { error: `I couldn't tell which device you mean on ${name}. Try its number or location — e.g. "camera 3" or "the entrance camera".`, reason: "no_data" };
+    const text = describeCoverage(hit.device);
+    return { text, facts: [text], project: { accessId: j.access_id, name } };
   } },
 
   // "Which projects need QC?" / "…are in <stage>?" → authorized project list filtered by lifecycle stage.

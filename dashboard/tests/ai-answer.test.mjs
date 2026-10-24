@@ -23,6 +23,10 @@ const db = {
   getProjectAssignments: () => [{ role: "tech", user_id: 7 }],
   getProjectFinancialState: (a) => a === "ASC1" ? { total: 600, paid: 100, balance: 500, pendingPayments: 0 } : null,
   listInstallIssues: (a) => a === "ASC1" ? [{ status: "NEEDS_REVIEW", title: "Camera 3 offline" }, { status: "RESOLVED", title: "Old flag" }] : [],
+  getProjectDevices: (a) => a === "ASC1" ? [
+    { id: "d1", k: "cam", kindName: "Camera", code: "C1", identity: "Camera 1", label: "Lobby", loc: "Lobby", floor: 0, floorName: "Floor 1", x: 20, y: 30, cone: true, aimed: true, aim: 45, fov: 30, range: 40 },
+    { id: "d2", k: "cam", kindName: "Camera", code: "C2", identity: "Camera 2", label: "Front Entrance", loc: "Front Entrance", floor: 0, floorName: "Floor 1", x: 82, y: 68, cone: true, aimed: true, aim: 92, fov: 30, range: 40, placementType: "outside" },
+  ] : [],
 };
 const fin = { optionTotals: (opt) => ({ grand: (opt.services || []).reduce((s, sv) => s + (sv.items || []).reduce((a, it) => a + it.qty * it.price, 0), 0) }) };
 // Uses the REAL capability map so role-stripping is genuinely exercised. userName matches ASC1.tech for the
@@ -45,6 +49,23 @@ test("a resolved read returns the project so memory can track 'it' later", () =>
   assert.deepEqual(status.project, { accessId: "ASC1", name: "Crazy Cars" });
   // "what's going on with it" after that answer → target "this" resolves to the remembered project.
   assert.match(runQuery({ query: "project_status", target: "it" }, ctx("admin", "ASC1")).text, /Crazy Cars/);
+});
+
+test("device_coverage explains a resolved device from survey facts (the headline's middle step)", () => {
+  // "the front entrance camera" → resolves to C2 and reports its stored coverage (never invented).
+  const r = runQuery({ query: "device_coverage", target: "this", ref: "what does the front entrance camera cover" }, ctx("admin", "ASC1"));
+  assert.match(r.text, /C2 Camera is on Floor 1 in Front Entrance/);
+  assert.match(r.text, /aimed about 92°/);
+  assert.match(r.text, /~40 ft/);
+  assert.deepEqual(r.project, { accessId: "ASC1", name: "Crazy Cars" });
+  // Ambiguous ("the camera" with two) → clarify, not a guess.
+  const amb = runQuery({ query: "device_coverage", target: "this", ref: "what does the camera cover" }, ctx("admin", "ASC1"));
+  assert.equal(amb.reason, "ambiguous");
+  assert.match(amb.error, /Which device/);
+  // Unknown device → a handled no_data miss.
+  assert.equal(runQuery({ query: "device_coverage", target: "this", ref: "what does the kiosk cover" }, ctx("admin", "ASC1")).reason, "no_data");
+  // No survey devices on ASC2 → says so (never invents).
+  assert.match(runQuery({ query: "device_coverage", target: "Nobo Restaurant", ref: "camera 1" }, ctx()).text, /no placed survey devices/);
 });
 
 test("project_status reports stage + proposal state, never invented", () => {

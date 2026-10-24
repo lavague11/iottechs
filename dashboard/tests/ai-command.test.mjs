@@ -53,6 +53,12 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.deepEqual(routeCommand("how many projects need payment"), { type: "answer", query: "projects_by_stage", stage: "payment" });
   assert.deepEqual(routeCommand("what's going on with Crazy Cars"), { type: "answer", query: "project_status", target: "Crazy Cars" });
   assert.deepEqual(routeCommand("status of Nobo Restaurant"), { type: "answer", query: "project_status", target: "Nobo Restaurant" });
+  // Device coverage questions → device_coverage read, carrying the full phrase as the device ref.
+  assert.deepEqual(routeCommand("what does camera 3 cover"), { type: "answer", query: "device_coverage", ref: "what does camera 3 cover", target: "this" });
+  assert.deepEqual(routeCommand("where is the entrance camera aimed"), { type: "answer", query: "device_coverage", ref: "where is the entrance camera aimed", target: "this" });
+  assert.equal(routeCommand("why is there a camera at the entrance")?.query, "device_coverage");
+  // A device flag ("flag camera 3") is still an ACTION, not a coverage read.
+  assert.equal(routeCommand("flag camera 3 as damaged")?.name, "raise_issue");
   // A plain navigation phrasing is NOT hijacked into an answer (no stage word) — the global bar's app
   // router still sends "show me projects" to the Projects page.
   assert.notEqual(routeCommand("show me projects")?.type, "answer");

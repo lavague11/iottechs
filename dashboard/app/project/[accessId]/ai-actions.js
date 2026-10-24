@@ -113,7 +113,7 @@ function answerFor(intent, tok, currentAccessId) {
   const ctx = {
     role: tok.role, userId: tok.id, userName: actorName(tok), currentAccessId: currentAccessId || null, can,
     db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects,
-          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues },
+          buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices },
     fin: { optionTotals },
   };
   const r = runQuery(intent, ctx);

@@ -107,6 +107,13 @@ export function routeCommand(text) {
     const st = stageFromText(t);
     if (st) return { type: "answer", query: "projects_by_stage", stage: st };
   }
+  // "what does camera 3 cover", "coverage of the entrance camera", "where is camera 3 aimed", "why is there a
+  // camera at the entrance", "what does the lobby camera see" → explain a device's coverage from the survey.
+  // BEFORE project_status, so "where is camera 3 aimed" is a device read, not a project-status lookup.
+  if (/\b(camera|cam|speaker|sensor|motion|glass|keypad|nvr|device)\b/i.test(t)
+      && /\b(cover|covers|coverage|aim|aimed|facing|face|point(?:ing|ed)?|field of view|fov|range|reach|sees?|watch(?:ing|es)?|view|what (?:area|part|direction)|why (?:is|are|do|does) (?:there|we|they))\b/i.test(t))
+    return { type: "answer", query: "device_coverage", ref: t, target: "this" };
+
   // "what's going on with Crazy Cars", "status of Crazy Cars", "where is Crazy Cars at"
   m = t.match(/^(?:what'?s\s+(?:going on|happening|the status)\s+(?:with|on|for)|status\s+(?:of|on|for)|where(?:'?s|\s+is)|how'?s)\s+(.+?)\s*(?:\bat\b)?[.?!]*$/i);
   if (m) { const tg = m[1].replace(/'s\s*$/, "").trim(); if (tg) return { type: "answer", query: "project_status", target: /^(it|this|that|the project)$/i.test(tg) ? "this" : tg }; }
@@ -457,11 +464,12 @@ export function parseClaudeResult(json) {
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "answer": {
-        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
+        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "awaiting_signature", "projects_by_stage"].includes(i.query) ? i.query : null;
         if (!query) return { type: "unknown" };
         const out = { type: "answer", query };
         if (i.target) out.target = String(i.target).slice(0, 80);
         if (i.stage) out.stage = String(i.stage).slice(0, 40);
+        if (query === "device_coverage") out.ref = String(i.ref || i.target || "").slice(0, 160);
         return out;
       }
       case "clarify": return i.ask ? { type: "clarify", ask: String(i.ask).slice(0, 200) } : { type: "unknown" };
