@@ -33,7 +33,10 @@ Device resolver + `getProjectDevices` shipped; concerns associate to a device vi
 
 ## Remaining (owner-steer — bigger or higher-risk)
 1. **Floor-plan highlight** (UI): **DONE — a91e9fe + fix 962e096**, independently reviewed + re-verified. AI-resolved device rings on the planner (window event → widget `highlight` by cid). The review uncovered + fixed a CRITICAL latent bug: device `id` was `undefined` on real data (stripDevs persists none), which had silently killed resolver/coverage/raise/feedback in production too — now `surveyDevices` keys on cid/code and a non-mocked test guards it. Non-camera visual highlight is a no-op pending a persisted per-device uid (deferred).
-2. **Proposed equipment changes for approval** (write): AI drafts a change as a proposal/addendum the human approves — bounded by "never auto-remove gear / change pricing / alter a signed agreement from conversation." Needs design + sign-off.
+2. **Proposed equipment changes for approval** (write): AI drafts a change the human approves — bounded by "never auto-remove gear / change pricing / alter a signed agreement from conversation." Design approved by owner; building in slices:
+   - **8a — SHIPPED 7ba03f4 (review in flight):** `propose_change` — device-referenced QTY change + MODEL swap on a DRAFT proposal line. Preview (device→line via camera_id===cid, before/after) → human confirm → `saveProposalDraftAction`. cap:null (editor); draft-only (sent/signed → "coming soon"); never invents a price; never touches a sent/signed proposal.
+   - **8b — next:** remove a line (confirm-only, non-destructive) + new `proposal.revise` cap (admin/manager) for remove.
+   - **8c — after:** sent/signed → `reviseProposal` v+1 path with the explicit "voids the signature, requires re-signature" warning (admin/manager).
 3. **Customer-facing AI (Phase 6)**: LAST, highest injection risk; owner sign-off before starting.
 (Optional polish for #1: also highlight on the customer "Your System Layout" React render, and auto-clear on a new question.)
 
