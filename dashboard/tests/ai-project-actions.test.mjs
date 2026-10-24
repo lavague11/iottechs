@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, detectAction } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, detectAction } from "../lib/ai-project-actions.js";
 import { routeCommand } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -135,4 +135,36 @@ test("2.4 assign_tech: extracts the tech name; router carries it; cap=assignment
   assert.equal(actionAllowed("assign_tech", { editor: true, can: (c) => c === "assignment.edit" }), true);   // admin/manager
   assert.equal(actionAllowed("assign_tech", { editor: true, can: () => false }), false);                      // sales refused
   assert.match(PROJECT_ACTIONS.assign_tech.confirm({ name: "Crazy Cars" }, { resolvedName: "Jess Tech" }).title, /Assign Jess Tech to Crazy Cars/);
+});
+
+test("2.5 adjudicate_issue: parses resolve/dismiss + optional id; needs an issue NOUN (not loose 'resolve' talk)", () => {
+  assert.deepEqual(parseAdjudicate("resolve the issue"), { decision: "resolve" });
+  assert.deepEqual(parseAdjudicate("close out the flag"), { decision: "resolve" });
+  assert.deepEqual(parseAdjudicate("mark issue 12 resolved"), { decision: "resolve", issueId: 12 });
+  assert.deepEqual(parseAdjudicate("dismiss the flag"), { decision: "dismiss" });
+  assert.deepEqual(parseAdjudicate("dismiss issue #7"), { decision: "dismiss", issueId: 7 });
+  assert.equal(parseAdjudicate("resolve the dispute with the customer"), null); // no issue/flag noun
+  assert.equal(parseAdjudicate("how many open issues"), null);                  // a question, no verb
+  // Status QUESTIONS must NOT produce a confirmable close card (interrogative lead or trailing "?").
+  assert.equal(parseAdjudicate("is the issue resolved?"), null);
+  assert.equal(parseAdjudicate("did we resolve the issue"), null);
+  assert.equal(parseAdjudicate("has issue 12 been resolved"), null);
+  assert.deepEqual(parseAdjudicate("resolve these issues"), { decision: "resolve" });   // plural imperative still fires
+  // Router carries the args; detectAction surfaces it.
+  assert.deepEqual(routeCommand("dismiss issue 7"), { type: "action", name: "adjudicate_issue", args: { decision: "dismiss", issueId: 7 }, target: "this" });
+  assert.deepEqual(detectAction("resolve the issue"), { name: "adjudicate_issue", args: { decision: "resolve" } });
+});
+
+test("2.5 adjudicate_issue: available only when an open flag exists; cap=issue.adjudicate (admin/manager only)", () => {
+  const a = PROJECT_ACTIONS.adjudicate_issue;
+  assert.equal(a.available({}, [], { openIssues: [{ id: 1, status: "NEEDS_REVIEW" }] }).ok, true);
+  assert.equal(a.available({}, [], { openIssues: [] }).ok, false);
+  assert.match(a.available({}, [], { openIssues: [] }).why, /no open issues/i);
+  assert.equal(a.available({}, [], {}).ok, false);           // no issues threaded → nothing to close
+  assert.equal(a.cap, "issue.adjudicate");
+  assert.equal(actionAllowed("adjudicate_issue", { editor: true, can: (c) => c === "issue.adjudicate" }), true);   // admin/manager
+  assert.equal(actionAllowed("adjudicate_issue", { editor: true, can: () => false }), false);                      // sales/tech refused
+  // Confirm copy names the decision + keeps-for-audit wording (never "delete").
+  assert.match(a.confirm({ name: "Crazy Cars" }, { decision: "resolve", label: "work order — Damaged" }).title, /Resolve the work order — Damaged issue on Crazy Cars/);
+  assert.match(a.confirm({ name: "Crazy Cars" }, { decision: "dismiss" }).detail, /dismissed .* never deleted/i);
 });

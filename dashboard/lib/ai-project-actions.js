@@ -102,6 +102,31 @@ export const PROJECT_ACTIONS = {
       detail: "Adds them to the project as the assigned technician.",
     }),
   },
+
+  // 2.5 — close an EXISTING open install-issue flag: resolve (fixed/accepted) or dismiss (not an issue). It
+  // never hard-deletes (the row is kept for audit) and never RAISES a new flag — creating one needs a device
+  // reference from the survey/QC model (Phase 4), so Phase 2 wires adjudication only. cap="issue.adjudicate"
+  // (admin/manager — a 5th distinct cap). Parameterized: { decision, issueId?, label? }. The open issue set
+  // is threaded via ctx.openIssues; the preview binds the exact issue (clarifying when several are open).
+  adjudicate_issue: {
+    verb: "resolve",
+    cap: "issue.adjudicate",
+    available: (facts, assignments, ctx) => {
+      const open = Array.isArray(ctx?.openIssues) ? ctx.openIssues : [];
+      if (!open.length) return { ok: false, why: "there are no open issues to close" };
+      return { ok: true };
+    },
+    confirm: ({ name }, args) => {
+      const dismiss = args?.decision === "dismiss";
+      const what = args?.label ? `the ${args.label} issue` : "the install issue";
+      return {
+        title: `${dismiss ? "Dismiss" : "Resolve"} ${what} on ${name}`,
+        detail: dismiss
+          ? "Marks the flag dismissed — kept on the record for audit, never deleted."
+          : "Marks the install issue resolved — kept on the record for audit.",
+      };
+    },
+  },
 };
 
 const moneyStr = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -163,6 +188,23 @@ export function parseAssign(text) {
   return { techName };
 }
 
+// Parse an "adjudicate an issue" command → { decision:"resolve"|"dismiss", issueId? } or null. Requires an
+// issue/flag NOUN so it can't swallow unrelated "resolve"/"close" talk, plus an explicit resolve/dismiss verb.
+export function parseAdjudicate(text) {
+  const t = String(text || "").toLowerCase().trim();
+  // A status QUESTION ("is the issue resolved?", "did we resolve it", "has issue 12 been closed") is not a
+  // command — bail on an interrogative lead or a trailing "?" so we never raise a confirm card for a query.
+  if (/^(is|was|are|were|did|do|does|has|have|had|which|what|how|why|when|can|could|should|will|would)\b/.test(t) || /\?\s*$/.test(t)) return null;
+  if (!/\b(issues?|flags?|defects?|punch(?:\s*list)?|tickets?)\b/.test(t)) return null;
+  let decision = null;
+  if (/\b(dismiss|dismissed|ignore|reject|waive|discard)\b/.test(t)) decision = "dismiss";
+  else if (/\b(resolve|resolved|close|cleared?|complete[d]?|mark(?:ed)?\s+(?:it\s+)?(?:as\s+)?(?:resolved|closed|done|fixed))\b/.test(t)) decision = "resolve";
+  if (!decision) return null;
+  const m = t.match(/\b(?:issues?|flags?|tickets?)\s*#?\s*(\d+)\b/) || t.match(/#\s*(\d+)\b/);
+  const issueId = m ? Number(m[1]) : null;
+  return issueId ? { decision, issueId } : { decision };
+}
+
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
 // Returns { name, args? } | null.
 export function detectAction(text) {
@@ -172,5 +214,7 @@ export function detectAction(text) {
   if (pay) return { name: "record_payment", args: pay };
   const asn = parseAssign(text);
   if (asn) return { name: "assign_tech", args: asn };
+  const adj = parseAdjudicate(text);
+  if (adj) return { name: "adjudicate_issue", args: adj };
   return null;
 }

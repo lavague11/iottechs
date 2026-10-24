@@ -20,8 +20,20 @@ import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed } from "../../../lib/ai-project-actions";
 import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction } from "./proposal-actions";
-import { setStage, addAssignmentAction } from "./actions";
+import { setStage, addAssignmentAction, installIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
+
+// Open install-issue flags (NEEDS_REVIEW | NEEDS_REWORK) — the only ones adjudicate_issue can close.
+const OPEN_ISSUE = new Set(["NEEDS_REVIEW", "NEEDS_REWORK"]);
+function openInstallIssuesFor(accessId) {
+  try { return (listInstallIssues(accessId) || []).filter((i) => OPEN_ISSUE.has(String(i.status || "").toUpperCase())); }
+  catch { return []; }
+}
+// A short human reference for an issue in a confirm/clarify line (never a raw id alone).
+function issueLabel(i) {
+  const where = i?.target_kind === "order" ? "work order" : (i?.target_label || "line item");
+  return i?.reason ? `${where} — ${i.reason}` : where;
+}
 
 // The project's TYPE-AWARE stage order (a Type C project skips some stages) — so an action's "next stage"
 // matches what setStage will accept. Null when the type is unknown; the action then reports "final stage".
@@ -117,10 +129,25 @@ function previewAction(name, accessId, tok, args) {
     if (!r.user) return { ok: true, kind: "clarify", speak: `I couldn't find a technician named "${args?.techName || "that"}". Who should I assign?` };
     eff = { ...args, resolvedName: r.user.name, userId: r.user.id };
   }
+  // adjudicate_issue binds to ONE open flag: use the named id, else the sole open one, else clarify the list.
+  const openIssues = name === "adjudicate_issue" ? openInstallIssuesFor(accessId) : undefined;
+  if (name === "adjudicate_issue") {
+    if (!openIssues.length) return { ok: true, kind: "unsupported", speak: "There are no open issues to close.", reason: "not_available" };
+    let target;
+    if (args?.issueId != null) {
+      target = openIssues.find((i) => Number(i.id) === Number(args.issueId));
+      if (!target) return { ok: true, kind: "clarify", speak: `Issue #${args.issueId} isn't open. Open: ${openIssues.map((i) => `#${i.id} ${issueLabel(i)}`).join(", ")}.` };
+    } else if (openIssues.length === 1) {
+      target = openIssues[0];
+    } else {
+      return { ok: true, kind: "clarify", speak: `Which issue — ${openIssues.map((i) => `#${i.id} (${issueLabel(i)})`).join(", ")}?` };
+    }
+    eff = { decision: args?.decision === "dismiss" ? "dismiss" : "resolve", issueId: target.id, label: issueLabel(target) };
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
-  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
+  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job), openIssues }) : { ok: true };
   if (!avail.ok) return { ok: true, kind: "unsupported", speak: `I can't do that yet — ${avail.why}.`, reason: "not_available" };
   // Show WHO it goes to / which tech (+ any action-specific data, e.g. the target stage) before confirming.
   const prev = spec.confirm({ ...actionContext(job, accessId), ...(avail.data || {}) }, eff);
@@ -156,9 +183,10 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
   if (!accessId || !job) return { error: "Couldn't find that project." };
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
-  // Re-check availability against CURRENT state + assignments + the TYPE-AWARE stage order (never trust the
-  // stale client intent); the action-specific data (e.g. the target stage) is recomputed here.
-  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job) }) : { ok: true };
+  // Re-check availability against CURRENT state + assignments + the TYPE-AWARE stage order + open issues
+  // (never trust the stale client intent); the action-specific data (e.g. the target stage) is recomputed here.
+  const openIssues = name === "adjudicate_issue" ? openInstallIssuesFor(accessId) : undefined;
+  const avail = spec.available ? spec.available(facts, getProjectAssignments(accessId), { order: stageOrderFor(job), openIssues }) : { ok: true };
   if (!avail.ok) return { error: `Can't do that — ${avail.why}.` };
   // Re-validate args server-side (never trust the client amount). recordPaymentAction clamps + re-checks too.
   const amount = Math.round((+args?.amount || 0) * 100) / 100;
@@ -177,6 +205,16 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     // The certification gate is the business's, not the AI's — refuse with the reason, never auto-override.
     if (out?.gate) return { error: `${out.techName || u.name} isn't certified for this service${out.missing?.length ? ` (missing: ${out.missing.join(", ")})` : ""}. An admin can assign them manually.` };
     message = out?.existed ? `${u.name} is already assigned.` : `Assigned ${u.name}.`;
+  }
+  else if (name === "adjudicate_issue") {
+    // Re-bind the target against the issues OPEN right now (never trust the client id) — if it closed
+    // between preview and apply, refuse rather than act on a stale reference.
+    const id = Number(args?.issueId);
+    const target = (openIssues || []).find((i) => Number(i.id) === id);
+    if (!target) return { error: "That issue is no longer open." };
+    const decision = args?.decision === "dismiss" ? "dismiss" : "resolve";
+    out = await installIssueAction(accessId, id, decision);   // self-authorizes (issue.adjudicate) + re-checks status
+    message = decision === "dismiss" ? "Issue dismissed." : "Issue resolved.";
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
