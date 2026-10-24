@@ -15,7 +15,7 @@ const db = {
   getJobByAccessId: (a) => JOBS[a] || null,
   getReceivables: () => [
     { access_id: "ASC1", customer: "Crazy Cars", status: "sent", financialState: "awaiting_signature", agingDays: 5, signatureDeadline: new Date(Date.now() + 25 * 86400000).toISOString().slice(0, 19).replace("T", " ") },
-    { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", financialState: "due_now" },
+    { access_id: "ASC2", customer: "Nobo Restaurant", status: "accepted", financialState: "due_now", amountDueNow: 500, agingDays: 10 },
   ],
   // No reminder events yet on ASC1 — the initial proposal-send email is NOT logged as a "signature request"
   // event (only requestSignatureEmailAction logs that), so a 5-day-old unsigned proposal is due for reminder #1.
@@ -87,6 +87,17 @@ test("signature_nudges queues sent-but-unsigned proposals due for a reminder (ne
   assert.ok(r.facts.some((f) => /nudges due/.test(f)));
   // The chase list is a sales/office read (cap proposal.reuse) — a technician is refused.
   assert.equal(runQuery({ query: "signature_nudges" }, ctx("tech")).reason, "permission");
+});
+
+test("collections_queue lists unpaid deposits/balances due for a reminder (admin/manager only)", () => {
+  // ASC2: due_now, $500 owed 10 days, no reminders yet → due for the first payment reminder.
+  const r = runQuery({ query: "collections_queue" }, ctx());
+  assert.match(r.text, /due for a payment reminder/i);
+  assert.match(r.text, /Nobo Restaurant \(\$500 balance, 10d\)/);
+  assert.match(r.text, /remind/i);
+  // Money-sensitive collections read → sales (no install.pay.edit) is refused; so is a tech.
+  assert.equal(runQuery({ query: "collections_queue" }, ctx("sales")).reason, "permission");
+  assert.equal(runQuery({ query: "collections_queue" }, ctx("tech")).reason, "permission");
 });
 
 test("feedback_summary summarizes captured objections/feedback (open items + device + status counts)", () => {

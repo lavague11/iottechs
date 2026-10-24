@@ -10,7 +10,7 @@ import {
   getStageAcceptances, notifyRoles, createNotification, getCustomerUserForProject, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
   getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, requestNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
-  addFeedbackNote, listFeedback, setFeedbackStatus,
+  addFeedbackNote, listFeedback, setFeedbackStatus, getProjectFinancialState,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -21,7 +21,7 @@ import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerpr
 import { can } from "../../../lib/roles";
 import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
-import { emailProposalReady, emailSignatureRequest, emailPaymentReceived } from "../../../lib/email";
+import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailPaymentReminder } from "../../../lib/email";
 
 const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
@@ -201,6 +201,39 @@ export async function requestSignatureEmailAction(accessId, optKey) {
     } catch { /* notification is best-effort */ }
   }
   return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
+// "Send a payment reminder" (#1 collections) → email the customer that their deposit/final balance is due.
+// Admin/manager only (the money/AR function). Only sends when there's actually an amount due now (reads the
+// canonical financial state); grounded in the real balance; debounced like the signature reminder; logs a
+// "Payment reminder emailed" event (which the collections cadence reads). Never charges anything.
+export async function requestPaymentReminderAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Unauthorized." };
+  const fin = getProjectFinancialState(accessId);
+  const due = Math.round((+fin?.amountDueNow || 0) * 100) / 100;
+  if (!(due > 0)) return { ok: true, sent: false, note: "Nothing is due right now." };
+  const kind = fin.financialState === "awaiting_deposit" ? "deposit" : "balance";
+  // Debounce repeated taps: a payment reminder logged in the last 90s wins.
+  try {
+    const events = getProjectEvents(accessId) || [];
+    const now = Date.now();
+    const recent = events.find((e) => e.kind === "email" && /payment reminder/i.test(e.label || "")
+      && (now - new Date(String(e.created_at || "").replace(" ", "T")).getTime()) < 90000);
+    if (recent) return { ok: true, sent: false, note: "Just sent — give it a minute." };
+  } catch { /* if the feed read fails, fall through and send */ }
+  const r = await emailPaymentReminder(accessId, { kind, amount: due }).catch(() => null);
+  const sent = !!(r && (r.ok || r.id));
+  const money = "$" + due.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (sent) {
+    logProjectEvent(accessId, { kind: "email", label: "Payment reminder emailed to the customer", actor: actorName(tok) });
+    try {
+      const cu = getCustomerUserForProject(accessId);
+      if (cu?.id) createNotification({ user_id: cu.id, type: "payment", title: `Your ${kind} is due`,
+        body: `A ${kind} of ${money} is outstanding (${accessId}).`, link: `/project/${accessId}?open=payment` });
+    } catch { /* notification is best-effort */ }
+  }
+  return { ok: true, sent, kind, amount: due, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
 }
 
 // Internal admin review of a SIGNED contract. Admin/manager only. This is an acknowledgment ("I looked at

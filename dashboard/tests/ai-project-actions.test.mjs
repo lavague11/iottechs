@@ -124,6 +124,27 @@ test("2.3 record_payment cap = install.pay.edit — admin/manager only; a salesp
   assert.equal(PROJECT_ACTIONS.record_payment.available({ proposal_status: "draft" }).ok, false);
 });
 
+test("#1 request_payment: natural phrasings, router, cap=install.pay.edit, grounded confirm", () => {
+  // Imperative "chase/remind for payment" → the send action (not the collections_queue read).
+  assert.equal(actionFromText("send a payment reminder"), "request_payment");
+  assert.equal(actionFromText("remind the customer to pay"), "request_payment");
+  assert.equal(actionFromText("chase the deposit"), "request_payment");
+  assert.equal(actionFromText("nudge them for payment"), "request_payment");
+  assert.equal(actionFromText("send the proposal"), "send_proposal");   // unrelated action untouched
+  assert.equal(actionFromText("how much do they owe"), null);           // a question, not a command
+  assert.deepEqual(routeCommand("send a payment reminder"), { type: "action", name: "request_payment", target: "this" });
+  // Money function — admin/manager only (sales/tech refused).
+  assert.equal(PROJECT_ACTIONS.request_payment.cap, "install.pay.edit");
+  assert.equal(actionAllowed("request_payment", { editor: true, can: (c) => c === "install.pay.edit" }), true);
+  assert.equal(actionAllowed("request_payment", { editor: true, can: () => false }), false);   // sales refused
+  assert.equal(actionAllowed("request_payment", { editor: false, can: (c) => c === "install.pay.edit" }), true); // cap-gated, editor flag irrelevant
+  // Confirm names the kind; when the amount is known it's grounded and states it never charges a card.
+  const c = PROJECT_ACTIONS.request_payment.confirm({ name: "Nobo Restaurant" }, { kind: "deposit", amount: "$2,450.00" });
+  assert.match(c.title, /Email Nobo Restaurant a deposit reminder/);
+  assert.match(c.detail, /\$2,450\.00/);
+  assert.match(c.detail, /does not charge a card/i);
+});
+
 test("2.4 assign_tech: extracts the tech name; router carries it; cap=assignment.edit (admin/manager only)", () => {
   assert.deepEqual(parseAssign("assign Jess to this project"), { techName: "Jess" });
   assert.deepEqual(parseAssign("put Mike on this job"), { techName: "Mike" });

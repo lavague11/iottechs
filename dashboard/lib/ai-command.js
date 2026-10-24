@@ -102,6 +102,10 @@ export function routeCommand(text) {
   // request_signature ACTION (handled later in detectAction), not this list read.
   if (/\b(who|which|any|list|show|how many)\b/i.test(t) && /\b(nudge|nudges|chase|chasing|remind|reminder|reminders|follow[-\s]?up)\b/i.test(t) && /\b(sign|signature|signatures|proposal|proposals)\b/i.test(t))
     return { type: "answer", query: "signature_nudges" };
+  // "who owes money", "which deposits are unpaid", "who's due for a payment reminder", "collections due" →
+  // the collections QUEUE (unpaid deposit/balance due for a reminder). Query-cue-gated like the nudge read.
+  if (/\b(who|which|any|list|show|how many|collections?)\b/i.test(t) && /\b(owe|owes|owing|outstanding|unpaid|overdue|collect|collections|chase|nudge|remind|reminder|reminders)\b/i.test(t) && /\b(deposit|deposits|balance|balances|payment|payments|pay|money)\b/i.test(t))
+    return { type: "answer", query: "collections_queue" };
   // "which proposals aren't signed", "who hasn't signed", "unsigned proposals", "what's awaiting signature"
   if (/\b(unsigned|not signed|aren'?t signed|haven'?t signed|hasn'?t signed|awaiting (?:a )?signature|still need(?:s)? (?:a )?signature|need(?:s)? to sign)\b/i.test(t) && /\b(proposal|proposals|sign|signed|signature|who|which|how many)\b/i.test(t))
     return { type: "answer", query: "awaiting_signature" };
@@ -488,7 +492,7 @@ export function parseClaudeResult(json) {
           : { type: "unsupported", reason: `I can open: Survey, Mockups, Proposal, Approval, Schedule, Install, QC, Payment or Completion.` };
       }
       case "answer": {
-        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "feedback_summary", "awaiting_signature", "signature_nudges", "projects_by_stage"].includes(i.query) ? i.query : null;
+        const query = ["proposal_total", "project_status", "project_next", "project_money", "project_payout", "project_issues", "project_timeline", "device_coverage", "feedback_summary", "awaiting_signature", "signature_nudges", "collections_queue", "projects_by_stage"].includes(i.query) ? i.query : null;
         if (!query) return { type: "unknown" };
         const out = { type: "answer", query };
         if (i.target) out.target = String(i.target).slice(0, 80);

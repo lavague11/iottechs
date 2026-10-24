@@ -14,6 +14,7 @@ import { resolveDevice } from "./device-resolver.js";
 import { describeCoverage } from "./device-coverage.js";
 import { feedbackLabel } from "./feedback-model.js";
 import { signatureNudge } from "./signature-cadence.js";
+import { paymentNudge } from "./collections-cadence.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -254,6 +255,31 @@ const QUERIES = {
     due.sort((a, b) => b.daysWaiting - a.daysWaiting);
     const list = due.slice(0, 8).map((d) => `${d.name} (${d.daysWaiting}d${d.remindersSent ? `, ${d.remindersSent} sent` : ""})`).join(", ");
     return { text: `${due.length} customer${due.length === 1 ? "" : "s"} due for a signature nudge: ${list}${due.length > 8 ? ", +more" : ""}. Say "remind <name>" to send one.`, facts: [`${due.length} signature nudges due`] };
+  } },
+
+  // "Who owes money? / collections due?" → receivables with an unpaid DEPOSIT or final BALANCE that are DUE
+  // for a reminder per the cadence. A QUEUE for a human to send (via request_payment); never auto-sends.
+  // Money-sensitive (shows amounts owed) → admin/manager (install.pay.edit), like the AR page.
+  collections_queue: { cap: "install.pay.edit", run: (intent, ctx) => {
+    const now = Date.now(), DAY = 86400000;
+    const vis = visibleSet(ctx);
+    const owing = ((ctx.db.getReceivables ? ctx.db.getReceivables() : []) || [])
+      .filter((r) => (r.financialState === "awaiting_deposit" || r.financialState === "due_now") && canSee(vis, r.access_id));
+    if (!owing.length) return { text: "No deposits or balances are outstanding right now.", facts: [] };
+    const due = [];
+    for (const r of owing) {
+      const events = ctx.db.getProjectEvents ? (ctx.db.getProjectEvents(r.access_id) || []) : [];
+      const times = events.filter((e) => e.kind === "email" && /payment reminder/i.test(e.label || ""))
+        .map((e) => new Date(String(e.created_at || "").replace(" ", "T")).getTime()).filter(Number.isFinite);
+      const lastAt = times.length ? Math.max(...times) : null;
+      const n = paymentNudge({ daysOwed: r.agingDays, reminderEmailCount: times.length, daysSinceLastEmail: lastAt != null ? Math.floor((now - lastAt) / DAY) : null });
+      if (n.due) due.push({ name: r.customer || r.access_id, kind: r.financialState === "awaiting_deposit" ? "deposit" : "balance", amount: +r.amountDueNow || 0, days: Math.max(0, Math.floor(+r.agingDays || 0)) });
+    }
+    if (!due.length) return { text: `${owing.length} account${owing.length === 1 ? "" : "s"} with an open balance, but none are due for a reminder yet.`, facts: [`0 of ${owing.length} collections due`] };
+    due.sort((a, b) => b.days - a.days);
+    const m = (n) => "$" + Math.round(+n || 0).toLocaleString("en-US");
+    const list = due.slice(0, 8).map((d) => `${d.name} (${m(d.amount)} ${d.kind}, ${d.days}d)`).join(", ");
+    return { text: `${due.length} account${due.length === 1 ? "" : "s"} due for a payment reminder: ${list}${due.length > 8 ? ", +more" : ""}. Say "remind <name> to pay" to send one.`, facts: [`${due.length} collections reminders due`] };
   } },
 
   // "Which projects need QC?" / "…are in <stage>?" → authorized project list filtered by lifecycle stage.

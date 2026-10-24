@@ -295,6 +295,35 @@ export async function emailPaymentReceived(accessId, { amount, kind, method, pai
   }
 }
 
+// Collections reminder (#1) — a friendly nudge that a deposit or final balance is outstanding. Grounded in
+// the real amount due; no invented payment gateway (Zelle preferred, consistent with the invoice). No-op
+// without RESEND_API_KEY, like every send. kind = "deposit" | "balance".
+export async function emailPaymentReminder(accessId, { kind, amount } = {}) {
+  try {
+    const amt = Number(amount || 0);
+    if (!(amt > 0)) return { ok: false, error: "no-amount" };
+    const money = "$" + amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const isDeposit = kind === "deposit";
+    const what = isDeposit ? "deposit" : "balance";
+    return await sendCustomerEmail(accessId, {
+      subject: `A reminder about your ${what} — ${money}`,
+      heading: `Your ${what} is due`,
+      intro: `A friendly reminder that your ${what} of ${money} is outstanding${isDeposit ? " so we can get your install scheduled" : ""}.`,
+      lines: [
+        `Amount due: ${money}`,
+        "Zelle is preferred — or reply to this email and we'll arrange payment.",
+        "You can see your up-to-date balance any time on your project page.",
+      ],
+      ctaLabel: "View Balance",
+      open: "payment",
+      footNote: "If you've already paid, thank you — please disregard this reminder.",
+    });
+  } catch (e) {
+    console.error(`[email:payment-reminder] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
 // Admin notification — a customer finished signing a proposal. Sent to the configured admin recipients
 // (ADMIN_NOTIFY_EMAIL vault override, else active admin accounts). The CTA opens the signed proposal in
 // the AUTHENTICATED admin project interface — never a public document link. Best-effort: a failed email

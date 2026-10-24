@@ -91,6 +91,20 @@ export const PROJECT_ACTIONS = {
     }),
   },
 
+  // #1 — email the customer a reminder that their deposit / final balance is due (collections). cap=
+  // install.pay.edit (admin/manager — the money function). Sends ONLY when something is actually due (the
+  // preview + the dispatched action both read the canonical financial state); grounded in the real balance;
+  // never charges anything. The amount/kind for the confirm are computed in ai-actions (getProjectFinancialState).
+  request_payment: {
+    verb: "remind",
+    cap: "install.pay.edit",
+    available: () => ({ ok: true }),   // the preview checks the real amount due (getProjectFinancialState)
+    confirm: ({ name }, args) => ({
+      title: `Email ${name} a ${args?.kind || "payment"} reminder`,
+      detail: args?.amount ? `Reminds them their ${args.kind || "balance"} of ${args.amount} is outstanding. It does not charge a card.` : "Sends a payment reminder.",
+    }),
+  },
+
   // 2.4 — assign a technician to the project. Parameterized (tech name → resolved to a user in ai-actions).
   // cap="assignment.edit" (admin/manager only). The CERTIFICATION gate stays enforced by addAssignmentAction:
   // if the tech lacks the required badge the AI REFUSES with the reason — it never auto-overrides.
@@ -261,6 +275,8 @@ export function actionFromText(text) {
     return "request_signature";
   if (/\b(advance (?:the |this )?(?:stage|project|step)|move (?:this |the (?:project|stage|step) )?(?:to the next (?:stage|step)|forward)|next stage|push (?:this |it )?(?:to the next stage|forward)|move it forward)\b/.test(t))
     return "advance_stage";
+  if (/\b(send (?:a |the )?(?:payment|deposit|balance) reminder|remind (?:the (?:customer|client)|them) (?:to pay|about (?:the )?(?:payment|deposit|balance))|chase (?:the |their )?(?:deposit|balance|payment)|nudge (?:the (?:customer|client)|them) (?:for|about) (?:the )?payment)\b/.test(t))
+    return "request_payment";
   return null;
 }
 

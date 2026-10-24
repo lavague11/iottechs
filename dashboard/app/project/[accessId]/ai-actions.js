@@ -24,7 +24,7 @@ import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult 
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
-import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction, addNoteAction } from "./proposal-actions";
+import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction, addNoteAction, requestPaymentReminderAction } from "./proposal-actions";
 import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
@@ -220,6 +220,18 @@ function previewAction(name, accessId, tok, args) {
       if (r.device) { eff.deviceId = r.device.id; eff.deviceLabel = candidateView(r.device).display; previewDevice = { id: r.device.id, cid: r.device.cid || null, floor: r.device.floor, code: r.device.code, label: r.device.label, accessId }; }
     }
   }
+  // request_payment (#1 collections): email the customer a deposit/balance reminder — ONLY when something is
+  // due (reads the canonical financial state for the real amount/kind). Preview → human confirm → the guarded
+  // requestPaymentReminderAction (admin/manager, re-checks + debounces). Never charges.
+  if (name === "request_payment") {
+    const fin = getProjectFinancialState(accessId);
+    const due = Math.round((+fin?.amountDueNow || 0) * 100) / 100;
+    if (!(due > 0)) return { ok: true, kind: "clarify", speak: "Nothing is due on this project right now — no reminder to send." };
+    const kind = fin.financialState === "awaiting_deposit" ? "deposit" : "balance";
+    const amount = "$" + due.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const prev = PROJECT_ACTIONS.request_payment.confirm(actionContext(getJobByAccessId(accessId), accessId), { kind, amount });
+    return { ok: true, kind: "write", write: "action", intent: { type: "action", name, accessId, args: { kind, amount } }, preview: { title: prev.title, body: prev.detail } };
+  }
   // propose_change (#2, 8a): a DEVICE-REFERENCED change to a DRAFT proposal line. Resolves the device, maps it
   // to the line via camera_id===cid, applies the edit to a CLONE for the before/after preview, and returns a
   // confirmable write — nothing persists until apply. Draft-only; a sent/signed proposal defers to 8c.
@@ -388,6 +400,11 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     }
     out = await captureFeedbackAction(accessId, { body: args?.body || "", kind: args?.kind || "feedback:other", deviceId, deviceLabel });
     message = out?.error ? null : `Logged ${deviceLabel ? `feedback on ${deviceLabel}` : "the feedback"} for review.`;
+  }
+  else if (name === "request_payment") {
+    out = await requestPaymentReminderAction(accessId);
+    noop = out?.sent === false;
+    message = out?.error ? null : (noop ? (out?.note || "Nothing to send.") : `Payment reminder sent${out?.amount ? ` (${"$" + (+out.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : ""}.`);
   }
   else if (name === "propose_change" || name === "remove_line") {
     // Re-derive everything server-side (never trust the client payload). DRAFT → edit in place; SENT/SIGNED →

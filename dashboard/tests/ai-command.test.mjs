@@ -50,6 +50,12 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.deepEqual(routeCommand("who needs a signature nudge"), { type: "answer", query: "signature_nudges" });
   assert.deepEqual(routeCommand("who should I chase for signatures"), { type: "answer", query: "signature_nudges" });
   assert.equal(routeCommand("any signature reminders due")?.query, "signature_nudges");
+  // Collections queue (unpaid deposits/balances) vs the imperative send action.
+  assert.equal(routeCommand("who owes money")?.query, "collections_queue");
+  assert.equal(routeCommand("which deposits are unpaid")?.query, "collections_queue");
+  assert.equal(routeCommand("who is due for a payment reminder")?.query, "collections_queue");
+  assert.equal(routeCommand("send a payment reminder")?.name, "request_payment");
+  assert.equal(routeCommand("remind them to pay")?.name, "request_payment");
   assert.deepEqual(routeCommand("what needs QC"), { type: "answer", query: "projects_by_stage", stage: "qc" });
   assert.deepEqual(routeCommand("which projects still need quality control"), { type: "answer", query: "projects_by_stage", stage: "qc" });
   // Any stage, not just QC — so the question answers instead of the word "projects" triggering a page jump.

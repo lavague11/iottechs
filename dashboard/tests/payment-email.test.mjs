@@ -19,7 +19,7 @@ test("lib/email exposes emailPaymentReceived with amount + kind, gated on a posi
 });
 
 test("proposal-actions fires the email when money is in hand (staff entry + staff confirmation), not on a pending submission", () => {
-  assert.ok(actions.includes("emailPaymentReceived") && /import \{ emailProposalReady, emailSignatureRequest, emailPaymentReceived \}/.test(actions), "imported");
+  assert.ok(actions.includes("emailPaymentReceived") && /import \{ emailProposalReady, emailSignatureRequest, emailPaymentReceived[,} ]/.test(actions), "imported");
   // staff-recorded payment = confirmed → email; guarded so a customer's pending submission does NOT email here
   const rec = actions.slice(actions.indexOf("export async function recordPaymentAction"), actions.indexOf("export async function deletePaymentAction"));
   assert.ok(/if \(!isCustomer\) \{[\s\S]*emailPaymentReceived\(accessId, \{/.test(rec), "staff entry emails; customer pending does not");
