@@ -359,14 +359,16 @@ export async function reportInstallIssueAction(accessId, { targetKind, targetId,
   const { tok, error } = await issueTok(accessId);
   if (error) return { error };
   if (!ISSUE_REPORTERS.has(tok.role)) return { error: "Only technicians and the office can flag install work." };
-  if (!["order", "item", "step"].includes(targetKind)) return { error: "Pick what the issue is about." };
+  // targetKind: order (whole work order), item (a line item), step (a checklist step), or device (a placed
+  // survey device — the AI device-resolver path; targetId is the device's STABLE survey id).
+  if (!["order", "item", "step", "device"].includes(targetKind)) return { error: "Pick what the issue is about." };
   if (targetKind !== "order" && !targetId) return { error: "Pick the line item." };
   const { createInstallIssue, listInstallIssues, notifyRoles } = await import("../../../lib/db");
   const { ISSUE_REASONS } = await import("../../../lib/install-checklist-model");
   const why = ISSUE_REASONS.includes(reason) ? reason : "Other";
   const who = issueActor(tok);
   const issue = createInstallIssue(accessId, { targetKind, targetId, stepIdx, targetLabel, reason: why, note, mediaId, by: who, byId: tok.id ?? null, role: tok.role });
-  const where = targetKind === "order" ? "the work order" : (targetLabel || "a line item");
+  const where = targetKind === "order" ? "the work order" : (targetLabel || (targetKind === "device" ? "a device" : "a line item"));
   logProjectEvent(accessId, { kind: "issue", label: `Install issue flagged on ${where} — ${why}`, actor: who });
   try { notifyRoles(["admin", "manager"], { type: "install-issue", title: "Install issue reported", body: `${who} flagged ${where} (${accessId}) — ${why}.`, link: `/project/${accessId}` }, tok.id ?? null); } catch {}
   const { revalidatePath } = await import("next/cache");

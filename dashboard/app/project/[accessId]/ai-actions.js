@@ -12,17 +12,18 @@ import {
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
-  getSupportArticles,
+  getSupportArticles, getProjectDevices, openInstallIssues,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
+import { resolveDevice, candidateView } from "../../../lib/device-resolver";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
-import { PROJECT_ACTIONS, actionAllowed } from "../../../lib/ai-project-actions";
+import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
 import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction } from "./proposal-actions";
-import { setStage, addAssignmentAction, installIssueAction } from "./actions";
+import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
 // Open install-issue flags (NEEDS_REVIEW | NEEDS_REWORK) — the only ones adjudicate_issue can close.
@@ -146,6 +147,16 @@ function previewAction(name, accessId, tok, args) {
     }
     eff = { decision: args?.decision === "dismiss" ? "dismiss" : "resolve", issueId: target.id, label: issueLabel(target) };
   }
+  // raise_issue resolves the natural device reference to ONE stable device id (via the reusable resolver over
+  // the survey model). Ambiguous → clarify with the options; unknown → clarify; never guess.
+  if (name === "raise_issue") {
+    const devices = getProjectDevices(accessId);
+    if (!devices.length) return { ok: true, kind: "clarify", speak: "This project has no placed survey devices yet, so there's nothing to flag. Add devices in the Site Survey first." };
+    const r = resolveDevice(args?.ref || "", devices);
+    if (r.candidates) return { ok: true, kind: "clarify", speak: `Which one — ${r.candidates.map((c) => c.display).join(", ")}?` };
+    if (!r.device) return { ok: true, kind: "clarify", speak: `I couldn't tell which device you mean. Try its number or location — e.g. "camera 3" or "the front entrance camera".` };
+    eff = { deviceId: r.device.id, deviceLabel: candidateView(r.device).display, reason: args?.reason || "Other", note: args?.note || "" };
+  }
   const facts = buildStageFacts(accessId);
   if (!facts) return { error: "Couldn't read this project." };
   const job = getJobByAccessId(accessId);
@@ -217,6 +228,22 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     const decision = args?.decision === "dismiss" ? "dismiss" : "resolve";
     out = await installIssueAction(accessId, id, decision);   // self-authorizes (issue.adjudicate) + re-checks status
     message = decision === "dismiss" ? "Issue dismissed." : "Issue resolved.";
+  }
+  else if (name === "raise_issue") {
+    // RE-resolve the device against the CURRENT survey (never trust the client device id) — if it moved or
+    // was removed since preview, refuse rather than flag a phantom.
+    const dev = getProjectDevices(accessId).find((d) => String(d.id) === String(args?.deviceId));
+    if (!dev) return { error: "That device is no longer in the survey — reopen the survey and try again." };
+    const label = candidateView(dev).display;
+    // Re-derive the reason server-side from the human's words (don't trust a client-sent label).
+    const reason = reasonFromText(args?.note || "");
+    // Duplicate guard: if this device already has an OPEN flag for the same reason, don't create a second.
+    const dup = (openInstallIssues(accessId) || []).find((i) => i.target_kind === "device" && String(i.target_id) === String(dev.id) && String(i.reason || "") === reason);
+    if (dup) { out = { ok: true }; noop = true; message = `${label} already has an open ${reason} flag.`; }
+    else {
+      out = await reportInstallIssueAction(accessId, { targetKind: "device", targetId: dev.id, targetLabel: label, reason, note: args?.note || "" });
+      message = out?.error ? null : `Flagged ${label}${reason !== "Other" ? ` — ${reason}` : ""}.`;
+    }
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };

@@ -9,6 +9,7 @@ import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, prop
 import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "./svc-status.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
+import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
@@ -6404,6 +6405,14 @@ export function getProjectCameras(accessId) {
     });
   } catch { /* bad blob → no cameras */ }
   return out;
+}
+
+// ALL placed survey devices across floors, normalized through the ONE device model (survey2-model
+// surveyDevices) — stable id + deterministic code (C3) + kindName + identity/label/loc + x/y percent.
+// Never a second device model; the AI device resolver and any device-aware feature read THIS.
+export function getProjectDevices(accessId) {
+  try { return surveyDevices(parseSurveyFloors(getToolData(accessId, "survey2")?.data)); }
+  catch { return []; }
 }
 
 // Attach / replace / clear a survey camera's view photo, targeting one device by (floor, di) — the

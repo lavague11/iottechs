@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, detectAction } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, detectAction } from "../lib/ai-project-actions.js";
 import { routeCommand } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -167,4 +167,35 @@ test("2.5 adjudicate_issue: available only when an open flag exists; cap=issue.a
   // Confirm copy names the decision + keeps-for-audit wording (never "delete").
   assert.match(a.confirm({ name: "Crazy Cars" }, { decision: "resolve", label: "work order — Damaged" }).title, /Resolve the work order — Damaged issue on Crazy Cars/);
   assert.match(a.confirm({ name: "Crazy Cars" }, { decision: "dismiss" }).detail, /dismissed .* never deleted/i);
+});
+
+test("2.5 raise_issue: parses a flag command (device ref + reason) and rejects questions / resolve-talk", () => {
+  const a = parseRaiseIssue("flag camera 3");
+  assert.ok(a && a.ref === "flag camera 3" && a.reason === "Other");
+  assert.equal(parseRaiseIssue("report that the front camera is damaged").reason, "Damaged");
+  assert.equal(parseRaiseIssue("raise an issue on camera 2 — wrong location").reason, "Wrong location");
+  assert.equal(parseRaiseIssue("resolve the camera issue"), null);   // resolve → adjudicate, not raise
+  assert.equal(parseRaiseIssue("how is camera 3?"), null);           // a question
+  assert.equal(parseRaiseIssue("flag it"), null);                    // no device reference to act on
+  assert.equal(parseRaiseIssue("send the proposal"), null);          // unrelated
+  // Reason taxonomy mapping (canonical ISSUE_REASONS).
+  assert.equal(reasonFromText("the camera is offline and not working"), "Failed test");
+  assert.equal(reasonFromText("missing material on the run"), "Missing material");
+  assert.equal(reasonFromText("looks fine"), "Other");
+});
+
+test("2.5 raise_issue: router carries args; cap=issue.report admits a TECHNICIAN but not sales", () => {
+  const r = routeCommand("flag camera 3 as damaged");
+  assert.equal(r.type, "action");
+  assert.equal(r.name, "raise_issue");
+  assert.equal(r.args.reason, "Damaged");
+  assert.equal(PROJECT_ACTIONS.raise_issue.cap, "issue.report");
+  // issue.report = admin/manager/tech → a tech (NOT an editor) is allowed for THIS action only.
+  assert.equal(actionAllowed("raise_issue", { editor: false, can: (c) => c === "issue.report" }), true, "tech may report");
+  assert.equal(actionAllowed("raise_issue", { editor: true, can: () => false }), false, "sales (no issue.report) refused");
+  // …and reporting grants NO other action: a tech-style can() that only has issue.report can't do the rest.
+  const techCan = (c) => c === "issue.report";
+  for (const n of ["send_proposal", "record_payment", "advance_stage", "assign_tech", "adjudicate_issue"])
+    assert.equal(actionAllowed(n, { editor: false, can: techCan }), false, `${n} refused for a reporter-only role`);
+  assert.match(PROJECT_ACTIONS.raise_issue.confirm({ name: "Crazy Cars" }, { deviceLabel: "C3 Camera (Dining)", reason: "Damaged" }).title, /Flag C3 Camera \(Dining\) on Crazy Cars — Damaged/);
 });

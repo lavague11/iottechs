@@ -127,7 +127,41 @@ export const PROJECT_ACTIONS = {
       };
     },
   },
+
+  // 2.5 — RAISE a new install issue against a specific survey DEVICE ("flag camera 3 — wrong location"). The
+  // device reference is resolved to a stable device id in ai-actions (via the reusable device resolver over
+  // the survey model); ambiguous → clarify, unknown → clarify, never a guess. cap="issue.report" — the one
+  // write a TECHNICIAN may do (admin/manager/tech); it grants NO proposal/payment/stage rights. Dispatches
+  // the existing reportInstallIssueAction (which self-authorizes ISSUE_REPORTERS + whitelists the reason).
+  raise_issue: {
+    verb: "flag",
+    cap: "issue.report",
+    available: () => ({ ok: true }),   // reportable whenever there are devices; resolution happens on preview
+    // confirm(ctx, args): args = { deviceId, deviceLabel, reason, note }. Shows WHICH device + WHY.
+    confirm: ({ name }, args) => ({
+      title: `Flag ${args?.deviceLabel || "a device"} on ${name}${args?.reason && args.reason !== "Other" ? ` — ${args.reason}` : ""}`,
+      detail: "Raises an install issue on this device for admin/manager review. Nothing is changed on the device.",
+    }),
+  },
 };
+
+// Issue-reason keywords → the canonical ISSUE_REASONS taxonomy (install-checklist-model). Order matters:
+// the most specific phrase wins. Unmatched → "Other" (never invented).
+const REASON_MAP = [
+  [/\bwrong (?:location|spot|place|position)|misplaced|wrong(?:ly)? placed\b/, "Wrong location"],
+  [/\bwrong (?:device|model|unit|camera|part)\b/, "Wrong device"],
+  [/\bpoor|sloppy|workmanship|messy|bad install\b/, "Poor workmanship"],
+  [/\b(?:failed|fails|failing) (?:a )?test|not working|doesn'?t work|offline|no signal|no feed|dead\b/, "Failed test"],
+  [/\bmissing (?:material|part|cable|mount|hardware)|no material\b/, "Missing material"],
+  [/\bincomplete|unfinished|not finished|half(?:-| )?done\b/, "Incomplete"],
+  [/\bblocked|obstructed|in the way|can'?t reach\b/, "Blocked"],
+  [/\bdamaged|broken|cracked|smashed|destroyed\b/, "Damaged"],
+];
+export function reasonFromText(text) {
+  const t = String(text || "").toLowerCase();
+  for (const [re, label] of REASON_MAP) if (re.test(t)) return label;
+  return "Other";
+}
 
 const moneyStr = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -154,14 +188,16 @@ export function parsePayment(text) {
 
 export const ACTION_NAMES = Object.keys(PROJECT_ACTIONS);
 
-// Is this action permitted for a caller? An editor role is NECESSARY; a per-action `cap` (when set) is ALSO
-// required — so authorization to one action never implies another (a salesperson who may send a proposal does
-// not thereby gain payment or stage-move rights). Pure: the caller injects { editor:boolean, can:(cap)=>bool }.
+// Is this action permitted for a caller? The per-action `cap` IS the authority when set: the action is
+// allowed iff `can(cap)` — so authorization to one action never implies another, and a capability can admit
+// a role the blanket editor gate wouldn't (a technician may `raise_issue` via issue.report, yet gains NO
+// proposal/payment/stage rights — those actions carry caps a tech lacks). A cap-less action (send/remind)
+// falls back to the editor gate (AI_EDITORS = admin/manager/sales). Pure: caller injects { editor, can }.
 export function actionAllowed(name, { editor, can } = {}) {
   const spec = PROJECT_ACTIONS[name];
-  if (!spec || !editor) return false;
-  if (spec.cap && !(typeof can === "function" && can(spec.cap))) return false;
-  return true;
+  if (!spec) return false;
+  if (spec.cap) return typeof can === "function" && can(spec.cap);
+  return !!editor;
 }
 
 // Resolve a spoken/written action phrase to an action name (0-token). Returns a name or null.
@@ -205,8 +241,27 @@ export function parseAdjudicate(text) {
   return issueId ? { decision, issueId } : { decision };
 }
 
+// Parse a "raise/flag an install issue on a device" command → { ref, reason, note } or null. `ref` is the
+// FULL utterance (the device resolver strips noise and finds the device); `reason` maps to the taxonomy;
+// `note` keeps the human's words for context. Requires a flag/report verb or a problem phrase, and is NOT a
+// question, NOT a resolve/dismiss (those are adjudicate_issue), and NOT a plain "any issues?" read.
+export function parseRaiseIssue(text) {
+  const t = String(text || "").toLowerCase();
+  if (/^(is|are|was|were|did|do|does|has|have|which|what|how|why|when|can|could|should|would)\b/.test(t) || /\?\s*$/.test(t)) return null;
+  if (/\b(resolve|resolved|dismiss|dismissed|close|closed|clear)\b/.test(t)) return null;   // → adjudicate, not raise
+  const verb = /\b(flag|report|raise|log|open)\b/.test(t);
+  const problem = /\b(problem|broken|damaged|not working|doesn'?t work|wrong|missing|incomplete|failed|offline|cracked|obstructed|blocked)\b/.test(t);
+  if (!(verb || problem)) return null;
+  // Must plausibly reference a device — a kind word or a number — else it's generic ("report a problem") and
+  // the resolver would have nothing to go on. Keep it broad; resolution + clarify happen server-side.
+  const deviceish = /\b(camera|cam|cctv|nvr|recorder|speaker|amp|display|monitor|tv|door|window|sensor|motion|glass|keypad|fire|smoke|kiosk|printer|pos|terminal|switch|router|device|entrance|front|back|left|right)\b/.test(t) || /\b\d+\b/.test(t);
+  if (!deviceish) return null;
+  return { ref: String(text), reason: reasonFromText(text), note: String(text).trim().slice(0, 500) };
+}
+
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
-// Returns { name, args? } | null.
+// Returns { name, args? } | null. Order: adjudicate (resolve/dismiss) is tried before raise (flag) so a
+// "resolve the issue" never reads as a new flag; raise_issue is last so it doesn't shadow the others.
 export function detectAction(text) {
   const name = actionFromText(text);
   if (name) return { name };
@@ -216,5 +271,7 @@ export function detectAction(text) {
   if (asn) return { name: "assign_tech", args: asn };
   const adj = parseAdjudicate(text);
   if (adj) return { name: "adjudicate_issue", args: adj };
+  const raise = parseRaiseIssue(text);
+  if (raise) return { name: "raise_issue", args: raise };
   return null;
 }
