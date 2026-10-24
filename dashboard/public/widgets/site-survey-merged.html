@@ -2219,10 +2219,12 @@
       if(m.cmd==="selectCid"){ var cd=null; for(var ci=0;ci<devices.length;ci++){ if(devices[ci].cid&&devices[ci].cid===m.cid){ cd=devices[ci]; break; } } if(cd){ if(curStep!==1) goStep(1); _suppressSelPost=true; select(cd.id); } return; }
       // Panel-card hover → ring the matching marker on the plan (id null clears every highlight).
       if(m.cmd==="hover"){ devices.forEach(function(x){ var e=document.getElementById("dev-"+x.id); if(e) e.classList.toggle("hl", x.id===m.id); }); return; }
-      // Floor-plan HIGHLIGHT (from the AI): locate the device across ALL floors by its stable id, switch to
+      // Floor-plan HIGHLIGHT (from the AI): locate the device across ALL floors by its stable key, switch to
       // its floor, focus it (reveals its cone/coverage) and ring it for a few seconds so the user sees exactly
-      // which device the assistant meant. Works even on a submitted/frozen survey (view/select only). Returns
-      // before the frozen/edit guards below.
+      // which device the assistant meant. Matches by cid (cameras — the only key shared with the server) with
+      // a runtime-id fallback; a non-camera has no shared key yet, so it's a clean no-op. Runs for staff and
+      // on a SUBMITTED survey (it's before the frozen/edit guards below); it does NOT run in the customer
+      // read-only view, which returns at the RO guard above.
       if(m.cmd==="highlight"){
         // Match by the STABLE cross-boundary key the persisted blob carries: a camera's cid (primary; the
         // same key selectCid uses), falling back to the runtime id when it happens to match (live session).
