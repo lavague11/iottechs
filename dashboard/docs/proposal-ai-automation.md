@@ -52,17 +52,18 @@ Phone-tag + hand-keying is the payment-entry friction. Let the customer assistan
 - **Metric:** payment-entry time, reconciliation errors, deposit-gate latency.
 - **Effort:** Medium. **Gap** (a new customer-assistant write — owner checkpoint, like slice 3).
 
-### 6. Explain the quote to the customer (reduce sales back-and-forth) — MEDIUM ROI
-Extend the customer assistant (read-only) to explain line items ("why an NVR?", "what's the $150 drop?"), compare options A/B, explain the PCP credit and deposit terms — all from the proposal payload + approved FAQ. Fewer "what does this mean?" calls before signing.
-- **Reuses:** the customer read allowlist + proposal payload + knowledge FAQ.
+### 6. Explain the quote to the customer (reduce sales back-and-forth) — ✅ SHIPPED (23fe35b, reviewed clean)
+The customer assistant (read-only) now explains their quote, grounded in their own proposal + a generic glossary (`quote-glossary.js`, never a price, never invented), via three reads added to `CUSTOMER_READS`:
+- **explain_item** (no cap): "why an NVR?" / "what's the $150 drop?" → a glossary definition grounded against their package ("includes 8 of these"). Unknown term → falls to the FAQ.
+- **compare_options** (`customer.financials.view`): "difference between the options" → each option's headline gear + retail total.
+- **explain_terms** (`customer.financials.view`): "how does the deposit work?" / "what's the PCP credit?" → their own plan (`planScheduleRows`/`planDepositPct`) + `pcp_credit`.
 - **Metric:** sales touch-time/deal, time-to-sign.
-- **Effort:** Low-Medium. **Gap** (adds reads to `CUSTOMER_READS`).
 
-### 7. Objection / change-request → proposed revision — MEDIUM ROI, mostly BUILT
-A customer objection or "Request a Change" becomes, for staff, a one-click **proposed revision** (`propose_change`/`remove_line` already exist) plus a **captured objection** (feedback capture, built) bound to the device (the headline). Wire the customer→staff handoff so a flag/objection lands as a ready-to-confirm change.
-- **Reuses:** `propose_change`, `remove_line`, `capture_feedback`, the device resolver — all shipped.
+### 7. Objection / change-request → proposed revision — ✅ SHIPPED (23fe35b, reviewed clean)
+- **Customer → captured concern (the headline):** `customerActionIntent` recognizes an objection/change-request. "I'm not sure we need the entrance camera" → the assistant **explains that camera's coverage** from the survey, then offers to **log the concern** → `aiCustomerFeedbackAction` (confirmed, re-gated like the shipped customer comment, device re-resolved server-side, role=customer, non-destructive `open` item). The proposal is never touched.
+- **Staff one-click revision:** `suggestedActionFor` surfaces the next step on a device-bound objection in `feedback_summary` (need/scope → drop, price → revise), confirmed through the shipped `remove_line`/`propose_change`.
+- **Reuses:** `propose_change`, `remove_line`, `capture_feedback`, the device resolver, the customer comment gating template.
 - **Metric:** revision turnaround, objection win-back.
-- **Effort:** Low (wiring). **Partly built.**
 
 ## Correctness gaps surfaced by the analysis (not AI, but worth fixing)
 - **Addendum action-center gap:** `install-addendum.jsx` never sets a `shared` flag, but `requiredActionsFromState`/`resolveCustomerRequiredActions` only surface a change order when `shared===true` — so customer change orders may not appear in the canonical action-center banner (signing still works inside the panel). Low effort, correctness win.

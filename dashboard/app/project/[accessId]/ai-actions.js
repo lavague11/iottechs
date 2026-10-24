@@ -674,19 +674,19 @@ export async function aiCustomerInterpretAction(accessId, text) {
   // first (so they get the "here's what it's for" answer), then offer to record the concern against that exact
   // device. The write is confirmed (Send/Cancel) and goes through aiCustomerFeedbackAction (re-gated there).
   if (act?.kind === "objection") {
-    let deviceId = null, deviceLabel = null, previewDevice = null, coverage = "";
+    let deviceId = null, deviceLabel = null, coverage = "";
     const devices = getProjectDevices(accessId) || [];
     if (devices.length) {
       const hit = resolveDevice(act.ref || "", devices);
       if (hit.device) {
         deviceId = hit.device.id; deviceLabel = candidateView(hit.device).display;
         coverage = describeCoverage(hit.device);
-        previewDevice = { id: hit.device.id, cid: hit.device.cid || null, floor: hit.device.floor, code: hit.device.code, label: hit.device.label, accessId };
       }
     }
     const lead = coverage ? `${coverage} ` : "";
-    return { ok: true, kind: "write", write: "objection", body: act.body, feedbackKind: act.feedbackKind,
-      deviceId, deviceLabel, device: previewDevice,
+    // Only deviceId travels to the apply action — the label is recomputed server-side from the re-resolved
+    // device (the client value is never trusted). deviceLabel here is for the confirm wording only.
+    return { ok: true, kind: "write", write: "objection", body: act.body, feedbackKind: act.feedbackKind, deviceId, deviceLabel,
       speak: `${lead}Want me to share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your project team?`,
       preview: { title: `Share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your team?`, body: act.body } };
   }
@@ -729,7 +729,7 @@ export async function aiCustomerCommentAction(accessId, body) {
 // must be a real device on THIS project or the binding is dropped — no cross-project id). It records an
 // internal, non-destructive review item (addFeedbackNote, role=customer → visible to the team, status 'open').
 // It NEVER changes the proposal — staff turn it into a revision later (propose_change / remove_line).
-export async function aiCustomerFeedbackAction(accessId, { body, feedbackKind, deviceId, deviceLabel } = {}) {
+export async function aiCustomerFeedbackAction(accessId, { body, feedbackKind, deviceId } = {}) {
   const tok = await getSessionRole();
   if (!tok || tok.role !== "customer") return { error: "Unavailable." };
   if (!customerAiOn()) return { error: "Unavailable." };

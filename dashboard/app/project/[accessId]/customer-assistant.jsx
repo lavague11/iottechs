@@ -68,7 +68,7 @@ export default function CustomerAssistant({ accessId }) {
       } else if (r?.kind === "write" && r.write === "objection") {
         // #7 — a concern/change-request. Show the coverage explanation (if any) + offer to share it with the team.
         setMsgs((m) => [...m, { role: "ai", text: r.speak || r.preview?.title || "Share this concern with your team?",
-          confirm: { kind: "objection", body: r.body, feedbackKind: r.feedbackKind, deviceId: r.deviceId, deviceLabel: r.deviceLabel } }]);
+          confirm: { kind: "objection", body: r.body, feedbackKind: r.feedbackKind, deviceId: r.deviceId } }]);
       } else {
         setMsgs((m) => [...m, { role: "ai", text: r?.speak || r?.error || "I didn't catch that — try rephrasing.", link: r?.link || null }]);
       }
@@ -84,7 +84,7 @@ export default function CustomerAssistant({ accessId }) {
     setBusy(true);
     try {
       const r = confirm.kind === "objection"
-        ? await aiCustomerFeedbackAction(accessId, { body: confirm.body, feedbackKind: confirm.feedbackKind, deviceId: confirm.deviceId, deviceLabel: confirm.deviceLabel })
+        ? await aiCustomerFeedbackAction(accessId, { body: confirm.body, feedbackKind: confirm.feedbackKind, deviceId: confirm.deviceId })
         : await aiCustomerCommentAction(accessId, confirm.body);
       setMsgs((m) => m.map((x, i) => (i === idx ? { role: "ai", text: r?.message || r?.error || "Done." } : x)));
     } catch {
