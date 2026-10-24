@@ -59,6 +59,8 @@ test("router answers questions at zero tokens (retrieve, don't navigate)", () =>
   assert.equal(routeCommand("why is there a camera at the entrance")?.query, "device_coverage");
   // A device flag ("flag camera 3") is still an ACTION, not a coverage read.
   assert.equal(routeCommand("flag camera 3 as damaged")?.name, "raise_issue");
+  // Even a verbose flag that mentions "covering" is an action, not a coverage read (action-verb exclusion).
+  assert.equal(routeCommand("flag the camera covering the front door")?.name, "raise_issue");
   // A plain navigation phrasing is NOT hijacked into an answer (no stage word) — the global bar's app
   // router still sends "show me projects" to the Projects page.
   assert.notEqual(routeCommand("show me projects")?.type, "answer");

@@ -111,7 +111,8 @@ export function routeCommand(text) {
   // camera at the entrance", "what does the lobby camera see" → explain a device's coverage from the survey.
   // BEFORE project_status, so "where is camera 3 aimed" is a device read, not a project-status lookup.
   if (/\b(camera|cam|speaker|sensor|motion|glass|keypad|nvr|device)\b/i.test(t)
-      && /\b(cover|covers|coverage|aim|aimed|facing|face|point(?:ing|ed)?|field of view|fov|range|reach|sees?|watch(?:ing|es)?|view|what (?:area|part|direction)|why (?:is|are|do|does) (?:there|we|they))\b/i.test(t))
+      && /\b(cover|covers|coverage|aim|aimed|facing|field of view|fov|range|reach|what (?:area|part|direction)|why (?:is|are|do|does) (?:there|we|they))\b/i.test(t)
+      && !/\b(flag|report|raise|resolve|dismiss|assign|send|record|pay|add|remove)\b/i.test(t))   // an action verb → not a coverage read (e.g. "flag the camera covering X" → raise_issue)
     return { type: "answer", query: "device_coverage", ref: t, target: "this" };
 
   // "what's going on with Crazy Cars", "status of Crazy Cars", "where is Crazy Cars at"
