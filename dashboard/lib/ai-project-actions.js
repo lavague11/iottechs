@@ -154,12 +154,9 @@ export const PROJECT_ACTIONS = {
   propose_change: {
     verb: "update",
     cap: null,
-    available: (facts) => {
-      const s = facts?.proposal_status;
-      if (!s) return { ok: false, why: "there's no proposal to change yet" };
-      if (s !== "draft") return { ok: false, why: "that proposal has already been sent — revising a sent or signed proposal is coming soon" };
-      return { ok: true };
-    },
+    // Any existing proposal is changeable; a DRAFT edits in place, a SENT/SIGNED one becomes a revision (v+1)
+    // gated by proposal.revise + a re-sign/re-send warning — enforced in ai-actions, not here.
+    available: (facts) => facts?.proposal_status ? { ok: true } : { ok: false, why: "there's no proposal to change yet" },
     // confirm(ctx, args): args = { lineLabel, change }. The before/after total rides on the preview object
     // (computed in ai-actions), like a normal proposal edit.
     confirm: ({ name }, args) => ({
@@ -175,12 +172,9 @@ export const PROJECT_ACTIONS = {
   remove_line: {
     verb: "remove",
     cap: "proposal.revise",
-    available: (facts) => {
-      const s = facts?.proposal_status;
-      if (!s) return { ok: false, why: "there's no proposal to change yet" };
-      if (s !== "draft") return { ok: false, why: "that proposal has already been sent — revising a sent or signed proposal is coming soon" };
-      return { ok: true };
-    },
+    // Any existing proposal; a DRAFT removes in place, a SENT/SIGNED one removes via a revision (v+1) with the
+    // re-sign/re-send warning (ai-actions). cap already restricts to admin/manager for every removal.
+    available: (facts) => facts?.proposal_status ? { ok: true } : { ok: false, why: "there's no proposal to change yet" },
     confirm: ({ name }, args) => ({
       title: `Remove ${args?.lineLabel || "a line"} from ${name}'s proposal`,
       detail: "Takes it off the draft proposal. Draft only — nothing is sent; review before sending.",

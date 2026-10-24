@@ -231,8 +231,7 @@ test("#2 8a propose_change: parses a device-referenced qty change / model swap; 
 test("#2 8a propose_change: DRAFT-only availability; cap-less editor gate (tech refused)", () => {
   const a = PROJECT_ACTIONS.propose_change;
   assert.equal(a.available({ proposal_status: "draft" }).ok, true);
-  assert.equal(a.available({ proposal_status: "sent" }).ok, false);
-  assert.match(a.available({ proposal_status: "sent" }).why, /already been sent|revising/i);
+  assert.equal(a.available({ proposal_status: "sent" }).ok, true);   // 8c: sent/signed → handled via a revision (proposal.revise + re-sign warning, enforced in ai-actions)
   assert.equal(a.available({ proposal_status: null }).ok, false);
   assert.equal(a.cap, null);
   assert.equal(actionAllowed("propose_change", { editor: true, can: () => false }), true);    // admin/manager/sales
@@ -252,7 +251,7 @@ test("#2 8b remove_line: parses a remove command; cap=proposal.revise (admin/man
   const a = PROJECT_ACTIONS.remove_line;
   assert.equal(a.cap, "proposal.revise");
   assert.equal(a.available({ proposal_status: "draft" }).ok, true);
-  assert.equal(a.available({ proposal_status: "sent" }).ok, false);
+  assert.equal(a.available({ proposal_status: "sent" }).ok, true);   // 8c: sent/signed removal → via a revision
   assert.equal(actionAllowed("remove_line", { editor: true, can: (c) => c === "proposal.revise" }), true);  // admin/manager
   assert.equal(actionAllowed("remove_line", { editor: true, can: () => false }), false);                     // sales refused
   assert.match(a.confirm({ name: "Crazy Cars" }, { lineLabel: "Camera 1 (Entrance)" }).title, /Remove Camera 1 \(Entrance\) from Crazy Cars'?s proposal/);

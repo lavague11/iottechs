@@ -12,7 +12,7 @@ import {
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
-  getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback,
+  getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
@@ -58,6 +58,18 @@ function findProposalLine(payload, { cid, id } = {}) {
     if (cid && it.camera_id === cid) return it;
   }
   return null;
+}
+
+// 8c — confirm copy when a proposal change targets a SENT/SIGNED row: it becomes a revision (v+1) that
+// supersedes the current version, with the explicit re-sign (signed) / re-send (sent) consequence spelled out.
+function reviseConfirm(nm, row, change) {
+  const signed = !!row.signed_name, v = +row.version || 1;
+  return {
+    title: `Revise ${nm}'s proposal — ${change}`,
+    detail: signed
+      ? `Creates v${v + 1} and supersedes the SIGNED v${v} — this voids the signature and the customer must re-sign.`
+      : `Creates v${v + 1} and supersedes sent v${v} — you'll re-send it.`,
+  };
 }
 
 // A short human reference for an issue in a confirm/clarify line (never a raw id alone).
@@ -208,7 +220,9 @@ function previewAction(name, accessId, tok, args) {
   if (name === "propose_change") {
     const row = getActiveProposal(accessId);
     if (!row || !row.payload) return { ok: true, kind: "unsupported", speak: "There's no proposal to change yet.", reason: "not_available" };
-    if (row.status !== "draft") return { ok: true, kind: "unsupported", speak: "That proposal has already been sent — revising a sent or signed proposal is coming soon.", reason: "not_available" };
+    // Draft → edit in place; sent/signed → a revision (v+1), which requires proposal.revise (admin/manager).
+    const revise = row.status !== "draft";
+    if (revise && !can(tok.role, "proposal.revise")) return { ok: true, kind: "unsupported", speak: "Revising a sent or signed proposal is limited to admin and managers.", reason: "permission" };
     let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
     const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
     if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device — ${r.candidates.map((c) => c.display).join(", ")}?` };
@@ -236,7 +250,8 @@ function previewAction(name, accessId, tok, args) {
     const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: line.id }, set });
     if (applied.error) return { ok: true, kind: "clarify", speak: applied.error };
     const before = grandOf(payload, row), after = grandOf(applied.payload, row);
-    const prev = PROJECT_ACTIONS.propose_change.confirm(actionContext(getJobByAccessId(accessId), accessId), { lineLabel: curName, change });
+    const nm = actionContext(getJobByAccessId(accessId), accessId).name;
+    const prev = revise ? reviseConfirm(nm, row, change) : PROJECT_ACTIONS.propose_change.confirm({ name: nm }, { lineLabel: curName, change });
     const device = dev ? { id: dev.id, cid: dev.cid || null, floor: dev.floor, code: dev.code, label: dev.label, accessId } : null;
     return { ok: true, kind: "write", write: "action",
       intent: { type: "action", name, accessId, args: { lineId: line.id, set, lineLabel: curName, change } },
@@ -249,7 +264,8 @@ function previewAction(name, accessId, tok, args) {
   if (name === "remove_line") {
     const row = getActiveProposal(accessId);
     if (!row || !row.payload) return { ok: true, kind: "unsupported", speak: "There's no proposal to change yet.", reason: "not_available" };
-    if (row.status !== "draft") return { ok: true, kind: "unsupported", speak: "That proposal has already been sent — revising a sent or signed proposal is coming soon.", reason: "not_available" };
+    const revise = row.status !== "draft";
+    if (revise && !can(tok.role, "proposal.revise")) return { ok: true, kind: "unsupported", speak: "Revising a sent or signed proposal is limited to admin and managers.", reason: "permission" };
     let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
     const r = resolveDevice(args?.ref || "", getProjectDevices(accessId));
     if (r.candidates) return { ok: true, kind: "clarify", speak: `Which device — ${r.candidates.map((c) => c.display).join(", ")}?` };
@@ -260,7 +276,8 @@ function previewAction(name, accessId, tok, args) {
     const applied = applyIntentToPayload(payload, { type: "remove_item", match: { id: line.id } });
     if (applied.error) return { ok: true, kind: "clarify", speak: applied.error };
     const before = grandOf(payload, row), after = grandOf(applied.payload, row);
-    const prev = PROJECT_ACTIONS.remove_line.confirm(actionContext(getJobByAccessId(accessId), accessId), { lineLabel: curName });
+    const nm = actionContext(getJobByAccessId(accessId), accessId).name;
+    const prev = revise ? reviseConfirm(nm, row, `remove ${curName}`) : PROJECT_ACTIONS.remove_line.confirm({ name: nm }, { lineLabel: curName });
     const device = dev ? { id: dev.id, cid: dev.cid || null, floor: dev.floor, code: dev.code, label: dev.label, accessId } : null;
     return { ok: true, kind: "write", write: "action",
       intent: { type: "action", name, accessId, args: { lineId: line.id, lineLabel: curName } },
@@ -366,36 +383,44 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     out = await captureFeedbackAction(accessId, { body: args?.body || "", kind: args?.kind || "feedback:other", deviceId, deviceLabel });
     message = out?.error ? null : `Logged ${deviceLabel ? `feedback on ${deviceLabel}` : "the feedback"} for review.`;
   }
-  else if (name === "propose_change") {
-    // Re-load the DRAFT and re-apply the edit server-side (never trust a client payload). Draft-only; the line
-    // must still exist. saveProposalDraftAction re-checks the role, strips cost for sales, and refuses a sent row.
-    const row = getActiveProposal(accessId);
+  else if (name === "propose_change" || name === "remove_line") {
+    // Re-derive everything server-side (never trust the client payload). DRAFT → edit in place; SENT/SIGNED →
+    // mint a revision (v+1) first (proposal.revise, admin/manager) then apply to it. The change is validated
+    // on the current payload BEFORE minting, so a bad edit never leaves a stray empty revision.
+    let row = getActiveProposal(accessId);
     if (!row || !row.payload) return { error: "There's no proposal to change." };
-    if (row.status !== "draft") return { error: "That proposal isn't a draft anymore — revise it in the proposal editor." };
+    const revise = row.status !== "draft";
+    if (revise && !can(g.tok.role, "proposal.revise")) return { error: "Revising a sent or signed proposal is limited to admin and managers." };
     let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
     const tgt = findProposalLine(payload, { id: args?.lineId });
     if (!tgt) return { error: "That proposal line is no longer there." };
-    // Whitelist the edit server-side to qty/name ONLY — a change from conversation can NEVER move price, even
-    // via a forged/replayed args.set.price (the parser never emits one; this makes it structural, not trust).
-    const set = {};
-    if (args?.set?.qty != null) { if (tgt.camera_id || (Array.isArray(tgt.sub) && tgt.sub.length)) return { error: "A camera is quoted as a block — add or remove a camera instead of changing its quantity." }; set.qty = Math.max(1, Math.min(999, parseInt(args.set.qty, 10) || 1)); }
-    if (args?.set?.name != null) set.name = String(args.set.name).slice(0, 80);
-    if (!Object.keys(set).length) return { error: "Nothing to change." };
-    const applied = applyIntentToPayload(payload, { type: "edit_item", match: { id: args.lineId }, set });
+    let intent;
+    if (name === "remove_line") intent = { type: "remove_item", match: { id: args.lineId } };
+    else {
+      // Whitelist to qty/name ONLY — a change from conversation can NEVER move price (structural, not trust).
+      const set = {};
+      if (args?.set?.qty != null) { if (tgt.camera_id || (Array.isArray(tgt.sub) && tgt.sub.length)) return { error: "A camera is quoted as a block — add or remove a camera instead of changing its quantity." }; set.qty = Math.max(1, Math.min(999, parseInt(args.set.qty, 10) || 1)); }
+      if (args?.set?.name != null) set.name = String(args.set.name).slice(0, 80);
+      if (!Object.keys(set).length) return { error: "Nothing to change." };
+      intent = { type: "edit_item", match: { id: args.lineId }, set };
+    }
+    const check = applyIntentToPayload(payload, intent);   // validate BEFORE minting a revision
+    if (check.error) return { error: check.error };
+    let wasSigned = false, newVer = row.version;
+    if (revise) {
+      const rv = reviseProposal(accessId, actorName(g.tok));
+      if (!rv.proposal) return { error: "Couldn't start a revision." };
+      wasSigned = !!rv.wasSigned; row = rv.proposal; newVer = row.version;
+      try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the revision." }; }
+      if (!findProposalLine(payload, { id: args.lineId })) return { error: "That line isn't in the revision." };
+    }
+    const applied = applyIntentToPayload(payload, intent);
     if (applied.error) return { error: applied.error };
     out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
-    message = out?.error ? null : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`;
-  }
-  else if (name === "remove_line") {
-    const row = getActiveProposal(accessId);
-    if (!row || !row.payload) return { error: "There's no proposal to change." };
-    if (row.status !== "draft") return { error: "That proposal isn't a draft anymore — revise it in the proposal editor." };
-    let payload; try { payload = JSON.parse(row.payload); } catch { return { error: "Couldn't read the proposal." }; }
-    if (!findProposalLine(payload, { id: args?.lineId })) return { error: "That proposal line is no longer there." };
-    const applied = applyIntentToPayload(payload, { type: "remove_item", match: { id: args.lineId } });
-    if (applied.error) return { error: applied.error };
-    out = await saveProposalDraftAction(accessId, { payload: applied.payload, taxRate: row.tax_rate, depositPct: row.deposit_pct });
-    message = out?.error ? null : `Removed ${args?.lineLabel || "the line"} from the proposal.`;
+    const verb = name === "remove_line" ? `removed ${args?.lineLabel || "the line"}` : `updated ${args?.lineLabel || "the line"}`;
+    message = out?.error ? null : (revise
+      ? `Revised to v${newVer} — ${verb}. ${wasSigned ? "The customer must re-sign." : "Re-send when ready."}`
+      : (name === "remove_line" ? `Removed ${args?.lineLabel || "the line"} from the proposal.` : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`));
   }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
