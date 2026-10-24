@@ -39,9 +39,14 @@ Device resolver + `getProjectDevices` shipped; concerns associate to a device vi
    - **8c — SHIPPED de7c947:** sent/signed → `reviseProposal` v+1 with the explicit "voids the signature, requires re-signature" warning (proposal.revise). A signed row is never mutated in place.
    - **#2 DONE (8a+8b+8c)** pending the combined 8b+8c review; 8a reviewed + fixed (ac4bdbe).
 
-## Remaining after #2
-- **#3 — Customer-facing AI (Phase 6):** highest injection risk; owner sign-off before starting.
-- Optional follow-ups: conversational generic non-camera ADD; a persisted per-device uid (non-camera stable refs + highlight); cloned-proposal camera_id relinking.
+## #3 — Customer-facing AI (Phase 6) — DONE (pending slice-3 review)
+Separate customer entry, hard allowlist, AI_CUSTOMER flag (default off), own-project only.
+- Slice 1 (4f2a499 + c66f82c): read assistant (status/quote/balance/coverage/timeline + customer FAQ), reviewed CLEAN.
+- Slice 2 (ac80561): UI mount (customer-assistant.jsx), read-only, flag-gated.
+- Slice 3 (635779a): comment (confirmed write) + sign/accept/pay guided nav (AI never performs them). Review in flight.
+
+## ROADMAP COMPLETE (pending slice-3 review). Optional follow-ups
+- Persisted per-device uid (non-camera stable refs + highlight); cloned-proposal camera_id relink; conversational generic non-camera ADD; customer-AI slice-3 could later add a true accept_option if the owner wants it (deferred by design).
 3. **Customer-facing AI (Phase 6)**: LAST, highest injection risk; owner sign-off before starting.
 (Optional polish for #1: also highlight on the customer "Your System Layout" React render, and auto-clear on a new question.)
 
