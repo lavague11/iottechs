@@ -229,7 +229,7 @@ const QUERIES = {
   // "Who needs a signature nudge?" → sent-but-unsigned proposals DUE for a reminder per the cadence. A QUEUE
   // for a human to send (via request_signature); it NEVER auto-sends. Reads aging/deadline from getReceivables
   // and the count/recency of "signature request emailed" events — no new storage.
-  signature_nudges: { run: (intent, ctx) => {
+  signature_nudges: { cap: "proposal.reuse", run: (intent, ctx) => {   // sales/office chase list — not techs
     const now = Date.now(), DAY = 86400000;
     const vis = visibleSet(ctx);
     const awaiting = ((ctx.db.getReceivables ? ctx.db.getReceivables() : []) || [])

@@ -85,6 +85,8 @@ test("signature_nudges queues sent-but-unsigned proposals due for a reminder (ne
   assert.match(r.text, /Crazy Cars \(5d\)/);
   assert.match(r.text, /remind/i);   // tells the human how to send (queue-for-confirm)
   assert.ok(r.facts.some((f) => /nudges due/.test(f)));
+  // The chase list is a sales/office read (cap proposal.reuse) — a technician is refused.
+  assert.equal(runQuery({ query: "signature_nudges" }, ctx("tech")).reason, "permission");
 });
 
 test("feedback_summary summarizes captured objections/feedback (open items + device + status counts)", () => {
