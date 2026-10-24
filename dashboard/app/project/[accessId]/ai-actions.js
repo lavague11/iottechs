@@ -12,7 +12,9 @@ import {
   searchProjects, actorName, secretValue,
   getJobByAccessId, getReceivables, getVisibleJobs,
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
+  getSupportArticles,
 } from "../../../lib/db";
+import { findKnowledge } from "../../../lib/ai-knowledge";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
@@ -229,6 +231,26 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
 // self-improvement system has a signal. A QUESTION we couldn't retrieve → "unanswered" (company knowledge,
 // Phase 2); anything else → "unknown". Never a bare "I don't know" when we can say what we CAN do.
 const CAPS_LINE = "I can look up a proposal total, a project's status, which proposals are unsigned, or what's in QC — or edit a proposal and open a project.";
+
+// Phase 3.1 — answer from the APPROVED support library (admin/manager-authored; never invented) before we
+// fall back to "I don't have that." Audience-scoped: staff may read both libraries; a customer (Phase 6) gets
+// only "customer". A match must clear findKnowledge's relevance bar, or this returns null (→ classifyMiss).
+function knowledgeAnswer(text, tok) {
+  const audiences = tok?.role === "customer" ? ["customer"] : ["customer", "tech"];
+  const articles = [];
+  for (const aud of audiences) {
+    try { for (const a of (getSupportArticles(aud) || [])) articles.push({ ...a, audience: aud }); } catch { /* library unavailable → skip */ }
+  }
+  const hit = findKnowledge(text, { articles });
+  if (!hit) return null;
+  const href = hit.audience === "tech" ? "/tech-support" : "/support";
+  return {
+    ok: true, kind: "answer", source: "knowledge",
+    speak: `From the Help Center — "${hit.title}": ${hit.snippet}`,
+    link: { href, label: hit.audience === "tech" ? "Tech Support" : "Help Center" },
+  };
+}
+
 function classifyMiss(text, noKey) {
   const t = String(text || "").trim();
   const isQuestion = /\?\s*$/.test(t) || /^(what|how|why|when|who|which|where|is|are|does|do|can|could|should|will|would|has|have)\b/i.test(t);
@@ -275,7 +297,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || CAPS_LINE, reason: "unsupported_action" };
-  return classifyMiss(t, noKey);
+  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey);
 }
 
 // Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
@@ -368,7 +390,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   // We couldn't fully parse it, but on a project an edit-ish phrasing ("rename a camera") should still take
   // the user to the proposal — the ⌘K bar only navigates; the edit itself is done with the proposal's bar.
   if (context.currentAccessId && looksLikeEdit(t)) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
-  return classifyMiss(t, noKey);
+  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey);
 }
 
 // Apply an add_note command.
