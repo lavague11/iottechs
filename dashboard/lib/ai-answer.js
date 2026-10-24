@@ -54,7 +54,9 @@ const internalRole = (ctx) => !["customer", "vendor"].includes(ctx.role);   // s
 function resolveProject(target, ctx) {
   const t = String(target || "").trim();
   const vis = visibleSet(ctx);
-  const gated = (row) => (row && canSee(vis, row.access_id) ? { row } : { error: `I couldn't find a project matching "${t || "that"}".`, reason: "no_data" });
+  // ownedAccessId: a single project whose ownership the caller already proved (customer path) — always visible,
+  // regardless of the getVisibleJobs filter (which isn't a per-customer ownership check).
+  const gated = (row) => (row && (canSee(vis, row.access_id) || (ctx.ownedAccessId && String(row.access_id) === String(ctx.ownedAccessId))) ? { row } : { error: `I couldn't find a project matching "${t || "that"}".`, reason: "no_data" });
   const useCurrent = !t || /^(this|that|current|it|the project|here)$/i.test(t) || /this (one|project|customer)/i.test(t);
   if (useCurrent) {
     if (!ctx.currentAccessId) return { error: "Which project? Open one or name it.", reason: "ambiguous" };

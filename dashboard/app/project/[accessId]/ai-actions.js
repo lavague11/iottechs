@@ -137,9 +137,13 @@ async function interpret(text, context) {
 // Run a read-only "answer" intent: retrieve real data (authorized, via existing db functions) and return
 // the answer TEXT — never invented. Ambiguous → a clarify question; permission/no-data/error carry a
 // `reason` for the (future) training loop. Shared by the proposal bar and the global ⌘K bar.
-function answerFor(intent, tok, currentAccessId) {
+function answerFor(intent, tok, currentAccessId, opts = {}) {
   const ctx = {
     role: tok.role, userId: tok.id, userName: actorName(tok), currentAccessId: currentAccessId || null, can,
+    // ownedAccessId: a project whose ownership the CALLER already proved (customer path) — resolveProject
+    // trusts it for that one project, so a customer on a RESTRICTED project still reads their own data
+    // instead of being filtered out by getVisibleJobs (which isn't a per-customer filter). Staff omit it.
+    ownedAccessId: opts.ownedAccessId || null,
     db: { getActiveProposal, getJobByAccessId, getReceivables, getVisibleJobs, searchProjects,
           buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, getProjectDevices, listFeedback },
     fin: { optionTotals },
@@ -631,12 +635,14 @@ export async function aiCustomerInterpretAction(accessId, text) {
   // Own-project gate: a PIN customer is bound to the PIN's accessId; a logged-in customer must own this project.
   const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
   if (!owns) return { error: "Unavailable." };
-  const t = String(text || "").trim();
+  // Cap untrusted customer input before it hits the regex router / FAQ scorer (DoS/ReDoS safety).
+  const t = String(text || "").trim().slice(0, 600);
   if (!t) return { ok: true, kind: "answer", speak: "Ask me about your project — its status, your quote, your balance, or what your cameras cover." };
 
   // 1) An ALLOWLISTED read, FORCED to the customer's own project, run as the customer (sanitize/caps apply).
+  //    ownedAccessId lets resolveProject return their own project even if it's restricted (ownership proven above).
   const read = customerReadIntent(t);
-  if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId);
+  if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId, { ownedAccessId: accessId });
 
   // 2) Approved customer FAQ (admin-authored; never invented). knowledgeAnswer scopes a customer to the
   //    "customer" library only.

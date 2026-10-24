@@ -1,7 +1,8 @@
 // Authorization for the AI command actions. The decision lives in one pure function (lib/ai-authz.js) that
 // every server action in app/project/[accessId]/ai-actions.js runs first — so the rule is unit-testable
-// without the Next request stack, and a drift check proves no action skips it. The AI command center is
-// STAFF-ONLY (admin/manager/sales) and dark unless AI_COMMANDS is on.
+// without the Next request stack, and a drift check proves no action skips it. The STAFF assistant is staff-
+// only (admin/manager/sales/tech; writes limited to AI_EDITORS) and dark unless AI_COMMANDS is on. The
+// customer-facing actions (aiCustomer*) use a SEPARATE gate (role=customer + own-project + AI_CUSTOMER flag).
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";

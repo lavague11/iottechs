@@ -86,6 +86,18 @@ test("feedback_summary summarizes captured objections/feedback (open items + dev
   assert.match(runQuery({ query: "feedback_summary", target: "Nobo Restaurant" }, ctx()).text, /no logged feedback/);
 });
 
+test("ownedAccessId lets a customer read their OWN project even when it's outside the visible set (#3 L2 fix)", () => {
+  // A customer on ASC2, which getVisibleJobs(customer) does NOT return (non-privileged sees only ASC1 here).
+  const base = { role: "customer", userId: 9, userName: "Cust", currentAccessId: "ASC2", can, db, fin };
+  assert.equal(runQuery({ query: "project_status", target: "this" }, base).reason, "no_data");   // filtered out → fails closed
+  // With ownership proven upstream (ownedAccessId), the SAME read resolves to their own project.
+  const r = runQuery({ query: "project_status", target: "this" }, { ...base, ownedAccessId: "ASC2" });
+  assert.ok(!r.error, "owned project resolves");
+  assert.match(r.text, /Nobo Restaurant/);
+  // (Cross-project protection for the customer path is the FORCED target:"this" in aiCustomerInterpretAction —
+  // customerReadIntent discards any named target — not getVisibleJobs; see ai-customer.test.)
+});
+
 test("project_status reports stage + proposal state, never invented", () => {
   const r = runQuery({ query: "project_status", target: "Crazy Cars" }, ctx());
   assert.match(r.text, /Proposal stage/);
