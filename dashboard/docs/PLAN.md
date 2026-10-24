@@ -35,8 +35,13 @@ Device resolver + `getProjectDevices` shipped; concerns associate to a device vi
 1. **Floor-plan highlight** (UI): **DONE — a91e9fe + fix 962e096**, independently reviewed + re-verified. AI-resolved device rings on the planner (window event → widget `highlight` by cid). The review uncovered + fixed a CRITICAL latent bug: device `id` was `undefined` on real data (stripDevs persists none), which had silently killed resolver/coverage/raise/feedback in production too — now `surveyDevices` keys on cid/code and a non-mocked test guards it. Non-camera visual highlight is a no-op pending a persisted per-device uid (deferred).
 2. **Proposed equipment changes for approval** (write): AI drafts a change the human approves — bounded by "never auto-remove gear / change pricing / alter a signed agreement from conversation." Design approved by owner; building in slices:
    - **8a — SHIPPED 7ba03f4 (review in flight):** `propose_change` — device-referenced QTY change + MODEL swap on a DRAFT proposal line. Preview (device→line via camera_id===cid, before/after) → human confirm → `saveProposalDraftAction`. cap:null (editor); draft-only (sent/signed → "coming soon"); never invents a price; never touches a sent/signed proposal.
-   - **8b — next:** remove a line (confirm-only, non-destructive) + new `proposal.revise` cap (admin/manager) for remove.
-   - **8c — after:** sent/signed → `reviseProposal` v+1 path with the explicit "voids the signature, requires re-signature" warning (admin/manager).
+   - **8b — SHIPPED 7a0d8c8:** `remove_line` (confirm-only) + `proposal.revise` cap (admin/manager) for removals.
+   - **8c — SHIPPED de7c947:** sent/signed → `reviseProposal` v+1 with the explicit "voids the signature, requires re-signature" warning (proposal.revise). A signed row is never mutated in place.
+   - **#2 DONE (8a+8b+8c)** pending the combined 8b+8c review; 8a reviewed + fixed (ac4bdbe).
+
+## Remaining after #2
+- **#3 — Customer-facing AI (Phase 6):** highest injection risk; owner sign-off before starting.
+- Optional follow-ups: conversational generic non-camera ADD; a persisted per-device uid (non-camera stable refs + highlight); cloned-proposal camera_id relinking.
 3. **Customer-facing AI (Phase 6)**: LAST, highest injection risk; owner sign-off before starting.
 (Optional polish for #1: also highlight on the customer "Your System Layout" React render, and auto-clear on a new question.)
 
