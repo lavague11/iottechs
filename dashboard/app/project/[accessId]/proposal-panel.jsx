@@ -132,7 +132,9 @@ const PROP_CSS = `
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-sysrow{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap}
+/* Slot editors (NVR / HDD / Displays) stack as full-width line-item rows — label · dropdown · price,
+   one per line — so they scale on a phone instead of a non-wrapping row of columns. */
+.pvx .prop-sysrow{display:flex;flex-direction:column;align-items:stretch;gap:9px;flex-wrap:nowrap}
 .pvx .prop-sysrow + .prop-sysrow{padding-top:12px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-sys-field{display:flex;align-items:center;gap:7px;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-sys-field select,.pvx .prop-sys-field input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.78rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none}
@@ -146,22 +148,22 @@ const PROP_CSS = `
 .pvx .prop-nvr-cancel{height:28px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-nvr-cancel:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-sys-field input:disabled{opacity:.45}
-.pvx .prop-slots{display:flex;gap:10px;flex-wrap:wrap}
-.pvx .prop-slot{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
-.pvx .prop-slot-lbl{font-size:.6rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.pvx .prop-slot select{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;font-size:.76rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418)}
+.pvx .prop-slots{display:flex;flex-direction:column;gap:8px}
+.pvx .prop-slot{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px 10px;width:100%}
+.pvx .prop-slot-lbl{flex:0 0 88px;display:flex;align-items:center;gap:6px;font-size:.62rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.pvx .prop-slot select{flex:1 1 140px;min-width:0;height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;font-size:.78rem;font-weight:600;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418)}
 .pvx .prop-slot select:focus{border-color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-slot-name{width:100%;box-sizing:border-box;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
+.pvx .prop-slot-name{flex:1 1 100%;order:6;box-sizing:border-box;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
 .pvx .prop-slot-name:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 /* Bays beyond the selected NVR's capacity — visible but locked, not just hidden */
 .pvx .prop-slot-locked{opacity:.45}
 .pvx .prop-slot-locked select{background:var(--dv-paper,#F4F4F2);cursor:not-allowed}
 .pvx .prop-slot-locked .prop-slot-lbl{color:var(--dv-meta,#787D84)}
-.pvx .prop-slot-cost{font-size:.7rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-slot-price{width:100%;box-sizing:border-box;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);font-family:inherit;outline:none;padding:0 6px;background:#fff}
+.pvx .prop-slot-cost{flex:0 0 92px;text-align:right;font-size:.74rem;font-weight:600;color:var(--dv-meta,#787D84)}
+.pvx .prop-slot-price{flex:0 0 92px;width:92px;box-sizing:border-box;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.78rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);font-family:inherit;outline:none;padding:0 8px;background:#fff}
 .pvx .prop-slot-price:focus{border-color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-slot-price:disabled{opacity:.6;border-color:transparent;background:transparent;padding-right:0}
-.pvx .prop-slot-costin{width:100%;box-sizing:border-box;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.68rem;font-weight:500;color:var(--dv-meta,#787D84);font-family:inherit;outline:none;padding:0 6px;background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-slot-price:disabled{opacity:.6;border-color:transparent;background:transparent}
+.pvx .prop-slot-costin{flex:0 0 78px;width:78px;box-sizing:border-box;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.7rem;font-weight:500;color:var(--dv-meta,#787D84);font-family:inherit;outline:none;padding:0 6px;background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-slot-costin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.85rem;cursor:pointer;padding:2px 6px}
 .pvx .prop-svc-gear{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:#fff;color:var(--dv-meta,#787D84);cursor:pointer;flex-shrink:0}
@@ -264,13 +266,13 @@ const PROP_CSS = `
 /* Recording-system "Done" button + collapsed NVR/Displays summary lines */
 .pvx .prop-slot-x{margin-left:6px;border:none;background:transparent;color:var(--dv-red,#C4553D);font-size:.68rem;cursor:pointer;padding:0;opacity:.65}
 .pvx .prop-slot-x:hover{opacity:1}
-.pvx .prop-add-slot{align-self:flex-end;height:32px;padding:0 12px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;margin-bottom:1px}
-.pvx .prop-add-slot:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-add-slot{align-self:flex-start;height:auto;padding:4px 6px;margin-left:-6px;border:none;border-radius:6px;background:none;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-add-slot:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(17,20,24,.03)}
 .pvx .prop-camask{display:inline-flex;align-items:center;gap:8px;font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-gold,#C9A96E);border-radius:9px;padding:4px 8px 4px 12px}
 .pvx .prop-camask input{width:56px;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;padding:0 8px;font-size:.82rem;font-family:inherit;text-align:center}
 .pvx .prop-camask-go{height:28px;padding:0 12px;border:none;border-radius:6px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .prop-camask-x{height:28px;padding:0 8px;border:none;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;cursor:pointer;font-family:inherit}
-.pvx .prop-sys-done{align-self:center;height:30px;padding:0 16px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-sys-done{align-self:flex-start;height:32px;padding:0 18px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;margin-top:2px}
 .pvx .prop-sys-done:hover{filter:brightness(1.12)}
 .pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}
 .pvx .prop-sysline-name{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418)}
