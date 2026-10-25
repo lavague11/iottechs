@@ -194,6 +194,23 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
     </div>
   );
 }
+// Action menu for a collapsed system row (NVR / Displays / Amp) — same ••• control the line items use, so
+// every row reads the same. Its one action opens that system's slot editor.
+function SysRowMenu({ onEdit, onClose }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  return (
+    <div className="prop-im" ref={ref} role="menu">
+      <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onEdit(); onClose(); }}>Edit</button>
+    </div>
+  );
+}
 // Dictation: a mic button that fills a text field by voice (Web Speech API). Renders nothing when the
 // browser has no SpeechRecognition (and stays quiet if the mic is blocked — e.g. inside the preview pane),
 // so it's a pure enhancement. onText receives the recognized phrase to append.
@@ -991,7 +1008,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <span className="prop-sysline-name">{lr.title}</span>
             <span className="prop-sysline-sub">{lr.sub}</span>
             <span className="prop-sysline-total">{money(lr.total)}</span>
-            {!readOnly && <button type="button" className="prop-mini prop-sysline-edit" onClick={lr.edit}>Edit</button>}
+            {!readOnly && (
+              <div className="prop-im-wrap prop-sysline-menu">
+                <button type="button" className="prop-item-menu" aria-label={`${lr.title} actions`} title="Actions"
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `sys-${lr.key}` ? null : `sys-${lr.key}`); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+                </button>
+                {menuOpen === `sys-${lr.key}` && <SysRowMenu onEdit={lr.edit} onClose={() => setMenuOpen(null)} />}
+              </div>
+            )}
           </div>
           {leadOpen[lr.key] && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
             // Byte-for-byte the same DOM as a camera's expanded sub-item (.prop-item.sub with
