@@ -198,6 +198,14 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const status = meta?.status && meta.payload ? meta.status : (meta?.status || "draft");
   const readOnly = status !== "draft";
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
+  // Services actually in this proposal (union across options — config is project-wide). Proposal
+  // Configuration only surfaces these, never the whole company catalog. Reactive: adding/removing a
+  // service updates it immediately.
+  const activeServices = useMemo(() => {
+    const keys = new Set();
+    (payload.options || []).forEach((o) => (o.services || []).forEach((s) => s.key && keys.add(s.key)));
+    return PROPOSAL_SERVICES.filter((s) => keys.has(s.key));
+  }, [payload]);
   // Camera lines display the survey's live location name. Prefer the camera_id link (the single source
   // of truth); on this staff-only editable surface fall back to a best-effort position match (Nth camera
   // block ↔ Nth surveyed camera) so survey-imported blocks read "Kitchen 1" etc. instead of the generic
@@ -1079,8 +1087,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           Stays open on Save so you can configure more than one tab in a sitting. */}
       {pricingOpen && (
         <ProposalConfig
+          services={activeServices}
           startTab={pricingOpen === "__all__" ? "default" : "service"}
-          startService={pricingOpen === "__all__" ? (defaultService || "camera") : pricingOpen}
+          startService={pricingOpen === "__all__"
+            ? (activeServices.find((s) => s.key === defaultService)?.key || activeServices[0]?.key || "camera")
+            : pricingOpen}
           onClose={() => setPricingOpen(null)}
           onSaved={() => {
             setPriceBookVersion((v) => v + 1); // refreshes every service's quick-add catalog

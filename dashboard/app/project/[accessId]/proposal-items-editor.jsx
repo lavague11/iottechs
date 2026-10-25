@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import { LINE_CONDITIONS, LINE_CONDITION, lineConditions } from "../../../lib/proposal-terms";
@@ -22,13 +22,12 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);
 
+  // Strictly scoped to the CURRENT service by canonical service id (never by name/keyword). A Security
+  // Cameras editor only ever offers Security Cameras catalog items — no cross-service leakage.
   const matches = useMemo(() => {
     const needle = value.trim().toLowerCase();
     if (!needle) return [];
-    const hits = allCatalog.filter((c) => c.name.toLowerCase().includes(needle));
-    const mine = hits.filter((c) => c.service === currentService);
-    const others = hits.filter((c) => c.service !== currentService);
-    return [...mine, ...others].slice(0, 8);
+    return allCatalog.filter((c) => c.service === currentService && c.name.toLowerCase().includes(needle)).slice(0, 8);
   }, [value, allCatalog, currentService]);
 
   function handleChange(e) {
@@ -47,10 +46,9 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
       {open && !disabled && matches.length > 0 && (
         <div className="prop-name-menu">
           {matches.map((c, i) => (
-            <div key={c.service + c.name + i} className={`prop-name-opt${c.service === currentService ? " mine" : ""}`}
+            <div key={c.service + c.name + i} className="prop-name-opt mine"
                  onMouseDown={(e) => { e.preventDefault(); pick(c); }}>
               <span className="prop-name-opt-name">{c.name}</span>
-              <span className="prop-name-opt-svc">{serviceLabel(c.service)}</span>
               <span className="prop-name-opt-price">{money(c.price)}</span>
             </div>
           ))}

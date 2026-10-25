@@ -16,8 +16,9 @@ const HDD_NAMES = new Set(PRICE_FIELDS[2].names);
 // null shows every service (the header gear). Camera splits into 3 sub-groups because
 // NVR models + storage drives are structurally locked (their names are pattern-matched
 // by the NVR/HDD pickers) — everything else is a plain, fully-editable catalog list.
-function sectionsFor(scopeKey) {
-  const keys = scopeKey ? [scopeKey] : PROPOSAL_SERVICES.map((s) => s.key);
+function sectionsFor(scope) {
+  // scope: a single service key, an array of keys (project-active services), or null (every service).
+  const keys = Array.isArray(scope) ? scope : scope ? [scope] : PROPOSAL_SERVICES.map((s) => s.key);
   const out = [];
   keys.forEach((key) => {
     if (key === "camera") {
@@ -47,8 +48,8 @@ function rowsFor(section, book) {
   return [...base, ...custom];
 }
 
-export default function PricingDefaults({ onClose, onSaved, scopeKey, embedded = false }) {
-  const sections = sectionsFor(scopeKey);
+export default function PricingDefaults({ onClose, onSaved, scopeKey, scopeKeys, embedded = false }) {
+  const sections = sectionsFor(scopeKeys || scopeKey);
   const [book, setBook] = useState(() => loadPriceBook());
   const [open, setOpen] = useState(() => ({ [sections[0]?.id]: true }));
   const [newItem, setNewItem] = useState({}); // sectionId -> { name, price }
@@ -250,9 +251,13 @@ const PRC_CSS = `
 // (per-service bundles). Scopes stay distinct — only the UI location is merged. Tab + service are remembered
 // while the modal is open. `services` = the configurable services to offer in the Service/Presets selectors.
 export function ProposalConfig({ onClose, onSaved, startTab = "default", startService = "camera", services = PROPOSAL_SERVICES }) {
+  // Only the services actually in this proposal are configurable here (passed by the builder). The
+  // company catalog/pricing/presets for other services are untouched — just not surfaced in this project.
+  const svcKeys = services.map((s) => s.key);
   const [tab, setTab] = useState(startTab);
-  const [svc, setSvc] = useState(startService);
+  const [svc, setSvc] = useState(svcKeys.includes(startService) ? startService : (svcKeys[0] || "camera"));
   const needsSel = tab === "service" || tab === "presets";
+  const noServices = services.length === 0;
   return (
     <div className="cfg-backdrop" onClick={onClose}>
       <div className="cfg-modal" onClick={(e) => e.stopPropagation()}>
@@ -260,6 +265,9 @@ export function ProposalConfig({ onClose, onSaved, startTab = "default", startSe
           <span className="cfg-title">Proposal Configuration</span>
           <button className="cfg-x" onClick={onClose} aria-label="Close">✕</button>
         </div>
+        {noServices ? (
+          <div className="cfg-body"><div className="cfg-empty">No services in this proposal yet.<br />Add a service to configure its pricing and presets.</div></div>
+        ) : (<>
         <div className="cfg-tabs" role="tablist">
           <button type="button" role="tab" aria-selected={tab === "default"} className={tab === "default" ? "on" : ""} onClick={() => setTab("default")}>Default Pricing</button>
           <button type="button" role="tab" aria-selected={tab === "service"} className={tab === "service" ? "on" : ""} onClick={() => setTab("service")}>Service Pricing</button>
@@ -274,10 +282,11 @@ export function ProposalConfig({ onClose, onSaved, startTab = "default", startSe
           </div>
         )}
         <div className="cfg-body">
-          {tab === "default" && <PricingDefaults embedded scopeKey={null} onSaved={onSaved} />}
+          {tab === "default" && <PricingDefaults embedded scopeKeys={svcKeys} onSaved={onSaved} />}
           {tab === "service" && <PricingDefaults embedded key={`svc-${svc}`} scopeKey={svc} onSaved={onSaved} />}
           {tab === "presets" && <PresetEditor embedded key={`pst-${svc}`} serviceKey={svc} onSaved={onSaved} />}
         </div>
+        </>)}
         <style>{CFG_CSS}</style>
       </div>
     </div>
@@ -299,6 +308,7 @@ const CFG_CSS = `
 .pvx .cfg-svcsel label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .cfg-svcsel select{height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);padding:0 10px;outline:none;cursor:pointer}
 .pvx .cfg-svcsel select:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .cfg-empty{padding:34px 22px;text-align:center;font-size:.86rem;line-height:1.6;color:var(--dv-meta,#787D84)}
 .pvx .cfg-body{flex:1 1 auto;min-height:0;overflow-y:auto}
 @media(max-width:560px){
   .pvx .cfg-backdrop{padding:0}
