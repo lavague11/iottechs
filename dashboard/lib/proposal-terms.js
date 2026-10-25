@@ -446,8 +446,50 @@ In any action to collect amounts due or enforce the Agreement, the prevailing pa
 The signature covers the entire Agreement. The customer initials each required acknowledgment; marketing consent is optional and leaving it blank means they do not consent. Residential in-home sales include the right-to-cancel acknowledgment and Appendix A Notice of Cancellation; business accounts may include the personal guaranty in Section 74.` },
 ];
 
+// Line-item CONDITIONS — site/supply facts that attach to a single proposal line (the customer is
+// supplying the gear, or the run reuses existing cable). Each is the ONE canonical source for its badge
+// (builder), its colour, and the acknowledgment the customer initials once per type at signing — grouped
+// by type, never repeated per line. `ack` is the exact initialed sentence; keep it plain and honest.
+export const LINE_CONDITIONS = [
+  { key: "cxEquip", badge: "CX supplied", tone: "gold", note: "Customer-provided equipment",
+    ack: "Customer-provided equipment: I'm supplying one or more devices for this project. IOT TECHS isn't responsible for the condition, compatibility, firmware, or warranty of equipment I provide, and added charges may apply if it's defective or incompatible." },
+  { key: "existingCable", badge: "Existing cable", tone: "orange", note: "Reuses existing cabling",
+    ack: "Existing cabling: this project reuses existing cable runs. IOT TECHS will test and map reused cabling but isn't responsible for faults in cable it didn't install, and replacing failed existing cable may be billable." },
+];
+export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
+export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
+
+// The valid conditions on a line item (unknown keys dropped). Top-level lines only — sub-items never carry them.
+export function lineConditions(it) {
+  return Array.isArray(it?.conditions) ? it.conditions.filter((k) => LINE_CONDITION[k]) : [];
+}
+export function normalizeConditions(arr) {
+  return Array.isArray(arr) ? [...new Set(arr.filter((k) => LINE_CONDITION[k]))] : [];
+}
+// Infer conditions from a preset's NAME so owner-named bundles ("CX Provided Camera Install", "Existing
+// Cable Install") carry the matching condition without re-tagging. An explicit preset.conditions wins.
+export function inferPresetConditions(name) {
+  const n = String(name || "").toLowerCase();
+  const out = [];
+  if (/\b(cx|customer)[\s-]*(provided|supplied|owned|own|furnished)\b|\b(provided|supplied|owned|furnished)\s+(equipment|camera|gear|device)/.test(n)) out.push("cxEquip");
+  if (/\bexisting\s+(cable|cabling|wir\w*|line|run|drop)/.test(n)) out.push("existingCable");
+  return out;
+}
+// Which condition keys are present across a proposal OPTION (top-level lines). Drives which per-condition
+// acknowledgments the signer must initial. Defaults to the first option when no key is given.
+export function optionConditions(payload, optionKey) {
+  const opts = payload?.options || [];
+  const opt = (optionKey && opts.find((o) => o.id === optionKey)) || opts[0];
+  if (!opt) return [];
+  const set = new Set();
+  for (const svc of opt.services || []) for (const it of svc.items || [])
+    for (const k of lineConditions(it)) set.add(k);
+  return [...set];
+}
+
 // The acknowledgments the customer initials on the proposal signature (Section 83). Required ones must be
-// checked to sign. `pcpOnly` items show only when the proposal actually carries a PCP credit.
+// checked to sign. `pcpOnly` items show only when the proposal actually carries a PCP credit; `condKey`
+// items show only when a line carries that condition (one acknowledgment per condition type).
 export const PROPOSAL_ACKS = [
   { key: "terms", required: true, label: "I have read and agree to the IOT TECHS Master Terms & Conditions." },
   { key: "payment", required: true, label: "Prompt payment: the balance is due at substantial completion; a payment more than 7 days late with no approved arrangement puts the account in default, with a $35 late fee and the remedies in Section 6." },
@@ -456,5 +498,8 @@ export const PROPOSAL_ACKS = [
   // payload). The customer reviews the appended site-survey / mockup pages and confirms them here.
   { key: "survey", required: true, surveyOnly: true, label: "Site survey & system layout: I have reviewed the survey / layout pages and confirm the equipment and placement shown reflect my property." },
   { key: "mockup", required: true, mockupOnly: true, label: "Camera mockup: I have reviewed the mockup pages and approve the proposed camera views." },
+  // One acknowledgment per line-item condition type, shown only when a line actually carries it.
+  { key: "cxEquip", required: true, condKey: "cxEquip", label: LINE_CONDITION.cxEquip.ack },
+  { key: "existingCable", required: true, condKey: "existingCable", label: LINE_CONDITION.existingCable.ack },
   { key: "marketing", required: false, label: "Social media & marketing (optional): IOT TECHS may post non-identifying photos and video of my completed project." },
 ];

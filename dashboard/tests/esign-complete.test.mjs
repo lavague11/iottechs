@@ -120,7 +120,7 @@ test("lifecycle: accepted + signed through the existing machinery; fingerprint +
   assert.equal(p.signed_fingerprint, fp, "binds to the same content fingerprint the session was bound to");
   assert.equal(p.signed_payload, row.payload, "frozen snapshot of exactly what was signed");
   assert.equal(p.signature_data, SIG, "legacy signature_data keeps the PNG (on-screen + legacy PDF render it)");
-  assert.deepEqual(JSON.parse(p.signed_acks), { terms: true, payment: true, pcp: false, survey: false, mockup: false, marketing: false });
+  assert.deepEqual(JSON.parse(p.signed_acks), { terms: true, payment: true, pcp: false, survey: false, mockup: false, cxEquip: false, existingCable: false, marketing: false });
   assert.equal(typeof r.stage, "string");
   const ev = db.getProjectEvents(x.a).find((e) => e.kind === "sign");
   assert.match(ev.label, /Proposal v1 signed \(PDF\) — Option A by Jordan Rivera/);

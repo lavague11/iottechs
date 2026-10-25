@@ -22,7 +22,7 @@ const docView = (d) => ({ id: d.id, sha256: d.sha256, version: d.version, fileNa
 const payloadOf = (row) => { try { return JSON.parse(row.payload || "{}"); } catch { return {}; } };
 // Which acks apply is read from the STORED unsigned doc's meta (does it carry survey / mockup pages), so
 // the survey/mockup sign-off tracks the actual document, not anything the client sends.
-const factsOf = (doc) => ({ hasSurvey: !!doc?.meta?.hasSurvey, hasMockup: !!doc?.meta?.hasMockup });
+const factsOf = (doc) => ({ hasSurvey: !!doc?.meta?.hasSurvey, hasMockup: !!doc?.meta?.hasMockup, option: doc?.meta?.option || null });
 // What the client may keep of the captured values (it already holds them; nothing here is secret from the signer).
 const valuesView = (v, row, doc) => ({ name: v?.name || null, signature: v?.signature ? { method: v.signature.method, data: v.signature.data } : null, acks: v?.acks || {}, placed: Array.isArray(v?.placed) ? v.placed : [], missing: missingRequired(v, payloadOf(row), factsOf(doc)) });
 const ackList = (row, doc) => requiredAcks(payloadOf(row), factsOf(doc)).map((a) => ({ key: a.key, required: !!a.required }));

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
+import { LINE_CONDITIONS, LINE_CONDITION, lineConditions } from "../../../lib/proposal-terms";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -143,7 +144,7 @@ const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 // Line-item (•••) action menu — the one predictable place for anything you do to a row: Duplicate ·
 // Add/Edit description · Remove. Delete is destructive, so Remove shows an in-menu confirm. Sub-items get
 // Remove only. Closes on outside-click / Escape.
-function ItemMenu({ isSub = false, hasDesc = false, onDuplicate, onDescribe, onRemove, removeLabel, onClose }) {
+function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, onRemove, removeLabel, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -168,11 +169,62 @@ function ItemMenu({ isSub = false, hasDesc = false, onDuplicate, onDescribe, onR
         <>
           {!isSub && onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
           {!isSub && onDescribe && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDescribe(); onClose(); }}>{hasDesc ? "Edit description" : "Add description"}</button>}
+          {!isSub && onToggleCondition && (
+            <>
+              <div className="prop-im-sep" />
+              <div className="prop-im-grouplbl">Conditions</div>
+              {LINE_CONDITIONS.map((c) => {
+                const on = conditions.includes(c.key);
+                return (
+                  <button key={c.key} type="button" className={`prop-im-item prop-im-cond${on ? " on" : ""}`} role="menuitemcheckbox" aria-checked={on}
+                          title={c.note} onClick={() => onToggleCondition(c.key, !on)}>
+                    <span className={`prop-im-cdot ${c.tone}`} aria-hidden="true" />
+                    <span className="prop-im-cname">{c.badge}</span>
+                    {on && <svg className="prop-im-ck" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>}
+                  </button>
+                );
+              })}
+              {onApplyPeers && conditions.length > 0 && (
+                <button type="button" className="prop-im-item prop-im-apply" role="menuitem" onClick={() => { onApplyPeers(); onClose(); }}>{peerLabel || "Apply to all"}</button>
+              )}
+            </>
+          )}
           {!isSub && <div className="prop-im-sep" />}
           <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
         </>
       )}
     </div>
+  );
+}
+// Dictation: a mic button that fills a text field by voice (Web Speech API). Renders nothing when the
+// browser has no SpeechRecognition (and stays quiet if the mic is blocked — e.g. inside the preview pane),
+// so it's a pure enhancement. onText receives the recognized phrase to append.
+function DictateButton({ onText, title = "Dictate" }) {
+  const [listening, setListening] = useState(false);
+  const recRef = useRef(null);
+  const SR = typeof window !== "undefined" ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
+  useEffect(() => () => { try { recRef.current?.stop(); } catch {} }, []);
+  if (!SR) return null;
+  function toggle() {
+    if (listening) { try { recRef.current?.stop(); } catch {} return; }
+    let rec; try { rec = new SR(); } catch { return; }
+    rec.lang = "en-US"; rec.interimResults = false; rec.continuous = false; rec.maxAlternatives = 1;
+    rec.onresult = (e) => {
+      const t = Array.from(e.results).map((r) => r[0]?.transcript || "").join(" ").replace(/\s+/g, " ").trim();
+      if (t) onText(t);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    try { rec.start(); setListening(true); } catch { setListening(false); }
+  }
+  return (
+    <button type="button" className={`prop-desc-mic${listening ? " on" : ""}`} title={listening ? "Stop" : title}
+            aria-label={title} aria-pressed={listening} onClick={toggle}>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10a7 7 0 0 0 14 0" /><line x1="12" y1="17" x2="12" y2="22" />
+      </svg>
+    </button>
   );
 }
 // Audio system bar (Commercial Audio only): the amplifier is the head end — picked once, like the
@@ -403,9 +455,31 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const idx = svc.items.findIndex((x) => x.id === id);
     if (idx < 0) return;
     const src = svc.items[idx];
-    const copy = { ...src, id: newItemId(), camera_id: null, ...(src.sub ? { sub: src.sub.map((s) => ({ ...s, id: newItemId() })) } : {}) };
+    const copy = { ...src, id: newItemId(), camera_id: null,
+      ...(Array.isArray(src.conditions) ? { conditions: [...src.conditions] } : {}),   // duplicate preserves flags
+      ...(src.sub ? { sub: src.sub.map((s) => ({ ...s, id: newItemId() })) } : {}) };
     const next = svc.items.slice(); next.splice(idx + 1, 0, copy);
     patchItems(next);
+  }
+  // Line-item CONDITIONS (customer-provided equipment, existing cable). Toggle on a single line, or apply
+  // additively across every peer line in this service (never removes a peer's existing conditions).
+  function setCondition(id, key, on) {
+    const it = svc.items.find((x) => x.id === id); if (!it || !LINE_CONDITION[key]) return;
+    const cur = lineConditions(it);
+    if (on === cur.includes(key)) return;
+    patchItem(id, { conditions: on ? [...cur, key] : cur.filter((k) => k !== key) });
+  }
+  // Bulk-apply: copy THIS line's conditions onto every peer endpoint line in one pass (additive — a peer's
+  // own conditions are kept). Infrastructure rows (NVR/Displays/amp) are skipped.
+  function applyLineConditionsToPeers(id) {
+    const src = svc.items.find((x) => x.id === id); if (!src) return;
+    const keys = lineConditions(src); if (!keys.length) return;
+    patchItems(svc.items.map((it) => {
+      if (it.id === id || lineRole(it) === "infrastructure") return it;
+      const cur = lineConditions(it);
+      const add = keys.filter((k) => !cur.includes(k));
+      return add.length ? { ...it, conditions: [...cur, ...add] } : it;
+    }));
   }
   function addItem(name = "", price = 0) {
     patchItems([...svc.items, { id: newItemId(), name, qty: 1, price, cost: 0 }]);
@@ -543,15 +617,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
           />
         )}
+        {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
+            managed from the ••• Conditions submenu. Each maps to one signed acknowledgment at signing. */}
+        {!parent && lineConditions(it).map((k) => (
+          <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
+        ))}
         {/* Description toggle (top-level, editable) — a speech bubble with a + (add) that becomes a − once the
             description is showing (remove). Replaces the old rename pencil; rename is double-click on the name. */}
         {/* MIDDLE: a lightweight "+ Description" after the name (only when there's no description yet and the
             editor isn't open). An existing description shows as a preview below the row; the ••• menu can also
             open the editor. */}
         {!parent && !readOnly && !(it.desc && it.desc.trim()) && !descOpen.has(it.id) && (
-          <button type="button" className="prop-desc-add2" title="Add a customer-facing description" aria-label="Add description" onClick={() => openDesc(it.id)}>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="15" y2="10" /><line x1="12" y1="7" x2="12" y2="13" /></svg>
-            Description
+          <button type="button" className="prop-desc-add2" title="Add a description" aria-label="Add description" onClick={() => openDesc(it.id)}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="15" y2="10" /><line x1="12" y1="7" x2="12" y2="13" /></svg>
           </button>
         )}
         {parent && /^line drop/i.test(it.name || "") && (
@@ -612,8 +690,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <ItemMenu
               isSub={!!parent}
               hasDesc={!parent && !!(it.desc && it.desc.trim())}
+              conditions={!parent ? lineConditions(it) : []}
               onDuplicate={parent ? null : () => duplicateItem(it.id)}
               onDescribe={parent ? null : () => openDesc(it.id)}
+              onToggleCondition={parent ? null : (key, on) => setCondition(it.id, key, on)}
+              onApplyPeers={parent ? null : () => applyLineConditionsToPeers(it.id)}
+              peerLabel={`Apply to all ${svc.key === "camera" ? "cameras" : "lines"}`}
               onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
               removeLabel={`${camName || it.name || "Item"}${!parent ? ` · ${money(itemTotal(it))}` : ""}`}
               onClose={() => setMenuOpen(null)}
@@ -632,6 +714,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                    placeholder="Customer description…" title="A short explanation the customer sees on the proposal — not the product name"
                    onChange={(e) => patchItem(it.id, { desc: e.target.value })}
                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); closeDesc(it.id); } }} />
+            <DictateButton title="Dictate description" onText={(t) => patchItem(it.id, { desc: ((it.desc || "") + (it.desc && !/\s$/.test(it.desc) ? " " : "") + t).slice(0, 600) })} />
             <button type="button" className="prop-desc-done" title="Done" aria-label="Done" onClick={() => closeDesc(it.id)}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
             </button>

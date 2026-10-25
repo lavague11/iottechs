@@ -1,6 +1,6 @@
 // Validation of what the signer captures. The client is never trusted: every value is re-checked here
 // before it is stored, and again when the PDF is flattened.
-import { PROPOSAL_ACKS, PROPOSAL_TERMS_VERSION } from "../proposal-terms.js";
+import { PROPOSAL_ACKS, PROPOSAL_TERMS_VERSION, optionConditions } from "../proposal-terms.js";
 
 // The data URL (what proposals.signature_data stores, sliced to 200000 chars by signProposal) must fit in 200KB —
 // a longer one would be truncated into a corrupt image, so it is refused up front.
@@ -37,10 +37,14 @@ export function cleanName(s) {
 // step never asks for more or less than what the customer is actually signing.
 export function requiredAcks(payload, facts = {}) {
   const pcp = +(payload?.pcp_credit || 0) > 0;
+  // Conditions come from the signed option's own lines (server-owned payload), not the client. Caller may
+  // pass facts.conditions directly; otherwise derive them from facts.option (the doc's option).
+  const conds = Array.isArray(facts.conditions) ? facts.conditions : optionConditions(payload, facts.option);
   return PROPOSAL_ACKS.filter((a) => {
     if (a.pcpOnly && !pcp) return false;
     if (a.surveyOnly && !facts.hasSurvey) return false;
     if (a.mockupOnly && !facts.hasMockup) return false;
+    if (a.condKey && !conds.includes(a.condKey)) return false;
     return true;
   });
 }

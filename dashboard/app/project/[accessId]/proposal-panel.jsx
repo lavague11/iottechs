@@ -281,8 +281,14 @@ const PROP_CSS = `
 /* Left disclosure spacer — keeps flat rows aligned with chevron'd ones */
 .pvx .prop-disc-sp{width:17px;flex:0 0 auto}
 /* "+ Description" inline affordance (after the name) + collapsed preview + the editor's Done check */
-.pvx .prop-desc-add2{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;font-family:inherit;cursor:pointer;padding:2px 7px;border-radius:5px;flex-shrink:0}
+.pvx .prop-desc-add2{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:none;border:none;color:var(--dv-meta,#787D84);font-family:inherit;cursor:pointer;padding:0;border-radius:5px;flex-shrink:0;margin-left:6px}
 .pvx .prop-desc-add2:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+/* Dictation mic inside the open description editor — pure enhancement, hidden where unsupported */
+.pvx .prop-desc-mic{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:5px;flex-shrink:0}
+.pvx .prop-desc-mic:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-desc-mic.on{color:var(--dv-red,#C4553D);animation:prop-mic-pulse 1.1s ease-in-out infinite}
+@keyframes prop-mic-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@media (prefers-reduced-motion:reduce){.pvx .prop-desc-mic.on{animation:none}}
 .pvx .prop-desc-preview{background:none;border:none;font-family:inherit;font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);cursor:pointer;text-align:left;padding:2px 4px 2px 2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .pvx .prop-desc-preview:hover{color:var(--dv-ink,#101418);text-decoration:underline}
 .pvx .prop-desc-done{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:none;border:none;color:var(--dv-green,#2E7D5B);cursor:pointer;border-radius:5px;flex-shrink:0}
@@ -305,6 +311,20 @@ const PROP_CSS = `
 .pvx .prop-im-cancel:hover{color:var(--dv-ink,#101418)}
 .pvx .prop-im-go{height:30px;padding:0 13px;border:none;border-radius:7px;background:var(--dv-red,#C4553D);color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .prop-im-go:hover{filter:brightness(1.08)}
+/* Conditions submenu inside ••• — a small group of togglable condition types + an additive bulk-apply */
+.pvx .prop-im-grouplbl{font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:5px 10px 2px}
+.pvx .prop-im-cond{display:flex;align-items:center;gap:8px}
+.pvx .prop-im-cdot{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
+.pvx .prop-im-cdot.gold{background:#C79A1E}
+.pvx .prop-im-cdot.orange{background:#C56B2C}
+.pvx .prop-im-cname{flex:1}
+.pvx .prop-im-cond.on{font-weight:700}
+.pvx .prop-im-ck{color:var(--dv-green,#2E7D5B);flex:0 0 auto}
+.pvx .prop-im-apply{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
+/* Condition badges on the row (gold = customer-supplied, orange = existing cable). Shown only when set. */
+.pvx .prop-cond{flex:0 0 auto;margin-left:8px;padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.pvx .prop-cond.gold{background:#f6edcf;color:#8A6A1F}
+.pvx .prop-cond.orange{background:#f7e4d6;color:#B45B22}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}

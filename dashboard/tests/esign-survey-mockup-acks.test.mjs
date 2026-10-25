@@ -67,7 +67,7 @@ test("the signing pipeline threads the appendix + facts end to end (drift)", () 
   assert.ok(/appendix = null/.test(sess) && /ensureProposalUnsigned\(accessId, optKey, \{ by: caller\.role, appendix \}\)/.test(sess), "startSession forwards the appendix");
 
   const comp = readFileSync(new URL("../lib/esign/complete.js", import.meta.url), "utf8");
-  assert.ok(/const facts = \{ hasSurvey: !!doc\.meta\?\.hasSurvey, hasMockup: !!doc\.meta\?\.hasMockup \}/.test(comp), "completion reads facts from the stored doc");
+  assert.ok(/const facts = \{ hasSurvey: !!doc\.meta\?\.hasSurvey, hasMockup: !!doc\.meta\?\.hasMockup, option: s\.option_key \}/.test(comp), "completion reads facts (incl. the signed option) from the stored doc");
   assert.ok(/missingRequired\(values, payload, facts\)/.test(comp) && /requiredAcks\(payload, facts\)/.test(comp), "and gates the required acks + certificate list on them");
 
   const act = readFileSync(new URL("../app/project/[accessId]/esign-actions.js", import.meta.url), "utf8");

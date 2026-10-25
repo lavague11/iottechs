@@ -14,7 +14,7 @@ const h = () => sqliteHandle();
 const fail = (code, error) => ({ ok: false, code, error });
 const ROLE_LABEL = { customer: "Customer", admin: "Admin (signing on the customer's behalf)", manager: "Manager (signing on the customer's behalf)" };
 const EVENT_LABEL = { opened: "Document opened", set_name: "Name entered", set_signature: "Signature adopted", set_acks: "Terms acknowledged", set_placed: "Signature placed", completed: "Signed" };
-const ACK_SHORT = { terms: "Master Terms & Conditions", payment: "Prompt payment terms", pcp: "PCP credit terms", survey: "Site survey & system layout", mockup: "Camera mockup", marketing: "Marketing (optional)" };
+const ACK_SHORT = { terms: "Master Terms & Conditions", payment: "Prompt payment terms", pcp: "PCP credit terms", survey: "Site survey & system layout", mockup: "Camera mockup", cxEquip: "Customer-provided equipment", existingCable: "Existing cabling", marketing: "Marketing (optional)" };
 const METHOD = { draw: "Drawn", type: "Typed", upload: "Uploaded image" };
 
 export async function completeSession({ token, accessId, caller, ip = null, ua = null, now = Date.now() }) {
@@ -24,7 +24,7 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
   let payload; try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
   // Which acknowledgments apply is decided by the STORED unsigned document (does it carry survey / mockup
   // pages), never by the client — so the survey/mockup sign-off can't be skipped or faked.
-  const facts = { hasSurvey: !!doc.meta?.hasSurvey, hasMockup: !!doc.meta?.hasMockup };
+  const facts = { hasSurvey: !!doc.meta?.hasSurvey, hasMockup: !!doc.meta?.hasMockup, option: s.option_key };
   if (missingRequired(values, payload, facts).length) return fail("MISSING", "Add your signature and agree to the required terms first.");
   // Every signature field must have been placed (and persisted) — the document isn't Approved until all
   // required signatures are in, not just one adopted. The placements come from the session, not the client.

@@ -4,6 +4,7 @@
 // Ported from the legacy calculator (public/proposal-v3.html CATALOG/optTotals) with
 // the per-camera labor bundle priced per the owner: Cat6 Drop $150, Cat6 Termination $20,
 // Camera Mounting $20, Camera Programming $20, Camera Waterproofing $20.
+import { normalizeConditions, inferPresetConditions, lineConditions } from "./proposal-terms.js";
 
 export const OPTION_LETTERS = ["A", "B", "C"];
 export const OPTION_NAMES = ["Premium Security", "Alternative Option", "Premium"];
@@ -190,8 +191,12 @@ export function makePresetBlock(preset, book) {
   const b = book || loadPriceBook();
   const px = (name) => priceOf(name, b);
   const dn = (name) => displayNameOf(name, b);
+  // A preset can carry its conditions explicitly; otherwise infer them from its name so owner-named
+  // bundles ("CX Provided …", "Existing Cable …") drop with the matching condition pre-set.
+  const conditions = normalizeConditions(preset.conditions?.length ? preset.conditions : inferPresetConditions(preset.name));
   return {
     id: newItemId(), name: preset.name || "Bundle", qty: 1, price: 0, cost: 0,
+    ...(conditions.length ? { conditions } : {}),
     sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: +x.qty || 1, price: px(x.name), cost: 0 })),
   };
 }
@@ -687,8 +692,14 @@ function _fpHash(str) {
   for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h |= 0; }
   return (h >>> 0).toString(36);
 }
-const _fpItem = (it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0, w: !!it?.waived,
-  s: (it?.sub || []).map((x) => ({ n: x?.name || "", q: +x?.qty || 0, p: +x?.price || 0 })) });
+const _fpItem = (it) => {
+  const base = { n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0, w: !!it?.waived,
+    s: (it?.sub || []).map((x) => ({ n: x?.name || "", q: +x?.qty || 0, p: +x?.price || 0 })) };
+  // Conditions are part of what the customer agreed to (they drive a signed acknowledgment), so a change
+  // voids the signature. Added only when present, so items without conditions hash exactly as before.
+  const c = lineConditions(it);
+  return c.length ? { ...base, c: [...c].sort() } : base;
+};
 const _fpSvc = (s) => ({ n: s?.name || "", items: (s?.items || []).map(_fpItem) });
 const _fpOpt = (o) => ({ n: o?.name || "", disc: o?.discount ?? null, pcp: o?.pcpCredit ?? 0, svc: (o?.services || []).map(_fpSvc) });
 export function proposalFingerprint(payload, taxRate = 0, depositPct = 0) {
@@ -996,6 +1007,7 @@ export function validatePayload(payload) {
       for (const it of s.items || []) {
         const rows = [it, ...(it.sub || [])];
         if ((it.sub || []).length > 20) return "Too many sub-items.";
+        if (it.conditions != null && (!Array.isArray(it.conditions) || it.conditions.length > 8 || it.conditions.some((k) => typeof k !== "string" || k.length > 40))) return "Bad conditions.";
         for (const x of rows) {
           if (String(x.name || "").length > 120) return "Item name too long.";
           if (x.desc != null && String(x.desc).length > 600) return "Description too long.";   // optional customer-facing blurb, separate from the product name
