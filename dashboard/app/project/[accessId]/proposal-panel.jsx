@@ -169,6 +169,19 @@ const PROP_CSS = `
 .pvx .prop-item-desc{grid-column:1 / -1;margin:1px 0 0;border:0;background:transparent;font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);padding:2px 4px 2px 2px;width:100%;outline:none;box-sizing:border-box}
 .pvx .prop-item-desc:focus{background:var(--dv-raise,#FBFBFA);border-radius:5px}
 .pvx .prop-item-desc::placeholder{font-style:normal;color:#c2c6cf}
+/* Progressive description: the "+ description" control + the inline editor + remove-confirm. Empty optional
+   descriptions never reserve a row. */
+.pvx .prop-desc-row{grid-column:1 / -1;display:flex;align-items:center;gap:6px;margin:1px 0 0;position:relative}
+.pvx .prop-desc-row .prop-item-desc{grid-column:auto;flex:1;margin:0}
+.pvx .prop-item-descro{font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);padding:2px 4px 2px 2px}
+.pvx .prop-desc-add{display:inline-flex;align-items:center;gap:5px;background:none;border:none;color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;font-family:inherit;cursor:pointer;padding:2px 6px 2px 2px;border-radius:5px}
+.pvx .prop-desc-add:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-desc-rm{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:5px;flex-shrink:0}
+.pvx .prop-desc-rm:hover{color:var(--dv-red,#C4553D);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-desc-confirm{position:absolute;right:0;top:calc(100% + 4px);z-index:30;display:flex;align-items:center;gap:8px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;box-shadow:0 10px 26px rgba(16,20,24,.14);padding:7px 10px;font-size:.76rem;font-weight:500;color:var(--dv-ink,#101418);white-space:nowrap}
+.pvx .prop-desc-cancel{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-desc-cancel:hover{color:var(--dv-ink,#101418)}
+.pvx .prop-desc-go{height:26px;padding:0 11px;border:none;border-radius:6px;background:var(--dv-red,#C4553D);color:#fff;font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit}
 .pvx .prop-item.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-item input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;width:100%;box-sizing:border-box}
 .pvx .prop-item input:focus{border-color:var(--dv-gold-text,#8A6A1F)}

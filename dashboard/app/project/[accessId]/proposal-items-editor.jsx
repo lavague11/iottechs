@@ -151,6 +151,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
   const preEdit = useRef({});                 // { [subId_field]: oldValue } captured onFocus
   const [bulkPrompt, setBulkPrompt] = useState(null);  // { parentId, subId, field, name, oldValue, newValue, cur:[], all:[] }
+  // Optional customer descriptions are progressive-disclosure: hidden until "+ description" is clicked (or the
+  // item already has one). descOpen = ids with the editor open; descConfirm = id awaiting a remove-confirm.
+  const [descOpen, setDescOpen] = useState(() => new Set());
+  const [descConfirm, setDescConfirm] = useState(null);
+  const openDesc = (id) => setDescOpen((s) => new Set(s).add(id));
+  const closeDesc = (id) => setDescOpen((s) => { const n = new Set(s); n.delete(id); return n; });
+  function removeDesc(id) {
+    const it = svc.items.find((x) => x.id === id);
+    if (it?.desc && it.desc.trim()) { setDescConfirm(id); return; }   // has content → confirm (don't destroy text)
+    closeDesc(id);                                                     // empty → just collapse
+  }
+  function confirmRemoveDesc(id) { patchItem(id, { desc: "" }); closeDesc(id); setDescConfirm(null); }
   // Detect a committed sub-item edit (blur / Enter) and open the propagate prompt when there are still-old matches.
   function maybeBulk(parent, sub, field) {
     if (readOnly || !payload || !onBulkApply) return;
@@ -552,13 +564,37 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <button className="prop-item-x" title="Remove"
                 onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
       ) : <span />}
-      {/* Optional customer-facing description — separate from the product name. Spans the full row; shown
-          for top-level lines only (sub-items don't carry one). Empty + editable = a faint placeholder. */}
-      {!parent && (!readOnly || it.desc) && (
-        <input className="prop-item-desc" value={it.desc || ""} disabled={readOnly} maxLength={600}
-               placeholder="Customer description (optional)" title="A short explanation the customer sees on the proposal — not the product name"
-               onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
-      )}
+      {/* Optional customer-facing description — progressive disclosure (top-level lines only). An empty optional
+          field never reserves a row; "+ description" reveals the editor. An existing description always shows. */}
+      {!parent && (() => {
+        const hasDesc = !!(it.desc && it.desc.trim());
+        if (readOnly) return hasDesc ? <div className="prop-desc-row"><span className="prop-item-descro">{it.desc}</span></div> : null;
+        if (!(hasDesc || descOpen.has(it.id))) return (
+          <div className="prop-desc-row">
+            <button type="button" className="prop-desc-add" title="Add a customer-facing description" aria-label="Add description" onClick={() => openDesc(it.id)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              description
+            </button>
+          </div>
+        );
+        return (
+          <div className="prop-desc-row open">
+            <input className="prop-item-desc" value={it.desc || ""} maxLength={600} autoFocus={descOpen.has(it.id) && !hasDesc}
+                   placeholder="Customer description…" title="A short explanation the customer sees on the proposal — not the product name"
+                   onFocus={() => openDesc(it.id)} onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
+            <button type="button" className="prop-desc-rm" title="Remove description" aria-label="Remove description" onClick={() => removeDesc(it.id)}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            {descConfirm === it.id && (
+              <div className="prop-desc-confirm" role="dialog" aria-label="Remove description">
+                <span>Remove description?</span>
+                <button type="button" className="prop-desc-cancel" onClick={() => setDescConfirm(null)}>Cancel</button>
+                <button type="button" className="prop-desc-go" onClick={() => confirmRemoveDesc(it.id)}>Remove</button>
+              </div>
+            )}
+          </div>
+        );
+      })()}
       {parent && bulkPrompt?.subId === it.id && (
         <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
       )}
