@@ -11,7 +11,7 @@ const newId = () => "p" + Date.now().toString(36) + Math.random().toString(36).s
 // Preset bundle manager for ONE service. A preset is a named group of catalog items that
 // drops as a single line block (header + sub-items) from the builder's add bar — e.g.
 // "Full Camera Install" = Camera + Cat6 drop + termination + mounting + programming + waterproofing.
-export default function PresetEditor({ serviceKey, onClose, onSaved }) {
+export default function PresetEditor({ serviceKey, onClose, onSaved, embedded = false }) {
   // Materialize the merged presets (seed defaults + saved) into an editable array up front.
   const [book, setBook] = useState(() => { const b = loadPriceBook(); return { ...b, presets: loadPresets(b).map((p) => ({ ...p, items: [...(p.items || [])] })) }; });
   const [err, setErr] = useState(null);
@@ -48,12 +48,14 @@ export default function PresetEditor({ serviceKey, onClose, onSaved }) {
   }
 
   return (
-    <div className="pst-backdrop" onClick={onClose}>
+    <div className={`pst-backdrop${embedded ? " pst-embed" : ""}`} onClick={embedded ? undefined : onClose}>
       <div className="pst-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="pst-head">
-          <span className="pst-title">Preset bundles · {serviceLabel(serviceKey)}</span>
-          <button className="pst-x" onClick={onClose}>✕</button>
-        </div>
+        {!embedded && (
+          <div className="pst-head">
+            <span className="pst-title">Preset bundles · {serviceLabel(serviceKey)}</span>
+            <button className="pst-x" onClick={onClose}>✕</button>
+          </div>
+        )}
         <div className="pst-sub">One-click line bundles, priced from your catalog.</div>
         {err && <div className="pst-err">{err}</div>}
 
@@ -99,6 +101,9 @@ export default function PresetEditor({ serviceKey, onClose, onSaved }) {
 const PST_CSS = `
 .pvx .pst-backdrop{position:fixed;inset:0;z-index:10600;background:rgba(11,15,26,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
 .pvx .pst-modal{background:var(--dv-raise,#FBFBFA);border-radius:14px;width:min(540px,94vw);box-shadow:0 1px 2px rgba(16,20,24,.04);display:flex;flex-direction:column;overflow:hidden}
+/* Embedded in the Configuration Center */
+.pvx .pst-backdrop.pst-embed{position:static;inset:auto;z-index:auto;background:none;padding:0;overflow:visible;display:block}
+.pvx .pst-backdrop.pst-embed .pst-modal{width:100%;box-shadow:none;border-radius:0;background:none}
 .pvx .pst-head{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 4px}
 .pvx .pst-title{font-size:1.05rem;font-weight:600;color:var(--dv-ink,#101418)}
 .pvx .pst-x{background:none;border:none;font-size:1rem;color:var(--dv-meta,#787D84);cursor:pointer}

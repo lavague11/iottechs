@@ -3,7 +3,6 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
-import PresetEditor from "./proposal-preset-editor";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -209,8 +208,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [dispShown, setDispShown] = useState(1);  // display slots revealed (start at 1, "+ Add display" reveals more)
   const [askCam, setAskCam] = useState(null);     // preset awaiting a "how many cameras?" count (first camera only)
   const [camN, setCamN] = useState(4);
-  const [presetOpen, setPresetOpen] = useState(false); // preset-bundle manager modal
-  const [presetVer, setPresetVer] = useState(0);       // bumps after a preset save to refresh chips
+  const [renamingSvc, setRenamingSvc] = useState(false);   // service-name inline rename (double-click)
+  const [svcDraft, setSvcDraft] = useState("");
   const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
   const [dragId, setDragId] = useState(null);   // line item being dragged (within THIS section)
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
@@ -375,7 +374,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // click drops the whole bundle as a block (header + sub-items priced from the book).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = presetsForService(svc.key, loadPriceBook());
-  void presetVer; // referenced so the chip row recomputes after a preset save
+  void priceBookVersion; // chips recompute when the Configuration Center saves presets (bumps priceBookVersion)
   function addPresetBlock(preset, count = 1) {
     const book = loadPriceBook();
     const blocks = Array.from({ length: Math.max(1, +count || 1) }, () => makePresetBlock(preset, book));
@@ -613,16 +612,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><circle cx="9" cy="6" r="1.4"/><circle cx="15" cy="6" r="1.4"/><circle cx="9" cy="12" r="1.4"/><circle cx="15" cy="12" r="1.4"/><circle cx="9" cy="18" r="1.4"/><circle cx="15" cy="18" r="1.4"/></svg>
           </span>
         )}
-        <span className="prop-svc-name">
-          {svc.label}
-          {svc.key === "camera" && camCount > 0 && <span className="prop-svc-count"> · {camCount} camera{camCount !== 1 ? "s" : ""}</span>}
-        </span>
-        <span className="prop-svc-sub">{money(svcSubtotal(svc))}</span>
-        {!readOnly && onOpenPricing && (
-          <button className="prop-svc-gear" title={`${svc.label} pricing`} onClick={() => onOpenPricing(svc.key)}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-          </button>
+        {renamingSvc && !readOnly ? (
+          <input className="prop-svc-name-in" value={svcDraft} autoFocus maxLength={60}
+                 onChange={(e) => setSvcDraft(e.target.value)}
+                 onBlur={() => { const v = svcDraft.trim(); if (v && v !== svc.label) onChange({ ...svc, label: v }); setRenamingSvc(false); }}
+                 onKeyDown={(e) => { if (e.key === "Enter") { const v = svcDraft.trim(); if (v && v !== svc.label) onChange({ ...svc, label: v }); setRenamingSvc(false); } else if (e.key === "Escape") setRenamingSvc(false); }} />
+        ) : (
+          <span className="prop-svc-name" title={readOnly ? undefined : "Double-click to rename"}
+                onDoubleClick={() => { if (!readOnly) { setSvcDraft(svc.label); setRenamingSvc(true); } }}>
+            {svc.label}
+            {svc.key === "camera" && camCount > 0 && <span className="prop-svc-count"> · {camCount} camera{camCount !== 1 ? "s" : ""}</span>}
+          </span>
         )}
+        <span className="prop-svc-sp" />
         {!readOnly && <button className="prop-svc-x" title="Remove service" onClick={onRemove}>✕</button>}
       </div>
 
@@ -848,7 +850,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {!readOnly && (
         <div className="prop-addbar">
-          {/* Preset bundles — one-click line groups, kept at the top of the add area */}
+          {/* Preset bundles — one-click line groups (ACTIONS). The preset EDITOR lives in the top gear's
+              Configuration Center; these chips just add items. Hidden when the service has no presets. */}
+          {(presets.length > 0 || askCam) && (
           <div className="prop-preset-row">
             {presets.map((p, pi) => (
               <button key={p.id} className={`prop-preset-chip c${pi % 3}`} title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
@@ -863,11 +867,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 <button type="button" className="prop-camask-x" onClick={() => setAskCam(null)}>Cancel</button>
               </span>
             )}
-            <button className="prop-preset-edit" title="Create or edit preset bundles" onClick={() => setPresetOpen(true)}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-              {presets.length ? "Edit presets" : "+ Preset"}
-            </button>
           </div>
+          )}
           <div className="prop-addrow-basic">
             <button className="prop-mini" onClick={() => addItem()}>+ Item</button>
             {catalog.length > 0 && (
@@ -883,14 +884,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       )}
 
       {svc.note && <div className="prop-svc-note">{svc.note}</div>}
-
-      {presetOpen && (
-        <PresetEditor
-          serviceKey={svc.key}
-          onClose={() => setPresetOpen(false)}
-          onSaved={() => { setPresetVer((v) => v + 1); setPresetOpen(false); }}
-        />
-      )}
     </div>
   );
 }

@@ -8,7 +8,7 @@ import {
   toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, fmtSignStamp, cameraNameOverrides,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
-import PricingDefaults from "./proposal-pricing";
+import { ProposalConfig } from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
 import AiCommandBar from "./ai-command-bar";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -618,7 +618,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <span className="prop-preview-chip" title="You're viewing by PIN — log in to save changes">Preview · log in to edit</span>
         );
         const gear = !readOnly && (
-          <button className="prop-gear" title="Default pricing (all services)" onClick={() => setPricingOpen("__all__")}>
+          <button className="prop-gear" title="Configuration — pricing &amp; presets" onClick={() => setPricingOpen("__all__")}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         );
@@ -1074,12 +1074,15 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
       </div>)}
 
+      {/* ONE Configuration Center (top gear): Default Pricing · Service Pricing · Presets. A service's
+          "Configure pricing" (if surfaced) opens it straight to the Service tab via setPricingOpen(key).
+          Stays open on Save so you can configure more than one tab in a sitting. */}
       {pricingOpen && (
-        <PricingDefaults
-          scopeKey={pricingOpen === "__all__" ? null : pricingOpen}
+        <ProposalConfig
+          startTab={pricingOpen === "__all__" ? "default" : "service"}
+          startService={pricingOpen === "__all__" ? (defaultService || "camera") : pricingOpen}
           onClose={() => setPricingOpen(null)}
           onSaved={() => {
-            setPricingOpen(null);
             setPriceBookVersion((v) => v + 1); // refreshes every service's quick-add catalog
             setImportMsg("Pricing saved — applies to new imports & items, not what's already placed.");
           }}

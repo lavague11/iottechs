@@ -5,6 +5,7 @@ import {
   loadPriceBook, savePriceBookCache,
 } from "../../../lib/proposal";
 import { getPriceBookAction, savePriceBookAction } from "./proposal-actions";
+import PresetEditor from "./proposal-preset-editor";
 
 const nice = (name) => name.replace(/^NVR \(|\)$/g, "").replace(/ Storage Drive$/, "");
 const LABOR_NAMES = new Set(PRICE_FIELDS[0].names);
@@ -46,7 +47,7 @@ function rowsFor(section, book) {
   return [...base, ...custom];
 }
 
-export default function PricingDefaults({ onClose, onSaved, scopeKey }) {
+export default function PricingDefaults({ onClose, onSaved, scopeKey, embedded = false }) {
   const sections = sectionsFor(scopeKey);
   const [book, setBook] = useState(() => loadPriceBook());
   const [open, setOpen] = useState(() => ({ [sections[0]?.id]: true }));
@@ -128,13 +129,15 @@ export default function PricingDefaults({ onClose, onSaved, scopeKey }) {
   const title = scopeKey ? `${serviceLabel(scopeKey)} pricing` : "Default pricing";
 
   return (
-    <div className="prc-backdrop" onClick={onClose}>
+    <div className={`prc-backdrop${embedded ? " prc-embed" : ""}`} onClick={embedded ? undefined : onClose}>
       <div className="prc-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="prc-head">
-          <span className="prc-title">{title}</span>
-          <button className="prc-x" onClick={onClose}>✕</button>
-        </div>
-        <div className="prc-sub">Company-wide · affects new items only.</div>
+        {!embedded && (
+          <div className="prc-head">
+            <span className="prc-title">{title}</span>
+            <button className="prc-x" onClick={onClose}>✕</button>
+          </div>
+        )}
+        <div className="prc-sub">{scopeKey ? `${serviceLabel(scopeKey)} — new items in this proposal.` : "Company-wide defaults for newly added items."} Changes don’t rewrite items already placed.</div>
         {err && <div className="prc-err">{err}</div>}
 
         <div className="prc-body">
@@ -202,6 +205,9 @@ export default function PricingDefaults({ onClose, onSaved, scopeKey }) {
 const PRC_CSS = `
 .pvx .prc-backdrop{position:fixed;inset:0;z-index:10600;background:rgba(11,15,26,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
 .pvx .prc-modal{background:var(--dv-raise,#FBFBFA);border-radius:14px;width:min(520px,94vw);box-shadow:0 1px 2px rgba(16,20,24,.04);display:flex;flex-direction:column;overflow:hidden}
+/* Embedded in the Configuration Center: no backdrop/modal chrome, the shell provides it. */
+.pvx .prc-backdrop.prc-embed{position:static;inset:auto;z-index:auto;background:none;padding:0;overflow:visible;display:block}
+.pvx .prc-backdrop.prc-embed .prc-modal{width:100%;box-shadow:none;border-radius:0;background:none}
 .pvx .prc-head{display:flex;align-items:center;justify-content:space-between;padding:20px 22px 4px}
 .pvx .prc-title{font-size:1.05rem;font-weight:600;color:var(--dv-ink,#101418)}
 .pvx .prc-x{background:none;border:none;font-size:1rem;color:var(--dv-meta,#787D84);cursor:pointer}
@@ -237,4 +243,65 @@ const PRC_CSS = `
 .pvx .prc-save{height:38px;padding:0 22px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.86rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prc-save:hover{filter:brightness(1.12)}
 .pvx .prc-save:disabled{opacity:.6;cursor:default}
+`;
+
+// The one proposal Configuration Center. ONE modal, three tabs over the EXISTING editors (never a second
+// pricing engine): Default Pricing (company-wide catalog), Service Pricing (per-service catalog), Presets
+// (per-service bundles). Scopes stay distinct — only the UI location is merged. Tab + service are remembered
+// while the modal is open. `services` = the configurable services to offer in the Service/Presets selectors.
+export function ProposalConfig({ onClose, onSaved, startTab = "default", startService = "camera", services = PROPOSAL_SERVICES }) {
+  const [tab, setTab] = useState(startTab);
+  const [svc, setSvc] = useState(startService);
+  const needsSel = tab === "service" || tab === "presets";
+  return (
+    <div className="cfg-backdrop" onClick={onClose}>
+      <div className="cfg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="cfg-head">
+          <span className="cfg-title">Proposal Configuration</span>
+          <button className="cfg-x" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="cfg-tabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "default"} className={tab === "default" ? "on" : ""} onClick={() => setTab("default")}>Default Pricing</button>
+          <button type="button" role="tab" aria-selected={tab === "service"} className={tab === "service" ? "on" : ""} onClick={() => setTab("service")}>Service Pricing</button>
+          <button type="button" role="tab" aria-selected={tab === "presets"} className={tab === "presets" ? "on" : ""} onClick={() => setTab("presets")}>Presets</button>
+        </div>
+        {needsSel && (
+          <div className="cfg-svcsel">
+            <label htmlFor="cfg-svc">Service</label>
+            <select id="cfg-svc" value={svc} onChange={(e) => setSvc(e.target.value)}>
+              {services.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="cfg-body">
+          {tab === "default" && <PricingDefaults embedded scopeKey={null} onSaved={onSaved} />}
+          {tab === "service" && <PricingDefaults embedded key={`svc-${svc}`} scopeKey={svc} onSaved={onSaved} />}
+          {tab === "presets" && <PresetEditor embedded key={`pst-${svc}`} serviceKey={svc} onSaved={onSaved} />}
+        </div>
+        <style>{CFG_CSS}</style>
+      </div>
+    </div>
+  );
+}
+
+const CFG_CSS = `
+.pvx .cfg-backdrop{position:fixed;inset:0;z-index:10600;background:rgba(11,15,26,.5);display:flex;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+.pvx .cfg-modal{background:var(--dv-raise,#FBFBFA);border-radius:14px;width:min(640px,96vw);max-height:84dvh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px -18px rgba(16,17,18,.5)}
+.pvx .cfg-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 10px;flex:0 0 auto}
+.pvx .cfg-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pvx .cfg-x{background:none;border:none;font-size:1rem;color:var(--dv-meta,#787D84);cursor:pointer;line-height:1}
+.pvx .cfg-x:hover{color:var(--dv-red,#C4553D)}
+.pvx .cfg-tabs{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--dv-line,#E4E4DF);flex:0 0 auto;overflow-x:auto}
+.pvx .cfg-tabs button{appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-meta,#787D84);padding:10px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.pvx .cfg-tabs button:hover{color:var(--dv-ink,#101418)}
+.pvx .cfg-tabs button.on{color:var(--dv-ink,#101418);border-bottom-color:var(--dv-gold,#C9A96E)}
+.pvx .cfg-svcsel{display:flex;align-items:center;gap:10px;padding:13px 22px 2px;flex:0 0 auto}
+.pvx .cfg-svcsel label{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.pvx .cfg-svcsel select{height:34px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418);padding:0 10px;outline:none;cursor:pointer}
+.pvx .cfg-svcsel select:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .cfg-body{flex:1 1 auto;min-height:0;overflow-y:auto}
+@media(max-width:560px){
+  .pvx .cfg-backdrop{padding:0}
+  .pvx .cfg-modal{width:100vw;max-height:100dvh;height:100dvh;border-radius:0}
+}
 `;
