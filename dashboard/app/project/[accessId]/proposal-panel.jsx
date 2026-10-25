@@ -86,6 +86,9 @@ const PROP_CSS = `
 .pvx .prop-fp-go:hover{filter:brightness(1.12)}
 .pvx .prop-fp-go:disabled{opacity:.5;cursor:default}
 .pvx .prop-block-num{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin-right:7px;border-radius:6px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-ink-soft,#3A4048);font-size:.68rem;font-weight:600;flex-shrink:0}
+/* Infrastructure badge — a dark/inverted equipment chip (gold glyph + thin gold border) where the number would
+   sit. The one cue that a row is supporting hardware (NVR/amp/display/switch), not a numbered endpoint. */
+.pvx .prop-infra-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;width:20px;height:20px;margin-right:7px;border-radius:6px;background:var(--dv-ink,#101418);color:var(--dv-gold,#C9A96E);border:1px solid var(--dv-gold,#C9A96E);flex-shrink:0}
 .pvx .prop-cflag-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:8px;flex-shrink:0}
 .pvx .prop-cflag{padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:600;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .pvx .prop-cflag.remove{background:#fbe9e6;color:var(--dv-red,#C4553D)}
@@ -267,6 +270,10 @@ const PROP_CSS = `
 .pvx .prop-preset-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .pvx .prop-addrow-basic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:none;border-radius:999px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+/* Color-coded preset chips (green / yellow / orange) so each bundle is distinct at a glance */
+.pvx .prop-preset-chip.c0{background:#2E7D5B}
+.pvx .prop-preset-chip.c1{background:#C79A1E}
+.pvx .prop-preset-chip.c2{background:#C56B2C}
 .pvx .prop-preset-chip:hover{filter:brightness(1.12)}
 .pvx .prop-preset-edit{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-preset-edit:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}

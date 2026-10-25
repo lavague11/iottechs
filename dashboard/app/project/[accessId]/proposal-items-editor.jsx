@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import PresetEditor from "./proposal-preset-editor";
@@ -61,6 +61,24 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
 }
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Dark / inverted equipment badge (gold glyph) that sits where the number badge would — the one visual cue that
+// a line is infrastructure, not a numbered endpoint. Same footprint as .prop-block-num.
+function InfraBadge({ kind = "generic" }) {
+  const P = {
+    nvr: <><rect x="3" y="4.5" width="18" height="6" rx="1.3"/><rect x="3" y="13.5" width="18" height="6" rx="1.3"/><circle cx="6.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="16.5" r=".9" fill="currentColor" stroke="none"/></>,
+    display: <><rect x="3" y="4.5" width="18" height="11" rx="1.3"/><line x1="9" y1="19.5" x2="15" y2="19.5"/><line x1="12" y1="15.5" x2="12" y2="19.5"/></>,
+    amp: <><rect x="3" y="5" width="18" height="14" rx="1.3"/><circle cx="9" cy="12" r="3"/><circle cx="16.5" cy="9" r=".9" fill="currentColor" stroke="none"/><circle cx="16.5" cy="12.5" r=".9" fill="currentColor" stroke="none"/></>,
+    switch: <><rect x="2.5" y="8.5" width="19" height="7" rx="1.3"/><line x1="6.5" y1="12" x2="6.5" y2="12"/><line x1="10.5" y1="12" x2="10.5" y2="12"/><line x1="14.5" y1="12" x2="14.5" y2="12"/><line x1="18" y1="12" x2="18" y2="12"/></>,
+    panel: <><rect x="5" y="2.5" width="14" height="19" rx="2"/><line x1="8.5" y1="6.5" x2="15.5" y2="6.5"/><circle cx="12" cy="14" r="3"/></>,
+    generic: <><rect x="4.5" y="4.5" width="15" height="15" rx="2"/></>,
+  };
+  return (
+    <span className="prop-infra-badge" title="Infrastructure">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{P[kind] || P.generic}</svg>
+    </span>
+  );
+}
 
 // Anchored "update matching items?" confirm shown after a repeated sub-item value is committed. Compact, one
 // clear primary action; the scope toggle appears only with multiple options. Closes on Escape / outside click
@@ -403,9 +421,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     sub: rackItem ? rackItem.name : "No rack", total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
     items: [ampItem, ...(rackItem ? [rackItem] : [])].map((d) => ({ name: d.name, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
   const leadCount = leadRows.length;
-  // Camera location blocks number AFTER the collapsed recording-system lines (1, 2, then cameras).
+  // Number ONLY endpoints (cameras / speakers / sensors), from 1 — infrastructure in the list gets an icon, not
+  // a number, and the collapsed recording-system lines (NVR/Displays/Amp) are infrastructure too. So "8 cameras"
+  // is badges 1–8 with no gaps. (leadCount no longer offsets the numbering.)
   const blockNumOf = {};
-  visibleItems.forEach((it, i) => { blockNumOf[it.id] = leadCount + i + 1; });
+  let _epN = 0;
+  visibleItems.forEach((it) => { if (lineRole(it) === "endpoint") blockNumOf[it.id] = ++_epN; });
 
   // Drag-to-reorder the numbered line-item blocks. Sysbar items (NVR/drives/displays) keep
   // their spots — only the visible blocks reorder, then the sysbar items are re-appended.
@@ -440,7 +461,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
         {/* The breakdown toggle now lives on the PRICE (see .prop-price-toggle below) — one affordance,
             not a separate left chevron. */}
-        {!parent && blockNumOf[it.id] && <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span>}
+        {!parent && (lineRole(it) === "infrastructure"
+          ? <InfraBadge kind={infraKindOf((it.baseName && it.baseName !== "__custom__") ? it.baseName : it.name)} />
+          : blockNumOf[it.id] ? <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span> : null)}
         {hasSub ? (
           editingId === it.id ? (
             <input value={it.name} disabled={readOnly} placeholder="Item" autoFocus
@@ -741,7 +764,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] ? "Hide breakdown" : "Show breakdown"}
                       onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: !o[lr.key] }))}>{leadOpen[lr.key] ? "▾" : "▸"}</button>
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
-            <span className="prop-block-num" style={{ background: svcColor }}>{i + 1}</span>
+            <InfraBadge kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>
             <span className="prop-sysline-sub">{lr.sub}</span>
             <span className="prop-sysline-total">{money(lr.total)}</span>
@@ -792,8 +815,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <div className="prop-addbar">
           {/* Preset bundles — one-click line groups, kept at the top of the add area */}
           <div className="prop-preset-row">
-            {presets.map((p) => (
-              <button key={p.id} className="prop-preset-chip" title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
+            {presets.map((p, pi) => (
+              <button key={p.id} className={`prop-preset-chip c${pi % 3}`} title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
             ))}
             {askCam && (
               <span className="prop-camask">

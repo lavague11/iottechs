@@ -632,6 +632,28 @@ export function surveyToImport(survey, floorIndex) {
 // ---- Totals ----------------------------------------------------------------
 const r2 = (n) => Math.round((+n || 0) * 100) / 100;
 const lineTotal = (it) => (+it.qty || 0) * (+it.price || 0);
+
+// Presentation classification for a proposal line item. A number badge means "this is camera / speaker #N" — a
+// countable ENDPOINT. Supporting hardware (NVR, amplifier, display, PoE switch, controller, panel) is
+// INFRASTRUCTURE and gets an icon badge, not a number — so "8 cameras" reads as badges 1–8 with no
+// counting-and-subtracting. Classified from canonical metadata (a camera install block carries sub-items;
+// everything else by its baseName, falling back to the display name), never a row index. Pure.
+export const INFRA_RE = /\b(nvr|dvr|recorder|poe|switch|amplifier|amp|controller|head[\s-]?end|hub|gateway|router|modem|bridge|rack|patch\s*panel|control\s*panel|monitor|display|screen|tv|storage|drive|hdd)\b/i;
+export function lineRole(it) {
+  if (it?.sub && it.sub.length) return "endpoint";           // a camera install block = a camera endpoint
+  const n = (it?.baseName && it.baseName !== "__custom__") ? it.baseName : (it?.name || "");
+  return INFRA_RE.test(n) ? "infrastructure" : "endpoint";
+}
+// Which infrastructure glyph to show — by a leadRow key ("nvr"/"disp"/"amp") or an item's name.
+export function infraKindOf(src) {
+  const s = String(src || "").toLowerCase();
+  if (/nvr|dvr|recorder|storage|drive|hdd/.test(s)) return "nvr";
+  if (/amp/.test(s)) return "amp";
+  if (/display|monitor|screen|tv|disp/.test(s)) return "display";
+  if (/poe|switch|hub|gateway|router|modem|bridge|network/.test(s)) return "switch";
+  if (/panel|controller/.test(s)) return "panel";
+  return "generic";
+}
 // An item's full total includes its sub-items (a camera block = camera + drop + labor).
 // A waived item is comped off the invoice — it still appears, but contributes $0.
 export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + lineTotal(x), 0);
