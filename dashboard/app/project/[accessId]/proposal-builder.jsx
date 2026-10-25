@@ -630,6 +630,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         );
+        // + Option lives in the toolbar (a second pricing option is a proposal-level action, like Submit /
+        // download / config) rather than a standalone row above the first service.
+        const addOptionBtn = !readOnly && !servicesEmpty && payload.options.length < 3 && (
+          <button type="button" className="prop-opt-add" onClick={addOption} title="Add a second pricing option">+ Option</button>
+        );
         // Eye icon (staff only, once sent) → how many times the customer opened the proposal and when.
         const isStaff = ["admin", "manager", "sales"].includes(role);
         const eye = isStaff && onShowViews && ["sent", "accepted", "changes_requested"].includes(status) && (
@@ -680,7 +685,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           // One compact toolset (matches the mobile mockup): Sent · Edit · views · share · download.
           // Copy ("use for another project") is not in the primary toolbar. On mobile the Sent stamp
           // compacts to just "● Sent" (CSS) and the row centers; desktop keeps the full date/sender stamp.
-          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{previewChip}{requestSignBtn}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}</div>;
+          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{previewChip}{requestSignBtn}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}{addOptionBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -758,10 +763,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         </div>
       )}
 
-      {/* Option tabs — only meaningful when there's a CHOICE (2+ options). A lone option (e.g.
-          "A · Premium Security") is redundant, so the whole row is hidden unless there are multiple
-          options or you're editing (where "+ Option" lets you add a second). */}
-      {(payload.options.length > 1 || (!readOnly && !servicesEmpty && payload.options.length < 3)) && (
+      {/* Option tabs — only meaningful when there's a CHOICE (2+ options). A lone option is redundant, so
+          the row is hidden for a single option; "+ Option" now lives in the top toolbar. */}
+      {payload.options.length > 1 && (
       <div className="prop-tabs">
         {payload.options.length > 1 && payload.options.map((o) => {
           const active = o.id === activeOpt;
@@ -780,9 +784,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             </button>
           );
         })}
-        {!readOnly && payload.options.length < 3 && (
-          <button className="prop-tab prop-tab-add" onClick={addOption}>+ Option</button>
-        )}
       </div>
       )}
 

@@ -211,6 +211,39 @@ function SysRowMenu({ onEdit, onClose }) {
     </div>
   );
 }
+// Service-header gear menu (replaces the old remove-service ✕): this service's pricing & presets, plus the
+// (destructive) remove-service at the bottom.
+function SvcHeadMenu({ onPricing, onRemove, onClose }) {
+  const [confirming, setConfirming] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  return (
+    <div className="prop-im" ref={ref} role="menu">
+      {confirming ? (
+        <div className="prop-im-confirm">
+          <div className="prop-im-ctitle">Remove this service?</div>
+          <div className="prop-im-csub">Its line items go with it.</div>
+          <div className="prop-im-cacts">
+            <button type="button" className="prop-im-cancel" onClick={onClose}>Cancel</button>
+            <button type="button" className="prop-im-go" onClick={() => { onRemove(); onClose(); }}>Remove</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onPricing(); onClose(); }}>Pricing &amp; presets</button>
+          <div className="prop-im-sep" />
+          <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove service</button>
+        </>
+      )}
+    </div>
+  );
+}
 // Dictation: a mic button that fills a text field by voice (Web Speech API). Renders nothing when the
 // browser has no SpeechRecognition (and stays quiet if the mic is blocked — e.g. inside the preview pane),
 // so it's a pure enhancement. onText receives the recognized phrase to append.
@@ -258,6 +291,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [descOpen, setDescOpen] = useState(() => new Set());
   const [menuOpen, setMenuOpen] = useState(null);   // id of the line-item (•••) action menu that's open
   const [subEditId, setSubEditId] = useState(null); // sub-item being inline-edited (one at a time); else compact
+  const [svcMenuOpen, setSvcMenuOpen] = useState(false); // service-header gear menu (pricing/presets · remove)
   const openDesc = (id) => setDescOpen((s) => new Set(s).add(id));
   const closeDesc = (id) => setDescOpen((s) => { const n = new Set(s); n.delete(id); return n; });
   // Detect a committed sub-item edit (blur / Enter) and open the propagate prompt when there are still-old matches.
@@ -828,7 +862,21 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           </span>
         )}
         <span className="prop-svc-sp" />
-        {!readOnly && <button className="prop-svc-x" title="Remove service" onClick={onRemove}>✕</button>}
+        {!readOnly && (
+          <div className="prop-svc-gearwrap">
+            <button type="button" className="prop-svc-gear" title="Service settings — pricing, presets, remove"
+                    aria-label="Service settings" onClick={(e) => { e.stopPropagation(); setSvcMenuOpen((o) => !o); }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+            {svcMenuOpen && (
+              <SvcHeadMenu
+                onPricing={() => onOpenPricing && onOpenPricing(svc.key)}
+                onRemove={onRemove}
+                onClose={() => setSvcMenuOpen(false)}
+              />
+            )}
+          </div>
+        )}
       </div>
 
       {/* First things first — the recording system: NVR model + a drive picker per HDD bay. NVR and

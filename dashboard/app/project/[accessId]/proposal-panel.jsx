@@ -67,6 +67,9 @@ const PROP_CSS = `
 .pvx .prop-title{font-family:inherit;font-size:.97rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
 .pvx .prop-gear{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer}
 .pvx .prop-eye{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);cursor:pointer;font-family:inherit}
+/* + Option moved into the toolbar — a compact outlined action matching the icon buttons */
+.pvx .prop-head-slim .prop-opt-add{flex-shrink:0;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-head-slim .prop-opt-add:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-eye:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-eye-n{font-size:.78rem;font-weight:800;color:var(--dv-ink,#101418)}
 .pvx .prop-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
@@ -166,7 +169,9 @@ const PROP_CSS = `
 .pvx .prop-slot-costin{flex:0 0 78px;width:78px;box-sizing:border-box;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;text-align:right;font-size:.7rem;font-weight:500;color:var(--dv-meta,#787D84);font-family:inherit;outline:none;padding:0 6px;background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-slot-costin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.85rem;cursor:pointer;padding:2px 6px}
-.pvx .prop-svc-gear{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:#fff;color:var(--dv-meta,#787D84);cursor:pointer;flex-shrink:0}
+.pvx .prop-svc-gearwrap{position:relative;flex-shrink:0;display:inline-flex}
+.pvx .prop-svc-gear{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:7px;background:none;color:var(--dv-meta,#787D84);cursor:pointer;flex-shrink:0}
+.pvx .prop-svc-gear:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-svc-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x:hover{color:var(--dv-red,#C4553D)}
 .pvx .prop-item{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;align-items:center;padding:7px 12px;border-top:1px solid var(--dv-line,#E4E4DF)}
