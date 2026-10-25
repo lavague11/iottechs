@@ -202,9 +202,12 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
   if (!total || !cur) return null;
   const f = cur.floor;
   const activeShape = shapes[floorStops.findIndex((x) => x.i === idx)] || null;
+  // Adaptive layout: only the active stop's media drives it. No photo on this stop → the right panel is removed
+  // and the plan takes the full walkthrough width (the camera title moves to a compact overlay on the plan).
+  const activeHasPhoto = !!cur.shot;
 
   const tree = (
-    <div className={`swk2${fs ? " fs" : ""}`}>
+    <div className={`swk2${fs ? " fs" : ""}${activeHasPhoto ? "" : " no-photo"}`}>
       <style>{CSS}</style>
 
       {fs && (
@@ -220,6 +223,19 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
       {/* MAP — the floor plan stays put; the selected device's marker + coverage are emphasised, the rest dimmed */}
       <div className="swk2-map" ref={mapRef}>
         <img className="swk2-plan" ref={aerialRef} onLoad={measure} src={f.bg} alt={f.name} />
+        {/* No-photo mode: the plan is the hero, so the camera step/name lives in a compact overlay here instead
+            of the (removed) right column. */}
+        {!activeHasPhoto && (
+          <div className="swk2-map-ttl">
+            <span className="swk2-mt-idx">{pad2(idx + 1)} / {pad2(total)}</span>
+            <span className="swk2-kind"><Ico kind={cur.kind} /></span>
+            <b className="swk2-mt-name">{cur.name}</b>
+            <button type="button" className={`swk2-mt-note${notes[cur.key] ? " on" : ""}`} title="Note" aria-label="Leave a note"
+              onClick={() => { setDraft(notes[cur.key] || ""); setCommentOpen((v) => !v); setPlaying(false); }}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+            </button>
+          </div>
+        )}
         {plate && regions && (
           <div className="swk2-site" aria-hidden="true" style={{ left: `${plate.l}px`, top: `${plate.t}px`, width: `${plate.w}px`, height: `${plate.h}px` }}>
             <svg viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -229,16 +245,8 @@ export default function SystemWalkthrough({ accessId = "", floors = [], photos =
             {regions.zones.map((z) => z.label ? <span key={`l-${z.key}`} className="swk2-zl" style={{ left: `${z.cx}%`, top: `${z.cy}%` }}>{z.label}</span> : null)}
           </div>
         )}
-        {plate && (
-          <svg className="swk2-cov" aria-hidden="true">
-            {floorStops.map(({ s, i }, j) => {
-              const sh = shapes[j];
-              return sh && i !== idx ? (
-                <g key={s.key} transform={`translate(${sh.px.toFixed(1)} ${sh.py.toFixed(1)}) rotate(${sh.rot})`}><path className={sh.kind} d={sh.d} /></g>
-              ) : null;
-            })}
-          </svg>
-        )}
+        {/* Only the ACTIVE device shows its coverage — the walkthrough presents one camera at a time, so the
+            other stops' cones are not drawn (their markers stay as neutral orientation references). */}
         {/* Selected device coverage — fans out on each advance, settles into the stored geometry (cone: aim/fov/
             range; ring: speaker radius; real feet when the floor is scaled). Never mutates the survey. */}
         {activeShape && (
@@ -368,6 +376,18 @@ const CSS = `
    Wide containers (desktop) go side by side — see the media query below. */
 .swk2-body{display:flex;flex-direction:column;gap:10px}
 .swk2.fs .swk2-body{display:grid;grid-template-rows:32dvh minmax(0,1fr);gap:8px;min-height:0;padding:8px 12px 0}
+/* Adaptive: the active stop has no photo → drop the right column entirely and let the plan be the hero. */
+.swk2.no-photo .swk2-side{display:none}
+.swk2.fs.no-photo .swk2-body{grid-template-rows:minmax(0,1fr)}
+.swk2.no-photo:not(.fs) .swk2-plan{max-height:min(66dvh,560px)}
+/* Camera step/name as a compact overlay on the plan (no-photo mode) — context without a reserved column. */
+.swk2-map-ttl{position:absolute;top:10px;left:10px;z-index:5;display:inline-flex;align-items:center;gap:8px;max-width:calc(100% - 44px);padding:6px 12px;border-radius:999px;background:rgba(16,20,24,.82);color:#fff;box-shadow:0 3px 12px rgba(0,0,0,.3)}
+.swk2-mt-idx{font-size:.72rem;font-weight:800;letter-spacing:.1em;color:var(--dv-gold,#C9A96E);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.swk2-map-ttl .swk2-kind{display:inline-flex;flex:0 0 auto;opacity:.92}
+.swk2-mt-name{font-size:.9rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.swk2-mt-note{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;margin-left:2px;border:none;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;padding:0}
+.swk2-mt-note:hover{background:rgba(255,255,255,.22)}
+.swk2-mt-note.on{background:var(--dv-gold,#C9A96E);color:#1a1712}
 
 /* MAP — stable floor plan; a white panel (contain letterbox is seamless on white plans) */
 .swk2-map{position:relative;overflow:hidden;background:#0b0f16;border-radius:14px}
@@ -381,11 +401,8 @@ const CSS = `
 .swk2-mk.spk{background:rgba(120,84,170,.72)}
 .swk2-mk:hover{transform:translate(-50%,-50%) scale(1.08);opacity:1}
 .swk2-mk.on{z-index:4;opacity:1;transform:translate(-50%,-50%) scale(1.18);background:var(--dv-gold,#C9A96E);color:#1a1712;border-color:#fff;box-shadow:0 0 0 4px rgba(201,169,110,.34),0 3px 9px rgba(0,0,0,.4)}
-/* Coverage. Selected = the animated wrapper (apex at the device; gold cone / blue ring); every other stop's
-   coverage is one shared faint SVG layer. Both sit under the markers. */
-.swk2-cov{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;pointer-events:none;overflow:visible}
-.swk2-cov path.cone{fill:rgba(201,169,110,.07);stroke:rgba(201,169,110,.32);stroke-width:1}
-.swk2-cov path.ring{fill:rgba(96,165,250,.07);stroke:rgba(96,165,250,.32);stroke-width:1}
+/* Coverage: ONLY the active device's cone is drawn (the walkthrough presents one camera at a time). The animated
+   wrapper has its apex at the device — gold cone / blue ring — and sits under the markers. */
 /* Site context (zones + estimated boundary) — static, quiet, under coverage (z0 < z1) and markers */
 .swk2-site{position:absolute;z-index:0;pointer-events:none}
 .swk2-site svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
@@ -459,6 +476,8 @@ const CSS = `
    in a narrow column) stays stacked. */
 @media (min-width:900px){
   .swk2.fs .swk2-body{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);gap:14px;align-items:stretch;padding:12px 18px 0}
+  /* No photo on the active stop → the plan spans the full width (no reserved right column). */
+  .swk2.fs.no-photo .swk2-body{grid-template-columns:minmax(0,1fr)}
   .swk2.fs .swk2-side{height:100%}
   .swk2.fs .swk2-cam-name{font-size:1.1rem}
   .swk2.fs .swk2-mk{width:30px;height:30px}

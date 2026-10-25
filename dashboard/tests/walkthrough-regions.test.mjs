@@ -16,11 +16,13 @@ test("walkthrough zone colours match the PDF export's map (one palette)", () => 
   assert.equal(rgbMap(wk), rgbMap(exp));
 });
 
-test("site layer: plate-% viewBox, under coverage + markers, static, never a legal line", () => {
+test("site layer: plate-% viewBox, under the ACTIVE coverage + markers, static, never a legal line", () => {
   assert.match(wk, /viewBox="0 0 100 100" preserveAspectRatio="none"/);
-  const siteZ = /\.swk2-site\{[^}]*z-index:(\d)/.exec(wk), covZ = /\.swk2-cov\{[^}]*z-index:(\d)/.exec(wk), mkZ = /\.swk2-mk\{[^}]*z-index:(\d)/.exec(wk);
-  assert.ok(+siteZ[1] < +covZ[1] && +covZ[1] <= +mkZ[1]);
-  assert.ok(wk.indexOf('className="swk2-site"') < wk.indexOf('className="swk2-cov"'));   // DOM order: under too
+  // Only the active device's cone is drawn (one camera at a time) — the shared non-active coverage layer is gone.
+  assert.doesNotMatch(wk, /className="swk2-cov"/, "no shared non-active coverage layer");
+  const siteZ = /\.swk2-site\{[^}]*z-index:(\d)/.exec(wk), coneZ = /\.swk2-cone\{[^}]*z-index:(\d)/.exec(wk), mkZ = /\.swk2-mk\{[^}]*z-index:(\d)/.exec(wk);
+  assert.ok(+siteZ[1] < +coneZ[1] && +coneZ[1] <= +mkZ[1]);
+  assert.ok(wk.indexOf('className="swk2-site"') < wk.indexOf("swk2-cone"));   // DOM order: site under the cone
   assert.match(wk, /\.swk2-site\{[^}]*pointer-events:none/);
   assert.doesNotMatch(wk.slice(wk.indexOf("siteRegions"), wk.indexOf("const Ico")), /parcel|legal|property line/i);
   assert.doesNotMatch(wk, /animation:[^;}]*swk2-?(site|zl)/);   // no animation on the polygons
