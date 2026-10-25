@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, serviceLabel, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
+import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import PresetEditor from "./proposal-preset-editor";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
@@ -61,6 +62,40 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Anchored "update matching items?" confirm shown after a repeated sub-item value is committed. Compact, one
+// clear primary action; the scope toggle appears only with multiple options. Closes on Escape / outside click
+// (= keep this one). All matching + counts are precomputed (b.cur / b.all) by the editor.
+function BulkPrompt({ b, optionCount, onApply, onClose }) {
+  const [scope, setScope] = useState("current");
+  const ref = useRef(null);
+  useEffect(() => {
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  const multi = optionCount > 1;
+  const fmt = (v) => (b.field === "price" ? money(v) : String(Math.round((+v || 0) * 100) / 100));
+  const count = (scope === "all" ? b.all : b.cur).length;
+  return (
+    <div className="prop-bulk" role="dialog" aria-label="Update matching items" ref={ref}>
+      <div className="prop-bulk-h">Update {b.name}?</div>
+      <div className="prop-bulk-sub">Changed from {fmt(b.oldValue)} to {fmt(b.newValue)}. {count} other{count === 1 ? "" : "s"} still use{count === 1 ? "s" : ""} {fmt(b.oldValue)}.</div>
+      {multi && (
+        <div className="prop-bulk-scope">
+          <button type="button" className={`prop-bulk-sc${scope === "current" ? " on" : ""}`} onClick={() => setScope("current")}>This option · {b.cur.length}</button>
+          <button type="button" className={`prop-bulk-sc${scope === "all" ? " on" : ""}`} onClick={() => setScope("all")}>All options · {b.all.length}</button>
+        </div>
+      )}
+      <div className="prop-bulk-acts">
+        <button type="button" className="prop-bulk-keep" onClick={onClose}>Keep this one</button>
+        <button type="button" className="prop-bulk-all" onClick={() => onApply(scope)}>Update all {count + 1}</button>
+      </div>
+    </div>
+  );
+}
+
 // One service group inside the builder: header, column labels, editable line-item rows
 // (Cost column only when showCost), catalog quick-add, locations note.
 // Items may carry sub-items (a camera block: the camera + its drop/termination/mounting/
@@ -91,8 +126,41 @@ const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 // NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
 const AMP_ADDON = "Rack & Mount";
 
-export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag, itemDrag }) {
+export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag, itemDrag, payload, activeOptId, optionCount = 1, onBulkApply }) {
   const flags = customerFlags || {};
+  // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
+  // other matching sub-items that still hold the OLD value. `preEdit` snapshots the value at focus so we can
+  // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
+  const preEdit = useRef({});                 // { [subId_field]: oldValue } captured onFocus
+  const [bulkPrompt, setBulkPrompt] = useState(null);  // { parentId, subId, field, name, oldValue, newValue, cur:[], all:[] }
+  // Detect a committed sub-item edit (blur / Enter) and open the propagate prompt when there are still-old matches.
+  function maybeBulk(parent, sub, field) {
+    if (readOnly || !payload || !onBulkApply) return;
+    const k = `${sub.id}_${field}`;
+    const oldValue = preEdit.current[k];
+    delete preEdit.current[k];
+    if (oldValue == null) return;
+    const newValue = sub[field];
+    if (numEq(oldValue, newValue)) return;                 // nothing really changed (#13)
+    const matchKey = subKey(sub);
+    const args = { serviceKey: svc.key, matchKey, field, oldValue, excludeSubId: sub.id };
+    const cur = bulkSubMatches(payload, { ...args, optionId: activeOptId, allOptions: false });
+    if (!cur.length) return;                               // unique → save normally, no prompt (#12)
+    const all = optionCount > 1 ? bulkSubMatches(payload, { ...args, allOptions: true }) : cur;
+    setBulkPrompt({ parentId: parent.id, subId: sub.id, field, matchKey, name: sub.name || "item", oldValue, newValue, cur, all });
+  }
+  // Apply the propagation at the chosen scope. Matches are RE-COMPUTED against the live payload (conflict
+  // safety: only sub-items that STILL hold the old value are updated — anything changed since the prompt opened
+  // is left alone). Reports the undo set (others + the edited sub) so the whole thing reverses atomically.
+  function applyBulk(scope) {
+    const b = bulkPrompt; if (!b) return;
+    const others = bulkSubMatches(payload, { serviceKey: svc.key, matchKey: b.matchKey, field: b.field, oldValue: b.oldValue, excludeSubId: b.subId, optionId: activeOptId, allOptions: scope === "all" });
+    const edited = { optionId: activeOptId, itemId: b.parentId, subId: b.subId };
+    const next = applyBulkSub(payload, others, b.field, b.newValue);
+    onBulkApply(next, { field: b.field, name: b.name, oldValue: b.oldValue, newValue: b.newValue,
+      count: others.length + 1, undoTargets: [...others, edited] });
+    setBulkPrompt(null);
+  }
   // Recomputed whenever the price book changes (priceBookVersion bumps after Save) — includes
   // renamed/priced defaults, minus hidden ones, plus any custom items added for this service.
   const catalog = effectiveCatalog(svc.key, loadPriceBook());
@@ -367,7 +435,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const startCamEdit = () => { if (readOnly) return; if (camName && camName !== it.name) patchItem(it.id, { name: camName }); setEditingId(it.id); };
     const writeCamName = () => { if (svc.key === "camera" && it.camera_id && onCameraRename) onCameraRename(it.camera_id, it.name); };  // survey write-back on rename
     return (
-    <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}>
+    <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
+         style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
         {/* The breakdown toggle now lives on the PRICE (see .prop-price-toggle below) — one affordance,
             not a separate left chevron. */}
@@ -424,10 +493,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       </span>
       {hasSub ? <span /> : (
         <input className="num" type="number" min="0" value={it.qty} disabled={readOnly}
+               onFocus={parent ? () => { preEdit.current[`${it.id}_qty`] = it.qty; } : undefined}
+               onBlur={parent ? () => maybeBulk(parent, it, "qty") : undefined}
+               onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { qty: e.target.value }) : patchItem(it.id, { qty: e.target.value }))} />
       )}
       {hasSub ? <span /> : (
         <input className="num" type="number" step="0.01" value={it.price} disabled={readOnly}
+               onFocus={parent ? () => { preEdit.current[`${it.id}_price`] = it.price; } : undefined}
+               onBlur={parent ? () => maybeBulk(parent, it, "price") : undefined}
+               onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { price: e.target.value }) : patchItem(it.id, { price: e.target.value }))} />
       )}
       {showCost && (hasSub ? <span /> : (
@@ -460,6 +535,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <input className="prop-item-desc" value={it.desc || ""} disabled={readOnly} maxLength={600}
                placeholder="Customer description (optional)" title="A short explanation the customer sees on the proposal — not the product name"
                onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
+      )}
+      {parent && bulkPrompt?.subId === it.id && (
+        <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
       )}
     </div>
     );

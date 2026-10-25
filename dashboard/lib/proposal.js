@@ -192,7 +192,7 @@ export function makePresetBlock(preset, book) {
   const dn = (name) => displayNameOf(name, b);
   return {
     id: newItemId(), name: preset.name || "Bundle", qty: 1, price: 0, cost: 0,
-    sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), qty: +x.qty || 1, price: px(x.name), cost: 0 })),
+    sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: +x.qty || 1, price: px(x.name), cost: 0 })),
   };
 }
 
@@ -205,8 +205,8 @@ export function makeCameraBundle(book, label = "Camera") {
   return {
     id: newItemId(), name: label, qty: 1, price: 0, cost: 0,
     sub: [
-      { id: newItemId(), name: dn("Camera"), qty: 1, price: px("Camera"), cost: 0 },
-      ...CAMERA_BUNDLE.map((x) => ({ id: newItemId(), name: dn(x.name), qty: 1, price: px(x.name), cost: 0 })),
+      { id: newItemId(), name: dn("Camera"), baseName: "Camera", qty: 1, price: px("Camera"), cost: 0 },
+      ...CAMERA_BUNDLE.map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: 1, price: px(x.name), cost: 0 })),
     ],
   };
 }
@@ -515,7 +515,7 @@ const TOAST_BASELINE_KINDS = ["tisp", "pronto", "tpoe"];
 // if a particular run is long enough to charge for.
 const toastCoreBlock = (px, dn, device) => ({
   id: newItemId(), name: dn(device), qty: 1, price: 0, cost: 0, waived: true,
-  sub: [{ id: newItemId(), name: dn("Line Drop"), qty: 1, price: px("Line Drop", 150), cost: 0 }],
+  sub: [{ id: newItemId(), name: dn("Line Drop"), baseName: "Line Drop", qty: 1, price: px("Line Drop", 150), cost: 0 }],
 });
 const TOAST_BASELINE_BUILDERS = {
   tisp:   (px, dn) => toastCoreBlock(px, dn, "ISP Router"),
@@ -573,8 +573,8 @@ export function surveyToImport(survey, floorIndex) {
       id: newItemId(), name: label, qty: 1, price: 0, cost: 0, outdoor: cam.io === "O",
       camera_id: cam.cid || null,   // → project camera (getProjectCameras id); null for manually-added cameras
       sub: [
-        { id: newItemId(), name: dn("Camera"), qty: 1, price: px("Camera"), cost: 0 },
-        ...CAMERA_BUNDLE.map((b) => ({ id: newItemId(), name: dn(b.name), qty: 1, price: px(b.name), cost: 0 })),
+        { id: newItemId(), name: dn("Camera"), baseName: "Camera", qty: 1, price: px("Camera"), cost: 0 },
+        ...CAMERA_BUNDLE.map((b) => ({ id: newItemId(), name: dn(b.name), baseName: b.name, qty: 1, price: px(b.name), cost: 0 })),
       ],
     });
   });

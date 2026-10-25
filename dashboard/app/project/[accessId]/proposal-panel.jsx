@@ -400,6 +400,25 @@ const PROP_CSS = `
 .pvx .prop-price-hint{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;padding:12px 0;border-top:1px solid var(--dv-line,#E4E4DF);margin-top:10px}
 /* PIN-preview chip beside the status — permission state, not proposal content */
 .pvx .prop-preview-chip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:100px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.7rem;font-weight:600;white-space:nowrap}
+/* Toast Undo (bulk sub-item update) */
+.pvx .prop-toast-undo{background:none;border:none;color:var(--dv-gold,#C9A96E);font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit;padding:0 2px;margin-left:4px;text-decoration:underline}
+.pvx .prop-toast-undo:hover{color:#fff}
+/* Smart bulk-update prompt — a compact popover anchored under the edited sub-item row */
+.pvx .prop-bulk{position:absolute;top:calc(100% - 2px);right:0;z-index:40;width:290px;max-width:84vw;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 14px 38px rgba(16,20,24,.16);padding:12px 13px;display:flex;flex-direction:column;gap:9px;text-align:left}
+.pvx .prop-bulk-h{font-size:.84rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pvx .prop-bulk-sub{font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.45}
+.pvx .prop-bulk-scope{display:flex;gap:6px}
+.pvx .prop-bulk-sc{flex:1 1 0;min-width:0;height:28px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;padding:0 6px}
+.pvx .prop-bulk-sc.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
+.pvx .prop-bulk-acts{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:1px}
+.pvx .prop-bulk-keep{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;padding:4px 2px}
+.pvx .prop-bulk-keep:hover{color:var(--dv-ink,#101418)}
+.pvx .prop-bulk-all{height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-bulk-all:hover{filter:brightness(1.12)}
+@media(max-width:640px){
+  /* On a phone the popover becomes a bottom sheet so it never clips off the edited row */
+  .pvx .prop-bulk{position:fixed;left:12px;right:12px;bottom:12px;top:auto;width:auto;max-width:none;z-index:11050}
+}
 @media(max-width:640px){
   /* The "Sent · Sep 6 · 11:29 AM · La Vague" stamp is too long to share the action row on a phone — it
      was cramming into a narrow pill and stacking. Let the row wrap so the stamp takes its own line

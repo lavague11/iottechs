@@ -14,6 +14,7 @@ import AiCommandBar from "./ai-command-bar";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
+import { applyBulkSub } from "../../../lib/proposal-bulk";
 import { can } from "../../../lib/roles";
 import { exportMockupImages } from "../../../lib/mockup-export";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
@@ -88,12 +89,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [dragItem, setDragItem] = useState(null); // cross-section line-item drag: { svcIdx, id }
   const [confirmSend, setConfirmSend] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [toast, setToast] = useState(null);   // string | { text, onUndo }
   const toastTimer = useRef(null);
-  function showToast(msg) {
-    setToast(msg);
+  function showToast(msg, onUndo = null) {
+    setToast(onUndo ? { text: msg, onUndo } : msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2800);
+    toastTimer.current = setTimeout(() => setToast(null), onUndo ? 6000 : 2800);   // longer when there's an Undo
   }
   const [savedAt, setSavedAt] = useState(null);
   const [authBlocked, setAuthBlocked] = useState(false); // PIN-only session — stop autosave retries
@@ -204,6 +205,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const camNames = cameraNameOverrides(opt?.services, camRoster, { byPosition: true });
 
   function patchPayload(next) { setPayload(next); setDirty(true); setErr(null); }
+  // Smart bulk-update apply: the editor hands back the already-propagated payload + the undo set. We commit it
+  // through the canonical path (patchPayload → autosave → totals recompute) and offer a single atomic Undo that
+  // sets every affected sub-item (the matches + the one you edited) back to the old value.
+  function applyBulkUpdate(nextPayload, info) {
+    patchPayload(nextPayload);
+    const fmt = (v) => (info.field === "price"
+      ? "$" + (Math.round((+v || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : String(Math.round((+v || 0) * 100) / 100));
+    showToast(`${info.name} updated on ${info.count} item${info.count === 1 ? "" : "s"} · ${fmt(info.newValue)}`,
+      () => patchPayload(applyBulkSub(nextPayload, info.undoTargets, info.field, info.oldValue)));
+  }
   function patchOption(patch) {
     patchPayload({ ...payload, options: payload.options.map((o) => (o.id === opt.id ? { ...o, ...patch } : o)) });
   }
@@ -780,6 +792,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           onResolveFlag={resolveFlag}
           onChange={(next) => patchOption({ services: opt.services.map((x, j) => (j === i ? next : x)) })}
           onRemove={() => patchOption({ services: opt.services.filter((_, j) => j !== i) })}
+          payload={payload}
+          activeOptId={opt.id}
+          optionCount={payload.options.length}
+          onBulkApply={applyBulkUpdate}
           onOpenPricing={readOnly ? undefined : setPricingOpen}
           priceBookVersion={priceBookVersion}
           cameraNames={camNames}
@@ -1036,7 +1052,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       {toast && (
         <div className="prop-toast">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          {toast}
+          {typeof toast === "string" ? toast : (
+            <>
+              <span>{toast.text}</span>
+              <button type="button" className="prop-toast-undo" onClick={() => { toast.onUndo(); setToast(null); }}>Undo</button>
+            </>
+          )}
         </div>
       )}
       </div>)}
