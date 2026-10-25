@@ -337,6 +337,8 @@ const PROP_CSS = `
 .pvx .prop-item-menu{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
 .pvx .prop-item-menu:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-im{position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:172px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 32px rgba(16,20,24,.17);padding:5px}
+/* Flip up when opening down would clip against the card's bottom (late rows) */
+.pvx .prop-im.up{top:auto;bottom:calc(100% + 4px)}
 .pvx .prop-im-item{display:block;width:100%;appearance:none;border:0;background:none;font-family:inherit;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer}
 .pvx .prop-im-item:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-im-item.danger{color:var(--dv-red,#C4553D)}

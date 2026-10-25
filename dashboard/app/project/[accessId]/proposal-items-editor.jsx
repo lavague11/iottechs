@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
@@ -142,9 +142,27 @@ const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
 // Line-item (•••) action menu — the one predictable place for anything you do to a row: Duplicate ·
 // Add/Edit description · Remove. Delete is destructive, so Remove shows an in-menu confirm. Sub-items get
 // Remove only. Closes on outside-click / Escape.
+// A dropdown menu (absolute, opens below its trigger) gets clipped when a late row sits near the bottom of
+// the overflow-hidden service card. Flip it to open UPWARD when opening down would clip it (and there's room
+// above). Measured once, before paint, so there's no flash.
+function useMenuFlip(ref) {
+  const [up, setUp] = useState(false);
+  useLayoutEffect(() => {
+    const el = ref.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    let clip = { top: 0, bottom: window.innerHeight };
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const cs = window.getComputedStyle(p);
+      if (/(auto|scroll|hidden)/.test(cs.overflowY)) { const pr = p.getBoundingClientRect(); clip = { top: Math.max(clip.top, pr.top), bottom: Math.min(clip.bottom, pr.bottom) }; break; }
+    }
+    setUp(r.bottom > clip.bottom - 4 && (r.top - r.height - 8) > clip.top);
+  }, []);
+  return up;
+}
 function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, onRemove, removeLabel, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
+  const up = useMenuFlip(ref);
   useEffect(() => {
     function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -153,7 +171,7 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
   return (
-    <div className="prop-im" ref={ref} role="menu">
+    <div className={`prop-im${up ? " up" : ""}`} ref={ref} role="menu">
       {confirming ? (
         <div className="prop-im-confirm">
           <div className="prop-im-ctitle">Remove this line item?</div>
@@ -198,6 +216,7 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
 // every row reads the same. Its one action opens that system's slot editor.
 function SysRowMenu({ onEdit, onClose }) {
   const ref = useRef(null);
+  const up = useMenuFlip(ref);
   useEffect(() => {
     function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -206,7 +225,7 @@ function SysRowMenu({ onEdit, onClose }) {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
   return (
-    <div className="prop-im" ref={ref} role="menu">
+    <div className={`prop-im${up ? " up" : ""}`} ref={ref} role="menu">
       <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onEdit(); onClose(); }}>Edit</button>
     </div>
   );
@@ -216,6 +235,7 @@ function SysRowMenu({ onEdit, onClose }) {
 function SvcHeadMenu({ onPricing, onRemove, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
+  const up = useMenuFlip(ref);
   useEffect(() => {
     function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -224,7 +244,7 @@ function SvcHeadMenu({ onPricing, onRemove, onClose }) {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
   return (
-    <div className="prop-im" ref={ref} role="menu">
+    <div className={`prop-im${up ? " up" : ""}`} ref={ref} role="menu">
       {confirming ? (
         <div className="prop-im-confirm">
           <div className="prop-im-ctitle">Remove this service?</div>
