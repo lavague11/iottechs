@@ -485,15 +485,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); setEditingId(null); writeCamName(); } }} />
           ) : (
             <>
-              <span className="prop-item-nametext" title={readOnly ? undefined : "Click the pencil to rename"}
+              <span className="prop-item-nametext" title={readOnly ? undefined : "Double-click to rename"}
                     style={!parent && it.outdoor ? { color: "var(--dv-red,#C4553D)", fontWeight: 700 } : undefined}
                     onDoubleClick={() => { if (camName != null) startCamEdit(); else if (!readOnly) setEditingId(it.id); }}>{camName || it.name || "Item"}</span>
-              {!parent && !readOnly && (
-                <button type="button" className="prop-name-edit" title="Rename"
-                        onClick={() => { if (camName != null) startCamEdit(); else setEditingId(it.id); }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                </button>
-              )}
             </>
           )
         ) : (
@@ -505,6 +499,21 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
           />
         )}
+        {/* Description toggle (top-level, editable) — a speech bubble with a + (add) that becomes a − once the
+            description is showing (remove). Replaces the old rename pencil; rename is double-click on the name. */}
+        {!parent && !readOnly && (() => {
+          const shown = !!(it.desc && it.desc.trim()) || descOpen.has(it.id);
+          return (
+            <button type="button" className={`prop-desc-tog${shown ? " on" : ""}`} title={shown ? "Remove description" : "Add description"} aria-label={shown ? "Remove description" : "Add description"}
+              onClick={() => (shown ? removeDesc(it.id) : openDesc(it.id))}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                <line x1="9" y1="10" x2="15" y2="10" />
+                {!shown && <line x1="12" y1="7" x2="12" y2="13" />}
+              </svg>
+            </button>
+          );
+        })()}
         {parent && /^line drop/i.test(it.name || "") && (
           readOnly
             ? (/existing/i.test(it.name || "") && <span className="prop-exist-tag" title="Existing cable — test &amp; map">Existing</span>)
@@ -564,27 +573,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <button className="prop-item-x" title="Remove"
                 onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
       ) : <span />}
-      {/* Optional customer-facing description — progressive disclosure (top-level lines only). An empty optional
-          field never reserves a row; "+ description" reveals the editor. An existing description always shows. */}
+      {/* Optional customer-facing description — progressive disclosure (top-level lines only). The +/- control
+          lives up by the name; here we render ONLY the editor (when open) or the saved text (read-only). */}
       {!parent && (() => {
         const hasDesc = !!(it.desc && it.desc.trim());
         if (readOnly) return hasDesc ? <div className="prop-desc-row"><span className="prop-item-descro">{it.desc}</span></div> : null;
-        if (!(hasDesc || descOpen.has(it.id))) return (
-          <div className="prop-desc-row">
-            <button type="button" className="prop-desc-add" title="Add a customer-facing description" aria-label="Add description" onClick={() => openDesc(it.id)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              description
-            </button>
-          </div>
-        );
+        if (!(hasDesc || descOpen.has(it.id))) return null;   // closed → nothing here (the "+" is next to the name)
         return (
           <div className="prop-desc-row open">
             <input className="prop-item-desc" value={it.desc || ""} maxLength={600} autoFocus={descOpen.has(it.id) && !hasDesc}
                    placeholder="Customer description…" title="A short explanation the customer sees on the proposal — not the product name"
                    onFocus={() => openDesc(it.id)} onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
-            <button type="button" className="prop-desc-rm" title="Remove description" aria-label="Remove description" onClick={() => removeDesc(it.id)}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            </button>
             {descConfirm === it.id && (
               <div className="prop-desc-confirm" role="dialog" aria-label="Remove description">
                 <span>Remove description?</span>

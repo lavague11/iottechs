@@ -193,6 +193,11 @@ const PROP_CSS = `
 /* Visible one-click rename on a camera/block name (replaces the hidden double-click). */
 .pvx .prop-name-edit{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--dv-meta,#9aa0ab);border-radius:6px;cursor:pointer;opacity:.55}
 .pvx .prop-name-edit:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);opacity:1}
+/* Description toggle next to the name: speech-bubble + (add) / − (remove). Quiet by default, gold when active. */
+.pvx .prop-desc-tog{flex:none;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;border:0;background:transparent;color:var(--dv-meta,#9aa0ab);border-radius:6px;cursor:pointer;opacity:.6}
+.pvx .prop-desc-tog:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);opacity:1}
+.pvx .prop-desc-tog.on{color:var(--dv-gold-text,#8A6A1F);opacity:1}
+.pvx .prop-desc-tog.on:hover{color:var(--dv-red,#C4553D)}
 /* Item-name field with catalog type-ahead */
 .pvx .prop-name-ac{position:relative;flex:1;min-width:0}
 .pvx .prop-name-ac input{width:100%}
