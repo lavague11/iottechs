@@ -383,6 +383,23 @@ const PROP_CSS = `
 .pvx .prop-mcell .v.bad{color:var(--dv-red,#C4553D)}
 .pvx .prop-mcell .v.ok{color:var(--dv-green,#2E7D5B)}
 .pvx .prop-empty{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;padding:6px 0}
+/* Empty state — an intentional "build your proposal" start (progressive disclosure), not a blank builder. */
+.pvx .prop-build{display:flex;flex-direction:column;gap:12px;align-items:flex-start;padding:26px 22px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-build-h{font-size:1.05rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:-.01em}
+.pvx .prop-build-sub{font-size:.84rem;color:var(--dv-meta,#787D84);margin-top:-7px}
+.pvx .prop-build-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px}
+.pvx .prop-build-opt{height:32px;border:none;background:none;color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:600;font-family:inherit;cursor:pointer;padding:0 4px}
+.pvx .prop-build-opt:hover{color:var(--dv-ink,#101418)}
+.pvx .prop-fp-btn.primary{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
+.pvx .prop-fp-btn.primary:hover{filter:brightness(1.12);color:#fff;border-color:var(--dv-ink,#101418)}
+/* "+ Add Service" dropdown (replaces the empty select box) */
+.pvx .prop-svc-menu{width:220px}
+.pvx .prop-svc-opt{display:flex;align-items:center;padding:7px 9px;border-radius:7px;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);cursor:pointer;background:none;border:none;font-family:inherit;text-align:left;width:100%}
+.pvx .prop-svc-opt:hover{background:var(--dv-paper,#F4F4F2)}
+/* Quiet stand-in for the whole $0 pricing stack before there's anything to price */
+.pvx .prop-price-hint{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500;padding:12px 0;border-top:1px solid var(--dv-line,#E4E4DF);margin-top:10px}
+/* PIN-preview chip beside the status — permission state, not proposal content */
+.pvx .prop-preview-chip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:100px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.7rem;font-weight:600;white-space:nowrap}
 @media(max-width:640px){
   /* The "Sent · Sep 6 · 11:29 AM · La Vague" stamp is too long to share the action row on a phone — it
      was cramming into a narrow pill and stacking. Let the row wrap so the stamp takes its own line

@@ -467,6 +467,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // Canonical contract math: base proposal (this doc) + approved add-ons = current contract total.
   // The base proposal is never rewritten — add-ons show as a separate amendment line.
   const fin = projectFinancials(totals.grand, addons.total, 0, depositPct);
+  // Progressive disclosure: don't show a finished proposal's controls before there's a proposal. The current
+  // option drives the empty state; the pricing engine + payment terms only render once there's something to price.
+  const servicesEmpty = opt.services.length === 0;
+  const optHasItems = opt.services.some((s) => (s.items || []).length > 0);
+  const priceable = optHasItems || totals.sub > 0;
   const disc = payload.discount || { type: "flat", value: 0 };
   const pcp = (payload.pcp_credit && typeof payload.pcp_credit === "object") ? payload.pcp_credit : { type: "flat", value: +payload.pcp_credit || 0 };
   const plan = payload.payment_plan || "custom";
@@ -588,6 +593,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
           </span>
         );
+        // PIN-preview notice — a quiet chip beside the status, not a full-width row (permission ≠ content).
+        const previewChip = authBlocked && (
+          <span className="prop-preview-chip" title="You're viewing by PIN — log in to save changes">Preview · log in to edit</span>
+        );
         const gear = !readOnly && (
           <button className="prop-gear" title="Default pricing (all services)" onClick={() => setPricingOpen("__all__")}>
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -643,7 +652,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           // One compact toolset (matches the mobile mockup): Sent · Edit · views · share · download.
           // Copy ("use for another project") is not in the primary toolbar. On mobile the Sent stamp
           // compacts to just "● Sent" (CSS) and the row centers; desktop keeps the full date/sender stamp.
-          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{requestSignBtn}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}</div>;
+          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{previewChip}{requestSignBtn}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -682,17 +691,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       {status === "changes_requested" && meta?.change_note && (
         <div className="prop-note-strip">Customer: “{meta.change_note}”</div>
       )}
-      {err && <div className="prop-note-strip">{err}</div>}
+      {/* A PIN-preview "log in to edit" notice lives as a compact chip in the toolbar (see previewChip), not a
+          full-width row — so permission state never looks like proposal content. Other errors still strip here. */}
+      {err && !authBlocked && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
       {/* Staff AI "Conversation" bar renders only when the AI_COMMANDS flag is on; it returns null otherwise,
           so this stays an additive, flag-controlled surface (toggle at /dev → API Keys → AI_COMMANDS). */}
       {!readOnly && <AiCommandBar accessId={accessId} projectName={customerName} payload={payload} patchPayload={patchPayload} />}
-      {/* Start From (Blank / Previous Project / Import) reuse picker — hidden on the proposal page per owner
-          request (not needed here; proposal reuse is still available from the New Project modal's Start From
-          step). Reversible: remove the `false &&` guard to restore it. */}
-      {false && !readOnly && canReuse && !hasItems && !startHidden && (
-        <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} />
-      )}
       {!readOnly && reviewDiffs.length > 0 && (
         <PricingReview diffs={reviewDiffs} onDismiss={() => setReviewDiffs([])}
           onApply={(updates) => { if (Object.keys(updates).length) { setPayload((p) => applyPrices(p, updates)); setDirty(true); } }} />
@@ -724,7 +729,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       {/* Option tabs — only meaningful when there's a CHOICE (2+ options). A lone option (e.g.
           "A · Premium Security") is redundant, so the whole row is hidden unless there are multiple
           options or you're editing (where "+ Option" lets you add a second). */}
-      {(payload.options.length > 1 || (!readOnly && payload.options.length < 3)) && (
+      {(payload.options.length > 1 || (!readOnly && !servicesEmpty && payload.options.length < 3)) && (
       <div className="prop-tabs">
         {payload.options.length > 1 && payload.options.map((o) => {
           const active = o.id === activeOpt;
@@ -749,7 +754,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       </div>
       )}
 
-      {!readOnly && surveyFloors.length > 0 && (
+      {!readOnly && !servicesEmpty && surveyFloors.length > 0 && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} />
           {syncConfirm ? (
@@ -796,16 +801,27 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           }}
         />
       ))}
-      {opt.services.length === 0 && <div className="prop-empty">No services yet — import the survey or add one below.</div>}
+      {/* EMPTY STATE — an intentional "build your proposal" start, not a blank builder. Shows only when the
+          current option has no services; the pricing engine + payment terms stay hidden until there's content. */}
+      {!readOnly && servicesEmpty && (
+        <div className="prop-build">
+          <div className="prop-build-h">Build your proposal</div>
+          <div className="prop-build-sub">Start from the site survey or add a service.</div>
+          <div className="prop-build-acts">
+            {surveyFloors.length > 0 && <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} label="Import Survey" primary />}
+            <ServiceAdder label="+ Add Service" primary={surveyFloors.length === 0} onPick={addService} />
+            {payload.options.length === 1 && <button type="button" className="prop-build-opt" onClick={addOption}>+ Option</button>}
+          </div>
+          {canReuse && (
+            <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} compact />
+          )}
+        </div>
+      )}
 
-      {!readOnly && (
+      {/* Once building — a clean "+ Add Service" menu (no empty select box). */}
+      {!readOnly && !servicesEmpty && (
         <div className="prop-tabs">
-          <select defaultValue="" onChange={(e) => { addService(e.target.value); e.target.value = ""; }}
-                  style={{ height: 38, border: "1px solid var(--line)", borderRadius: 8, background: "var(--bg-soft)", fontSize: ".76rem", fontWeight: 700, fontFamily: "inherit", padding: "0 8px", outline: "none" }}>
-            <option value="" disabled>+ Service…</option>
-            {/* Every type stays addable — a proposal can carry two camera systems, two custom blocks, etc. */}
-            {PROPOSAL_SERVICES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
+          <ServiceAdder label="+ Add Service" onPick={addService} />
         </div>
       )}
 
@@ -836,7 +852,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         </div>
       )}
 
-      {/* Totals — full-width summary at the bottom */}
+      {/* Pricing engine + payment terms — revealed only once there's something to price. Before that, a single
+          quiet line stands in for the whole $0 subtotal→discount→tax→total→plan→deposit stack. */}
+      {!priceable ? (!readOnly && <div className="prop-price-hint">Pricing will appear after you add a service.</div>) : (
       <div className="prop-totals">
         <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
         {(!readOnly || totals.discount > 0) && (
@@ -973,8 +991,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           );
         })()}
       </div>
+      )}
 
-      {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save */}
+      {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save. Hidden in the empty
+          state (nothing to submit/download yet) — the one Submit/Download lives in the top toolbar. */}
+      {(priceable || readOnly) && (
       <div className="prop-actions">
         <details className="prop-dl" onClick={(e) => { const b = e.target.closest("button[data-mode]"); if (b) { e.currentTarget.removeAttribute("open"); handleDownload(b.dataset.mode); } }}>
           <summary className="prop-mini" title="Download the proposal PDF (with mockup & survey)">{dlBusy ? "Preparing…" : "⭳ Download"}</summary>
@@ -1010,6 +1031,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           </>
         )}
       </div>
+      )}
 
       {toast && (
         <div className="prop-toast">
@@ -1034,9 +1056,35 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   );
 }
 
+// "+ Add Service" as a compact menu button (replaces the empty select box). Opens the service list; picking one
+// adds it to the current option. Mirrors FloorImportPicker's dropdown behavior (outside-click close).
+function ServiceAdder({ label = "+ Add Service", primary = false, onPick }) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocDown(e) { if (skipOutsideClose(e)) return; if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [open]);
+  return (
+    <div className="prop-fp" ref={boxRef}>
+      <button type="button" className={`prop-fp-btn${primary ? " primary" : ""}`} onClick={() => setOpen((o) => !o)}>{label}</button>
+      {open && (
+        <div className="prop-fp-menu prop-svc-menu">
+          {/* Every type stays addable — a proposal can carry two camera systems, two custom blocks, etc. */}
+          {PROPOSAL_SERVICES.map((s) => (
+            <button type="button" key={s.key} className="prop-svc-opt" onClick={() => { onPick(s.key); setOpen(false); }}>{s.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Floor-plan import as a checkbox dropdown: check any number of floor plans, then Import
 // pulls all of them in at once (rather than one floor per pick, as the old single-select did).
-function FloorImportPicker({ floors, onImport }) {
+function FloorImportPicker({ floors, onImport, label, primary = false }) {
   const [open, setOpen] = useState(false);
   const [checked, setChecked] = useState(() => new Set());
   const boxRef = useRef(null);
@@ -1064,8 +1112,8 @@ function FloorImportPicker({ floors, onImport }) {
 
   return (
     <div className="prop-fp" ref={boxRef}>
-      <button type="button" className="prop-fp-btn" onClick={() => setOpen((o) => !o)}>
-        ⭳ Import from floor plan{checked.size ? ` (${checked.size})` : ""}
+      <button type="button" className={`prop-fp-btn${primary ? " primary" : ""}`} onClick={() => setOpen((o) => !o)}>
+        {label || "⭳ Import from floor plan"}{checked.size ? ` (${checked.size})` : ""}
       </button>
       {open && (
         <div className="prop-fp-menu">

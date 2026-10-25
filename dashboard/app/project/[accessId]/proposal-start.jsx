@@ -26,15 +26,17 @@ const Sheet = ({ title, onClose, children, wide }) => (
   </div>
 );
 
-export function ProposalStart({ accessId, serviceKey, onCreated, onBlank, initialImport = null }) {
+export function ProposalStart({ accessId, serviceKey, onCreated, onBlank, initialImport = null, compact = false }) {
   const [mode, setMode] = useState(null);   // null | "previous" | "import"
   // The ?import= hand-off opens the review after mount (never during SSR — the sheet is client-only).
   useEffect(() => { if (initialImport?.mediaId) setMode("import"); }, [initialImport?.mediaId]);
   return (
-    <div className="rp-start">
+    <div className={`rp-start${compact ? " compact" : ""}`}>
       <style>{RP_CSS}</style>
       <span className="rp-start-k">Start from</span>
-      <button type="button" className="rp-start-btn" onClick={() => onBlank?.()}>Blank</button>
+      {/* Compact (empty-state secondary): you're already on a blank proposal, so "Blank" is redundant — just
+          the two reuse paths. The full row (non-compact) keeps Blank for the legacy start strip. */}
+      {!compact && <button type="button" className="rp-start-btn" onClick={() => onBlank?.()}>Blank</button>}
       <button type="button" className="rp-start-btn" onClick={() => setMode("previous")}>Previous Project</button>
       <button type="button" className="rp-start-btn" onClick={() => setMode("import")}>Import Proposal</button>
       {mode === "previous" && <ReusePicker accessId={accessId} onClose={() => setMode(null)} onCreated={(r) => { setMode(null); onCreated?.(r); }} />}
@@ -305,6 +307,11 @@ export const RP_CSS = `
 .rp-start-k{font-size:.7rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-right:2px}
 .rp-start-btn{height:32px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);border-radius:8px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .rp-start-btn:hover{border-color:var(--dv-ink,#101418)}
+/* Compact (empty-state secondary): no border/background of its own, quieter buttons — it sits inside the
+   "Build your proposal" block as the secondary reuse path, below the primary Import Survey / Add Service. */
+.rp-start.compact{padding:0;margin:2px 0 0;border:none;background:none}
+.rp-start.compact .rp-start-btn{height:28px;padding:0 10px;font-size:.76rem;background:none;color:var(--dv-meta,#787D84)}
+.rp-start.compact .rp-start-btn:hover{color:var(--dv-ink,#101418);border-color:var(--dv-line,#E4E4DF)}
 .rp-veil{position:fixed;inset:0;z-index:90;background:rgba(16,20,24,.32);display:flex;justify-content:flex-end}
 .rp-sheet{width:min(440px,100%);height:100%;background:#fff;display:flex;flex-direction:column;box-shadow:-8px 0 32px -12px rgba(0,0,0,.35);font-family:inherit;color:var(--dv-ink,#101418)}
 .rp-sheet.wide{width:min(560px,100%)}
