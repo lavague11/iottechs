@@ -902,7 +902,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           )}
           </div>}
           {!nvrItem && camCount > 0 && (
-            <span className="prop-sys-hint">Recommended: {camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel</span>
+            <span className="prop-sys-hint">Recommended · {camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel NVR</span>
           )}
         </div>
       )}
@@ -960,7 +960,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {visibleItems.map((it, idx) => (
         <div key={it.id}
-             className={`prop-block${!readOnly ? " has-drag" : ""}${idx % 2 ? " alt" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}${dragId === it.id ? " prop-dragging" : ""}${overId === it.id && (dragId || crossItem) && dragId !== it.id ? " prop-dragover" : ""}`}
+             className={`prop-block${!readOnly ? " has-drag" : ""}${idx % 2 ? " alt" : ""}${open[it.id] && (it.sub || []).length ? " prop-open" : ""}${it.outdoor ? " prop-outdoor" : ""}${it.waived ? " prop-waived" : ""}${dragId === it.id ? " prop-dragging" : ""}${overId === it.id && (dragId || crossItem) && dragId !== it.id ? " prop-dragover" : ""}`}
              style={{ "--svc-color": svcColor }} title={it.outdoor ? "Outdoor placement" : undefined}
              onDragOver={!readOnly && (dragId || crossItem) ? (e) => { e.preventDefault(); if (overId !== it.id) setOverId(it.id); } : undefined}
              onDrop={!readOnly && (dragId || crossItem) ? (e) => { e.preventDefault(); e.stopPropagation(); if (crossItem) itemDrag.onDrop(it.id); else moveItem(dragId, it.id); setDragId(null); setOverId(null); } : undefined}>
@@ -975,7 +975,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           {open[it.id] && (it.sub || []).map((x, si) => row(x, it, si))}
           {open[it.id] && !readOnly && (
             <div className="prop-subadd">
-              <button className="prop-mini" onClick={() => addSub(it.id)}>+ Sub-item</button>
+              <button type="button" className="prop-subadd-btn" onClick={() => addSub(it.id)}>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Sub-item
+              </button>
             </div>
           )}
         </div>

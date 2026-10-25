@@ -217,14 +217,18 @@ const PROP_CSS = `
 .pvx .prop-wrap input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .pvx .prop-chev{background:none;border:none;padding:0 2px;color:var(--dv-gold-text,#8A6A1F);font-size:.72rem;cursor:pointer;flex-shrink:0;font-family:inherit}
 .pvx .prop-chev:hover{color:var(--dv-gold-text,#8A6A1F)}
-/* Sub-item (expanded camera breakdown) rows: zebra + hover, like the blocks */
-.pvx .prop-item.sub{background:var(--dv-paper,#F4F4F2);border-top:1px solid var(--dv-line-soft,#EDEDE9);transition:background .12s}
-.pvx .prop-item.sub.alt{background:var(--dv-raise,#FBFBFA)}
-.pvx .prop-item.sub:hover,.pvx .prop-item.sub.alt:hover{background:var(--dv-line-soft,#EDEDE9)}
-.pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--dv-meta,#787D84)}
+/* Expanded breakdown rows: hierarchy comes from indentation + hairlines, NOT fills. Children are the
+   internal composition of the parent — same neutral canvas, readable (never disabled-looking) text. No
+   zebra, no shaded first child. */
+.pvx .prop-item.sub{background:transparent;border-top:1px solid var(--dv-line-soft,#EDEDE9);padding-left:30px;transition:background .12s}
+.pvx .prop-item.sub.alt{background:transparent}
+.pvx .prop-item.sub:hover{background:rgba(17,20,24,.025)}
+.pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--dv-ink,#101418)}
 .pvx .prop-item.sub input:focus{border-color:var(--dv-gold-text,#8A6A1F);background:#fff}
-.pvx .prop-item.sub .prop-line-total{color:var(--dv-meta,#787D84);font-weight:500}
-.pvx .prop-block{border-left:3px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
+.pvx .prop-item.sub .prop-line-total{color:var(--dv-ink-soft,#3A4048);font-weight:500}
+.pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
+/* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill. */
+.pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E)}
 /* Drag-to-reorder line items */
 .pvx .prop-block.has-drag{padding-left:17px}
 .pvx .prop-drag-handle{position:absolute;left:0;top:0;bottom:0;width:17px;display:flex;align-items:center;justify-content:center;color:var(--dv-meta,#787D84);opacity:.35;cursor:grab}
@@ -250,8 +254,8 @@ const PROP_CSS = `
 .pvx .prop-sysline-edit{flex-shrink:0}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--dv-line,#E4E4DF)}
-/* Zebra shading (parity class from the component) so adjacent rows/blocks read as distinct */
-.pvx .prop-block.alt{background:var(--dv-paper,#F4F4F2)}
+/* No zebra on top-level blocks — adjacent camera rows read as distinct via the hairline separator. */
+.pvx .prop-block.alt{background:transparent}
 /* Waived block: comped off the invoice — a green "Waived" banner on the left, and the
    original price struck through on the right so you can still see the amount waived. */
 .pvx .prop-block.prop-waived{border-left-color:var(--dv-green,#2E7D5B)}
@@ -260,12 +264,15 @@ const PROP_CSS = `
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:600}
 .pvx .prop-item.prop-parent .prop-line-total{font-weight:600;color:var(--dv-ink,#101418)}
-/* Hover + active-edit highlight so it's obvious which block/row you're working on */
-.pvx .prop-block:hover{background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-block:focus-within{background:var(--dv-line-soft,#EDEDE9);border-left-color:var(--dv-gold-text,#8A6A1F)}
+/* Hover/edit feedback is a faint tint + the gold accent — no heavy fill that competes with content. */
+.pvx .prop-block:hover{background:rgba(17,20,24,.015)}
+.pvx .prop-block:focus-within{background:transparent;border-left-color:var(--dv-gold-text,#8A6A1F)}
 /* Outdoor placement — red name text (an <input>'s value can't be partially colored, so the
    whole name goes red rather than just the "(O)" suffix) */
-.pvx .prop-subadd{padding:4px 12px 8px 30px;background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-subadd{padding:2px 12px 7px 30px;background:transparent}
+/* Lightweight inline "+ Sub-item" — text + small plus, no button chrome */
+.pvx .prop-subadd-btn{display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:4px 6px;margin-left:-6px;border-radius:6px;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;font-family:inherit;cursor:pointer}
+.pvx .prop-subadd-btn:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(17,20,24,.03)}
 .pvx .prop-savestat{font-size:.74rem;font-weight:600;color:var(--dv-green,#2E7D5B)}
 .pvx .prop-savestat.saving{color:var(--dv-meta,#787D84)}
 .pvx .prop-line-total{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);text-align:right;font-variant-numeric:tabular-nums}
