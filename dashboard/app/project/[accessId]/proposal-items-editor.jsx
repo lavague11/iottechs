@@ -89,7 +89,7 @@ function BulkPrompt({ b, optionCount, onApply, onClose }) {
         </div>
       )}
       <div className="prop-bulk-acts">
-        <button type="button" className="prop-bulk-keep" onClick={onClose}>Keep this one</button>
+        <button type="button" className="prop-bulk-keep" onClick={onClose}>Keep</button>
         <button type="button" className="prop-bulk-all" onClick={() => onApply(scope)}>Update all {count + 1}</button>
       </div>
     </div>

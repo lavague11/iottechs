@@ -213,8 +213,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     const fmt = (v) => (info.field === "price"
       ? "$" + (Math.round((+v || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : String(Math.round((+v || 0) * 100) / 100));
+    // Undo sets the SAME targets back to the old value, re-derived from the LIVE payload (functional update) —
+    // not the captured post-bulk snapshot — so any edit made in the 6s the toast is up is never discarded.
     showToast(`${info.name} updated on ${info.count} item${info.count === 1 ? "" : "s"} · ${fmt(info.newValue)}`,
-      () => patchPayload(applyBulkSub(nextPayload, info.undoTargets, info.field, info.oldValue)));
+      () => { setPayload((prev) => applyBulkSub(prev, info.undoTargets, info.field, info.oldValue)); setDirty(true); setErr(null); });
   }
   function patchOption(patch) {
     patchPayload({ ...payload, options: payload.options.map((o) => (o.id === opt.id ? { ...o, ...patch } : o)) });
