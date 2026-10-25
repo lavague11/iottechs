@@ -278,6 +278,33 @@ const PROP_CSS = `
 .pvx button.prop-price-toggle.open .prop-price-chev{transform:rotate(180deg);opacity:.7}
 .pvx .prop-item-x{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;font-size:.85rem;padding:0}
 .pvx .prop-item-x:hover{color:var(--dv-red,#C4553D)}
+/* Left disclosure spacer — keeps flat rows aligned with chevron'd ones */
+.pvx .prop-disc-sp{width:17px;flex:0 0 auto}
+/* "+ Description" inline affordance (after the name) + collapsed preview + the editor's Done check */
+.pvx .prop-desc-add2{display:inline-flex;align-items:center;gap:4px;background:none;border:none;color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;font-family:inherit;cursor:pointer;padding:2px 7px;border-radius:5px;flex-shrink:0}
+.pvx .prop-desc-add2:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-desc-preview{background:none;border:none;font-family:inherit;font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);cursor:pointer;text-align:left;padding:2px 4px 2px 2px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.pvx .prop-desc-preview:hover{color:var(--dv-ink,#101418);text-decoration:underline}
+.pvx .prop-desc-done{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:none;border:none;color:var(--dv-green,#2E7D5B);cursor:pointer;border-radius:5px;flex-shrink:0}
+.pvx .prop-desc-done:hover{background:var(--dv-paper,#F4F4F2)}
+/* Line-item ••• action menu */
+.pvx .prop-im-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
+.pvx .prop-item-menu{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+.pvx .prop-item-menu:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-im{position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:172px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 32px rgba(16,20,24,.17);padding:5px}
+.pvx .prop-im-item{display:block;width:100%;appearance:none;border:0;background:none;font-family:inherit;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-align:left;padding:8px 10px;border-radius:7px;cursor:pointer}
+.pvx .prop-im-item:hover{background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-im-item.danger{color:var(--dv-red,#C4553D)}
+.pvx .prop-im-item.danger:hover{background:rgba(196,85,61,.08)}
+.pvx .prop-im-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:4px 6px}
+.pvx .prop-im-confirm{padding:9px 11px;min-width:210px}
+.pvx .prop-im-ctitle{font-size:.82rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pvx .prop-im-csub{font-size:.76rem;color:var(--dv-meta,#787D84);margin:3px 0 11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .prop-im-cacts{display:flex;justify-content:flex-end;align-items:center;gap:10px}
+.pvx .prop-im-cancel{background:none;border:none;color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-im-cancel:hover{color:var(--dv-ink,#101418)}
+.pvx .prop-im-go{height:30px;padding:0 13px;border:none;border-radius:7px;background:var(--dv-red,#C4553D);color:#fff;font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit}
+.pvx .prop-im-go:hover{filter:brightness(1.08)}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}

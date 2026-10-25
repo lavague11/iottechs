@@ -139,6 +139,42 @@ function recommendedNvr(count) {
   return "NVR (32-Channel + 16-Port PoE)"; // largest; may need a second NVR beyond 32
 }
 const nvrShort = (name) => String(name).replace(/^NVR \(|\)$/g, "");
+
+// Line-item (•••) action menu — the one predictable place for anything you do to a row: Duplicate ·
+// Add/Edit description · Remove. Delete is destructive, so Remove shows an in-menu confirm. Sub-items get
+// Remove only. Closes on outside-click / Escape.
+function ItemMenu({ isSub = false, hasDesc = false, onDuplicate, onDescribe, onRemove, removeLabel, onClose }) {
+  const [confirming, setConfirming] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
+    function onKey(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [onClose]);
+  return (
+    <div className="prop-im" ref={ref} role="menu">
+      {confirming ? (
+        <div className="prop-im-confirm">
+          <div className="prop-im-ctitle">Remove this line item?</div>
+          <div className="prop-im-csub">{removeLabel}</div>
+          <div className="prop-im-cacts">
+            <button type="button" className="prop-im-cancel" onClick={onClose}>Cancel</button>
+            <button type="button" className="prop-im-go" onClick={() => { onRemove(); onClose(); }}>Remove</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {!isSub && onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
+          {!isSub && onDescribe && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDescribe(); onClose(); }}>{hasDesc ? "Edit description" : "Add description"}</button>}
+          {!isSub && <div className="prop-im-sep" />}
+          <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
+        </>
+      )}
+    </div>
+  );
+}
 // Audio system bar (Commercial Audio only): the amplifier is the head end — picked once, like the
 // NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
 const AMP_ADDON = "Rack & Mount";
@@ -150,18 +186,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
   const preEdit = useRef({});                 // { [subId_field]: oldValue } captured onFocus
   const [bulkPrompt, setBulkPrompt] = useState(null);  // { parentId, subId, field, name, oldValue, newValue, cur:[], all:[] }
-  // Optional customer descriptions are progressive-disclosure: hidden until "+ description" is clicked (or the
-  // item already has one). descOpen = ids with the editor open; descConfirm = id awaiting a remove-confirm.
+  // Optional customer descriptions are progressive-disclosure: hidden until "+ Description" is clicked (or the
+  // item already has one). descOpen = ids whose editor is open; emptying the field just clears it (no confirm).
   const [descOpen, setDescOpen] = useState(() => new Set());
-  const [descConfirm, setDescConfirm] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(null);   // id of the line-item (•••) action menu that's open
   const openDesc = (id) => setDescOpen((s) => new Set(s).add(id));
   const closeDesc = (id) => setDescOpen((s) => { const n = new Set(s); n.delete(id); return n; });
-  function removeDesc(id) {
-    const it = svc.items.find((x) => x.id === id);
-    if (it?.desc && it.desc.trim()) { setDescConfirm(id); return; }   // has content → confirm (don't destroy text)
-    closeDesc(id);                                                     // empty → just collapse
-  }
-  function confirmRemoveDesc(id) { patchItem(id, { desc: "" }); closeDesc(id); setDescConfirm(null); }
   // Detect a committed sub-item edit (blur / Enter) and open the propagate prompt when there are still-old matches.
   function maybeBulk(parent, sub, field) {
     if (readOnly || !payload || !onBulkApply) return;
@@ -367,6 +397,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       : it));
   }
   function removeItem(id) { patchItems(svc.items.filter((it) => it.id !== id)); }
+  // Duplicate a top-level line item just below the source: deep-copy (incl. sub-items, description, conditions)
+  // with FRESH ids, and drop the survey camera link so the copy is a new camera, not the same placed device.
+  function duplicateItem(id) {
+    const idx = svc.items.findIndex((x) => x.id === id);
+    if (idx < 0) return;
+    const src = svc.items[idx];
+    const copy = { ...src, id: newItemId(), camera_id: null, ...(src.sub ? { sub: src.sub.map((s) => ({ ...s, id: newItemId() })) } : {}) };
+    const next = svc.items.slice(); next.splice(idx + 1, 0, copy);
+    patchItems(next);
+  }
   function addItem(name = "", price = 0) {
     patchItems([...svc.items, { id: newItemId(), name, qty: 1, price, cost: 0 }]);
   }
@@ -470,8 +510,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
          style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-        {/* The breakdown toggle now lives on the PRICE (see .prop-price-toggle below) — one affordance,
-            not a separate left chevron. */}
+        {/* LEFT = hierarchy. A subtle disclosure chevron (same language as the NVR/Displays rows), shown only
+            when the row expands into sub-items. A description is a one-line muted preview below the row, not a
+            disclosure target, so a flat row (even one with a description) gets a spacer. */}
+        {!parent && (hasSub ? (
+          <button type="button" className="prop-chev" style={{ color: svcColor }} aria-expanded={!!open[it.id]}
+                  title={open[it.id] ? "Collapse" : "Expand"} onClick={() => toggle(it.id)}>{open[it.id] ? "▾" : "▸"}</button>
+        ) : <span className="prop-disc-sp" />)}
         {!parent && (lineRole(it) === "infrastructure"
           ? <InfraBadge kind={infraKindOf((it.baseName && it.baseName !== "__custom__") ? it.baseName : it.name)} />
           : blockNumOf[it.id] ? <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span> : null)}
@@ -500,19 +545,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
         {/* Description toggle (top-level, editable) — a speech bubble with a + (add) that becomes a − once the
             description is showing (remove). Replaces the old rename pencil; rename is double-click on the name. */}
-        {!parent && !readOnly && (() => {
-          const shown = !!(it.desc && it.desc.trim()) || descOpen.has(it.id);
-          return (
-            <button type="button" className={`prop-desc-tog${shown ? " on" : ""}`} title={shown ? "Remove description" : "Add description"} aria-label={shown ? "Remove description" : "Add description"}
-              onClick={() => (shown ? removeDesc(it.id) : openDesc(it.id))}>
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                <line x1="9" y1="10" x2="15" y2="10" />
-                {!shown && <line x1="12" y1="7" x2="12" y2="13" />}
-              </svg>
-            </button>
-          );
-        })()}
+        {/* MIDDLE: a lightweight "+ Description" after the name (only when there's no description yet and the
+            editor isn't open). An existing description shows as a preview below the row; the ••• menu can also
+            open the editor. */}
+        {!parent && !readOnly && !(it.desc && it.desc.trim()) && !descOpen.has(it.id) && (
+          <button type="button" className="prop-desc-add2" title="Add a customer-facing description" aria-label="Add description" onClick={() => openDesc(it.id)}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="15" y2="10" /><line x1="12" y1="7" x2="12" y2="13" /></svg>
+            Description
+          </button>
+        )}
         {parent && /^line drop/i.test(it.name || "") && (
           readOnly
             ? (/existing/i.test(it.name || "") && <span className="prop-exist-tag" title="Existing cable — test &amp; map">Existing</span>)
@@ -553,45 +594,54 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                title="Internal cost — never shown to sales or customers"
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { cost: e.target.value }) : patchItem(it.id, { cost: e.target.value }))} />
       ))}
+      {/* RIGHT = money, then actions. The price is calm — no expand/delete controls beside it (expand is the
+          left chevron; delete lives in •••). */}
       {(() => {
         const priceEl = (!parent && it.waived)
           ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s>
           : hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it));
-        // Top-level items: the price itself opens/closes the line's price breakdown (chevron flips).
-        return expandable ? (
-          <button type="button" className={`prop-line-total prop-price-toggle${open[it.id] ? " open" : ""}`}
-                  title={open[it.id] ? "Hide price breakdown" : "Show price breakdown"} onClick={() => toggle(it.id)}>
-            {priceEl}
-            <svg className="prop-price-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-          </button>
-        ) : (
-          <span className="prop-line-total">{priceEl}</span>
-        );
+        return <span className="prop-line-total">{priceEl}</span>;
       })()}
       {!readOnly ? (
-        <button className="prop-item-x" title="Remove"
-                onClick={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}>✕</button>
+        <div className="prop-im-wrap">
+          <button type="button" className="prop-item-menu" aria-label="Line item actions" title="Actions"
+                  onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === it.id ? null : it.id); }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+          </button>
+          {menuOpen === it.id && (
+            <ItemMenu
+              isSub={!!parent}
+              hasDesc={!parent && !!(it.desc && it.desc.trim())}
+              onDuplicate={parent ? null : () => duplicateItem(it.id)}
+              onDescribe={parent ? null : () => openDesc(it.id)}
+              onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
+              removeLabel={`${camName || it.name || "Item"}${!parent ? ` · ${money(itemTotal(it))}` : ""}`}
+              onClose={() => setMenuOpen(null)}
+            />
+          )}
+        </div>
       ) : <span />}
-      {/* Optional customer-facing description — progressive disclosure (top-level lines only). The +/- control
-          lives up by the name; here we render ONLY the editor (when open) or the saved text (read-only). */}
+      {/* Optional customer-facing description (top-level). Editor while editing; a muted one-line PREVIEW when
+          it has text and is collapsed (tap to edit); nothing when empty (the "+ Description" is by the name). */}
       {!parent && (() => {
         const hasDesc = !!(it.desc && it.desc.trim());
         if (readOnly) return hasDesc ? <div className="prop-desc-row"><span className="prop-item-descro">{it.desc}</span></div> : null;
-        if (!(hasDesc || descOpen.has(it.id))) return null;   // closed → nothing here (the "+" is next to the name)
-        return (
+        if (descOpen.has(it.id)) return (
           <div className="prop-desc-row open">
-            <input className="prop-item-desc" value={it.desc || ""} maxLength={600} autoFocus={descOpen.has(it.id) && !hasDesc}
+            <input className="prop-item-desc" value={it.desc || ""} maxLength={600} autoFocus
                    placeholder="Customer description…" title="A short explanation the customer sees on the proposal — not the product name"
-                   onFocus={() => openDesc(it.id)} onChange={(e) => patchItem(it.id, { desc: e.target.value })} />
-            {descConfirm === it.id && (
-              <div className="prop-desc-confirm" role="dialog" aria-label="Remove description">
-                <span>Remove description?</span>
-                <button type="button" className="prop-desc-cancel" onClick={() => setDescConfirm(null)}>Cancel</button>
-                <button type="button" className="prop-desc-go" onClick={() => confirmRemoveDesc(it.id)}>Remove</button>
-              </div>
-            )}
+                   onChange={(e) => patchItem(it.id, { desc: e.target.value })}
+                   onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") { e.preventDefault(); closeDesc(it.id); } }} />
+            <button type="button" className="prop-desc-done" title="Done" aria-label="Done" onClick={() => closeDesc(it.id)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </button>
           </div>
         );
+        return hasDesc ? (
+          <div className="prop-desc-row">
+            <button type="button" className="prop-item-descro prop-desc-preview" title="Edit description" onClick={() => openDesc(it.id)}>{it.desc}</button>
+          </div>
+        ) : null;
       })()}
       {parent && bulkPrompt?.subId === it.id && (
         <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
