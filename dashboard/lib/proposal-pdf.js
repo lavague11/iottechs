@@ -113,6 +113,15 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // signature is bound to (and the signed date below), never a live re-render of the current payload.
   if (p && p.signed_at && p.signedPayload) p = { ...p, payload: p.signedPayload };
   const { customerName, customerAddress, customerPhone, customerEmail } = meta;
+  // Identity: "Prepared For" is the business when one exists (fileBase.identity is already business-aware —
+  // company on commercial, else the person), the person otherwise. `customerName` is ALWAYS the human
+  // contact/signer. When they differ we have a real business, so we show a separate CONTACT line; when they
+  // match (residential) we drop the redundant second name field. Signer identity is unaffected — it is the
+  // human everywhere (customerName / the typed signature), never the business.
+  const normId = (s) => String(s || "").trim().toLowerCase();
+  const contactPerson = String(customerName || "").trim();
+  const preparedFor = String(meta.fileBase?.identity || customerName || "Client TBD").trim();
+  const isBusiness = !!contactPerson && normId(preparedFor) !== normId(contactPerson) && normId(preparedFor) !== "client tbd";
   // One document model, two renderings of the SAME proposal version: "standard" (the concise customer
   // proposal) and "detailed" (system summary + every package expanded into its components). Same
   // items, totals, payment terms and acceptance — only the level of detail differs.
@@ -447,9 +456,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       // the proposal number and date already sit in the masthead.
       doc.setDrawColor(...GOLD); doc.setLineWidth(0.8); doc.line(lm, y, lm + rw, y);
       doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
-      doc.text(String(customerName || "Client TBD").toUpperCase(), lm, y + 20, { charSpace: 0.6 });
+      doc.text(String(preparedFor).toUpperCase(), lm, y + 20, { charSpace: 0.6 });
       doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(58, 58, 55);
-      doc.text(customerAddress || "Address TBD", lm, y + 34);
+      doc.text((isBusiness ? `Attn: ${contactPerson}   ·   ` : "") + (customerAddress || "Address TBD"), lm, y + 34);
       const contact = [customerPhone, customerEmail].filter(Boolean).join("   ·   ");
       if (contact) { doc.setFontSize(8); doc.setTextColor(74, 82, 112); doc.text(contact, lm, y + 47); }
       y += contact ? 58 : 46;
@@ -468,15 +477,14 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
     const cols = [lm + 6, lm + rw * 0.40, lm + rw * 0.74];
     const infoItems = [
-      ["PREPARED FOR", customerName || "Client TBD"],
+      ["PREPARED FOR", preparedFor],
       ["PROJECT ADDRESS", (customerAddress || "Address TBD").slice(0, 32)],
       ["PROPOSAL #", propNum],
     ];
-    const infoItems2 = [
-      ["CLIENT NAME", customerName || "Client TBD"],
-      ["PHONE", customerPhone || "—"],
-      ["EMAIL", customerEmail || "—"],
-    ];
+    // Business → a separate CONTACT (the human signer); individual → no redundant second name, just reach info.
+    const infoItems2 = isBusiness
+      ? [["CONTACT", contactPerson], ["PHONE", customerPhone || "—"], ["EMAIL", customerEmail || "—"]]
+      : [["PHONE", customerPhone || "—"], ["EMAIL", customerEmail || "—"]];
     // Usable width per column (to the next column / the box edge, less a small inset) so a long value —
     // a long email, business name or address — shrinks to fit instead of spilling past the box border.
     const colMaxW = [rw * 0.40 - 12, rw * 0.34 - 8, rw * 0.26 - 8];
