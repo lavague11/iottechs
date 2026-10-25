@@ -242,6 +242,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // item already has one). descOpen = ids whose editor is open; emptying the field just clears it (no confirm).
   const [descOpen, setDescOpen] = useState(() => new Set());
   const [menuOpen, setMenuOpen] = useState(null);   // id of the line-item (•••) action menu that's open
+  const [subEditId, setSubEditId] = useState(null); // sub-item being inline-edited (one at a time); else compact
   const openDesc = (id) => setDescOpen((s) => new Set(s).add(id));
   const closeDesc = (id) => setDescOpen((s) => { const n = new Set(s); n.delete(id); return n; });
   // Detect a committed sub-item edit (blur / Enter) and open the propagate prompt when there are still-old matches.
@@ -292,7 +293,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [camN, setCamN] = useState(4);
   const [renamingSvc, setRenamingSvc] = useState(false);   // service-name inline rename (double-click)
   const [svcDraft, setSvcDraft] = useState("");
-  const toggle = (id) => setOpen((o) => ({ ...o, [id]: !o[id] }));
+  // Accordion: opening one parent collapses the others in this service (keeps the proposal from becoming
+  // screens of breakdowns, esp. on mobile). Collapsing clears any open sub-item editor.
+  const toggle = (id) => { setSubEditId(null); setOpen((o) => (o[id] ? {} : { [id]: true })); };
   const [dragId, setDragId] = useState(null);   // line item being dragged (within THIS section)
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
   // An item dragged from ANOTHER section is hovering here → this section is a cross-section drop target.
@@ -733,6 +736,58 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     );
   };
 
+  // Compact, responsive sub-item (bundle component). Default = name … amount (a qty>1 reads as "N × $unit"
+  // under the name). Tap/click to inline-edit (one at a time): name + qty × price, the Existing-cable
+  // toggle for a Line Drop, Done, and Remove. A blank (just-added) sub opens straight into edit. Same
+  // component on desktop and mobile — no per-breakpoint logic. Bulk-propagate + price book autocomplete
+  // are preserved in edit mode.
+  const subRow = (x, parent) => {
+    const q = +x.qty || 1;
+    const amount = (+x.qty || 0) * (+x.price || 0);
+    const isDrop = /^line drop/i.test(x.name || "");
+    const isExisting = /existing/i.test(x.name || "");
+    const editing = !readOnly && (subEditId === x.id || !String(x.name || "").trim());
+    return (
+      <div key={x.id} className="prop-sub2-wrap" style={bulkPrompt?.subId === x.id ? { position: "relative", zIndex: 5 } : undefined}>
+        {editing ? (
+          <div className="prop-sub2 editing">
+            <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog}
+              onChange={(v) => patchSub(parent.id, x.id, { name: v })}
+              onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
+            <input className="num prop-sub2-qty" type="number" min="0" step="1" value={x.qty} disabled={readOnly} title="Quantity"
+              onFocus={() => { preEdit.current[`${x.id}_qty`] = x.qty; }} onBlur={() => maybeBulk(parent, x, "qty")}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+              onChange={(e) => patchSub(parent.id, x.id, { qty: e.target.value })} />
+            <span className="prop-sub2-mul">×</span>
+            <input className="num prop-sub2-price" type="number" step="0.01" value={x.price} disabled={readOnly} title="Unit price"
+              onFocus={() => { preEdit.current[`${x.id}_price`] = x.price; }} onBlur={() => maybeBulk(parent, x, "price")}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+              onChange={(e) => patchSub(parent.id, x.id, { price: e.target.value })} />
+            {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
+              onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
+            {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
+            <span className="prop-sub2-amt">{money(amount)}</span>
+            <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setSubEditId(null)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+            </button>
+            <button type="button" className="prop-sub2-del" title="Remove from bundle" aria-label="Remove from bundle" onClick={() => removeSub(parent.id, x.id)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="prop-sub2 compact" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"}>
+            <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
+            {q > 1 && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
+            <span className="prop-sub2-amt">{money(amount)}</span>
+          </button>
+        )}
+        {bulkPrompt?.subId === x.id && (
+          <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`prop-svc${svcDrag?.over ? " svc-over" : ""}${crossItem ? " svc-item-target" : ""}`}
          onDragOver={(svcDrag?.dragging || crossItem) ? (e) => { e.preventDefault(); if (svcDrag?.dragging) svcDrag.onDragOver(); } : undefined}
@@ -972,7 +1027,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             </span>
           )}
           {row(it, null)}
-          {open[it.id] && (it.sub || []).map((x, si) => row(x, it, si))}
+          {open[it.id] && (it.sub || []).map((x) => subRow(x, it))}
           {open[it.id] && !readOnly && (
             <div className="prop-subadd">
               <button type="button" className="prop-subadd-btn" onClick={() => addSub(it.id)}>

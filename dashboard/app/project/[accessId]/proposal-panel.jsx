@@ -226,6 +226,31 @@ const PROP_CSS = `
 .pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--dv-ink,#101418)}
 .pvx .prop-item.sub input:focus{border-color:var(--dv-gold-text,#8A6A1F);background:#fff}
 .pvx .prop-item.sub .prop-line-total{color:var(--dv-ink-soft,#3A4048);font-weight:500}
+/* Compact responsive sub-item (bundle component): name … amount by default, click to inline-edit. One
+   component on desktop + mobile — a flex row (not the rigid grid), so narrow screens never overflow. */
+.pvx .prop-sub2-wrap{position:relative}
+.pvx .prop-sub2{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px 8px 42px;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:transparent;font-family:inherit;box-sizing:border-box}
+.pvx button.prop-sub2.compact{border:none;text-align:left;cursor:pointer;min-height:40px}
+.pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.025)}
+.pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize}
+.pvx .prop-sub2-math{font-size:.72rem;color:var(--dv-muted,#6a7085);white-space:nowrap;flex-shrink:0}
+.pvx .prop-sub2-amt{font-size:.8rem;font-weight:500;color:var(--dv-ink-soft,#3A4048);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px}
+.pvx .prop-sub2-tag{margin-left:7px;font-size:.58rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#B45B22;background:rgba(197,107,44,.12);border-radius:100px;padding:1px 7px;vertical-align:middle}
+/* Inline edit mode */
+.pvx .prop-sub2.editing{flex-wrap:wrap}
+.pvx .prop-sub2 .prop-name-ac{flex:1 1 140px;min-width:120px}
+.pvx .prop-sub2 input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;box-sizing:border-box;width:100%}
+.pvx .prop-sub2 input.num{text-align:right;width:auto}
+.pvx .prop-sub2 input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-sub2-qty{width:46px!important}
+.pvx .prop-sub2-price{width:76px!important}
+.pvx .prop-sub2-cost{width:64px!important}
+.pvx .prop-sub2-mul{color:var(--dv-meta,#787D84);font-size:.8rem;flex-shrink:0}
+.pvx .prop-sub2-done,.pvx .prop-sub2-del{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0}
+.pvx .prop-sub2-done{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-sub2-done:hover{background:rgba(46,125,91,.08)}
+.pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
+.pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.08)}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill. */
 .pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E)}
@@ -528,8 +553,14 @@ const PROP_CSS = `
      gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
   .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0}
   .pvx .prop-item.prop-parent>span:not(:first-child):empty{display:none}
-  .pvx .prop-item.prop-parent .prop-item-nametext{white-space:normal;overflow:visible;line-height:1.25;height:auto;min-height:26px}
-  .pvx .prop-item.prop-parent .prop-line-total{margin-left:auto}
+  /* Parent name stays on ONE line (ellipsis if long) so the price + ••• never drop below it; the
+     description lives on its own row underneath, not competing with the title. */
+  .pvx .prop-item.prop-parent .prop-item-nametext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;height:30px}
+  /* Name grows from a zero basis to fill the space LEFT OF the total (which stays a fixed, non-shrinking
+     chip) — not margin-left:auto, which would steal the free space and crush the title. The name
+     ellipsizes only if it still doesn't fit, so the price never wraps below it. */
+  .pvx .prop-item.prop-parent .prop-line-total{margin-left:0;flex:0 0 auto}
+  .pvx .prop-item.prop-parent .prop-im-wrap{flex:0 0 auto}
   .pvx .prop-cols{display:none}
   /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
      price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
@@ -553,5 +584,15 @@ const PROP_CSS = `
   /* Tighter service header + section rhythm on mobile */
   .pvx .prop-svc-head{padding:8px 11px}
   .pvx .prop-item.sub input.num{flex:0 0 56px;width:56px}
+  /* Compact sub-item: smaller indent on a phone; the edit row wraps its controls tidily, amount + Done
+     + Remove stay together on the right. */
+  .pvx .prop-sub2{padding-left:22px;gap:6px 8px}
+  .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 100%}
+  .pvx .prop-sub2-amt{min-width:56px}
+  /* Reclaim horizontal room so the parent title fits: tighter card padding + block indent, and the
+     inline +Description icon drops out of the title row (still available in the ••• menu). */
+  .pvx .prop-body{padding-left:9px;padding-right:9px}
+  .pvx .prop-block.has-drag{padding-left:13px}
+  .pvx .prop-item.prop-parent .prop-desc-add2{display:none}
 }
 `;
