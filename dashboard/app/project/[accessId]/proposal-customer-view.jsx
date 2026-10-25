@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, planDepositPct, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
+import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, planDepositPct, displayOptionName, cameraNameOverrides, lineRole } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { lineConditionBadges } from "../../../lib/proposal-terms";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -762,7 +762,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
       <div className="pcv-table">
         <div className="pcv-table-head">
-          <span>#</span><span>Description</span><span className="r">Qty</span><span className="r">Unit</span><span className="r">Total</span>
+          <span>#</span><span>Description</span><span className="r">Total</span>
         </div>
         {(opt.services || []).map((s, i) => {
           if (!s.items?.length) return null;
@@ -775,7 +775,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
               {s.items.map((it, idx) => {
                 const hasSub = (it.sub || []).length > 0;
                 const expanded = !!openItems[it.id];
-                const blockNum = ++blockN;
+                // Endpoint numbering: cameras/endpoints get the next number; infrastructure (NVR/storage/
+                // display) stays blank so it never distorts the endpoint count — mirrors the PDF.
+                const blockNum = lineRole(it) === "infrastructure" ? "" : ++blockN;
                 secTotal += itemTotal(it);
                 return (
                   <div key={it.id} className="pcv-row-wrap">
@@ -813,10 +815,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                             {flags[it.id] ? "↩" : "✕"}
                           </button>
                         )}
+                        {!hasSub && (+it.qty || 1) > 1 && <span className="pcv-rowmath">{(+it.qty || 1)} × {money(it.price)}</span>}
                         {it.desc && <span className="pcv-rowblurb">{it.desc}</span>}
                       </span>
-                      <span className="r">{hasSub ? "1" : (it.qty ?? 1)}</span>
-                      <span className="r">{it.waived ? <s className="pcv-waived-strike">{money(hasSub ? itemTotal({ ...it, waived: false }) : it.price)}</s> : money(hasSub ? itemTotal(it) : it.price)}</span>
                       <span className="r b">{it.waived ? <s className="pcv-waived-strike">{money(itemTotal({ ...it, waived: false }))}</s> : money(itemTotal(it))}</span>
                     </div>
 
@@ -840,9 +841,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                     {!reviseMode && hasSub && expanded && it.sub.map((x) => (
                       <div key={x.id} className="pcv-row sub">
                         <span className="pcv-rownum" />
-                        <span className="pcv-rowdesc">· {titleCase(x.name)}</span>
-                        <span className="r">{x.qty}</span>
-                        <span className="r">{money(x.price)}</span>
+                        <span className="pcv-rowdesc">· {titleCase(x.name)}{(+x.qty || 1) > 1 ? <span className="pcv-rowmath">{(+x.qty || 1)} × {money(x.price)}</span> : null}</span>
                         <span className="r b">{money((+x.qty || 0) * (+x.price || 0))}</span>
                       </div>
                     ))}
@@ -1278,9 +1277,8 @@ const PCV_CSS = `
   button.pcv-signbar{width:auto;margin-left:16px;margin-right:16px}
   /* Cost breakdown reads as a clean 3-column list on a phone: drop the # and Unit columns, give the
      description the room, keep the amount right-aligned. (The detailed breakdown is opt-in anyway.) */
-  .pcv-table-head,.pcv-row{grid-template-columns:1fr 42px 82px !important}
-  .pcv-table-head > :first-child,.pcv-table-head > :nth-child(4),
-  .pcv-row > :first-child,.pcv-row > :nth-child(4){display:none}
+  .pcv-table-head,.pcv-row{grid-template-columns:1fr 84px !important}
+  .pcv-table-head > :first-child,.pcv-row > :first-child{display:none}
   .pcv-info-row{grid-template-columns:1fr;gap:10px}
   .pcv-sum-total{flex-wrap:wrap;gap:2px 12px}
   .pcv-sum-total-amt{font-size:1.45rem}
@@ -1309,11 +1307,12 @@ const PCV_CSS = `
   .pcv-fold-title,.pcv-info-row b,.pcv-info-link{min-width:0}
 }
 .pcv-table{margin:0 22px}
-.pcv-table-head{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;background:var(--dv-paper,#F4F4F2);
+.pcv-table-head{display:grid;grid-template-columns:26px 1fr 96px;gap:6px;background:var(--dv-paper,#F4F4F2);
   color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
 .pcv-table-head .r{text-align:right}
 .pcv-svc-head{font-size:.7rem;font-weight:600;letter-spacing:.04em;padding:6px 10px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-ink,#101418);border-radius:0 6px 6px 0}
-.pcv-row{display:grid;grid-template-columns:26px 1fr 60px 80px 90px;gap:6px;padding:7px 10px;
+/* Compact customer breakdown: Description → Total. No Qty/Unit columns; a qty>1 reads as secondary math. */
+.pcv-row{display:grid;grid-template-columns:26px 1fr 96px;gap:6px;padding:7px 10px;
   font-size:.8rem;color:var(--dv-ink,#101418);border-bottom:1px solid var(--dv-line-soft,#EDEDE9);align-items:center}
 .pcv-row.alt{background:var(--dv-line-soft,#EDEDE9)}
 .pcv-row.sub{background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.76rem;opacity:.85}
@@ -1322,6 +1321,7 @@ const PCV_CSS = `
 .pcv-rownum{text-align:center;color:var(--dv-meta,#787D84);font-size:.74rem}
 .pcv-rowdesc{display:flex;align-items:center;gap:5px;min-width:0;flex-wrap:wrap}
 .pcv-rowblurb{flex-basis:100%;font-size:12px;font-style:italic;line-height:1.35;color:var(--dv-muted,#6a7085);margin-top:1px}
+.pcv-rowmath{flex-basis:100%;font-size:11.5px;line-height:1.3;color:var(--dv-muted,#6a7085);margin-top:1px}
 .pcv-chev{font-size:.68rem;color:var(--dv-gold-text,#8A6A1F);flex-shrink:0}
 .r{text-align:right}
 .b{font-weight:600}

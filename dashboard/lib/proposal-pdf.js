@@ -1,7 +1,7 @@
 // Pure jsPDF renderer — no "use client" directive on purpose: lib/esign/ calls it from server code
 // (route handlers / server actions), where a client-boundary module would be an uncallable reference.
 import { jsPDF, AcroFormTextField } from "jspdf";
-import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName } from "./proposal.js";
+import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, displayOptionName, lineRole } from "./proposal.js";
 import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
@@ -137,7 +137,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.text = (txt, x, y, opts) => {
       const str = Array.isArray(txt) ? txt.join("\n") : String(txt);
       if (chrome) { if (meta.__footers && /\| \d+$/.test(str)) meta.__footers.push(str); }
-      else if (meta.__trace) meta.__trace.push({ page: doc.getCurrentPageInfo().pageNumber, y, text: str });
+      else if (meta.__trace) meta.__trace.push({ page: doc.getCurrentPageInfo().pageNumber, x, y, text: str });
       return rawText(txt, x, y, opts);
     };
   }
@@ -298,8 +298,12 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFontSize(8.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...CREAM);
     doc.text("#", lm + 12, yPos + 13, { align: "center" });
     doc.text("Description", lm + 22, yPos + 13);
-    doc.text("Qty", lm + rw * 0.72, yPos + 13, { align: "center" });
-    doc.text("Unit", lm + rw * 0.86, yPos + 13, { align: "right" });
+    // Standard (customer) proposal is a clean Description → Total read. The Qty / Unit accounting columns
+    // appear only in the detailed breakdown; in standard mode a qty > 1 shows as "N × $unit" under the name.
+    if (detailed) {
+      doc.text("Qty", lm + rw * 0.72, yPos + 13, { align: "center" });
+      doc.text("Unit", lm + rw * 0.86, yPos + 13, { align: "right" });
+    }
     doc.text("Total", lm + rw - 6, yPos + 13, { align: "right" });
     return yPos + 20;
   };
@@ -310,7 +314,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const RED = [192, 57, 43];
   // A row is as tall as its wrapped description (one line = 18pt; each extra line adds 10pt), so a
   // long name pushes what follows down instead of overprinting the next row or the footer.
-  const DESC_W = rw * 0.66, ROW_H = 18, LINE_H = 10;
+  const DESC_W = (detailed ? 0.66 : 0.80) * rw, ROW_H = 18, LINE_H = 10;
   const descLines = (desc) => { doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); return doc.splitTextToSize(String(desc), DESC_W); };
   // Optional customer-facing description under the product name — small, muted, italic. Backward-compatible:
   // items without a description render exactly as before (empty blurb → no extra lines, no height change).
@@ -319,12 +323,13 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // Condition line (customer-provided equipment / existing cable): one compact line under the name. The
   // label text ALWAYS prints (grayscale-safe); the tone colour is emphasis only. Metadata, never priced.
   const condH = (conds) => (conds && conds.length ? COND_LH + 1 : 0);
-  const rowHeight = (desc, blurb, conds) => ROW_H + (descLines(desc).length - 1) * LINE_H + condH(conds) + (blurbLines(blurb).length ? blurbLines(blurb).length * BLURB_LH + 2 : 0);
-  const tableRow = (num, desc, qty, unit, total, yPos, strike = false, blurb = "", conds = []) => {
+  const mathH = (m) => (m ? COND_LH : 0);   // "N × $unit" secondary line in standard mode
+  const rowHeight = (desc, blurb, conds, mathLine) => ROW_H + (descLines(desc).length - 1) * LINE_H + condH(conds) + mathH(mathLine) + (blurbLines(blurb).length ? blurbLines(blurb).length * BLURB_LH + 2 : 0);
+  const tableRow = (num, desc, qty, unit, total, yPos, strike = false, blurb = "", conds = [], mathLine = "") => {
     const lines = descLines(desc);
     const bl = blurbLines(blurb);
-    const ch = condH(conds);
-    const h = ROW_H + (lines.length - 1) * LINE_H + ch + (bl.length ? bl.length * BLURB_LH + 2 : 0);
+    const ch = condH(conds), mh = mathH(mathLine);
+    const h = ROW_H + (lines.length - 1) * LINE_H + ch + mh + (bl.length ? bl.length * BLURB_LH + 2 : 0);
     const bg = rowIdx % 2 === 0 ? WHITE : MIST;
     doc.setFillColor(...bg);
     doc.rect(lm, yPos, rw, h, "F");
@@ -346,12 +351,21 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
       subY += COND_LH;
     }
+    if (mathLine) {
+      doc.setFontSize(7.5); doc.setFont("helvetica", "normal"); doc.setTextColor(112, 118, 132);
+      doc.text(mathLine, lm + 22, subY);
+      doc.setTextColor(...INK);
+      subY += COND_LH;
+    }
     if (bl.length) {
       doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(112, 118, 132);
       bl.forEach((ln, i) => doc.text(ln, lm + 22, subY + i * BLURB_LH));
       doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     }
-    doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
+    // Reset to the row font before the money cells — a sub-line above (condition/math/blurb) leaves a
+    // smaller size set, which otherwise shrinks the price. All line totals print at one consistent size.
+    doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
+    if (detailed) doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
     const price = (txt, x) => {
       doc.setTextColor(...(strike ? RED : INK));
       doc.text(txt, x, yPos + 12, { align: "right" });
@@ -361,7 +375,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         doc.line(x - w, yPos + 9, x, yPos + 9);
       }
     };
-    price(unit, lm + rw * 0.86);
+    if (detailed) price(unit, lm + rw * 0.86);
     price(total, lm + rw - 6);
     doc.setTextColor(...INK);
     rowIdx++;
@@ -567,7 +581,8 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     y = sectionHeader(detailed ? "DETAILED SYSTEM BREAKDOWN" : "PROJECT COST BREAKDOWN", y) + 4;
     y = tableHeader(y);
     rowIdx = 0;
-    let lineNum = 1;
+    let lineNum = 1;        // physical row counter (drives the page-break cadence)
+    let endpointNum = 0;    // displayed number — endpoints only; infrastructure (NVR/storage/display) is blank
 
     (opt.services || []).forEach((svc) => {
       if (!svc.items?.length) return;
@@ -589,16 +604,21 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         const showKids = detailed && hasSub && !it.waived;
         const blurb = String(it.desc || "").trim();
         const conds = lineConditionBadges(it);   // customer-provided equipment / existing cable (metadata only)
+        // Endpoint numbering: a camera/endpoint gets the next number; infrastructure stays blank so it
+        // never distorts the endpoint count. Standard mode shows a qty > 1 as "N × $unit" under the name.
+        const num = lineRole(it) === "infrastructure" ? "" : String(++endpointNum);
+        const q = hasSub ? 1 : (+it.qty || 1);
+        const mathLine = (!detailed && !hasSub && q > 1) ? `${q} × $${money(it.price)}` : "";
         if (lineNum > 1 && (lineNum - 1) % 12 === 0 && !detailed) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
-        else { const ny = ensureRoom(y, rowHeight(desc, blurb, conds) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
+        else { const ny = ensureRoom(y, rowHeight(desc, blurb, conds, mathLine) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
         const tot = itemTotal(it);
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
         y = tableRow(
-          String(lineNum), detailed && it.waived ? titleCase(it.name) : desc,
+          num, detailed && it.waived ? titleCase(it.name) : desc,
           hasSub ? "1" : String(it.qty ?? 1),
           detailed && it.waived ? "—" : "$" + money(hasSub ? gross : it.price),
-          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed, blurb, conds
+          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed, blurb, conds, mathLine
         );
         if (showKids) {
           // Components explain the package total; a parent with its own price on top is flagged
