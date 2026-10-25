@@ -462,6 +462,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [sigBusy, setSigBusy] = useState(false);
   const [sigCopied, setSigCopied] = useState(false);
   const signingUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/project/${accessId}?open=proposal&sign=${opt?.id ?? ""}`;
+  // Copy the signing link straight to the clipboard and close the sheet — the fast path when you just want the URL.
+  async function copySigningLink() {
+    try { await navigator.clipboard.writeText(signingUrl); showToast("Signing link copied"); }
+    catch { try { window.prompt("Copy this signing link:", signingUrl); } catch { /* noop */ } }
+    setSigSheet(false);
+  }
   async function shareSigningLink() {
     try { if (navigator.share) { await navigator.share({ title: "Review & sign your IOT TECHS proposal", url: signingUrl }); return; } } catch { /* cancelled — fall through to copy */ }
     try { await navigator.clipboard.writeText(signingUrl); setSigCopied(true); setTimeout(() => setSigCopied(false), 1800); }
@@ -726,6 +732,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
               <span className="prop-sig-title">Request Signature</span>
               <button type="button" className="prop-sig-x" onClick={() => setSigSheet(false)} aria-label="Close">×</button>
             </div>
+            <button type="button" className="prop-sig-act" onClick={copySigningLink}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              <span>Copy Link</span>
+            </button>
             <button type="button" className="prop-sig-act" onClick={shareSigningLink}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
               <span>{sigCopied ? "Link copied" : "Share Signing Link"}</span>
