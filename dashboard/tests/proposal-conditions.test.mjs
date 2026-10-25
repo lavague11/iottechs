@@ -148,3 +148,13 @@ test("PDF: an item with no conditions prints no condition label", () => {
   const texts = renderTexts([{ id: "x", name: "Plain Camera", qty: 1, price: 300 }]);
   assert.ok(!texts.includes("CUSTOMER-PROVIDED EQUIPMENT") && !texts.includes("EXISTING CABLE"), "no condition text for a clean line");
 });
+
+test("PDF camera-location section flags conditions with a legend (by data)", () => {
+  const cam = (id, name, conditions) => ({ id, name, qty: 1, price: 300, ...(conditions ? { conditions } : {}), sub: [{ id: id + "s", name: "Camera", qty: 1, price: 300 }] });
+  const texts = renderTexts([cam("c1", "Entrance Camera", ["cxEquip"]), cam("c2", "Rear Camera", ["existingCable"]), cam("c3", "Side Camera")]);
+  assert.ok(texts.includes("CAMERA LOCATIONS"), "the location section renders");
+  for (const n of ["Entrance Camera", "Rear Camera", "Side Camera"]) assert.ok(texts.includes(n), `location ${n} listed`);
+  // Legend names each present condition exactly once, in the customer-facing (title-case) label.
+  assert.equal(texts.filter((t) => t === "Customer-Provided Equipment").length, 1, "CX legend once (distinct from the uppercase cost-breakdown line)");
+  assert.equal(texts.filter((t) => t === "Existing Cable").length, 1, "existing-cable legend once");
+});

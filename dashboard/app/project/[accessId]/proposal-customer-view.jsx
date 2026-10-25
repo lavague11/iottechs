@@ -867,11 +867,30 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           <div className="pcv-section-hd">Camera Locations</div>
           <div className="pcv-loc-box">
             <div className="pcv-loc-list">
-              {camBlocks.map((it) => (
-                <span key={it.id} className="pcv-loc-item">• {titleCase(it.name).replace(/\s*—.*$/, "")}</span>
-              ))}
+              {camBlocks.map((it) => {
+                const conds = lineConditionBadges(it);
+                return (
+                  <span key={it.id} className="pcv-loc-item">
+                    {conds.length
+                      ? conds.map((c) => <span key={c.key} className={`pcv-loc-dot ${c.tone}`} title={c.label} />)
+                      : <span className="pcv-loc-dot" aria-hidden="true" />}
+                    {titleCase(it.name).replace(/\s*—.*$/, "")}
+                  </span>
+                );
+              })}
             </div>
             <div className="pcv-loc-total">Total Camera Locations: {camBlocks.length}</div>
+            {(() => {
+              const legend = []; const seen = new Set();
+              camBlocks.forEach((it) => lineConditionBadges(it).forEach((c) => { if (!seen.has(c.key)) { seen.add(c.key); legend.push(c); } }));
+              return legend.length ? (
+                <div className="pcv-loc-legend">
+                  {legend.map((c) => (
+                    <span key={c.key} className="pcv-loc-leg"><span className={`pcv-loc-dot ${c.tone}`} />{c.label}</span>
+                  ))}
+                </div>
+              ) : null;
+            })()}
           </div>
         </>
       )}
@@ -1316,6 +1335,14 @@ const PCV_CSS = `
 
 .pcv-loc-box{margin:0 22px}
 .pcv-loc-list{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;font-size:.8rem;color:var(--dv-ink,#101418);padding:10px 4px 0}
+.pcv-loc-item{display:flex;align-items:center}
+/* Location dot: neutral bullet by default; gold = customer-provided, orange = existing cable (one per condition) */
+.pcv-loc-dot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:7px;flex:0 0 auto;background:var(--dv-muted,#9aa0ab)}
+.pcv-loc-dot+.pcv-loc-dot{margin-left:-3px}
+.pcv-loc-dot.gold{background:#C79A1E}
+.pcv-loc-dot.orange{background:#C56B2C}
+.pcv-loc-legend{display:flex;flex-wrap:wrap;gap:4px 16px;padding:6px 4px 2px}
+.pcv-loc-leg{display:flex;align-items:center;font-size:.68rem;color:var(--dv-muted,#6a7085)}
 .pcv-loc-total{font-weight:600;color:var(--dv-ink-soft,#3A4048);font-size:.8rem;padding:8px 4px 4px}
 
 /* Payment Terms — stacked milestones, no table. Each milestone is a row: phase + % on the left,

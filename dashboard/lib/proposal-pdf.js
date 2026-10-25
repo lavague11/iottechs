@@ -645,14 +645,24 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     const camSvc = (opt.services || []).find((s) => s.key === "camera");
     const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
     if (camBlocks.length) {
-      y = ensureRoom(y, 28 + Math.ceil(camBlocks.length / 2) * 15 + 18);
+      // Distinct conditions present across the locations → a compact legend so the dots are legible on paper.
+      const legend = [];
+      const seenC = new Set();
+      camBlocks.forEach((it) => lineConditionBadges(it).forEach((c) => { if (!seenC.has(c.key)) { seenC.add(c.key); legend.push(c); } }));
+      y = ensureRoom(y, 28 + Math.ceil(camBlocks.length / 2) * 15 + 18 + (legend.length ? 14 : 0));
       y = sectionHeader("CAMERA LOCATIONS", y) + 6;
       doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
       const colW = rw / 2;
       let col = 0, rowY = y;
       camBlocks.forEach((it) => {
-        const label = "• " + titleCase(it.name).replace(/\s*—.*$/, "");
-        doc.text(label, lm + 6 + col * colW, rowY + 10);
+        // A location gets a coloured dot per condition (gold = customer-provided, orange = existing cable),
+        // else a neutral bullet. Compact flag only — the cost breakdown carries the full spelled-out label.
+        const conds = lineConditionBadges(it);
+        const x0 = lm + 6 + col * colW, cy = rowY + 7;
+        if (conds.length) conds.forEach((c, i) => { doc.setFillColor(...(COND_RGB[c.tone] || [154, 160, 171])); doc.circle(x0 + 2 + i * 5, cy, 2, "F"); });
+        else { doc.setFillColor(154, 160, 171); doc.circle(x0 + 2, cy, 1.6, "F"); }
+        doc.setTextColor(...INK);
+        doc.text(titleCase(it.name).replace(/\s*—.*$/, ""), x0 + (conds.length > 1 ? 13 : 10), rowY + 10);
         col++;
         if (col === 2) { col = 0; rowY += 15; }
       });
@@ -661,6 +671,17 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFont("helvetica", "bold"); doc.setTextColor(...SLATE);
       doc.text(`Total Camera Locations: ${camBlocks.length}`, lm + 6, y + 8);
       y += 14;
+      if (legend.length) {
+        let lx = lm + 6;
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+        legend.forEach((c) => {
+          doc.setFillColor(...(COND_RGB[c.tone] || [154, 160, 171])); doc.circle(lx + 2, y + 5, 2, "F");
+          doc.setTextColor(90, 96, 104);
+          doc.text(c.label, lx + 8, y + 7.5);
+          lx += 8 + doc.getTextWidth(c.label) + 16;
+        });
+        y += 14;
+      }
     }
 
     // Payment terms — ONE block (heading, schedule, methods, plan terms, tax note). Its full height is
