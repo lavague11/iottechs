@@ -469,10 +469,13 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   }, [needsSig, verKey]);
   const markSeen = () => { setBannerDismissed(true); try { if (verKey) localStorage.setItem(verKey, "seen"); } catch { /* ignore */ } };
   const startReview = () => { markSeen(); setSpotlightOn(true); };
+  // Guided review follows the customer's DECISION path (not the DOM order): what am I buying & what does it
+  // cost → when do I pay → ready to sign. The final step opens the real PDF signer (onFinish). Request a
+  // Change / Decline is never a step. Tapping the highlighted region also advances (the engine wires the ring).
   const reviewSteps = () => [
-    { getEl: () => costRef.current, title: "Your project cost", hint: "Here’s your full breakdown and grand total. Take a look, then tap Next." },
-    { getEl: () => payRef.current, title: "Payment schedule", hint: "This is when each payment is due. Review it before you sign." },
-    { getEl: () => signRef.current, title: "Ready to continue?", hint: "Review and sign your proposal — this opens the signer; it won’t submit until you sign.", cta: "Review & Sign" },
+    { getEl: () => costRef.current, title: "Review your project", hint: "Confirm the equipment, locations, and total project cost. Tap the highlighted area to continue." },
+    { getEl: () => payRef.current, title: "Review your payment schedule", hint: "Confirm when each payment is due. Tap the highlighted area to continue." },
+    { getEl: () => signRef.current, title: "Ready to sign?", hint: "Open the proposal, review the final document, and sign when ready. Tap Review & Sign to continue.", cta: "Review & Sign" },
   ];
   // Multi-document action center: when more than one customer action is outstanding on this surface
   // (proposal signature + PCP approval), list them in ONE center instead of competing banners. Each routes
@@ -854,7 +857,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit{pcpApproved ? "" : " (pending)"}</span><span>−{money(t.pcpCredit)}</span></div>}
       {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}
       <div className="pcv-grand"><span>Grand Total</span><span>{money(t.grand)}</span></div>
-      </div>
 
       {camBlocks.length > 0 && (
         <>
@@ -869,6 +871,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           </div>
         </>
       )}
+      </div>{/* /pcv-cost-region — Step 1 spotlight: Project Cost Breakdown → Camera Locations */}
       </>)}
 
       <div className="pcv-pay-region" ref={payRef}>
