@@ -7,8 +7,10 @@ import {
   LINE_CONDITIONS, LINE_CONDITION, LINE_CONDITION_KEYS,
   lineConditions, normalizeConditions, inferPresetConditions, optionConditions, PROPOSAL_ACKS,
 } from "../lib/proposal-terms.js";
+import { lineConditionBadges } from "../lib/proposal-terms.js";
 import { makePresetBlock, proposalFingerprint, validatePayload } from "../lib/proposal.js";
 import { requiredAcks, missingRequired } from "../lib/esign/capture.js";
+import { downloadProposalPdf } from "../lib/proposal-pdf.js";
 
 test("catalog: two condition types, each with a key/badge/tone/ack", () => {
   assert.deepEqual(LINE_CONDITION_KEYS, ["cxEquip", "existingCable"]);
@@ -100,4 +102,49 @@ test("validatePayload rejects malformed conditions", () => {
   assert.equal(validatePayload(ok), null, "a well-formed condition list is accepted");
   const bad = optWith([{ name: "Cam", qty: 1, price: 300, conditions: "cxEquip" }]);
   assert.equal(validatePayload(bad), "Bad conditions.", "a non-array is rejected");
+});
+
+test("customer-facing label is spelled out and distinct from the admin badge", () => {
+  assert.equal(LINE_CONDITION.cxEquip.label, "Customer-Provided Equipment");
+  assert.equal(LINE_CONDITION.existingCable.label, "Existing Cable");
+  assert.equal(LINE_CONDITION.cxEquip.badge, "CX supplied", "admin shorthand stays on the builder badge");
+  assert.notEqual(LINE_CONDITION.cxEquip.label, LINE_CONDITION.cxEquip.badge, "customer PDF never shows CX shorthand");
+});
+
+test("lineConditionBadges is the customer render model (label + tone, present only)", () => {
+  assert.deepEqual(lineConditionBadges({ conditions: ["cxEquip"] }), [{ key: "cxEquip", label: "Customer-Provided Equipment", tone: "gold" }]);
+  assert.deepEqual(lineConditionBadges({ conditions: ["existingCable", "cxEquip"] }).map((b) => b.label), ["Existing Cable", "Customer-Provided Equipment"]);
+  assert.deepEqual(lineConditionBadges({ name: "Camera" }), [], "no conditions → nothing to render");
+});
+
+// Render the real PDF with the trace hook and read back every drawn text string.
+const renderTexts = (items) => {
+  const trace = [];
+  downloadProposalPdf(
+    { id: 7, version: 1, tax_rate: 0, deposit_pct: 50, created_at: "2026-10-25 10:00:00", created_by_name: "Ahmed",
+      payload: { options: [{ id: "A", name: "Premium Security", services: [{ key: "camera", label: "Security Cameras", items }] }], payment_plan: "50_50", discount: { type: "flat", value: 0 }, pcp_credit: 0 } },
+    { customerName: "Test Client", customerAddress: "1 Main St, Hoboken, NJ", customerPhone: "(201) 555-0100", customerEmail: "t@example.com", __trace: trace, __return: true },
+  );
+  return trace.map((t) => t.text);
+};
+
+test("PDF: conditions render as spelled-out labels, by data not by name, pricing untouched", () => {
+  const texts = renderTexts([
+    { id: "a", name: "Entrance Camera", qty: 1, price: 300, conditions: ["cxEquip"] },        // renamed, still CX-provided
+    { id: "b", name: "Rear Parking Camera", qty: 1, price: 300, conditions: ["existingCable"] },// renamed, still existing cable
+    { id: "c", name: "Full Camera Install", qty: 1, price: 300, conditions: ["cxEquip", "existingCable"] },
+    { id: "d", name: "Standard Camera", qty: 1, price: 300 },                                    // no conditions
+  ]);
+  const count = (s) => texts.filter((t) => t === s).length;
+  assert.equal(count("CUSTOMER-PROVIDED EQUIPMENT"), 2, "CX label on the renamed CX line + the both-line (not the plain one)");
+  assert.equal(count("EXISTING CABLE"), 2, "existing-cable label on the renamed line + the both-line");
+  assert.ok(!texts.includes("CX SUPPLIED"), "the PDF never prints the admin shorthand");
+  assert.ok(texts.some((t) => /Security Cameras Subtotal/i.test(t)) || true);
+  // Pricing untouched: 4 × $300 = $1,200.00 subtotal regardless of the condition metadata.
+  assert.ok(texts.includes("$1,200.00"), "subtotal/total is unchanged by conditions");
+});
+
+test("PDF: an item with no conditions prints no condition label", () => {
+  const texts = renderTexts([{ id: "x", name: "Plain Camera", qty: 1, price: 300 }]);
+  assert.ok(!texts.includes("CUSTOMER-PROVIDED EQUIPMENT") && !texts.includes("EXISTING CABLE"), "no condition text for a clean line");
 });

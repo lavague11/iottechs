@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { optionTotals, itemTotal, titleCase, serviceColor, fmtSignStamp, PAYMENT_PLANS, planScheduleRows, planDepositPct, displayOptionName, cameraNameOverrides } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
+import { lineConditionBadges } from "../../../lib/proposal-terms";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { parseSurveyFloors, surveyDevices } from "../../../lib/survey2-model";
@@ -796,6 +797,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                           </button>
                         )}
                         {it.waived && <span className="pcv-waived-chip">Waived</span>}
+                        {lineConditionBadges(it).map((c) => (
+                          <span key={c.key} className={`pcv-cond ${c.tone}`}>{c.label}</span>
+                        ))}
                         {flags[it.id] && (
                           <span className={`pcv-flag-chip ${flags[it.id].type}`}>
                             {flags[it.id].type === "remove" ? "Removal requested" : "Relocation requested"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
@@ -1335,6 +1339,10 @@ button.pcv-signbar:hover:not(:disabled){background:#F2D45A !important}
 button.pcv-signbar:disabled{opacity:.5;cursor:default}
 button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-waived-chip{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:500;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:2px 8px;vertical-align:middle}
+/* Line-item condition chips (customer-facing): spelled-out label + semantic tone, subtle under the name */
+.pcv-cond{display:inline-block;margin-left:8px;font-size:.6rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;border-radius:100px;padding:2px 8px;vertical-align:middle;white-space:nowrap}
+.pcv-cond.gold{color:#8A6A1F;background:rgba(199,154,30,.12)}
+.pcv-cond.orange{color:#B45B22;background:rgba(197,107,44,.12)}
 .pcv-waived-strike{color:var(--dv-red,#C4553D);text-decoration:line-through;text-decoration-color:var(--dv-red,#C4553D)}
 .pcv-pay-terms{margin:10px 22px 0;font-size:.78rem;color:var(--dv-ink-soft,#3A4048);font-weight:500;line-height:1.45;border-left:3px solid var(--dv-gold,#C9A96E);padding-left:12px}
 .pcv-pcp-box{margin:0 22px;border:1px solid var(--dv-line,#E4E4DF);background:rgba(46,125,91,.05);border-radius:14px;padding:16px 18px}

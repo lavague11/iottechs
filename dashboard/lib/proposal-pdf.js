@@ -5,7 +5,7 @@ import { optionTotals, itemTotal, svcSubtotal, titleCase, fmtSignStamp, PAYMENT_
 import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
-import { PROPOSAL_TERMS } from "./proposal-terms.js";
+import { PROPOSAL_TERMS, lineConditionBadges } from "./proposal-terms.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -148,6 +148,8 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const CREAM = [250, 248, 244];
   const MIST = [240, 237, 232];
   const WHITE = [255, 255, 255];
+  // Condition accent colours (grayscale-safe — the label text always prints; colour is only emphasis).
+  const COND_RGB = { gold: [138, 106, 31], orange: [181, 91, 34] };
   const lm = 57.6;
   const rw = W - lm - 28.8;
 
@@ -312,13 +314,17 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   const descLines = (desc) => { doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); return doc.splitTextToSize(String(desc), DESC_W); };
   // Optional customer-facing description under the product name — small, muted, italic. Backward-compatible:
   // items without a description render exactly as before (empty blurb → no extra lines, no height change).
-  const BLURB_LH = 9;
+  const BLURB_LH = 9, COND_LH = 10;
   const blurbLines = (blurb) => { const s = String(blurb || "").trim(); if (!s) return []; doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); return doc.splitTextToSize(s, DESC_W); };
-  const rowHeight = (desc, blurb) => ROW_H + (descLines(desc).length - 1) * LINE_H + (blurbLines(blurb).length ? blurbLines(blurb).length * BLURB_LH + 2 : 0);
-  const tableRow = (num, desc, qty, unit, total, yPos, strike = false, blurb = "") => {
+  // Condition line (customer-provided equipment / existing cable): one compact line under the name. The
+  // label text ALWAYS prints (grayscale-safe); the tone colour is emphasis only. Metadata, never priced.
+  const condH = (conds) => (conds && conds.length ? COND_LH + 1 : 0);
+  const rowHeight = (desc, blurb, conds) => ROW_H + (descLines(desc).length - 1) * LINE_H + condH(conds) + (blurbLines(blurb).length ? blurbLines(blurb).length * BLURB_LH + 2 : 0);
+  const tableRow = (num, desc, qty, unit, total, yPos, strike = false, blurb = "", conds = []) => {
     const lines = descLines(desc);
     const bl = blurbLines(blurb);
-    const h = ROW_H + (lines.length - 1) * LINE_H + (bl.length ? bl.length * BLURB_LH + 2 : 0);
+    const ch = condH(conds);
+    const h = ROW_H + (lines.length - 1) * LINE_H + ch + (bl.length ? bl.length * BLURB_LH + 2 : 0);
     const bg = rowIdx % 2 === 0 ? WHITE : MIST;
     doc.setFillColor(...bg);
     doc.rect(lm, yPos, rw, h, "F");
@@ -327,10 +333,22 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFontSize(8.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     doc.text(num, lm + 12, yPos + 12, { align: "center" });
     lines.forEach((ln, i) => doc.text(ln, lm + 22, yPos + 12 + i * LINE_H));
+    let subY = yPos + 12 + lines.length * LINE_H - 1;   // baseline just under the name
+    if (ch) {
+      doc.setFontSize(7); doc.setFont("helvetica", "bold");
+      let cx = lm + 22;
+      conds.forEach((c, i) => {
+        if (i) { doc.setTextColor(150, 150, 150); doc.text(" · ", cx, subY); cx += doc.getTextWidth(" · "); }
+        doc.setTextColor(...(COND_RGB[c.tone] || INK));
+        const t = String(c.label || "").toUpperCase();
+        doc.text(t, cx, subY); cx += doc.getTextWidth(t);
+      });
+      doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
+      subY += COND_LH;
+    }
     if (bl.length) {
       doc.setFontSize(7.5); doc.setFont("helvetica", "italic"); doc.setTextColor(112, 118, 132);
-      const by = yPos + 12 + lines.length * LINE_H - 1;
-      bl.forEach((ln, i) => doc.text(ln, lm + 22, by + i * BLURB_LH));
+      bl.forEach((ln, i) => doc.text(ln, lm + 22, subY + i * BLURB_LH));
       doc.setFont("helvetica", "normal"); doc.setTextColor(...INK);
     }
     doc.text(qty, lm + rw * 0.72, yPos + 12, { align: "center" });
@@ -570,8 +588,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         const hasSub = (it.sub || []).length > 0;
         const showKids = detailed && hasSub && !it.waived;
         const blurb = String(it.desc || "").trim();
+        const conds = lineConditionBadges(it);   // customer-provided equipment / existing cable (metadata only)
         if (lineNum > 1 && (lineNum - 1) % 12 === 0 && !detailed) { y = newPage(); y = tableHeader(y); rowIdx = 0; }
-        else { const ny = ensureRoom(y, rowHeight(desc, blurb) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
+        else { const ny = ensureRoom(y, rowHeight(desc, blurb, conds) + (showKids ? CHILD_H : 0) + 4); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
         const tot = itemTotal(it);
         const gross = it.waived ? itemTotal({ ...it, waived: false }) : tot;
         secTotal += tot;
@@ -579,7 +598,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
           String(lineNum), detailed && it.waived ? titleCase(it.name) : desc,
           hasSub ? "1" : String(it.qty ?? 1),
           detailed && it.waived ? "—" : "$" + money(hasSub ? gross : it.price),
-          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed, blurb
+          detailed && it.waived ? "Waived" : "$" + money(it.waived ? gross : tot), y, !!it.waived && !detailed, blurb, conds
         );
         if (showKids) {
           // Components explain the package total; a parent with its own price on top is flagged

@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials, planDepositPct } from "../../../lib/proposal";
+import { lineConditions, LINE_CONDITION } from "../../../lib/proposal-terms";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
@@ -370,9 +371,16 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
       const other = items.length - cams - nvrs;
       return [cams && `${cams} camera${cams > 1 ? "s" : ""}`, nvrs && `${nvrs} recorder${nvrs > 1 ? "s" : ""}`, other > 0 && `${other} item${other > 1 ? "s" : ""}`].filter(Boolean).join("  ·  ");
     };
+    // Distinct conditions across the option's lines — carried onto the invoice summary so customer-provided
+    // equipment / existing cable don't disappear after acceptance (one mention per type, canonical labels).
+    const condSummary = (o) => {
+      const set = new Set();
+      (o.services || []).forEach((s) => (s.items || []).forEach((it) => lineConditions(it).forEach((k) => set.add(k))));
+      return [...set].map((k) => LINE_CONDITION[k].label);
+    };
     const lines = [
       ...shown.map((o) => ({ label: `Security System — Option ${o.id}${o.name ? ` (${displayOptionName(o.name)})` : ""}`,
-        sub: itemSummary(o),
+        sub: [itemSummary(o), ...condSummary(o)].filter(Boolean).join("  ·  "),
         amount: optionTotals(o, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit).grand })),
       ...(addons.list || []).map((a) => ({ label: `Add-on · ${a.title}`, amount: a.total })),
     ];

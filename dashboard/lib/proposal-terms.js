@@ -450,10 +450,14 @@ The signature covers the entire Agreement. The customer initials each required a
 // supplying the gear, or the run reuses existing cable). Each is the ONE canonical source for its badge
 // (builder), its colour, and the acknowledgment the customer initials once per type at signing — grouped
 // by type, never repeated per line. `ack` is the exact initialed sentence; keep it plain and honest.
+// `badge` is the admin shorthand (compact builder chip); `label` is the customer-facing name used on the
+// customer proposal, the PDF, the invoice and the acknowledgment — always spelled out, never shorthand, so
+// a grayscale printout still reads correctly. `tone` is the shared colour token each renderer maps to its
+// own space (CSS vars on the web, RGB in the PDF).
 export const LINE_CONDITIONS = [
-  { key: "cxEquip", badge: "CX supplied", tone: "gold", note: "Customer-provided equipment",
+  { key: "cxEquip", badge: "CX supplied", label: "Customer-Provided Equipment", tone: "gold", note: "Customer-provided equipment",
     ack: "Customer-provided equipment: I'm supplying one or more devices for this project. IOT TECHS isn't responsible for the condition, compatibility, firmware, or warranty of equipment I provide, and added charges may apply if it's defective or incompatible." },
-  { key: "existingCable", badge: "Existing cable", tone: "orange", note: "Reuses existing cabling",
+  { key: "existingCable", badge: "Existing cable", label: "Existing Cable", tone: "orange", note: "Reuses existing cabling",
     ack: "Existing cabling: this project reuses existing cable runs. IOT TECHS will test and map reused cabling but isn't responsible for faults in cable it didn't install, and replacing failed existing cable may be billable." },
 ];
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
@@ -462,6 +466,11 @@ export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
 // The valid conditions on a line item (unknown keys dropped). Top-level lines only — sub-items never carry them.
 export function lineConditions(it) {
   return Array.isArray(it?.conditions) ? it.conditions.filter((k) => LINE_CONDITION[k]) : [];
+}
+// Customer-facing render model for a line's conditions — the ONE shape every customer surface consumes
+// (customer proposal, PDF, invoice). Never derived from the name/preset/price.
+export function lineConditionBadges(it) {
+  return lineConditions(it).map((k) => ({ key: k, label: LINE_CONDITION[k].label, tone: LINE_CONDITION[k].tone }));
 }
 export function normalizeConditions(arr) {
   return Array.isArray(arr) ? [...new Set(arr.filter((k) => LINE_CONDITION[k]))] : [];
