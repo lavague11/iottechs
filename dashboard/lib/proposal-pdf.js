@@ -513,6 +513,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     }
 
     const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
+    // Conditional disclosure (presentation only): a subtotal line earns its place only when a modifier moves
+    // the price. With no discount/credit/tax, subtotal === grand total, so only the total prints.
+    const hasMods = t.discount > 0 || t.pcpCredit > 0 || t.tax > 0;
+    // Per-section subtotal is a sub-grouping — meaningful only with two+ priced sections (else it equals total).
+    const pricedSvcCount = (opt.services || []).filter((svc) => svc.items?.length).length;
 
     // Detailed: EXECUTIVE SYSTEM SUMMARY — one coherent region: small gold label, per-service heading,
     // headline metrics, installation scope, and a compact project summary on the right. Derived from
@@ -521,10 +526,14 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       const MUTED = [74, 82, 112];
       const label = (txt, x, yy) => { doc.setFontSize(6.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD_D); doc.text(txt, x, yy, { charSpace: 1.3 }); };
       const groups = (opt.services || []).filter((svc) => svc.items?.length).map((svc) => ({ label: svc.label, metrics: serviceMetrics(svc), scope: scopeLines(svc) }));
-      const finRows = [["Project subtotal", "$" + money(t.sub)]];
-      if (t.discount > 0) finRows.push(["Discount", "-$" + money(t.discount)]);
-      if (t.pcpCredit > 0) finRows.push(["PCP credit", "-$" + money(t.pcpCredit)]);
-      if (t.tax > 0) finRows.push([`Sales tax (${p.tax_rate}%)`, "+$" + money(t.tax)]);
+      // Only show the subtotal→modifiers ladder when a modifier exists; otherwise the summary is FINAL alone.
+      const finRows = [];
+      if (hasMods) {
+        finRows.push(["Project subtotal", "$" + money(t.sub)]);
+        if (t.discount > 0) finRows.push(["Discount", "-$" + money(t.discount)]);
+        if (t.pcpCredit > 0) finRows.push(["PCP credit", "-$" + money(t.pcpCredit)]);
+        if (t.tax > 0) finRows.push([`Sales tax (${p.tax_rate}%)`, "+$" + money(t.tax)]);
+      }
       const finH = 12 + finRows.length * 13 + 8 + 18;
       const groupH = (g) => 16 + (g.metrics.length ? 34 : 0) + (g.scope.length ? 14 + g.scope.length * 12 : 0) + 10;
       y = ensureRoom(y, 14 + groupH(groups[0] || { metrics: [], scope: [] }));
@@ -641,15 +650,20 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         }
         lineNum++;
       });
-      y = ensureRoom(y, 22);
-      y = subtotalRow(svc.label + " Subtotal", "$" + money(secTotal), y);
-      y += 4;
+      if (pricedSvcCount > 1) {
+        y = ensureRoom(y, 22);
+        y = subtotalRow(svc.label + " Subtotal", "$" + money(secTotal), y);
+        y += 4;
+      }
     });
 
     y = ensureRoom(y, 40);
     y += 4;
-    y = subtotalRow("PROJECT SUBTOTAL", "$" + money(t.sub), y);
-    y += 4;
+    // Subtotal row collapses away when nothing modifies the price (GRAND TOTAL carries the number).
+    if (hasMods) {
+      y = subtotalRow("PROJECT SUBTOTAL", "$" + money(t.sub), y);
+      y += 4;
+    }
     if (t.discount > 0) {
       y = ensureRoom(y, 20);
       y = tableRow("", "Discount", "", "", "-$" + money(t.discount), y);

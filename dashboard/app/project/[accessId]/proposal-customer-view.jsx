@@ -394,6 +394,12 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const optAccepted = acceptedSet.has(opt.id);
   const optDeclined = Object.prototype.hasOwnProperty.call(declinedMap, opt.id);
   const t = optionTotals(opt, p.tax_rate, p.payload.discount, p.deposit_pct, p.payload.pcp_credit);
+  // Conditional disclosure: Subtotal earns its place only when a modifier moves the price between it and the
+  // grand total. With no discount/credit/tax, Project Subtotal === Grand Total, so it's dropped (Total alone).
+  const hasMods = t.discount > 0 || t.pcpCredit > 0 || t.tax > 0;
+  // A per-section subtotal is a sub-grouping — it only means something when there are two+ priced sections.
+  // With a single section its number equals the grand total, so the section-subtotal line is dropped.
+  const pricedSvcCount = (opt.services || []).filter((s) => s.items?.length).length;
   const depositPct = planDepositPct(p.payload, p.deposit_pct);   // the up-front % from the PAYMENT PLAN (not the legacy deposit_pct) — keeps this summary consistent with the Payment Terms table below
   const camSvc = (opt.services || []).find((s) => s.key === "camera");
   const camBlocks = (camSvc?.items || []).filter((it) => (it.sub || []).length > 0);
@@ -849,13 +855,13 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                 );
               })}
               {s.note && <div className="pcv-svc-note">{s.note}</div>}
-              <div className="pcv-subtotal-row"><span>{s.label} Subtotal</span><span>{money(secTotal)}</span></div>
+              {pricedSvcCount > 1 && <div className="pcv-subtotal-row"><span>{s.label} Subtotal</span><span>{money(secTotal)}</span></div>}
             </div>
           );
         })}
       </div>
 
-      <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>
+      {hasMods && <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>}
       {t.discount > 0 && <div className="pcv-subtotal-row main"><span>Discount</span><span>−{money(t.discount)}</span></div>}
       {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit{pcpApproved ? "" : " (pending)"}</span><span>−{money(t.pcpCredit)}</span></div>}
       {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}

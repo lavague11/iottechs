@@ -66,9 +66,11 @@ test("page count grows with content and long descriptions take taller rows", () 
 test("Payment Terms moves whole to the next page when the grand total lands near the bottom", () => {
   // Sweep sizes: at least one proposal ends its totals low enough that Payment Terms must move, and
   // when it does, Grand Total stays on the earlier page while the whole block lands on the next.
+  // Long (wrapped) descriptions make the rows tall enough that some size lands the totals near the
+  // bottom — the compact no-modifier summary is shorter, so the plain fixture never reaches the edge.
   let moved = 0;
   for (let n = 1; n <= 24; n++) {
-    const { trace } = render(proposal(n));
+    const { trace } = render(proposal(n, { long: true }));
     const gt = pageOf(trace, "GRAND TOTAL")[0], pt = pageOf(trace, "PAYMENT TERMS")[0];
     assert.ok(pt === gt || pt === gt + 1, `n=${n}: payment terms page ${pt} vs grand total page ${gt}`);
     if (pt === gt + 1) {
@@ -78,6 +80,26 @@ test("Payment Terms moves whole to the next page when the grand total lands near
     }
   }
   assert.ok(moved > 0, "the sweep never exercised the move-to-next-page path");
+});
+
+test("conditional financial disclosure: zero-modifier proposal shows only the total; modifiers earn their rows", () => {
+  const texts = (p) => render(p).trace.map((t) => t.text);
+  // A clean single-service proposal with no tax/discount/credit: Grand Total only — no Subtotal ladder, no Tax.
+  const clean = texts(proposal(6, { tax: 0 }));
+  assert.ok(clean.some((t) => t.includes("GRAND TOTAL")), "the total always prints");
+  assert.ok(!clean.some((t) => t.includes("PROJECT SUBTOTAL")), "no redundant subtotal when subtotal === total");
+  assert.ok(!clean.some((t) => t.includes("Security Cameras Subtotal")), "no single-section subtotal (it equals the total)");
+  assert.ok(!clean.some((t) => t.includes("Sales Tax (")), "no Tax row when tax is zero (the footer note doesn't count)");
+  // Add a real modifier → the subtotal ladder earns its place.
+  const taxed = texts(proposal(6, { tax: 6.625 }));
+  assert.ok(taxed.some((t) => t.includes("PROJECT SUBTOTAL")), "subtotal returns once a modifier moves the price");
+  assert.ok(taxed.some((t) => /Sales Tax \(6\.625%\)/.test(t)), "a non-zero tax prints with its rate");
+  const discounted = texts(proposal(6, { tax: 0, discount: 100 }));
+  assert.ok(discounted.some((t) => t.includes("PROJECT SUBTOTAL")) && discounted.some((t) => t === "Discount"), "a discount brings back the subtotal + its row");
+  // Two priced services: per-section subtotals are a meaningful sub-grouping and DO print.
+  const multi = texts(proposal(8, { tax: 0, services: 2 }));
+  assert.ok(multi.some((t) => t.includes("Security Cameras Subtotal")) && multi.some((t) => t.includes("Wiring / Low-Voltage Subtotal")),
+    "each of two+ sections keeps its own subtotal");
 });
 
 // ---- Site Survey pages: device list under the plan, count validation, planner ↔ proposal scope check ----

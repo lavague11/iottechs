@@ -495,6 +495,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // Canonical contract math: base proposal (this doc) + approved add-ons = current contract total.
   // The base proposal is never rewritten — add-ons show as a separate amendment line.
   const fin = projectFinancials(totals.grand, addons.total, 0, depositPct);
+  // Conditional financial disclosure (presentation only — canonical values, no recalculation): in a read-only
+  // proposal, a row earns its place only when it actually moves the price. When subtotal === total with no
+  // non-zero modifier, Subtotal and Tax collapse away and only Total shows, then straight into Payment Terms.
+  // Edit mode always keeps the Subtotal/Tax/Discount/PCP controls so staff can add an adjustment.
+  const hasTax = totals.tax > 0;
+  const hasAdjustments = totals.discount > 0 || totals.pcpCredit > 0 || hasTax || fin.hasAddons;
   // Progressive disclosure: don't show a finished proposal's controls before there's a proposal. The current
   // option drives the empty state; the pricing engine + payment terms only render once there's something to price.
   const servicesEmpty = opt.services.length === 0;
@@ -902,7 +908,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           quiet line stands in for the whole $0 subtotal→discount→tax→total→plan→deposit stack. */}
       {!priceable ? (!readOnly && <div className="prop-price-hint">Pricing will appear after you add a service.</div>) : (
       <div className="prop-totals">
-        <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
+        {(!readOnly || hasAdjustments) && (
+          <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
+        )}
         {(!readOnly || totals.discount > 0) && (
           <div className="prop-trow">
             <span>Discount</span>
@@ -929,16 +937,18 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             )}
           </div>
         )}
-        <div className="prop-trow">
-          <span>Tax</span>
-          {readOnly ? <b>{taxRate}%</b> : (
-            <span className="prop-adj">
-              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 6.625 ? 0 : 6.625); setDirty(true); }}>NJ</button>
-              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 8.875 ? 0 : 8.875); setDirty(true); }}>NY</button>
-              <input className="tin" type="number" min="0" max="30" step="0.01" value={taxRate} onChange={(e) => { setTaxRate(e.target.value); setDirty(true); }} />
-            </span>
-          )}
-        </div>
+        {(!readOnly || hasTax) && (
+          <div className="prop-trow">
+            <span>Tax{readOnly ? ` · ${taxRate}%` : ""}</span>
+            {readOnly ? <b>{money(totals.tax)}</b> : (
+              <span className="prop-adj">
+                <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 6.625 ? 0 : 6.625); setDirty(true); }}>NJ</button>
+                <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => { setTaxRate(+taxRate === 8.875 ? 0 : 8.875); setDirty(true); }}>NY</button>
+                <input className="tin" type="number" min="0" max="30" step="0.01" value={taxRate} onChange={(e) => { setTaxRate(e.target.value); setDirty(true); }} />
+              </span>
+            )}
+          </div>
+        )}
 
         {/* An approved add-on amends the contract: keep the original proposal total visible and show the
             current contract total below it — never silently rewrite the signed proposal. */}
