@@ -50,6 +50,35 @@ const PROP_CSS = `
 .pvx .prop-head-cta.prop-head-sign{display:inline-flex;align-items:center;gap:6px;background:#C9A96E;color:#101418;border-color:#C9A96E}
 .pvx .prop-head-cta.prop-head-sign:hover{filter:brightness(1.06)}
 .pvx .prop-head-cta.prop-head-sign svg{width:15px;height:15px}
+/* Informational top band (Phase 1): no actions — customer open-count + (Phase-2) + Option only. */
+.pvx .prop-head-info{border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-head-info:empty{display:none}
+/* ONE canonical action dock — sticky to the viewport bottom (sibling of .prop-card, outside its
+   overflow:hidden), so staff never scroll to act. Replaces the old top toolbar + bottom prop-actions. */
+.pvx .prop-dock{position:sticky;bottom:0;z-index:40;margin-top:10px;padding-bottom:env(safe-area-inset-bottom)}
+.pvx .prop-dock-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 8px 28px -12px rgba(16,20,24,.30)}
+.pvx .prop-dock-state{display:inline-flex;align-items:center;gap:6px;min-width:0;font-size:.8rem;color:var(--dv-ink,#101418)}
+.pvx .prop-dock-save{font-size:.74rem;font-weight:500;color:var(--dv-green,#2E7D5B);white-space:nowrap}
+.pvx .prop-dock-save.pending{color:var(--dv-meta,#787D84)}
+.pvx .prop-dock-sp{flex:1 1 auto}
+.pvx .prop-dock-ask{font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
+.pvx .prop-dock-edit{height:36px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;flex:0 0 auto}
+.pvx .prop-dock-edit:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
+.pvx .prop-dock-ghost{height:36px;padding:0 12px;border:none;background:none;color:var(--dv-meta,#787D84);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-dock-ghost:hover:not(:disabled){color:var(--dv-ink,#101418)}
+.pvx .prop-dock-cta{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 18px;border:none;border-radius:10px;background:#C9A96E;color:#101418;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto}
+.pvx .prop-dock-cta:hover:not(:disabled){filter:brightness(1.06)}
+.pvx .prop-dock-cta:disabled{opacity:.5;cursor:default}
+.pvx .prop-dock-menuwrap{position:relative;display:inline-flex;flex:0 0 auto}
+.pvx .prop-dock-more{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);cursor:pointer}
+.pvx .prop-dock-more:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-dock-menu{position:absolute;right:0;bottom:calc(100% + 8px);z-index:60;min-width:196px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 12px 32px rgba(16,20,24,.18);padding:6px}
+.pvx .prop-dock-mlbl{font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:6px 10px 3px}
+.pvx .prop-dock-mi{display:block;width:100%;text-align:left;appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);padding:8px 10px;border-radius:7px;cursor:pointer}
+.pvx .prop-dock-mi:hover{background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-dock-mi:disabled{opacity:.5;cursor:default}
+.pvx .prop-dock-msep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 6px}
+@media(max-width:640px){.pvx .prop-dock-row{border-radius:12px 12px 0 0}}
 /* Internal admin-review banner on a signed contract (staff-only). */
 .pvx .prop-review-bar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA)}
 .pvx .prop-review-bar.pending{border-left:3px solid #C9A96E}

@@ -600,27 +600,34 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     patchOption({ services: opt.services.map((s) => ({ ...s, items: (s.items || []).map((it) => (canWaive(it) ? { ...it, waived: v } : it)) })) });
   }
 
+  // Lifted to component scope so BOTH the card header and the new bottom action dock use one definition.
+  const statusChip = (
+    <span className={`prop-status ${status === "changes_requested" ? "changes" : status}`}>
+      {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
+      {status === "sent" && (() => {
+        const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
+        const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "").replace(/\s*\bET\b/, "").trim() : "";
+        return <><i className="prop-sent-dot" /><b className="prop-sent-lbl">Sent</b>{when && <span className="prop-sent-seg">· {when}</span>}{by && <span className="prop-sent-seg">· {by}</span>}</>;
+      })()}
+      {status === "changes_requested" && "Changes requested"}
+      {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
+    </span>
+  );
+  // Contextual save state for the dock (draft only): "Saved HH:MM" / "Unsaved…" / "Saving…".
+  const saveStateEl = !readOnly && !authBlocked && (busy || dirty || savedAt) ? (
+    <span className={`prop-dock-save${busy || dirty ? " pending" : ""}`}>· {busy ? "Saving…" : dirty ? "Unsaved…" : `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>
+  ) : null;
+  const isStaffDock = ["admin", "manager", "sales"].includes(role);
+  const showRequestSign = isStaffDock && ["sent", "changes_requested"].includes(status);
+
   return (
+    <>
     <div className="prop-card" style={{ "--prop-accent": status === "accepted" ? "#2f7d5a" : status === "sent" ? "#C9A96E" : "#D64545" }}>
       {/* Card header — matches the one project-page tool-card format: icon · title · status chip
           on the left, actions + collapse chevron on the right (same as FlowStep / the other cards).
           Left accent follows the red/gold/green rule: red = draft/changes (staff action needed),
           gold = sent (awaiting customer), green = accepted (done). */}
       {(() => {
-        const statusChip = (
-          <span className={`prop-status ${status === "changes_requested" ? "changes" : status}`}>
-            {status === "draft" && (dirty ? "Draft · unsaved" : "Draft")}
-            {status === "sent" && (() => {
-              const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
-              // Compact document metadata — not a pill/alert. Drop the year AND the timezone abbrev from
-              // the display; date/time/sender wrap only as whole segments (never fragment-by-fragment).
-              const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "").replace(/\s*\bET\b/, "").trim() : "";
-              return <><i className="prop-sent-dot" /><b className="prop-sent-lbl">Sent</b>{when && <span className="prop-sent-seg">· {when}</span>}{by && <span className="prop-sent-seg">· {by}</span>}</>;
-            })()}
-            {status === "changes_requested" && "Changes requested"}
-            {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
-          </span>
-        );
         // PIN-preview notice — a quiet chip beside the status, not a full-width row (permission ≠ content).
         const previewChip = authBlocked && (
           <span className="prop-preview-chip" title="You're viewing by PIN — log in to save changes">Preview · log in to edit</span>
@@ -685,7 +692,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           // One compact toolset (matches the mobile mockup): Sent · Edit · views · share · download.
           // Copy ("use for another project") is not in the primary toolbar. On mobile the Sent stamp
           // compacts to just "● Sent" (CSS) and the row centers; desktop keeps the full date/sender stamp.
-          return <div className="prop-head-slim prop-head-toolbar">{statusChip}{previewChip}{requestSignBtn}{reviseBtn}{submitBtn}{eye}{shareBtn}{download}{gear}{addOptionBtn}</div>;
+          // Phase 1: the top band is informational — customer open-count + (Phase-2) + Option. The status
+          // and EVERY action (Submit, Request Signature, Edit, Share, Download, Config) now live in the dock.
+          return <div className="prop-head-slim prop-head-toolbar prop-head-info">{previewChip}{eye}{addOptionBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -1032,7 +1041,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
 
       {/* Actions — drafts auto-save (debounced); the status text replaces a manual Save. Hidden in the empty
           state (nothing to submit/download yet) — the one Submit/Download lives in the top toolbar. */}
-      {(priceable || readOnly) && (
+      {!embedded && (priceable || readOnly) && (
       <div className="prop-actions">
         <details className="prop-dl" onClick={(e) => { const b = e.target.closest("button[data-mode]"); if (b) { e.currentTarget.removeAttribute("open"); handleDownload(b.dataset.mode); } }}>
           <summary className="prop-mini" title="Download the proposal PDF (with mockup & survey)">{dlBusy ? "Preparing…" : "⭳ Download"}</summary>
@@ -1099,6 +1108,80 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             setImportMsg("Pricing saved — applies to new imports & items, not what's already placed.");
           }}
         />
+      )}
+    </div>
+    {/* ONE canonical action dock (deck/embedded): status + save state on the left; Edit (sent), the •••
+        document-utilities menu, and the single primary CTA (Submit / Request Signature) on the right.
+        Sticky to the viewport bottom so staff never scroll to act — replaces BOTH the old top toolbar and
+        the old bottom prop-actions row. Handlers are reused verbatim (send / revise / setSigSheet /
+        shareProposal / emailToCustomer / handleDownload / setPricingOpen). */}
+    {embedded && (
+      <div className="prop-dock">
+        {confirmSend ? (
+          <div className="prop-dock-row">
+            <span className="prop-dock-ask">Submit this proposal to the customer?</span>
+            <span className="prop-dock-sp" />
+            <button type="button" className="prop-dock-ghost" disabled={busy} onClick={() => setConfirmSend(false)}>Cancel</button>
+            <button type="button" className="prop-dock-cta" disabled={busy} onClick={send}>Submit</button>
+          </div>
+        ) : (
+          <div className="prop-dock-row">
+            <span className="prop-dock-state">{statusChip}{saveStateEl}</span>
+            <span className="prop-dock-sp" />
+            {readOnly && !authBlocked && isStaffDock && (
+              <button type="button" className="prop-dock-edit" disabled={busy} onClick={revise} title="Edit — reopen an editable version of this proposal">Edit</button>
+            )}
+            <DockMenu dlBusy={dlBusy} copied={copied} onCopyLink={shareProposal} onEmail={emailToCustomer}
+                      onDownload={handleDownload} onConfig={() => setPricingOpen("__all__")} />
+            {!readOnly && !authBlocked && (
+              <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setConfirmSend(true)}>Submit</button>
+            )}
+            {showRequestSign && (
+              <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setSigSheet(true)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+                Request Signature
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+    </>
+  );
+}
+
+// The dock's ••• — document utilities grouped as Share (delivery) / Download (formats) / Configuration.
+// Opens UPWARD (the dock sits at the bottom). Outside-click / Escape close.
+function DockMenu({ dlBusy, copied, onCopyLink, onEmail, onDownload, onConfig }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onKey(e) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const act = (fn) => () => { fn(); setOpen(false); };
+  return (
+    <div className="prop-dock-menuwrap" ref={ref}>
+      <button type="button" className="prop-dock-more" aria-label="More actions" title="More" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+      </button>
+      {open && (
+        <div className="prop-dock-menu" role="menu">
+          <div className="prop-dock-mlbl">Share</div>
+          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onCopyLink)}>Copy Link{copied ? " ✓" : ""}</button>
+          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onEmail)}>Email Customer</button>
+          <div className="prop-dock-msep" />
+          <div className="prop-dock-mlbl">Download</div>
+          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("standard"))}>Standard</button>
+          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("detailed"))}>Detailed</button>
+          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("survey"))}>Survey</button>
+          <div className="prop-dock-msep" />
+          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onConfig)}>Configuration</button>
+        </div>
       )}
     </div>
   );
