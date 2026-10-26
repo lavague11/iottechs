@@ -810,16 +810,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // toggle for a Line Drop, Done, and Remove. A blank (just-added) sub opens straight into edit. Same
   // component on desktop and mobile — no per-breakpoint logic. Bulk-propagate + price book autocomplete
   // are preserved in edit mode.
-  const subRow = (x, parent) => {
+  const subRow = (x, parent, idx = 0) => {
     const q = +x.qty || 1;
     const amount = (+x.qty || 0) * (+x.price || 0);
     const isDrop = /^line drop/i.test(x.name || "");
     const isExisting = /existing/i.test(x.name || "");
     const editing = !readOnly && (subEditId === x.id || !String(x.name || "").trim());
+    const letter = String.fromCharCode(65 + (idx % 26));   // A, B, C… local to this parent (decorative)
     return (
-      <div key={x.id} className="prop-sub2-wrap" style={bulkPrompt?.subId === x.id ? { position: "relative", zIndex: 5 } : undefined}>
+      <div key={x.id} className={`prop-sub2-wrap${idx % 2 ? " alt" : ""}`} style={bulkPrompt?.subId === x.id ? { position: "relative", zIndex: 5 } : undefined}>
         {editing ? (
           <div className="prop-sub2 editing">
+            <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
             <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog}
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
               onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
@@ -844,7 +846,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             </button>
           </div>
         ) : (
-          <button type="button" className="prop-sub2 compact" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"}>
+          <button type="button" className="prop-sub2 compact" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Sub-item ${letter}: ${x.name || "Sub-item"}`}>
+            <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
             <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
             {q > 1 && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
             <span className="prop-sub2-amt">{money(amount)}</span>
@@ -1093,10 +1096,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {readOnly && <span className="prop-im-sp" aria-hidden="true" />}
           </div>
           {leadOpen[lr.key] !== false && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
-            // The same compact child-row component as a camera's expanded sub-item (name … amount, "N × $unit" when
-            // qty > 1) — display-only: you edit these via the block's Edit action.
-            <div key={bidx} className="prop-sub2-wrap">
+            // The SAME canonical child-row grammar as a camera's expanded sub-item: local A/B/C badge, light
+            // zebra, name … amount ("N × $unit" when qty > 1) — display-only (you edit these via the block's Edit).
+            <div key={bidx} className={`prop-sub2-wrap${bidx % 2 ? " alt" : ""}`}>
               <div className="prop-sub2 static">
+                <span className="prop-sub2-badge" aria-hidden="true">{String.fromCharCode(65 + (bidx % 26))}</span>
                 <span className="prop-sub2-name">{bi.name}</span>
                 {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
                 <span className="prop-sub2-amt">{money(bi.total)}</span>
@@ -1120,7 +1124,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             </span>
           )}
           {row(it, null)}
-          {open[it.id] && (it.sub || []).map((x) => subRow(x, it))}
+          {open[it.id] && (it.sub || []).map((x, i) => subRow(x, it, i))}
           {open[it.id] && !readOnly && (
             <div className="prop-subadd">
               <button type="button" className="prop-subadd-btn" onClick={() => addSub(it.id)}>

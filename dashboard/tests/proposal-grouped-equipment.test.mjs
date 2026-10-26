@@ -61,6 +61,32 @@ test("children are shown by default (collapse is opt-in) using the existing fram
   assert.ok(editor.includes('className="prop-sub2 static"'));
 });
 
+test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR AND Displays alike", () => {
+  // Camera sub-items: letter is local to the parent (restarts at A) and the row zebra-stripes by index.
+  assert.ok(/const subRow = \(x, parent, idx = 0\)/.test(editor), "subRow takes a per-parent index");
+  assert.ok(/String\.fromCharCode\(65 \+ \(idx % 26\)\)/.test(editor), "A/B/C derived from the local index");
+  assert.ok(/\(it\.sub \|\| \[\]\)\.map\(\(x, i\) => subRow\(x, it, i\)\)/.test(editor), "index passed per parent (restarts at A)");
+  // Lead children (NVR/Displays) use the SAME badge + zebra, not a separate styling.
+  assert.ok(/String\.fromCharCode\(65 \+ \(bidx % 26\)\)/.test(editor), "lead children carry the same local badge");
+  const badges = (editor.match(/className="prop-sub2-badge" aria-hidden="true"/g) || []).length;
+  assert.ok(badges >= 3, `badge appears in all child renderers (compact, editing, lead) — found ${badges}`);
+  // Zebra: alternating class on both child renderers.
+  assert.ok(/prop-sub2-wrap\$\{idx % 2 \? " alt" : ""\}/.test(editor) && /prop-sub2-wrap\$\{bidx % 2 \? " alt" : ""\}/.test(editor), "both renderers alternate rows");
+  // Decorative: the badge is aria-hidden; the compact row keeps an accessible 'Sub-item A: <name>' label.
+  assert.ok(/aria-label=\{`Sub-item \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
+});
+
+test("child badge + zebra are presentation-only: subordinate badge, neutral tint, hover still distinct", () => {
+  assert.ok(panel.includes(".pvx .prop-sub2-badge{"), "child badge style exists");
+  assert.ok(/prop-sub2-wrap\.alt>\.prop-sub2\{background:rgba\(17,20,24,\.022\)\}/.test(panel), "zebra is a very light NEUTRAL tint");
+  // Hover must beat the zebra so interaction stays legible (owner rule 14).
+  assert.ok(/button\.prop-sub2\.compact:hover\{background:rgba\(17,20,24,\.055\)\}/.test(panel), "hover is stronger than the zebra");
+  // Child names wrap rather than truncate (no price pushed off-screen).
+  assert.ok(/\.prop-sub2-name\{[^}]*white-space:normal/.test(panel), "child names wrap, not ellipsis");
+  // Group boundary: extra spacing below an expanded group / infra lead, not a heavy border.
+  assert.ok(/prop-block\.prop-open\{[^}]*margin-bottom:10px/.test(panel) && /\.prop-lead\{margin-bottom:8px\}/.test(panel), "group boundary via spacing");
+});
+
 test("infrastructure lead rows never take an endpoint number", () => {
   assert.ok(editor.includes('if (lineRole(it) === "endpoint") blockNumOf[it.id] = ++_epN;'));
   assert.ok(!/leadRows\.forEach[^\n]*blockNumOf/.test(editor));

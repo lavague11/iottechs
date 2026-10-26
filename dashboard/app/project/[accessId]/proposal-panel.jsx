@@ -325,13 +325,22 @@ const PROP_CSS = `
 .pvx .prop-sub2{display:flex;align-items:center;gap:8px;width:100%;padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:transparent;font-family:inherit;box-sizing:border-box}
 /* Right padding = the parent's ••• column, so child amounts right-align with the parent price above them. */
 .pvx button.prop-sub2.compact{border:none;border-top:1px solid var(--dv-line-soft,#EDEDE9);text-align:left;cursor:pointer;min-height:38px;padding-right:36px}
-.pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.025)}
+.pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.055)}
 .pvx .prop-sub2.static{padding-right:36px;min-height:38px}
+/* ONE canonical child-row grammar (camera sub-items · NVR · Displays): a local A/B/C badge — subordinate
+   to the parent number badge (smaller, pale gold, lower contrast) — plus a very light alternating surface.
+   The badge is decorative (aria-hidden); the title stays the semantic label. */
+.pvx .prop-sub2-badge{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:5px;background:rgba(201,169,110,.17);color:var(--dv-gold-text,#8A6A1F);font-size:.6rem;font-weight:700;flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Zebra: neutral only (never a status/condition colour), lighter than hover so interaction stays legible —
+   it just helps the eye track label → name → price across a wide row. */
+.pvx .prop-sub2-wrap.alt>.prop-sub2{background:rgba(17,20,24,.022)}
 /* Grouped equipment (NVR / Displays / Amp): the real child rows indent under the parent's NAME (past chevron + badge), not the page edge. */
 .pvx .prop-lead .prop-sub2-wrap{margin-left:60px}
 .pvx .prop-lead .prop-sub2-name{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3;overflow-wrap:anywhere}
 /* Children: regular weight, slightly smaller than the parent, still full-strength ink (never disabled-gray). */
-.pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize}
+/* Child names wrap rather than truncate — a long equipment name drops to a second line, the price stays
+   anchored right (never pushed off-screen). One rule for camera / NVR / Displays children alike. */
+.pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);white-space:normal;overflow-wrap:anywhere;line-height:1.3;text-transform:capitalize}
 .pvx .prop-sub2-math{font-size:.72rem;color:var(--dv-meta,#787D84);white-space:nowrap;flex-shrink:0}
 .pvx .prop-sub2-amt{font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px}
 .pvx .prop-sub2-tag{margin-left:7px;font-size:.58rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#B45B22;background:rgba(197,107,44,.12);border-radius:100px;padding:1px 7px;vertical-align:middle}
@@ -351,8 +360,11 @@ const PROP_CSS = `
 .pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
 .pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.08)}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
-/* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill. */
-.pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E)}/* Drag-to-reorder line items */
+/* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill.
+   Group boundary: a little extra breathing room below an expanded group (and below each infra lead)
+   so the last child never visually merges into the next parent row — spacing, not a heavy border. */
+.pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E);margin-bottom:10px}
+.pvx .prop-lead{margin-bottom:8px}/* Drag-to-reorder line items */
 .pvx .prop-block.has-drag{padding-left:17px}
 .pvx .prop-drag-handle{position:absolute;left:0;top:0;bottom:0;width:17px;display:flex;align-items:center;justify-content:center;color:var(--dv-meta,#787D84);opacity:.35;cursor:grab}
 .pvx .prop-drag-handle:active{cursor:grabbing}
