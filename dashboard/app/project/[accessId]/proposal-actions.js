@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, saveProposalDraft, markProposalSent,
+  getJobByAccessId, getActiveProposal, getPublishedProposal, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -56,7 +56,10 @@ export async function getProposalAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };   // gate reads to the project's own people (mirror getProposalDiffAction) — else any logged-in customer could read a stranger's proposal + signature
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
-  return { ok: true, proposal: sanitizeProposal(getActiveProposal(accessId), role) };
+  // Staff editors work the live draft (their workspace). Everyone else — customer/tech/vendor/
+  // readonly — reads the PUBLISHED version, so a staff member's unsent edits are never exposed.
+  const row = STAFF_EDIT.has(role) ? getActiveProposal(accessId) : getPublishedProposal(accessId);
+  return { ok: true, proposal: sanitizeProposal(row, role) };
 }
 
 // ---- Company-wide price book (shared across devices/users) ----
@@ -472,7 +475,8 @@ export async function getLiveSnapshotAction(accessId) {
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   const p = getJobByAccessId(accessId);
   if (!p) return { error: "Not found." };
-  const proposal = getActiveProposal(accessId);
+  // The live snapshot is the CONTRACTUAL state the customer/gateway polls — read the published version.
+  const proposal = getPublishedProposal(accessId);
   const payments = getProjectPayments(accessId);
   const acceptances = getStageAcceptances(accessId);
   const confirmed = payments.filter((x) => x.status !== "pending");
@@ -536,7 +540,8 @@ export async function getApprovalDataAction(accessId) {
   const role = tok?.role || "customer";
   return {
     ok: true,
-    proposal: sanitizeProposal(getActiveProposal(accessId), role),
+    // Approval & Deposit is contractual (signatures, money owed) — read the published version.
+    proposal: sanitizeProposal(getPublishedProposal(accessId), role),
     payments: getProjectPayments(accessId),
     acceptances: getStageAcceptances(accessId),
     addons: getApprovedAddons(accessId),  // approved job-site add-ons fold into the amount owed

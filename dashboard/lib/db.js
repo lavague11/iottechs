@@ -2200,19 +2200,19 @@ export function getReceivables() {
 // dashboard / customer view so no surface recomputes money independently (section 28). Returns the resolver
 // output plus the raw total/paid, or null when there is no proposal to bill against.
 export function getProjectFinancialState(accessId) {
-  const r = db.prepare(
-    `SELECT p.access_id, p.stage, p.category, p.completed_at, p.lost_at, p.lost_reason, p.lost_kind, p.reopened_at,
-            pr.status, pr.payload, pr.tax_rate, pr.deposit_pct, pr.accepted_options, pr.selected_option,
-            pr.selected_at, pr.signed_name, pr.signed_at, pr.signature_deadline, pr.declined_at
-       FROM projects p
-       JOIN proposals pr
-         ON pr.project_access_id = p.access_id
-        AND pr.id = (SELECT x.id FROM proposals x
-                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
-                      ORDER BY x.version DESC, x.id DESC LIMIT 1)
-      WHERE p.access_id = ? COLLATE NOCASE`
+  const proj = db.prepare(
+    `SELECT access_id, stage, category, completed_at, lost_at, lost_reason, lost_kind, reopened_at
+       FROM projects WHERE access_id = ? COLLATE NOCASE`
   ).get(String(accessId));
-  if (!r) return null;
+  if (!proj) return null;
+  // Contractual money reads the PUBLISHED version (what the customer agreed to), never the staff
+  // working draft — so an in-progress revision never moves the billed total/deposit/balance. No
+  // published version yet (nothing sent) ⇒ no contract to bill.
+  const pr = getPublishedProposal(accessId);
+  if (!pr) return null;
+  const r = { ...proj, status: pr.status, payload: pr.payload, tax_rate: pr.tax_rate, deposit_pct: pr.deposit_pct,
+    accepted_options: pr.accepted_options, selected_option: pr.selected_option, selected_at: pr.selected_at,
+    signed_name: pr.signed_name, signed_at: pr.signed_at, signature_deadline: pr.signature_deadline, declined_at: pr.declined_at };
   let grand = 0;
   try {
     const pl = JSON.parse(r.payload);
@@ -2657,9 +2657,10 @@ export function setSurveyDate(accessId, dateStr) {
 export function buildStageFacts(accessId) {
   const p = db.prepare("SELECT * FROM projects WHERE access_id=?").get(String(accessId));
   if (!p) return null;
-  const prop = db.prepare(
-    "SELECT * FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
-  ).get(String(accessId));
+  // Stage facts are CONTRACTUAL — they read the PUBLISHED version, never the staff working draft.
+  // So revising a signed/accepted proposal (which mints an unsigned draft) doesn't rewind the gate;
+  // the project keeps reflecting what the customer actually received until a revision is Sent.
+  const prop = getPublishedProposal(accessId);
   const pays = db.prepare("SELECT amount, status FROM project_payments WHERE project_access_id=?").all(String(accessId));
   const confirmedTotal = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
 
@@ -5827,11 +5828,38 @@ function resolvePreparerName(v) {
   return local.split(" ").map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w)).join(" ");
 }
 
+// The STAFF WORKING proposal: the latest non-superseded row — the editable draft the moment one
+// exists, else the published version. This is the staff editing workspace; it is NOT customer-facing.
 export function getActiveProposal(accessId) {
   const r = db.prepare(
     "SELECT * FROM proposals WHERE project_access_id=? AND status != 'superseded' ORDER BY version DESC, id DESC LIMIT 1"
   ).get(String(accessId));
   return r ? { ...r, created_by_name: resolvePreparerName(r.created_by_name) } : null;
+}
+// Derive a published row's effective CONTRACTUAL status. `reviseProposal` overwrites the old
+// published row's `status` to 'superseded' when it mints the next draft, but the acceptance /
+// decline / signature fields on that row are preserved — so recover what the customer actually did.
+function effectivePublishedStatus(r) {
+  if (!r) return null;
+  if (r.status !== "superseded") return r.status;
+  let acc = []; try { acc = JSON.parse(r.accepted_options || "[]"); } catch { /* bad json */ }
+  if (Array.isArray(acc) && acc.length) return "accepted";
+  let decN = 0; try { decN = Object.keys(JSON.parse(r.declined_options || "{}")).length; } catch { /* bad json */ }
+  if (decN) return "declined";
+  return "sent";
+}
+// The PUBLISHED proposal: the latest version the customer has actually received (`sent_at` set). It
+// stays the customer-facing contractual truth even after a newer working DRAFT supersedes it, until
+// that draft is itself sent. Customer, portal, stage facts and contractual financials read THIS —
+// never the staff working draft. Null when nothing has been sent yet (no contract). `status` is
+// normalized back to the effective contractual state (a superseded-but-published row reports what
+// the customer did, not 'superseded').
+export function getPublishedProposal(accessId) {
+  const r = db.prepare(
+    "SELECT * FROM proposals WHERE project_access_id=? AND sent_at IS NOT NULL ORDER BY version DESC, id DESC LIMIT 1"
+  ).get(String(accessId));
+  if (!r) return null;
+  return { ...r, status: effectivePublishedStatus(r), created_by_name: resolvePreparerName(r.created_by_name) };
 }
 // The current (non-superseded) proposal per project, with its project — for the global search Proposals group.
 export function listProposalsForSearch() {

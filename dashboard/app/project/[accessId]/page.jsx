@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getPublishedProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
@@ -236,13 +236,19 @@ export default async function ProjectLinkPage({ params, searchParams }) {
 
   // ---- Proposal: server-sanitized per role — cost/margin never reach non-admin/manager browsers.
   // No session (PIN gate ahead) ships the customer-safe variant; staff builders re-fetch on mount.
-  const proposalRow = getActiveProposal(p.access_id);
+  // Staff editors (admin/manager/sales) get the live working draft to edit; every other view gets
+  // the PUBLISHED version so unsent staff edits are never shipped to the customer's browser.
+  const publishedRow = getPublishedProposal(p.access_id);
+  const isStaffEditView = ["admin", "manager", "sales"].includes(initialView);
+  const proposalRow = isStaffEditView ? getActiveProposal(p.access_id) : publishedRow;
   const proposal = sanitizeProposal(proposalRow, initialView || "customer");
-  project.proposal_status = proposalRow?.status || null;
-  project.proposal_selected_option = proposalRow?.selected_option || null;
-  project.proposal_signed = !!proposalRow?.signed_name;                 // customer signed the proposal
+  // Contractual gate facts are always the PUBLISHED truth (so the client gate agrees with the server
+  // buildStageFacts and never reflects an in-progress revision).
+  project.proposal_status = publishedRow?.status || null;
+  project.proposal_selected_option = publishedRow?.selected_option || null;
+  project.proposal_signed = !!publishedRow?.signed_name;                 // customer signed the proposal
   project.deposit_recorded = getProjectPayments(p.access_id).some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"); // ≥1 CONFIRMED payment
-  project.tech_accepted = !!proposalRow?.tech_signed_name;              // technician accepted the work order
+  project.tech_accepted = !!publishedRow?.tech_signed_name;              // technician accepted the work order
   project.survey_accepted = surveyStageSatisfied(p.access_id); // data-aware: only tools with data need a current approval
   // Phase-2 gate facts (server-derived, same names as buildStageFacts) so every role's client gate
   // agrees with the server even when that role doesn't render the work order / QC tools.
