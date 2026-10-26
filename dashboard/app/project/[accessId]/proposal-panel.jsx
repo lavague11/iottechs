@@ -363,6 +363,28 @@ const PROP_CSS = `
 .pvx .prop-sub2-dup:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
 .pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
 .pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.1)}
+/* Inline grouped-item child editor: the selector (recorder/drive/display) + a custom-name field. One
+   grammar with the camera sub-item editor — no separate form. */
+.pvx .prop-lead-sel{flex:1 1 150px;min-width:120px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;box-sizing:border-box}
+.pvx .prop-lead-sel:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-sub2-cname{width:130px!important;text-align:left!important}
+.pvx .prop-subadd-note{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
+/* NVR downgrade conflict dialog — confirm before dropping drives (never silent). */
+.pvx .prop-conflict-bg{position:fixed;inset:0;z-index:200;background:rgba(16,20,24,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.pvx .prop-conflict{width:min(360px,100%);background:var(--dv-raise,#FBFBFA);border-radius:14px;box-shadow:0 24px 60px rgba(16,20,24,.28);padding:18px;display:flex;flex-direction:column;gap:6px}
+.pvx .prop-conflict-t{font-size:.95rem;font-weight:650;color:var(--dv-ink,#101418)}
+.pvx .prop-conflict-m{font-size:.82rem;color:var(--dv-meta,#787D84)}
+.pvx .prop-conflict-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.pvx .prop-conflict-cancel{height:34px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-conflict-go{height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-red,#C4553D);color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
+/* Add-Hard-Drive size picker — a small anchored menu (don't assume a default drive). */
+.pvx .prop-subadd-rel{position:relative}
+.pvx .prop-pick-back{position:fixed;inset:0;z-index:40}
+.pvx .prop-pick{position:absolute;left:30px;top:calc(100% - 2px);z-index:50;min-width:180px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 14px 34px rgba(16,20,24,.18);padding:6px}
+.pvx .prop-pick-lbl{font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:5px 9px 4px}
+.pvx .prop-pick-opt{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);padding:8px 9px;border-radius:7px;cursor:pointer}
+.pvx .prop-pick-opt:hover{background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-pick-price{color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill.
    Group boundary: a little extra breathing room below an expanded group (and below each infra lead)

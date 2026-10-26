@@ -21,13 +21,14 @@ test("lead rows carry no count-only secondary line", () => {
 
 test("NVR parent lists the recorder + every real drive record; totals use the unchanged aggregates", () => {
   assert.ok(/total: nvrGroupTotal/.test(editor));
-  assert.ok(/items: \[\{ name: nvrItem\.name[\s\S]*?\.\.\.driveItems\.map\(/.test(editor), "recorder + driveItems.map");
+  // Children carry the real item ref + kind + slot so they can be edited inline (recorder + each drive).
+  assert.ok(/\{ ref: nvrItem, kind: "nvr", name: nvrItem\.name[\s\S]*?\.\.\.driveItems\.map\(\(d\) => \(\{ ref: d, kind: "drive", slot: d\.slot/.test(editor), "recorder + driveItems with refs");
   assert.ok(/const nvrGroupTotal = nvrItem \? itemTotal\(nvrItem\) \+ driveItems\.reduce/.test(editor), "aggregate math untouched");
 });
 
 test("Displays parent renders one child per distinct display record, named Display N", () => {
   assert.ok(/total: displaysTotal/.test(editor));
-  assert.ok(/items: displayItems\.map\(\(d\) => \(\{ name: `Display \$\{d\.displaySlot\} · /.test(editor));
+  assert.ok(/items: displayItems\.map\(\(d\) => \(\{ ref: d, kind: "display", slot: d\.displaySlot, name: `Display \$\{d\.displaySlot\} · /.test(editor));
   assert.ok(/const displaysTotal = displayItems\.reduce\(\(s, it\) => s \+ itemTotal\(it\)/.test(editor));
 });
 
@@ -48,17 +49,18 @@ test("dispSummary: counts when 2+ displays, bare label for one; CX Provided norm
 });
 
 test("the collapsed summary is derived from children and shown ONLY while collapsed (never expanded)", () => {
-  assert.ok(editor.includes("summary: nvrSummary(nvrItem, driveItems)"), "NVR lead row carries a children-derived summary");
-  assert.ok(editor.includes("summary: dispSummary(displayItems)"), "Displays lead row carries a children-derived summary");
-  assert.ok(/lr\.summary && leadOpen\[lr\.key\] === false &&/.test(editor), "summary renders only when the group is collapsed");
+  assert.ok(editor.includes("nvrSummary(nvrItem, driveItems)"), "NVR lead row carries a children-derived summary");
+  assert.ok(editor.includes("dispSummary(displayItems)"), "Displays lead row carries a children-derived summary");
+  assert.ok(/lr\.summary && !isOpen &&/.test(editor), "summary renders only when the group is collapsed");
   assert.ok(editor.includes('displayItems.length === 1 ? "Display" : "Displays"'), "Displays title pluralizes naturally");
   assert.ok(panel.includes(".pvx .prop-sysline-sum{"), "muted inline summary style exists");
   assert.ok(/prop-sysline-sum\{order:9;flex:1 1 100%/.test(panel), "on mobile it drops to its own line");
 });
 
-test("children are shown by default (collapse is opt-in) using the existing frameless .prop-sub2 row", () => {
-  assert.ok(editor.includes("leadOpen[lr.key] !== false && lr.items?.length > 0"));
-  assert.ok(editor.includes('className="prop-sub2 static"'));
+test("children are shown by default (collapse is opt-in) via the inline-editable .prop-sub2 rows", () => {
+  assert.ok(editor.includes("isOpen && lr.items?.length > 0 && lr.items.map"));
+  // Children are now click-to-edit (compact) / editing — the SAME grammar as a camera sub-item, not a static form.
+  assert.ok(editor.includes('className="prop-sub2 compact"') && editor.includes('className="prop-sub2 editing"'), "inline compact/editing child rows");
 });
 
 test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR AND Displays alike", () => {
@@ -74,6 +76,37 @@ test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR 
   assert.ok(/prop-sub2-wrap\$\{idx % 2 \? " alt" : ""\}/.test(editor) && /prop-sub2-wrap\$\{bidx % 2 \? " alt" : ""\}/.test(editor), "both renderers alternate rows");
   // Decorative: the badge is aria-hidden; the compact row keeps an accessible 'Sub-item A: <name>' label.
   assert.ok(/aria-label=\{`Sub-item \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
+});
+
+test("NVR/Displays are inline-editable (no Edit-mode form takeover); the camera sysbar is gone", () => {
+  // The sysbar config form for cameras is removed; NVR/Displays edit through inline child selectors.
+  assert.ok(editor.includes("const showSysbar = false"), "camera NVR/Display form removed");
+  assert.ok(!editor.includes("setNvrDone") && !editor.includes("setDispDone"), "no NVR/Display Edit-mode toggle");
+  assert.ok(editor.includes("function leadSelect(bi)") && editor.includes("setLeadEditId"), "inline child selector + one-at-a-time edit state");
+  assert.ok(editor.includes("chooseNvr(e.target.value)") && editor.includes("setSlotDrive(bi.slot, e.target.value)") && editor.includes("setSlotDisplay(bi.slot, e.target.value)"), "selectors route to the canonical handlers");
+});
+
+test("contextual add actions are capacity-aware and use component-specific wording", () => {
+  assert.ok(editor.includes('label: "+ Add Hard Drive"') && editor.includes('label: "+ Add Display"'), "component-specific add labels");
+  assert.ok(editor.includes("Add Component"), "camera + Sub-item renamed to + Add Component");
+  assert.ok(!/>\s*Sub-item\s*</.test(editor), "no leftover + Sub-item label");
+  // Capacity comes from the ONE canonical rule (slotsFor/NVR_SLOTS), not re-derived; full → a bays-used note.
+  assert.ok(/nextFreeBay\(\) \? \{ label: "\+ Add Hard Drive", pick: "drive" \} : \{ note: `\$\{driveItems\.length\} \/ \$\{hddSlots\} bays used`/.test(editor), "Add Hard Drive gated by free bays, else a bays-used note");
+  assert.ok(editor.includes("displayItems.length < 4 ?"), "Add Display capped at 4");
+  assert.ok(/for \(let n = 1; n <= hddSlots; n\+\+\) if \(!driveAt\(n\)\)/.test(editor), "free-bay search uses the canonical hddSlots capacity");
+});
+
+test("Add Hard Drive pops a size picker (no assumed default); picking a size fills the next free bay", () => {
+  assert.ok(editor.includes('lr.add.pick === "drive"') && editor.includes("setDrivePick"), "the add action opens a size picker");
+  assert.ok(/STORAGE_DRIVES\.map\(\(d\) => \([\s\S]*?addDrive\(d\.name\)/.test(editor), "the picker lists every drive size and adds the chosen one");
+  assert.ok(/function addDrive\(name\) \{[\s\S]*?setSlotDrive\(n, name/.test(editor), "addDrive takes the chosen size (no silent default)");
+  assert.ok(panel.includes(".pvx .prop-pick{"), "the picker menu has styles");
+});
+
+test("an NVR downgrade that drops drives is confirmed, never silent (#7)", () => {
+  assert.ok(/function chooseNvr\(name\)/.test(editor) && /filled\.length > slots/.test(editor) && /setNvrConflict\(/.test(editor), "downgrade raises a conflict instead of dropping");
+  assert.ok(/applyNvr\(nvrConflict\.name\); setNvrConflict\(null\)/.test(editor), "confirming applies the switch");
+  assert.ok(panel.includes(".pvx .prop-conflict{"), "the conflict dialog has styles");
 });
 
 test("sub-item edit bar = Done · Duplicate · Remove; duplicateSub deep-copies with a fresh id below the source", () => {

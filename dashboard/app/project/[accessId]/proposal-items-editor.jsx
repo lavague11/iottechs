@@ -214,9 +214,13 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
 }
 // Action menu for a collapsed system row (NVR / Displays / Amp) — same ••• control the line items use, so
 // every row reads the same. Its one action opens that system's slot editor.
-function SysRowMenu({ onEdit, onClose }) {
+// Parent (•••) menu for a grouped lead row — only TRUE parent-level actions. Edit (amp, which still
+// uses its own form) OR Remove (NVR/Displays, now edited inline, so the only parent action is removing
+// the whole group). Remove shows a one-step in-menu confirm since it drops the group's equipment.
+function SysRowMenu({ onEdit, onRemove, removeLabel = "Remove", onClose }) {
   const ref = useRef(null);
   const up = useMenuFlip(ref);
+  const [confirm, setConfirm] = useState(false);
   useEffect(() => {
     function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) onClose(); }
     function onKey(e) { if (e.key === "Escape") onClose(); }
@@ -226,7 +230,10 @@ function SysRowMenu({ onEdit, onClose }) {
   }, [onClose]);
   return (
     <div className={`prop-im${up ? " up" : ""}`} ref={ref} role="menu">
-      <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onEdit(); onClose(); }}>Edit</button>
+      {onEdit && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onEdit(); onClose(); }}>Edit</button>}
+      {onRemove && (confirm
+        ? <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => { onRemove(); onClose(); }}>Confirm remove</button>
+        : <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirm(true)}>{removeLabel}</button>)}
     </div>
   );
 }
@@ -357,6 +364,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
   const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays/Amp group -> children; open by default, false = user collapsed it
+  const [leadEditId, setLeadEditId] = useState(null);   // which NVR/Display child row is inline-editing (one at a time)
+  const [nvrConflict, setNvrConflict] = useState(null); // pending NVR downgrade that would drop drives → confirm first
+  const [drivePick, setDrivePick] = useState(false);    // "+ Add Hard Drive" → pick the drive size before adding
   const [dispShown, setDispShown] = useState(1);  // display slots revealed (start at 1, "+ Add display" reveals more)
   const [askCam, setAskCam] = useState(null);     // preset awaiting a "how many cameras?" count (first camera only)
   const [camN, setCamN] = useState(4);
@@ -369,10 +379,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
   // An item dragged from ANOTHER section is hovering here → this section is a cross-section drop target.
   const crossItem = !!(itemDrag?.active && itemDrag.active.svcIdx !== itemDrag.svcIdx);
-  // Camera recording system: NVR (+drives) and Displays each collapse to a compact, expandable
-  // summary line via a "Done" button. Start collapsed when already configured (cleaner reopen).
-  const [nvrDone, setNvrDone] = useState(() => (svc.items || []).some((it) => !it.sub && /^NVR/.test(it.name || "")));
-  const [dispDone, setDispDone] = useState(() => (svc.items || []).some((it) => it.displaySlot != null));
+  // Audio amp still collapses to a summary line via its own "Done" (NVR/Displays are now inline-editable).
   const [ampDone, setAmpDone] = useState(() => (svc.items || []).some((it) => it.ampSlot === 1));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   void priceBookVersion; // referenced only to force a recompute of `catalog` above on save
@@ -396,8 +403,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     onChange({ ...svc, items: svc.items.map((it) => (it === nvrItem ? { ...it, name: model.name, price: priceOf(model.name) } : it)) });
   }
 
-  function pickNvr(e) {
-    const name = e.target.value;
+  function applyNvr(name) {
     let items;
     if (!name) {
       // No NVR — drives have nowhere to mount, so every slotted drive goes too.
@@ -407,11 +413,64 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       items = nvrItem
         ? svc.items.map((it) => (it === nvrItem ? { ...it, name: model.name, price: priceOf(model.name) } : it))
         : [...svc.items, { id: newItemId(), name: model.name, qty: 1, price: priceOf(model.name), cost: 0 }];
-      // Downgrading drops any drive in a bay beyond the new NVR's slot count.
+      // Downgrading drops any drive in a bay beyond the new NVR's slot count (only reached after the
+      // conflict prompt is confirmed — chooseNvr blocks a silent drop).
       const slots = slotsFor(model.name);
       items = items.filter((it) => it.slot == null || it.slot <= slots);
     }
     onChange({ ...svc, items });
+  }
+  // Inline NVR model change. A downgrade that would drop drives is NOT silent — it raises a compact
+  // conflict the user confirms first (#7). Capacity comes from the canonical NVR_SLOTS rule (slotsFor).
+  function chooseNvr(name) {
+    if (name) {
+      const slots = slotsFor(name);
+      const filled = svc.items.filter((it) => it.slot != null);
+      if (filled.length > slots) { setNvrConflict({ name, slots, remove: filled.length - slots }); return; }
+    }
+    applyNvr(name);
+  }
+  // First empty HDD bay within the current NVR's capacity, else 0 (none free).
+  function nextFreeBay() {
+    for (let n = 1; n <= hddSlots; n++) if (!driveAt(n)) return n;
+    return 0;
+  }
+  // "+ Add Hard Drive" → pick a size (addDrive), then fill the next free bay (capacity-gated by nextFreeBay).
+  function addDrive(name) {
+    const n = nextFreeBay();
+    if (n) { setSlotDrive(n, name || (STORAGE_DRIVES[0] || {}).name || ""); setDrivePick(false); }
+  }
+  // "+ Add Display" — next display slot (max 4), defaults to the customer-provided $0 option.
+  function addDisplay() {
+    const used = displayItems.map((d) => d.displaySlot);
+    let n = 1; while (used.includes(n)) n++;
+    if (n <= 4) { setSlotDisplay(n, "Customer Provided"); setDispShown(Math.max(dispShown, n)); }
+  }
+  // The inline selector for a lead child (recorder / drive / display), by kind. Changing it routes to the
+  // SAME canonical handler (chooseNvr / setSlotDrive / setSlotDisplay) and closes the row (unless Custom).
+  function leadSelect(bi) {
+    if (bi.kind === "nvr") return (
+      <select className="prop-lead-sel" value={nvrItem?.name || ""} disabled={readOnly} autoFocus aria-label="NVR model"
+        onChange={(e) => { chooseNvr(e.target.value); setLeadEditId(null); }}>
+        <option value="">None</option>
+        {NVR_MODELS.map((m) => <option key={m.name} value={m.name}>{nvrShort(m.name)}</option>)}
+      </select>
+    );
+    if (bi.kind === "drive") return (
+      <select className="prop-lead-sel" value={bi.ref?.name || ""} disabled={readOnly} autoFocus aria-label="Storage drive"
+        onChange={(e) => { setSlotDrive(bi.slot, e.target.value); setLeadEditId(null); }}>
+        <option value="">Empty</option>
+        {STORAGE_DRIVES.map((x) => <option key={x.name} value={x.name}>{x.name.replace(/ Storage Drive$/, "")}</option>)}
+      </select>
+    );
+    return (
+      <select className="prop-lead-sel" value={bi.ref?.baseName || ""} disabled={readOnly} autoFocus aria-label="Display"
+        onChange={(e) => { setSlotDisplay(bi.slot, e.target.value); if (e.target.value !== "__custom__") setLeadEditId(null); }}>
+        <option value="">Empty</option>
+        {displayOptions.map((x) => <option key={x.baseName} value={x.baseName}>{x.name}</option>)}
+        <option value="__custom__">Custom…</option>
+      </select>
+    );
   }
   // Put a drive (or Empty) into a specific bay. One qty-1 line item per filled slot.
   function setSlotDrive(n, driveName) {
@@ -607,25 +666,29 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const dispVisible = Math.max(1, displayItems.reduce((m, it) => Math.max(m, it.displaySlot || 0), 0), dispShown);
   const nvrGroupTotal = nvrItem ? itemTotal(nvrItem) + driveItems.reduce((s, it) => s + itemTotal(it), 0) : 0;
   const displaysTotal = displayItems.reduce((s, it) => s + itemTotal(it), 0);
-  const nvrCollapsed = camMode && nvrDone && !!nvrItem;
-  const dispCollapsed = camMode && dispDone && displayItems.length > 0;
-  const showNvrPickers = camMode && !nvrCollapsed;              // NVR select + HDD bays
-  const showDispPickers = camMode && !!nvrItem && !dispCollapsed; // Display slots
-  const showSysbar = camMode && (showNvrPickers || showDispPickers);
-  // Collapsed recording-system lines that render as numbered items 1..leadCount above the cameras.
+  // NVR + Displays are now ALWAYS inline-editable lead rows (no "Edit mode" form takeover). The camera
+  // sysbar form is gone; a no-NVR service shows the recorder child as a compact inline selector instead.
+  // Amp (audio) keeps its own sysbar for now. Every child carries its real item ref + kind + slot so the
+  // inline editor can call the SAME canonical handlers (chooseNvr / setSlotDrive / setSlotDisplay).
+  const showSysbar = false;
   const leadRows = [];
-  if (nvrCollapsed) leadRows.push({ key: "nvr", title: `NVR · ${nvrShort(nvrItem.name)}`,
-    summary: nvrSummary(nvrItem, driveItems),
-    total: nvrGroupTotal, edit: () => setNvrDone(false),
-    // Breakdown so the collapsed line isn't a mystery total — recorder + each drive, priced.
-    // qty/price carried so these rows read exactly like a camera's sub-items (qty · price · total).
-    items: [{ name: nvrItem.name, qty: +nvrItem.qty || 1, price: +nvrItem.price || 0, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
-      ...driveItems.map((d) => ({ name: d.name || "Storage drive", qty: +d.qty || 1, price: +d.price || 0, total: (+d.qty || 1) * (+d.price || 0) }))] });
-  if (dispCollapsed) leadRows.push({ key: "disp", title: displayItems.length === 1 ? "Display" : "Displays",
-    summary: dispSummary(displayItems),
-    total: displaysTotal, edit: () => setDispDone(false),
-    // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
-    items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
+  if (camMode) {
+    const nvrChildren = nvrItem
+      ? [{ ref: nvrItem, kind: "nvr", name: nvrItem.name, price: +nvrItem.price || 0, total: itemTotal(nvrItem) },
+         ...driveItems.map((d) => ({ ref: d, kind: "drive", slot: d.slot, name: d.name || "Storage drive", price: +d.price || 0, total: itemTotal(d) }))]
+      : [{ kind: "nvr", placeholder: true, name: "", price: 0, total: 0 }];   // pick the recorder inline
+    leadRows.push({ key: "nvr", title: nvrItem ? `NVR · ${nvrShort(nvrItem.name)}` : "NVR",
+      summary: nvrItem ? nvrSummary(nvrItem, driveItems) : null,
+      total: nvrGroupTotal,
+      add: nvrItem && hddSlots > 0 ? (nextFreeBay() ? { label: "+ Add Hard Drive", pick: "drive" } : { note: `${driveItems.length} / ${hddSlots} bays used` }) : null,
+      hint: !nvrItem && camCount > 0 ? `Recommended · ${camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel NVR` : null,
+      items: nvrChildren });
+    if (nvrItem) leadRows.push({ key: "disp", title: displayItems.length === 1 ? "Display" : "Displays",
+      summary: displayItems.length > 0 ? dispSummary(displayItems) : null,
+      total: displaysTotal,
+      add: displayItems.length < 4 ? { label: "+ Add Display", onClick: addDisplay } : null,
+      items: displayItems.map((d) => ({ ref: d, kind: "display", slot: d.displaySlot, name: `Display ${d.displaySlot} · ${d.name || "—"}`, price: +d.price || 0, total: itemTotal(d) })) });
+  }
   const ampCollapsed = soundMode && ampDone && !!ampItem;
   if (ampCollapsed) leadRows.push({ key: "amp", title: `Amp · ${ampItem.name}`,
     total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
@@ -961,111 +1024,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           </div>
         </div>
       )}
-      {showSysbar && (
-        <div className="prop-sysbar">
-          {showNvrPickers && <div className="prop-sysrow">
-          <div className="prop-slot">
-            <span className="prop-slot-lbl">NVR</span>
-            <select value={nvrItem?.name || ""} onChange={pickNvr} disabled={readOnly}>
-              <option value="">None</option>
-              {NVR_MODELS.map((m) => (
-                <option key={m.name} value={m.name}>{m.name.replace(/^NVR \(|\)$/g, "")}</option>
-              ))}
-            </select>
-            {nvrItem ? (
-              <>
-                <input className="prop-slot-price" type="number" min="0" step="0.01" value={nvrItem.price} disabled={readOnly}
-                       title="Price" onChange={(e) => setNvrField({ price: e.target.value })} />
-                {showCost && (
-                  <input className="prop-slot-costin" type="number" min="0" step="0.01" value={nvrItem.cost ?? 0} disabled={readOnly}
-                         title="Internal cost" onChange={(e) => setNvrField({ cost: e.target.value })} />
-                )}
-              </>
-            ) : <span className="prop-slot-cost">—</span>}
-          </div>
-          {nvrItem && hddSlots > 0 && (
-            <div className="prop-slots">
-              {/* Only the bays this NVR actually has — 8-Ch → 1, 16-Ch → 2, 32-Ch → 4. No greyed N/A slots. */}
-              {Array.from({ length: hddSlots }, (_, i) => {
-                const n = i + 1;
-                const d = driveAt(n);
-                return (
-                  <div className="prop-slot" key={n}>
-                    <span className="prop-slot-lbl">HDD Slot {n}</span>
-                    <select value={d?.name || ""} onChange={(e) => setSlotDrive(n, e.target.value)} disabled={readOnly}>
-                      <option value="">Empty</option>
-                      {STORAGE_DRIVES.map((x) => (
-                        <option key={x.name} value={x.name}>{x.name.replace(/ Storage Drive$/, "")}</option>
-                      ))}
-                    </select>
-                    {d ? (
-                      <>
-                        <input className="prop-slot-price" type="number" min="0" step="0.01" value={d.price} disabled={readOnly}
-                               title="Price" onChange={(e) => setSlotField(n, { price: e.target.value })} />
-                        {showCost && (
-                          <input className="prop-slot-costin" type="number" min="0" step="0.01" value={d.cost ?? 0} disabled={readOnly}
-                                 title="Internal cost" onChange={(e) => setSlotField(n, { cost: e.target.value })} />
-                        )}
-                      </>
-                    ) : <span className="prop-slot-cost">—</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          {nvrItem && !readOnly && (
-            <button type="button" className="prop-sys-done" onClick={() => setNvrDone(true)}>Done</button>
-          )}
-          </div>}
-          {showDispPickers && <div className="prop-sysrow">
-            <div className="prop-slots">
-              {Array.from({ length: dispVisible }, (_, i) => {
-                const n = i + 1;
-                const d = displayAt(n);
-                return (
-                  <div className="prop-slot" key={n}>
-                    <span className="prop-slot-lbl">Display {n}
-                      {!readOnly && n === dispVisible && dispVisible > 1 && (
-                        <button type="button" className="prop-slot-x" title="Remove this display" onClick={() => { setSlotDisplay(n, ""); setDispShown(dispVisible - 1); }}>✕</button>
-                      )}
-                    </span>
-                    <select value={d?.baseName || ""} onChange={(e) => setSlotDisplay(n, e.target.value)} disabled={readOnly}>
-                      <option value="">Empty</option>
-                      {displayOptions.map((x) => (
-                        <option key={x.baseName} value={x.baseName}>{x.name}</option>
-                      ))}
-                      <option value="__custom__">Custom…</option>
-                    </select>
-                    {d ? (
-                      <>
-                        {d.baseName === "__custom__" && (
-                          <input className="prop-slot-name" type="text" placeholder="Custom display…" value={d.name} disabled={readOnly}
-                                 title="Custom display name" onChange={(e) => setDisplayField(n, { name: e.target.value })} />
-                        )}
-                        <input className="prop-slot-price" type="number" min="0" step="0.01" value={d.price} disabled={readOnly}
-                               title="Price" onChange={(e) => setDisplayField(n, { price: e.target.value })} />
-                        {showCost && (
-                          <input className="prop-slot-costin" type="number" min="0" step="0.01" value={d.cost ?? 0} disabled={readOnly}
-                                 title="Internal cost" onChange={(e) => setDisplayField(n, { cost: e.target.value })} />
-                        )}
-                      </>
-                    ) : <span className="prop-slot-cost">—</span>}
-                  </div>
-                );
-              })}
-              {!readOnly && dispVisible < 4 && (
-                <button type="button" className="prop-add-slot" onClick={() => setDispShown(dispVisible + 1)} title="Add another display">+ Add display</button>
-              )}
-            </div>
-          {displayItems.length > 0 && !readOnly && (
-            <button type="button" className="prop-sys-done" onClick={() => setDispDone(true)}>Done</button>
-          )}
-          </div>}
-          {!nvrItem && camCount > 0 && (
-            <span className="prop-sys-hint">Recommended · {camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel NVR</span>
-          )}
-        </div>
-      )}
 
       {/* NVR capacity warning: more cameras than the selected NVR's channels */}
       {svc.key === "camera" && overCapacity && !warnDismissed && !readOnly && (
@@ -1089,45 +1047,134 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       )}
 
       {/* Collapsed recording-system lines (NVR, Displays) — numbered, expandable via Edit */}
-      {leadRows.map((lr, i) => (
+      {leadRows.map((lr) => {
+        const isOpen = leadOpen[lr.key] !== false;
+        // Parent menu holds ONLY true parent actions: Edit (amp still uses its form) or Remove the group.
+        const removeGroup = lr.key === "nvr" ? (nvrItem ? () => applyNvr("") : null)
+          : lr.key === "disp" ? () => patchItems(svc.items.filter((it) => it.displaySlot == null))
+          : null;
+        const hasMenu = !readOnly && !!(lr.edit || removeGroup);
+        return (
         <div key={lr.key} className={`prop-block prop-lead${!readOnly ? " has-drag" : ""}`}>
           <div className="prop-sysline">
             {lr.items?.length > 0 ? (
-              <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] !== false ? "Hide breakdown" : "Show breakdown"}
-                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: o[lr.key] === false }))}>{leadOpen[lr.key] !== false ? "▾" : "▸"}</button>
+              <button className="prop-chev" style={{ color: svcColor }} title={isOpen ? "Hide breakdown" : "Show breakdown"}
+                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: o[lr.key] === false }))}>{isOpen ? "▾" : "▸"}</button>
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
             <InfraBadge kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>
             {/* CLOSED tells you what's inside — a muted scan-summary built from the children; hidden once
-                expanded (the exact rows below are the detail). Inline on desktop, its own line on mobile. */}
-            {lr.summary && leadOpen[lr.key] === false && <span className="prop-sysline-sum">{lr.summary}</span>}
+                expanded (the exact rows below are the detail, now inline-editable). */}
+            {lr.summary && !isOpen && <span className="prop-sysline-sum">{lr.summary}</span>}
             <span className="prop-sysline-total">{money(lr.total)}</span>
-            {!readOnly && (
+            {hasMenu ? (
               <div className="prop-im-wrap prop-sysline-menu">
                 <button type="button" className="prop-item-menu" aria-label={`${lr.title} actions`} title="Actions"
                         onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `sys-${lr.key}` ? null : `sys-${lr.key}`); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
                 </button>
-                {menuOpen === `sys-${lr.key}` && <SysRowMenu onEdit={lr.edit} onClose={() => setMenuOpen(null)} />}
+                {menuOpen === `sys-${lr.key}` && <SysRowMenu onEdit={lr.edit} onRemove={removeGroup} removeLabel={lr.key === "nvr" ? "Remove NVR" : "Remove displays"} onClose={() => setMenuOpen(null)} />}
               </div>
-            )}
-            {/* Read-only keeps the ••• column's width so every price lines up with the editable layout. */}
-            {readOnly && <span className="prop-im-sp" aria-hidden="true" />}
+            ) : <span className="prop-im-sp" aria-hidden="true" />}
           </div>
-          {leadOpen[lr.key] !== false && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
-            // The SAME canonical child-row grammar as a camera's expanded sub-item: local A/B/C badge, light
-            // zebra, name … amount ("N × $unit" when qty > 1) — display-only (you edit these via the block's Edit).
-            <div key={bidx} className={`prop-sub2-wrap${bidx % 2 ? " alt" : ""}`}>
-              <div className="prop-sub2 static">
-                <span className="prop-sub2-badge" aria-hidden="true">{String.fromCharCode(65 + (bidx % 26))}</span>
-                <span className="prop-sub2-name">{bi.name}</span>
-                {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
-                <span className="prop-sub2-amt">{money(bi.total)}</span>
+          {/* Inline-editable children — ONE grammar with the camera bundle: click a child → that row becomes
+              a compact selector (recorder / drive / display). No separate Edit mode, no form takeover. Amp
+              children stay display-only (amp keeps its own form for now). */}
+          {isOpen && lr.items?.length > 0 && lr.items.map((bi, bidx) => {
+            const letter = String.fromCharCode(65 + (bidx % 26));
+            const editing = !readOnly && lr.key !== "amp" && (bi.placeholder || (bi.ref && leadEditId === bi.ref.id));
+            const setField = (p) => { if (bi.kind === "nvr") setNvrField(p); else if (bi.kind === "drive") setSlotField(bi.slot, p); else setDisplayField(bi.slot, p); };
+            return (
+              <div key={bi.ref?.id || `${lr.key}-${bidx}`} className={`prop-sub2-wrap${bidx % 2 ? " alt" : ""}`}>
+                {editing ? (
+                  <div className="prop-sub2 editing">
+                    <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
+                    {leadSelect(bi)}
+                    {bi.ref?.baseName === "__custom__" && (
+                      <input className="num prop-sub2-cname" type="text" placeholder="Custom display…" value={bi.ref.name} disabled={readOnly}
+                             title="Custom display name" onChange={(e) => setDisplayField(bi.slot, { name: e.target.value })} />
+                    )}
+                    {bi.ref && (
+                      <input className="num prop-sub2-price" type="number" min="0" step="0.01" value={bi.ref.price} disabled={readOnly} title="Price"
+                             onChange={(e) => setField({ price: e.target.value })} />
+                    )}
+                    {bi.ref && showCost && (
+                      <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={bi.ref.cost ?? 0} disabled={readOnly} title="Internal cost"
+                             onChange={(e) => setField({ cost: e.target.value })} />
+                    )}
+                    <span className="prop-sub2-amt">{money(bi.total)}</span>
+                    <span className="prop-sub2-bar">
+                      {bi.ref && <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setLeadEditId(null)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                      </button>}
+                      {bi.ref && bi.kind !== "nvr" && <button type="button" className="prop-sub2-del" title="Remove" aria-label={`Remove ${bi.name}`} onClick={() => { if (bi.kind === "drive") setSlotDrive(bi.slot, ""); else setSlotDisplay(bi.slot, ""); setLeadEditId(null); }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+                      </button>}
+                    </span>
+                  </div>
+                ) : (
+                  <button type="button" className="prop-sub2 compact" disabled={readOnly || lr.key === "amp"} title={readOnly || lr.key === "amp" ? undefined : "Edit"}
+                          aria-label={`${letter}: ${bi.name}`} onClick={() => { if (!readOnly && bi.ref && lr.key !== "amp") setLeadEditId(bi.ref.id); }}>
+                    <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
+                    <span className="prop-sub2-name">{bi.name}</span>
+                    {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
+                    <span className="prop-sub2-amt">{money(bi.total)}</span>
+                  </button>
+                )}
               </div>
+            );
+          })}
+          {/* Contextual add — component-specific wording, capacity-aware (bays used when full). Adding a
+              hard drive first pops a size picker (don't assume a default); Add Display adds the $0 default. */}
+          {isOpen && !readOnly && lr.add && (
+            <div className="prop-subadd prop-subadd-rel">
+              {lr.add.note ? (
+                <span className="prop-subadd-note">{lr.add.note}</span>
+              ) : lr.add.pick === "drive" ? (
+                <>
+                  <button type="button" className="prop-subadd-btn" onClick={() => setDrivePick((v) => !v)} aria-expanded={drivePick} aria-haspopup="menu">
+                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    Add Hard Drive
+                  </button>
+                  {drivePick && (
+                    <>
+                      <div className="prop-pick-back" onMouseDown={() => setDrivePick(false)} />
+                      <div className="prop-pick" role="menu" aria-label="Choose drive size">
+                        <div className="prop-pick-lbl">Add drive</div>
+                        {STORAGE_DRIVES.map((d) => (
+                          <button key={d.name} type="button" className="prop-pick-opt" role="menuitem" onClick={() => addDrive(d.name)}>
+                            <span>{d.name.replace(/ Storage Drive$/, "")}</span><span className="prop-pick-price">{money(d.price)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : lr.add.onClick ? (
+                <button type="button" className="prop-subadd-btn" onClick={lr.add.onClick}>
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  {lr.add.label.replace(/^\+\s*/, "")}
+                </button>
+              ) : null}
             </div>
-          ))}
+          )}
+          {isOpen && lr.hint && <div className="prop-subadd"><span className="prop-subadd-note">{lr.hint}</span></div>}
         </div>
-      ))}
+        );
+      })}
+      {/* NVR downgrade conflict — never drop drives silently (#7). */}
+      {nvrConflict && (
+        <div className="prop-conflict-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setNvrConflict(null); }}>
+          <div className="prop-conflict" role="dialog" aria-modal="true" aria-label="NVR drive conflict">
+            <b className="prop-conflict-t">This NVR supports {nvrConflict.slots} drive{nvrConflict.slots === 1 ? "" : "s"}</b>
+            <span className="prop-conflict-m">Switching will remove {nvrConflict.remove} drive{nvrConflict.remove === 1 ? "" : "s"} from the extra bays.</span>
+            <div className="prop-conflict-acts">
+              <button type="button" className="prop-conflict-cancel" onClick={() => setNvrConflict(null)}>Cancel</button>
+              <button type="button" className="prop-conflict-go" onClick={() => { applyNvr(nvrConflict.name); setNvrConflict(null); }}>Remove {nvrConflict.remove} &amp; switch</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {visibleItems.map((it, idx) => (
         <div key={it.id}
@@ -1148,7 +1195,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <div className="prop-subadd">
               <button type="button" className="prop-subadd-btn" onClick={() => addSub(it.id)}>
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Sub-item
+                Add Component
               </button>
             </div>
           )}
