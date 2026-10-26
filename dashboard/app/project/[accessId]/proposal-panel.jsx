@@ -335,7 +335,7 @@ const PROP_CSS = `
    it just helps the eye track label → name → price across a wide row. */
 .pvx .prop-sub2-wrap.alt>.prop-sub2{background:rgba(17,20,24,.022)}
 /* Grouped equipment (NVR / Displays / Amp): the real child rows indent under the parent's NAME (past chevron + badge), not the page edge. */
-.pvx .prop-lead .prop-sub2-wrap{margin-left:60px}
+.pvx .prop-lead .prop-sub2-wrap{margin-left:30px}/* align infra (NVR/Displays) children to the camera child column */
 .pvx .prop-lead .prop-sub2-name{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3;overflow-wrap:anywhere}
 /* Children: regular weight, slightly smaller than the parent, still full-strength ink (never disabled-gray). */
 /* Child names wrap rather than truncate — a long equipment name drops to a second line, the price stays
@@ -717,7 +717,7 @@ const PROP_CSS = `
      its controls tidily, amount + Done + Remove stay together on the right. The compact row's right inset matches the
      parent's ••• column so amounts line up with the price above. */
   .pvx .prop-sub2-wrap{margin-left:26px}
-  .pvx .prop-lead .prop-sub2-wrap{margin-left:50px}
+  .pvx .prop-lead .prop-sub2-wrap{margin-left:26px}/* align infra children to camera children on mobile too */
   .pvx .prop-sub2{gap:6px 8px}
   .pvx button.prop-sub2.compact,.pvx .prop-sub2.static{min-height:44px;padding-right:28px}
   .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 100%}
