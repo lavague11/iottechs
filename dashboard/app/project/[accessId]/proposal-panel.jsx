@@ -377,14 +377,16 @@ const PROP_CSS = `
 .pvx .prop-conflict-acts{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
 .pvx .prop-conflict-cancel{height:34px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-conflict-go{height:34px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-red,#C4553D);color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
-/* Add-Hard-Drive size picker — a small anchored menu (don't assume a default drive). */
-.pvx .prop-subadd-rel{position:relative}
-.pvx .prop-pick-back{position:fixed;inset:0;z-index:40}
-.pvx .prop-pick{position:absolute;left:30px;top:calc(100% - 2px);z-index:50;min-width:180px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 14px 34px rgba(16,20,24,.18);padding:6px}
-.pvx .prop-pick-lbl{font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:5px 9px 4px}
-.pvx .prop-pick-opt{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);padding:8px 9px;border-radius:7px;cursor:pointer}
-.pvx .prop-pick-opt:hover{background:var(--dv-paper,#F4F4F2)}
-.pvx .prop-pick-price{color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
+/* Add-Hard-Drive / Add-Display picker — a center-screen modal (reuses .prop-conflict-bg overlay). Pick
+   the drive SIZE / display TYPE; prices are the live service-pricing values so it matches the config. */
+.pvx .prop-pickm{width:min(340px,100%);background:var(--dv-raise,#FBFBFA);border-radius:14px;box-shadow:0 24px 60px rgba(16,20,24,.28);overflow:hidden;display:flex;flex-direction:column}
+.pvx .prop-pickm-head{display:flex;align-items:center;justify-content:space-between;padding:15px 16px 11px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-pickm-head b{font-size:.95rem;font-weight:650;color:var(--dv-ink,#101418)}
+.pvx .prop-pickm-x{border:0;background:none;font-size:1.3rem;line-height:1;color:var(--dv-meta,#787D84);cursor:pointer;padding:0 2px}
+.pvx .prop-pickm-list{padding:7px;display:flex;flex-direction:column;gap:1px;max-height:60vh;overflow:auto}
+.pvx .prop-pickm-opt{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;appearance:none;border:0;background:none;font-family:inherit;font-size:.86rem;font-weight:500;color:var(--dv-ink,#101418);padding:11px 11px;border-radius:9px;cursor:pointer;text-align:left}
+.pvx .prop-pickm-opt:hover{background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-pickm-price{color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums;flex-shrink:0}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill.
    Group boundary: a little extra breathing room below an expanded group (and below each infra lead)

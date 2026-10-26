@@ -97,11 +97,16 @@ test("contextual add actions are capacity-aware and use component-specific wordi
   assert.ok(/for \(let n = 1; n <= hddSlots; n\+\+\) if \(!driveAt\(n\)\)/.test(editor), "free-bay search uses the canonical hddSlots capacity");
 });
 
-test("Add Hard Drive pops a size picker (no assumed default); picking a size fills the next free bay", () => {
-  assert.ok(editor.includes('lr.add.pick === "drive"') && editor.includes("setDrivePick"), "the add action opens a size picker");
-  assert.ok(/STORAGE_DRIVES\.map\(\(d\) => \([\s\S]*?addDrive\(d\.name\)/.test(editor), "the picker lists every drive size and adds the chosen one");
-  assert.ok(/function addDrive\(name\) \{[\s\S]*?setSlotDrive\(n, name/.test(editor), "addDrive takes the chosen size (no silent default)");
-  assert.ok(panel.includes(".pvx .prop-pick{"), "the picker menu has styles");
+test("Add drive AND Add display open a CENTER-SCREEN picker (no assumed default); prices sync to the config", () => {
+  // Both adds open the same modal picker, keyed by kind — no dropdown, no auto-add.
+  assert.ok(editor.includes("setPick({ kind: lr.add.pick })"), "the add buttons open the center-screen picker");
+  assert.ok(/pick\.kind === "drive"[\s\S]*?driveOptions\.map\(\(d\) => \([\s\S]*?addDrive\(d\.name\)/.test(editor), "drive picker lists sizes → addDrive");
+  assert.ok(/displayOptions\.map\(\(x\) => \([\s\S]*?addDisplay\(x\.baseName\)/.test(editor) && editor.includes('addDisplay("__custom__")'), "display picker lets you choose the type (incl. Custom)");
+  assert.ok(/function addDisplay\(baseName\)/.test(editor), "Add Display no longer auto-adds CX Provided — it takes the chosen type");
+  // Prices come from the price book (service-pricing config), not the stale catalog base.
+  assert.ok(/const driveOptions = useMemo\(\(\) => \{[\s\S]*?priceOf\(d\.name, book\)/.test(editor), "drive picker prices use the live price book");
+  assert.ok(panel.includes(".pvx .prop-pickm{"), "the center-screen picker has styles");
+  assert.ok(!panel.includes(".pvx .prop-pick{"), "the old anchored dropdown styles are gone");
 });
 
 test("an NVR downgrade that drops drives is confirmed, never silent (#7)", () => {

@@ -361,12 +361,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const book = loadPriceBook();
     return DISPLAY_OPTION_NAMES.map((n) => ({ baseName: n, name: displayNameOf(n, book), price: priceOf(n, book) }));
   }, [priceBookVersion]);
+  // Drive options with the LIVE service-pricing (price-book) prices — same source the config edits — so
+  // the add-drive picker never shows a stale catalog price (setSlotDrive already prices from the book).
+  const driveOptions = useMemo(() => {
+    const book = loadPriceBook();
+    return STORAGE_DRIVES.map((d) => ({ name: d.name, price: priceOf(d.name, book) }));
+  }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
   const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays/Amp group -> children; open by default, false = user collapsed it
   const [leadEditId, setLeadEditId] = useState(null);   // which NVR/Display child row is inline-editing (one at a time)
   const [nvrConflict, setNvrConflict] = useState(null); // pending NVR downgrade that would drop drives → confirm first
-  const [drivePick, setDrivePick] = useState(false);    // "+ Add Hard Drive" → pick the drive size before adding
+  const [pick, setPick] = useState(null);               // center-screen add picker: { kind: "drive" | "display" } | null
   const [dispShown, setDispShown] = useState(1);  // display slots revealed (start at 1, "+ Add display" reveals more)
   const [askCam, setAskCam] = useState(null);     // preset awaiting a "how many cameras?" count (first camera only)
   const [camN, setCamN] = useState(4);
@@ -435,16 +441,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     for (let n = 1; n <= hddSlots; n++) if (!driveAt(n)) return n;
     return 0;
   }
-  // "+ Add Hard Drive" → pick a size (addDrive), then fill the next free bay (capacity-gated by nextFreeBay).
+  // "+ Add Hard Drive" → the picker calls this with the chosen size; fills the next free bay.
   function addDrive(name) {
     const n = nextFreeBay();
-    if (n) { setSlotDrive(n, name || (STORAGE_DRIVES[0] || {}).name || ""); setDrivePick(false); }
+    if (n) setSlotDrive(n, name || (STORAGE_DRIVES[0] || {}).name || "");
+    setPick(null);
   }
-  // "+ Add Display" — next display slot (max 4), defaults to the customer-provided $0 option.
-  function addDisplay() {
+  // "+ Add Display" → the picker calls this with the chosen type (or "__custom__"); next slot, max 4.
+  function addDisplay(baseName) {
     const used = displayItems.map((d) => d.displaySlot);
     let n = 1; while (used.includes(n)) n++;
-    if (n <= 4) { setSlotDisplay(n, "Customer Provided"); setDispShown(Math.max(dispShown, n)); }
+    if (n <= 4) { setSlotDisplay(n, baseName || "Customer Provided"); setDispShown(Math.max(dispShown, n)); }
+    setPick(null);
   }
   // The inline selector for a lead child (recorder / drive / display), by kind. Changing it routes to the
   // SAME canonical handler (chooseNvr / setSlotDrive / setSlotDisplay) and closes the row (unless Custom).
@@ -686,7 +694,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     if (nvrItem) leadRows.push({ key: "disp", title: displayItems.length === 1 ? "Display" : "Displays",
       summary: displayItems.length > 0 ? dispSummary(displayItems) : null,
       total: displaysTotal,
-      add: displayItems.length < 4 ? { label: "+ Add Display", onClick: addDisplay } : null,
+      add: displayItems.length < 4 ? { label: "+ Add Display", pick: "display" } : null,
       items: displayItems.map((d) => ({ ref: d, kind: "display", slot: d.displaySlot, name: `Display ${d.displaySlot} · ${d.name || "—"}`, price: +d.price || 0, total: itemTotal(d) })) });
   }
   const ampCollapsed = soundMode && ampDone && !!ampItem;
@@ -1125,35 +1133,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             );
           })}
           {/* Contextual add — component-specific wording, capacity-aware (hidden when no bay/slot is free).
-              Adding a hard drive first pops a size picker (don't assume a default); Add Display adds the $0 default. */}
+              Both open a center-screen picker (don't assume a default size/type); the modal is rendered once below. */}
           {isOpen && !readOnly && lr.add && (
-            <div className="prop-subadd prop-subadd-rel">
-              {lr.add.pick === "drive" ? (
-                <>
-                  <button type="button" className="prop-subadd-btn" onClick={() => setDrivePick((v) => !v)} aria-expanded={drivePick} aria-haspopup="menu">
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Add Hard Drive
-                  </button>
-                  {drivePick && (
-                    <>
-                      <div className="prop-pick-back" onMouseDown={() => setDrivePick(false)} />
-                      <div className="prop-pick" role="menu" aria-label="Choose drive size">
-                        <div className="prop-pick-lbl">Add drive</div>
-                        {STORAGE_DRIVES.map((d) => (
-                          <button key={d.name} type="button" className="prop-pick-opt" role="menuitem" onClick={() => addDrive(d.name)}>
-                            <span>{d.name.replace(/ Storage Drive$/, "")}</span><span className="prop-pick-price">{money(d.price)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : lr.add.onClick ? (
-                <button type="button" className="prop-subadd-btn" onClick={lr.add.onClick}>
-                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                  {lr.add.label.replace(/^\+\s*/, "")}
-                </button>
-              ) : null}
+            <div className="prop-subadd">
+              <button type="button" className="prop-subadd-btn" onClick={() => setPick({ kind: lr.add.pick })} aria-haspopup="dialog">
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                {lr.add.label.replace(/^\+\s*/, "")}
+              </button>
             </div>
           )}
           {isOpen && lr.hint && <div className="prop-subadd"><span className="prop-subadd-note">{lr.hint}</span></div>}
@@ -1169,6 +1155,36 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <div className="prop-conflict-acts">
               <button type="button" className="prop-conflict-cancel" onClick={() => setNvrConflict(null)}>Cancel</button>
               <button type="button" className="prop-conflict-go" onClick={() => { applyNvr(nvrConflict.name); setNvrConflict(null); }}>Remove {nvrConflict.remove} &amp; switch</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Center-screen add picker — pick the drive SIZE / display TYPE before adding (no assumed default).
+          Prices are the LIVE service-pricing (price-book) values, so the picker matches the config exactly. */}
+      {pick && (
+        <div className="prop-conflict-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setPick(null); }}>
+          <div className="prop-pickm" role="dialog" aria-modal="true" aria-label={pick.kind === "drive" ? "Add hard drive" : "Add display"}>
+            <div className="prop-pickm-head">
+              <b>{pick.kind === "drive" ? "Add hard drive" : "Add display"}</b>
+              <button type="button" className="prop-pickm-x" aria-label="Close" onClick={() => setPick(null)}>×</button>
+            </div>
+            <div className="prop-pickm-list">
+              {pick.kind === "drive"
+                ? driveOptions.map((d) => (
+                    <button key={d.name} type="button" className="prop-pickm-opt" onClick={() => addDrive(d.name)}>
+                      <span>{d.name.replace(/ Storage Drive$/, "")}</span><span className="prop-pickm-price">{money(d.price)}</span>
+                    </button>
+                  ))
+                : (<>
+                    {displayOptions.map((x) => (
+                      <button key={x.baseName} type="button" className="prop-pickm-opt" onClick={() => addDisplay(x.baseName)}>
+                        <span>{x.name}</span><span className="prop-pickm-price">{money(x.price)}</span>
+                      </button>
+                    ))}
+                    <button type="button" className="prop-pickm-opt" onClick={() => addDisplay("__custom__")}>
+                      <span>Custom…</span><span className="prop-pickm-price" />
+                    </button>
+                  </>)}
             </div>
           </div>
         </div>
