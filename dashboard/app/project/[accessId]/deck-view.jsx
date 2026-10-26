@@ -628,7 +628,7 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
 
 const CSS = `
 .dv-shell{--dv-ink:#101418;--dv-ink-soft:#3A4048;--dv-meta:#787D84;--dv-faint:#A1A6AC;--dv-paper:#F4F4F2;--dv-raise:#FBFBFA;--dv-line:#E4E4DF;--dv-line-soft:#EDEDE9;--dv-gold:#C9A96E;--dv-gold-deep:#A8842F;--dv-gold-text:#8A6A1F;--dv-green:#2E7D5B;--dv-red:#C4553D;--dv-blue:#3E6C9E;--dv-e:cubic-bezier(.22,.9,.24,1);--dv-eo:cubic-bezier(.16,1,.3,1);
-  height:100dvh;display:flex;flex-direction:column;background:var(--dv-paper);color:var(--dv-ink);touch-action:pan-y;
+  height:100dvh;display:flex;flex-direction:column;background:#fff;color:var(--dv-ink);touch-action:pan-y;
   font-family:var(--font-sans),"Instrument Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden}
 .dv-shell .mono{font-family:var(--font-mono),"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
 .dv-shell button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
