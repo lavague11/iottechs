@@ -15,6 +15,7 @@ process.env.TZ = "America/New_York";
 
 let db;
 let proposalChangeState;
+let downloadProposalPdf;
 
 // 4 cameras × $150 = $600 (no tax) → grand 600, 50% deposit = 300.
 const PAYLOAD = { options: [{ id: "A", name: "Premium Security", services: [{ key: "camera", label: "Security Cameras", items: [{ id: "i1", name: "Camera", qty: 4, price: 150 }] }] }] };
@@ -25,7 +26,7 @@ let seq = 0;
 const project = () => { seq++; const r = db.createLeadProject(`Resolver ${seq}`, `resolver${seq}@example.com`, `201555${String(1000 + seq)}`, "2503 Jay Pl", "cctv", `Resolver ${seq} Co`); return r.accessId || r.access_id || r; };
 const sendV1 = (a) => { db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "Staff"); db.markProposalSent(a, "Staff"); };
 
-before(async () => { db = await import("../lib/db.js"); ({ proposalChangeState } = await import("../lib/proposal.js")); });
+before(async () => { db = await import("../lib/db.js"); ({ proposalChangeState } = await import("../lib/proposal.js")); ({ downloadProposalPdf } = await import("../lib/proposal-pdf.js")); });
 
 test("before first send: no published version (no contract), working draft exists", () => {
   const a = project();
@@ -134,6 +135,21 @@ test("Phase 3: accepting the published version while a draft exists keeps v1's s
   const stored = db.sqliteHandle().prepare("SELECT status FROM proposals WHERE project_access_id=? AND version=1").get(a);
   assert.equal(stored.status, "superseded", "v1 stays marked superseded — the version model isn't corrupted");
   assert.equal(db.getActiveProposal(a).version, 2, "staff workspace is still the draft v2");
+});
+
+// ---- Phase 4: per-version PDF reproducibility (each version's row is an immutable snapshot) ----
+test("Phase 4: a superseded version's PDF reproduces exactly that version, not the later one", () => {
+  const a = project(); sendV1(a);                                   // v1 = $600
+  db.reviseProposal(a, "Staff");
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff");
+  db.markProposalSent(a, "Staff");                                   // v2 = $1,200 published
+  // v1's stored row still carries its ORIGINAL payload — render it and confirm it reproduces v1's numbers.
+  const v1row = db.sqliteHandle().prepare("SELECT * FROM proposals WHERE project_access_id=? AND version=1").get(a);
+  const trace = [];
+  downloadProposalPdf({ ...v1row, payload: JSON.parse(v1row.payload) }, { customerName: "T", __trace: trace, __return: true });
+  const texts = trace.map((t) => t.text).join(" ");
+  assert.ok(/\$600\b/.test(texts), "v1 PDF reproduces v1's $600 total");
+  assert.ok(!/\$1,200\b/.test(texts), "v1 PDF never shows the later v2 ($1,200) total");
 });
 
 // ---- Phase 1.1: AR / receivables follows the published version too ----
