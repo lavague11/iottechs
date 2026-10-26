@@ -78,12 +78,22 @@ test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR 
   assert.ok(/aria-label=\{`Sub-item \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
 });
 
-test("NVR/Displays are inline-editable (no Edit-mode form takeover); the camera sysbar is gone", () => {
-  // The sysbar config form for cameras is removed; NVR/Displays edit through inline child selectors.
+test("NVR/Displays/Amp are inline-editable (no Edit-mode form takeover); every sysbar form is gone", () => {
+  // The sysbar config forms (camera + amp) are removed; all groups edit through inline child selectors.
   assert.ok(editor.includes("const showSysbar = false"), "camera NVR/Display form removed");
-  assert.ok(!editor.includes("setNvrDone") && !editor.includes("setDispDone"), "no NVR/Display Edit-mode toggle");
+  assert.ok(!editor.includes("setNvrDone") && !editor.includes("setDispDone") && !editor.includes("setAmpDone"), "no NVR/Display/Amp Edit-mode toggle");
+  assert.ok(!editor.includes('className="prop-sysbar"') && !editor.includes("prop-sys-done"), "no leftover sysbar form");
   assert.ok(editor.includes("function leadSelect(bi)") && editor.includes("setLeadEditId"), "inline child selector + one-at-a-time edit state");
   assert.ok(editor.includes("chooseNvr(e.target.value)") && editor.includes("setSlotDrive(bi.slot, e.target.value)") && editor.includes("setSlotDisplay(bi.slot, e.target.value)"), "selectors route to the canonical handlers");
+});
+
+test("the amp group follows the same inline grammar: amp selector + Rack add-on, Remove in the parent menu", () => {
+  // Amp renders as a lead row always in soundMode; children carry refs + kind (amp recorder / rack add-on).
+  assert.ok(/if \(soundMode\) \{[\s\S]*?\{ ref: ampItem, kind: "amp"/.test(editor), "amp recorder is an inline child");
+  assert.ok(/rackItem \? \[\{ ref: rackItem, kind: "rack"/.test(editor), "Rack & Mount is an optional inline child");
+  assert.ok(/bi\.kind === "amp"[\s\S]*?pickAmp\(e\.target\.value\)/.test(editor) && /bi\.kind === "rack"[\s\S]*?setRack\(e\.target\.value === "on"\)/.test(editor), "amp/rack selectors use the canonical handlers");
+  assert.ok(editor.includes('{ label: "+ Add Rack & Mount", onClick: () => setRack(true) }'), "Rack add-on is a direct add (single option)");
+  assert.ok(/lr\.key === "amp" \? \(ampItem \? \(\) => pickAmp\(""\)/.test(editor), "parent menu removes the whole amp group");
 });
 
 test("contextual add actions are capacity-aware and use component-specific wording", () => {

@@ -385,8 +385,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const [overId, setOverId] = useState(null);    // line item currently hovered as a drop target
   // An item dragged from ANOTHER section is hovering here → this section is a cross-section drop target.
   const crossItem = !!(itemDrag?.active && itemDrag.active.svcIdx !== itemDrag.svcIdx);
-  // Audio amp still collapses to a summary line via its own "Done" (NVR/Displays are now inline-editable).
-  const [ampDone, setAmpDone] = useState(() => (svc.items || []).some((it) => it.ampSlot === 1));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   void priceBookVersion; // referenced only to force a recompute of `catalog` above on save
 
@@ -469,6 +467,21 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         onChange={(e) => { setSlotDrive(bi.slot, e.target.value); setLeadEditId(null); }}>
         <option value="">Empty</option>
         {STORAGE_DRIVES.map((x) => <option key={x.name} value={x.name}>{x.name.replace(/ Storage Drive$/, "")}</option>)}
+      </select>
+    );
+    if (bi.kind === "amp") return (
+      <select className="prop-lead-sel" value={ampItem?.name || ""} disabled={readOnly} autoFocus aria-label="Amplifier"
+        onChange={(e) => { pickAmp(e.target.value); setLeadEditId(null); }}>
+        <option value="">None</option>
+        {ampModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+        {ampItem && !ampModels.some((m) => m.name === ampItem.name) && <option value={ampItem.name}>{ampItem.name}</option>}
+      </select>
+    );
+    if (bi.kind === "rack") return (
+      <select className="prop-lead-sel" value={rackItem ? "on" : ""} disabled={readOnly} autoFocus aria-label="Rack & Mount"
+        onChange={(e) => { setRack(e.target.value === "on"); setLeadEditId(null); }}>
+        <option value="">None</option>
+        <option value="on">{displayNameOf(AMP_ADDON, loadPriceBook())}</option>
       </select>
     );
     return (
@@ -697,10 +710,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       add: displayItems.length < 4 ? { label: "+ Add Display", pick: "display" } : null,
       items: displayItems.map((d) => ({ ref: d, kind: "display", slot: d.displaySlot, name: `Display ${d.displaySlot} · ${d.name || "—"}`, price: +d.price || 0, total: itemTotal(d) })) });
   }
-  const ampCollapsed = soundMode && ampDone && !!ampItem;
-  if (ampCollapsed) leadRows.push({ key: "amp", title: `Amp · ${ampItem.name}`,
-    total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
-    items: [ampItem, ...(rackItem ? [rackItem] : [])].map((d) => ({ name: d.name, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
+  // Audio amp — same inline-editable grammar as NVR/Displays. Amp = the "recorder" (always a child,
+  // selector); Rack & Mount = its optional add-on child. No Edit-mode form.
+  if (soundMode) {
+    const ampChildren = ampItem
+      ? [{ ref: ampItem, kind: "amp", name: ampItem.name, price: +ampItem.price || 0, total: itemTotal(ampItem) },
+         ...(rackItem ? [{ ref: rackItem, kind: "rack", name: rackItem.name, price: +rackItem.price || 0, total: itemTotal(rackItem) }] : [])]
+      : [{ kind: "amp", placeholder: true, name: "", price: 0, total: 0 }];
+    leadRows.push({ key: "amp", title: ampItem ? `Amp · ${ampItem.name}` : "Amp",
+      total: (ampItem ? itemTotal(ampItem) : 0) + (rackItem ? itemTotal(rackItem) : 0),
+      add: ampItem && !rackItem ? { label: "+ Add Rack & Mount", onClick: () => setRack(true) } : null,
+      items: ampChildren });
+  }
   const leadCount = leadRows.length;
   // Number ONLY endpoints (cameras / speakers / sensors), from 1 — infrastructure in the list gets an icon, not
   // a number, and the collapsed recording-system lines (NVR/Displays/Amp) are infrastructure too. So "8 cameras"
@@ -992,46 +1013,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
       </div>
 
-      {/* First things first — the recording system: NVR model + a drive picker per HDD bay. NVR and
-          Displays each sit on their own row (mobile-friendly). Prices/cost render below each picker. */}
-      {soundMode && !ampCollapsed && (
-        <div className="prop-sysbar">
-          <div className="prop-sysrow">
-            <div className="prop-slot">
-              <span className="prop-slot-lbl">Amp</span>
-              <select value={ampItem?.name || ""} onChange={(e) => pickAmp(e.target.value)} disabled={readOnly} aria-label="Amplifier">
-                <option value="">None</option>
-                {ampModels.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                {ampItem && !ampModels.some((m) => m.name === ampItem.name) && <option value={ampItem.name}>{ampItem.name}</option>}
-              </select>
-              {ampItem ? (
-                <>
-                  <input className="prop-slot-price" type="number" min="0" step="0.01" value={ampItem.price} disabled={readOnly} title="Price" onChange={(e) => setAmpField(1, { price: e.target.value })} />
-                  {showCost && <input className="prop-slot-costin" type="number" min="0" step="0.01" value={ampItem.cost ?? 0} disabled={readOnly} title="Internal cost" onChange={(e) => setAmpField(1, { cost: e.target.value })} />}
-                </>
-              ) : <span className="prop-slot-cost">—</span>}
-            </div>
-            {ampItem && (
-              <div className="prop-slots">
-                <div className="prop-slot">
-                  <span className="prop-slot-lbl">Rack</span>
-                  <select value={rackItem ? "on" : ""} onChange={(e) => setRack(e.target.value === "on")} disabled={readOnly} aria-label="Rack">
-                    <option value="">None</option>
-                    <option value="on">{displayNameOf(AMP_ADDON, loadPriceBook())}</option>
-                  </select>
-                  {rackItem ? (
-                    <>
-                      <input className="prop-slot-price" type="number" min="0" step="0.01" value={rackItem.price} disabled={readOnly} title="Price" onChange={(e) => setAmpField(2, { price: e.target.value })} />
-                      {showCost && <input className="prop-slot-costin" type="number" min="0" step="0.01" value={rackItem.cost ?? 0} disabled={readOnly} title="Internal cost" onChange={(e) => setAmpField(2, { cost: e.target.value })} />}
-                    </>
-                  ) : <span className="prop-slot-cost">—</span>}
-                </div>
-              </div>
-            )}
-            {ampItem && !readOnly && <button type="button" className="prop-sys-done" onClick={() => setAmpDone(true)}>Done</button>}
-          </div>
-        </div>
-      )}
 
       {/* NVR capacity warning: more cameras than the selected NVR's channels */}
       {svc.key === "camera" && overCapacity && !warnDismissed && !readOnly && (
@@ -1060,8 +1041,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         // Parent menu holds ONLY true parent actions: Edit (amp still uses its form) or Remove the group.
         const removeGroup = lr.key === "nvr" ? (nvrItem ? () => applyNvr("") : null)
           : lr.key === "disp" ? () => patchItems(svc.items.filter((it) => it.displaySlot == null))
+          : lr.key === "amp" ? (ampItem ? () => pickAmp("") : null)
           : null;
-        const hasMenu = !readOnly && !!(lr.edit || removeGroup);
+        const hasMenu = !readOnly && !!removeGroup;
         return (
         <div key={lr.key} className={`prop-block prop-lead${!readOnly ? " has-drag" : ""}`}>
           <div className="prop-sysline">
@@ -1081,7 +1063,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                         onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `sys-${lr.key}` ? null : `sys-${lr.key}`); }}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
                 </button>
-                {menuOpen === `sys-${lr.key}` && <SysRowMenu onEdit={lr.edit} onRemove={removeGroup} removeLabel={lr.key === "nvr" ? "Remove NVR" : "Remove displays"} onClose={() => setMenuOpen(null)} />}
+                {menuOpen === `sys-${lr.key}` && <SysRowMenu onRemove={removeGroup} removeLabel={lr.key === "nvr" ? "Remove NVR" : lr.key === "amp" ? "Remove amp" : "Remove displays"} onClose={() => setMenuOpen(null)} />}
               </div>
             ) : <span className="prop-im-sp" aria-hidden="true" />}
           </div>
@@ -1090,8 +1072,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               children stay display-only (amp keeps its own form for now). */}
           {isOpen && lr.items?.length > 0 && lr.items.map((bi, bidx) => {
             const letter = String.fromCharCode(65 + (bidx % 26));
-            const editing = !readOnly && lr.key !== "amp" && (bi.placeholder || (bi.ref && leadEditId === bi.ref.id));
-            const setField = (p) => { if (bi.kind === "nvr") setNvrField(p); else if (bi.kind === "drive") setSlotField(bi.slot, p); else setDisplayField(bi.slot, p); };
+            const editing = !readOnly && (bi.placeholder || (bi.ref && leadEditId === bi.ref.id));
+            const setField = (p) => {
+              if (bi.kind === "nvr") setNvrField(p);
+              else if (bi.kind === "drive") setSlotField(bi.slot, p);
+              else if (bi.kind === "display") setDisplayField(bi.slot, p);
+              else if (bi.kind === "amp") setAmpField(1, p);
+              else if (bi.kind === "rack") setAmpField(2, p);
+            };
+            const removable = bi.kind === "drive" || bi.kind === "display" || bi.kind === "rack";   // not the recorder/amp
+            const removeChild = () => { if (bi.kind === "drive") setSlotDrive(bi.slot, ""); else if (bi.kind === "display") setSlotDisplay(bi.slot, ""); else if (bi.kind === "rack") setRack(false); setLeadEditId(null); };
             return (
               <div key={bi.ref?.id || `${lr.key}-${bidx}`} className={`prop-sub2-wrap${bidx % 2 ? " alt" : ""}`}>
                 {editing ? (
@@ -1115,14 +1105,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                       {bi.ref && <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setLeadEditId(null)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                       </button>}
-                      {bi.ref && bi.kind !== "nvr" && <button type="button" className="prop-sub2-del" title="Remove" aria-label={`Remove ${bi.name}`} onClick={() => { if (bi.kind === "drive") setSlotDrive(bi.slot, ""); else setSlotDisplay(bi.slot, ""); setLeadEditId(null); }}>
+                      {bi.ref && removable && <button type="button" className="prop-sub2-del" title="Remove" aria-label={`Remove ${bi.name}`} onClick={removeChild}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
                       </button>}
                     </span>
                   </div>
                 ) : (
-                  <button type="button" className="prop-sub2 compact" disabled={readOnly || lr.key === "amp"} title={readOnly || lr.key === "amp" ? undefined : "Edit"}
-                          aria-label={`${letter}: ${bi.name}`} onClick={() => { if (!readOnly && bi.ref && lr.key !== "amp") setLeadEditId(bi.ref.id); }}>
+                  <button type="button" className="prop-sub2 compact" disabled={readOnly} title={readOnly ? undefined : "Edit"}
+                          aria-label={`${letter}: ${bi.name}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
                     <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
                     <span className="prop-sub2-name">{bi.name}</span>
                     {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
@@ -1133,10 +1123,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             );
           })}
           {/* Contextual add — component-specific wording, capacity-aware (hidden when no bay/slot is free).
-              Both open a center-screen picker (don't assume a default size/type); the modal is rendered once below. */}
+              A multi-option add (drive size / display type) opens a center-screen picker; a single add-on
+              (Rack & Mount) is added directly. */}
           {isOpen && !readOnly && lr.add && (
             <div className="prop-subadd">
-              <button type="button" className="prop-subadd-btn" onClick={() => setPick({ kind: lr.add.pick })} aria-haspopup="dialog">
+              <button type="button" className="prop-subadd-btn" aria-haspopup={lr.add.pick ? "dialog" : undefined}
+                      onClick={() => (lr.add.pick ? setPick({ kind: lr.add.pick }) : lr.add.onClick?.())}>
                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 {lr.add.label.replace(/^\+\s*/, "")}
               </button>
