@@ -1056,7 +1056,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         </div>
       )}
 
-      {svc.items.length > 0 && (
+      {/* Column captions only when a flat (qty × price) line exists — bundle blocks carry just a total, so Qty/Price
+          captions over empty columns would be noise. Presentation only; the rows themselves are unchanged. */}
+      {svc.items.length > 0 && visibleItems.some((it) => !((it.sub || []).length > 0)) && (
         <div className={`prop-cols${gridClass}`}>
           <span>Item</span><span className="r">Qty</span><span className="r">Price</span>
           {showCost && <span className="r">Cost</span>}
@@ -1066,7 +1068,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {/* Collapsed recording-system lines (NVR, Displays) — numbered, expandable via Edit */}
       {leadRows.map((lr, i) => (
-        <div key={lr.key} className="prop-block">
+        <div key={lr.key} className={`prop-block prop-lead${!readOnly ? " has-drag" : ""}`}>
           <div className="prop-sysline">
             {lr.items?.length > 0 ? (
               <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] ? "Hide breakdown" : "Show breakdown"}
@@ -1085,20 +1087,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 {menuOpen === `sys-${lr.key}` && <SysRowMenu onEdit={lr.edit} onClose={() => setMenuOpen(null)} />}
               </div>
             )}
+            {/* Read-only keeps the ••• column's width so every price lines up with the editable layout. */}
+            {readOnly && <span className="prop-im-sp" aria-hidden="true" />}
           </div>
           {leadOpen[lr.key] && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
-            // Byte-for-byte the same DOM as a camera's expanded sub-item (.prop-item.sub with
-            // name + qty + price inputs) so height, zebra shading, and row hover are identical —
-            // only read-only (pointer-events off): you edit these via the block's Edit button.
-            <div key={bidx} className={`prop-item${gridClass} sub${bidx % 2 ? " alt" : ""}`}>
-              <span style={{ display: "flex", alignItems: "center" }}>
-                <input value={bi.name} readOnly tabIndex={-1} style={{ marginLeft: 18, pointerEvents: "none" }} />
-              </span>
-              <input className="num" value={bi.qty} readOnly tabIndex={-1} style={{ pointerEvents: "none" }} />
-              <input className="num" value={bi.price} readOnly tabIndex={-1} style={{ pointerEvents: "none" }} />
-              {showCost && <span />}
-              <span className="prop-line-total">{money(bi.total)}</span>
-              <span />
+            // The same compact child-row component as a camera's expanded sub-item (name … amount, "N × $unit" when
+            // qty > 1) — display-only: you edit these via the block's Edit action.
+            <div key={bidx} className="prop-sub2-wrap">
+              <div className="prop-sub2 static">
+                <span className="prop-sub2-name">{bi.name}</span>
+                {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
+                <span className="prop-sub2-amt">{money(bi.total)}</span>
+              </div>
             </div>
           ))}
         </div>

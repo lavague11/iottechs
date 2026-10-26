@@ -557,6 +557,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, pct: r2(+r.pct || 0), due: ordered[i] })); })();
   const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
   const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
+  // Canonical payment schedule for DISPLAY (same function + base the customer view uses). The signature is just the
+  // schedule's own percentages: "100%" for one milestone, "50 / 50" / "50 / 30 / 20" for several.
+  const planSched = planScheduleRows(plan, custRows, fin.current, payload.full_date || null);
+  const planSig = planSched.length === 1 ? planSched[0].pctLabel : planSched.map((r) => r.pctLabel.replace("%", "")).join(" / ");
   function commitPlan(next) {
     patchPayload({ ...payload, payment_plan: "custom", custom_plan: next });
     setDepositPct(+next.rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
@@ -962,23 +966,15 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
         )}
 
-        <div className="prop-plan-row2">
-          <span className="prop-plan-lbl">Payment plan</span>
-          {readOnly ? (() => {
-            const sched = planScheduleRows(plan, custRows, fin.current);
-            if (sched.length) return (
-              <div className="prop-plan-sched">
-                {sched.map((r, i) => (
-                  <div className="prop-sched-row" key={i}>
-                    <b className="prop-sched-pct">{r.pctLabel}</b>
-                    {r.amount != null && <span className="prop-sched-amt">{money(r.amount)}</span>}
-                    {r.when && <span className="prop-sched-when">{r.when}</span>}
-                  </div>
-                ))}
-              </div>
-            );
-            return <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>;
-          })() : (
+        {/* Payment plan — the canonical schedule (planScheduleRows) as columns: each milestone's amount sits directly
+            under its own term. Read-only shows the plan signature (50 / 50); edit mode shows the preset picker instead.
+            Presentation only — the schedule, amounts and deposit all come from the existing canonical values. */}
+        <div className="prop-plan">
+          <div className="prop-plan-head">
+            <span className="prop-plan-lbl">Payment plan</span>
+            {readOnly && planSched.length > 0 && <span className="prop-plan-sig">{planSig}</span>}
+          </div>
+          {!readOnly && (
             <div className="prop-plan-edit">
               <div className="prop-plan-opts">
                 <button type="button" className={`prop-plan-btn${plan === "100" || plan === "100_end" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
@@ -998,6 +994,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
               )}
             </div>
           )}
+          {planSched.length > 0 && !(plan === "custom" && !readOnly) && (
+            <div className="prop-plan-cols">
+              {planSched.map((r, i) => (
+                <div className="prop-plan-col" key={i}>
+                  <span className="prop-plan-term"><b>{r.pctLabel}</b>{r.when ? ` ${/begin/i.test(r.when) ? "due before we begin" : r.when}` : ""}</span>
+                  {r.amount != null && <span className="prop-plan-amt">{money(r.amount)}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+          {readOnly && planSched.length === 0 && <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>}
         </div>
         {plan === "custom" && !readOnly && (
           <div className="prop-cplan">
@@ -1035,7 +1042,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
           </div>
         )}
-        {(() => {
+        {/* Fallback only: with no renderable schedule, keep the one-line terms + deposit so the plan is never silent.
+            When the schedule is showing it already states every milestone — no second "Deposit due" row or terms box. */}
+        {planSched.length === 0 && !(plan === "custom" && !readOnly) && (() => {
           const payFull = plan === "100" || plan === "100_end";
           const whenLabel = payload.full_date ? `by ${fmtShortDate(payload.full_date)}` : plan === "100_end" ? "upon completion" : "before we begin";
           const termsText = payFull ? `Paid in full ${whenLabel}.` : (plan !== "custom" ? PAYMENT_PLANS[plan]?.terms : null);

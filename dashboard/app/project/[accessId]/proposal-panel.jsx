@@ -56,7 +56,7 @@ const PROP_CSS = `
 /* ONE canonical action dock — sticky to the viewport bottom (sibling of .prop-card, outside its
    overflow:hidden), so staff never scroll to act. Replaces the old top toolbar + bottom prop-actions. */
 .pvx .prop-dock{position:sticky;bottom:0;z-index:40;margin-top:10px;padding-bottom:env(safe-area-inset-bottom)}
-.pvx .prop-dock-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 8px 28px -12px rgba(16,20,24,.30)}
+.pvx .prop-dock-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 6px 20px -14px rgba(16,20,24,.28)}
 .pvx .prop-dock-state{display:inline-flex;align-items:center;gap:6px;min-width:0;font-size:.8rem;color:var(--dv-ink,#101418)}
 .pvx .prop-dock-save{font-size:.74rem;font-weight:500;color:var(--dv-green,#2E7D5B);white-space:nowrap}
 .pvx .prop-dock-save.pending{color:var(--dv-meta,#787D84)}
@@ -80,7 +80,7 @@ const PROP_CSS = `
 .pvx .prop-dock-msep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 6px}
 @media(max-width:640px){.pvx .prop-dock-row{border-radius:12px 12px 0 0}}
 /* Internal admin-review banner on a signed contract (staff-only). */
-.pvx .prop-review-bar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:9px 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA)}
+.pvx .prop-review-bar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:4px 0 4px 12px;border:0;border-radius:0;background:none}
 .pvx .prop-review-bar.pending{border-left:3px solid #C9A96E}
 .pvx .prop-review-bar.done{border-left:3px solid #2f7d5a}
 .pvx .prop-review-bar > svg{flex:none;color:var(--dv-meta,#787D84)}
@@ -120,7 +120,8 @@ const PROP_CSS = `
 .pvx .prop-block-num{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 5px;margin-right:7px;border-radius:6px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-ink-soft,#3A4048);font-size:.68rem;font-weight:600;flex-shrink:0}
 /* Infrastructure badge — a dark/inverted equipment chip (gold glyph + thin gold border) where the number would
    sit. The one cue that a row is supporting hardware (NVR/amp/display/switch), not a numbered endpoint. */
-.pvx .prop-infra-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;width:20px;height:20px;margin-right:7px;border-radius:6px;background:var(--dv-ink,#101418);color:var(--dv-gold,#C9A96E);border:1px solid var(--dv-gold,#C9A96E);flex-shrink:0}
+/* (quiet outlined glyph — distinct from a filled endpoint number, but not a loud chip) */
+.pvx .prop-infra-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;width:20px;height:20px;margin-right:7px;border-radius:6px;background:transparent;color:var(--dv-gold-text,#8A6A1F);border:1px solid var(--dv-line,#E4E4DF);flex-shrink:0}
 .pvx .prop-cflag-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:8px;flex-shrink:0}
 .pvx .prop-cflag{padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:600;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .pvx .prop-cflag.remove{background:#fbe9e6;color:var(--dv-red,#C4553D)}
@@ -140,7 +141,7 @@ const PROP_CSS = `
 .pvx .prop-sent-seg{color:var(--dv-meta,#787D84);font-weight:500;white-space:nowrap}
 .pvx .prop-status.changes{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-status.accepted{background:#e9f3ed;color:var(--dv-green,#2E7D5B)}
-.pvx .prop-note-strip{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-ink-soft,#3A4048);font-size:.78rem;font-weight:500;padding:9px 12px;border-radius:9px}
+.pvx .prop-note-strip{background:none;border:0;border-left:2px solid #C9A96E;color:var(--dv-ink-soft,#3A4048);font-size:.78rem;font-weight:500;padding:3px 0 3px 10px;border-radius:0}
 .pvx .prop-tabs{display:flex;gap:6px;flex-wrap:wrap}
 .pvx .prop-tab{display:inline-flex;align-items:center;gap:7px;height:32px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-tab.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
@@ -151,19 +152,25 @@ const PROP_CSS = `
 .pvx .prop-tab-name::placeholder{color:rgba(255,255,255,.5)}
 .pvx .prop-tab-x{opacity:.7;cursor:pointer;font-size:.72rem;margin-left:1px}
 .pvx .prop-tab-x:hover{opacity:1}
-.pvx .prop-svc{border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;overflow:hidden}
-.pvx .prop-svc.svc-over{box-shadow:0 0 0 2px var(--dv-gold,#B98A2E)}
-.pvx .prop-svc.svc-item-target{box-shadow:inset 0 0 0 2px var(--dv-gold,#B98A2E)}
-.pvx .prop-svc-head{display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--dv-paper,#F4F4F2)}
+/* Frameless service section: one continuous document — a strong title, a hairline, then the lines on the open page.
+   No outer border, no rounded shell, no shaded header band. The drag-over states keep their ring (that IS state). */
+.pvx .prop-svc{border:none;border-radius:0;overflow:visible;background:none}
+.pvx .prop-svc + .prop-svc{margin-top:14px}
+.pvx .prop-svc.svc-over{box-shadow:0 0 0 2px var(--dv-gold,#B98A2E);border-radius:8px}
+.pvx .prop-svc.svc-item-target{box-shadow:inset 0 0 0 2px var(--dv-gold,#B98A2E);border-radius:8px}
+.pvx .prop-svc-head{display:flex;align-items:center;gap:4px;padding:2px 0 9px;background:none;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+/* The hairline under the title is the section divider — the first row after it doesn't add a second one. */
+.pvx .prop-svc > .prop-svc-head + *{border-top:0}
 .pvx .prop-svc-sp{flex:1 1 auto}
 .pvx .prop-svc-name-in{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);border:1px solid var(--dv-gold-text,#8A6A1F);border-radius:6px;padding:3px 8px;outline:none;font-family:inherit;min-width:150px;max-width:60%;background:#fff}
-.pvx .prop-svc-drag{flex:none;display:flex;align-items:center;color:var(--dv-meta,#787D84);opacity:.4;cursor:grab}
+.pvx .prop-svc-drag{flex:none;display:flex;align-items:center;width:13px;margin-right:4px;color:var(--dv-meta,#787D84);opacity:.4;cursor:grab}
 .pvx .prop-svc-drag:active{cursor:grabbing}
 .pvx .prop-svc-head:hover .prop-svc-drag{opacity:.75}
-.pvx .prop-svc-name{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418);letter-spacing:.02em}
+/* Section title = the strongest type on the page below the price; the count is muted metadata. */
+.pvx .prop-svc-name{font-size:.98rem;font-weight:650;color:var(--dv-ink,#101418);letter-spacing:-.005em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
-.pvx .prop-svc-count{font-size:.74rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-svc-count{font-size:.8rem;font-weight:500;color:var(--dv-meta,#787D84);letter-spacing:0}
+.pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:10px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:none}
 /* Slot editors (NVR / HDD / Displays) stack as full-width line-item rows — label · dropdown · price,
    one per line — so they scale on a phone instead of a non-wrapping row of columns. */
 .pvx .prop-sysrow{display:flex;flex-direction:column;align-items:stretch;gap:9px;flex-wrap:nowrap}
@@ -173,7 +180,7 @@ const PROP_CSS = `
 .pvx .prop-sys-field input{width:58px;text-align:center}
 .pvx .prop-sys-field select:focus,.pvx .prop-sys-field input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-sys-hint{font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-nvr-warn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2)}
+.pvx .prop-nvr-warn{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:none}
 .pvx .prop-nvr-warn-msg{font-size:.78rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-nvr-up{height:28px;padding:0 12px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-nvr-up:hover{filter:brightness(1.12)}
@@ -203,7 +210,7 @@ const PROP_CSS = `
 .pvx .prop-svc-gear:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-svc-gear:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-svc-x:hover{color:var(--dv-red,#C4553D)}
-.pvx .prop-item{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;align-items:center;padding:7px 12px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-item{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-item-desc{grid-column:1 / -1;margin:1px 0 0;border:0;background:transparent;font-size:12px;font-style:italic;color:var(--dv-muted,#6a7085);padding:2px 4px 2px 2px;width:100%;outline:none;box-sizing:border-box}
 .pvx .prop-item-desc:focus{background:var(--dv-raise,#FBFBFA);border-radius:5px}
 .pvx .prop-item-desc::placeholder{font-style:normal;color:#c2c6cf}
@@ -261,16 +268,20 @@ const PROP_CSS = `
 .pvx .prop-item.sub:hover{background:rgba(17,20,24,.025)}
 .pvx .prop-item.sub input{background:transparent;border-color:transparent;font-weight:500;color:var(--dv-ink,#101418)}
 .pvx .prop-item.sub input:focus{border-color:var(--dv-gold-text,#8A6A1F);background:#fff}
-.pvx .prop-item.sub .prop-line-total{color:var(--dv-ink-soft,#3A4048);font-weight:500}
+.pvx .prop-item.sub .prop-line-total{color:var(--dv-ink,#101418);font-weight:500}
 /* Compact responsive sub-item (bundle component): name … amount by default, click to inline-edit. One
-   component on desktop + mobile — a flex row (not the rigid grid), so narrow screens never overflow. */
-.pvx .prop-sub2-wrap{position:relative}
-.pvx .prop-sub2{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px 8px 42px;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:transparent;font-family:inherit;box-sizing:border-box}
-.pvx button.prop-sub2.compact{border:none;text-align:left;cursor:pointer;min-height:40px}
+   component on desktop + mobile — a flex row (not the rigid grid), so narrow screens never overflow.
+   The child is indented as a unit (wrapper margin) so its hairline starts at the indent, not the page edge. */
+.pvx .prop-sub2-wrap{position:relative;margin-left:30px}
+.pvx .prop-sub2{display:flex;align-items:center;gap:8px;width:100%;padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:transparent;font-family:inherit;box-sizing:border-box}
+/* Right padding = the parent's ••• column, so child amounts right-align with the parent price above them. */
+.pvx button.prop-sub2.compact{border:none;border-top:1px solid var(--dv-line-soft,#EDEDE9);text-align:left;cursor:pointer;min-height:38px;padding-right:36px}
 .pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.025)}
-.pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize}
-.pvx .prop-sub2-math{font-size:.72rem;color:var(--dv-muted,#6a7085);white-space:nowrap;flex-shrink:0}
-.pvx .prop-sub2-amt{font-size:.8rem;font-weight:500;color:var(--dv-ink-soft,#3A4048);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px}
+.pvx .prop-sub2.static{padding-right:36px;min-height:38px}
+/* Children: regular weight, slightly smaller than the parent, still full-strength ink (never disabled-gray). */
+.pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize}
+.pvx .prop-sub2-math{font-size:.72rem;color:var(--dv-meta,#787D84);white-space:nowrap;flex-shrink:0}
+.pvx .prop-sub2-amt{font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px}
 .pvx .prop-sub2-tag{margin-left:7px;font-size:.58rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#B45B22;background:rgba(197,107,44,.12);border-radius:100px;padding:1px 7px;vertical-align:middle}
 /* Inline edit mode */
 .pvx .prop-sub2.editing{flex-wrap:wrap}
@@ -289,8 +300,7 @@ const PROP_CSS = `
 .pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.08)}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill. */
-.pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E)}
-/* Drag-to-reorder line items */
+.pvx .prop-block.prop-open{border-left-color:var(--dv-gold,#C9A96E)}/* Drag-to-reorder line items */
 .pvx .prop-block.has-drag{padding-left:17px}
 .pvx .prop-drag-handle{position:absolute;left:0;top:0;bottom:0;width:17px;display:flex;align-items:center;justify-content:center;color:var(--dv-meta,#787D84);opacity:.35;cursor:grab}
 .pvx .prop-drag-handle:active{cursor:grabbing}
@@ -308,10 +318,14 @@ const PROP_CSS = `
 .pvx .prop-camask-x{height:28px;padding:0 8px;border:none;background:transparent;color:var(--dv-meta,#787D84);font-size:.74rem;cursor:pointer;font-family:inherit}
 .pvx .prop-sys-done{align-self:flex-start;height:32px;padding:0 18px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit;margin-top:2px}
 .pvx .prop-sys-done:hover{filter:brightness(1.12)}
-.pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:11px 12px}
-.pvx .prop-sysline-name{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418)}
+/* Infrastructure rows (NVR / Displays / Amp): compact supporting lines — quieter than a numbered endpoint, never a card. */
+.pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:8px 0}
+.pvx .prop-sysline-name{font-size:.84rem;font-weight:550;color:var(--dv-ink,#101418)}
 .pvx .prop-sysline-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
-.pvx .prop-sysline-total{margin-left:auto;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
+/* The ••• column is a fixed 28px (same as the line-item grid) so infrastructure totals line up with line prices. */
+.pvx .prop-sysline .prop-im-wrap,.pvx .prop-sysline .prop-im-sp{flex:0 0 28px;margin-left:-2px}
+.pvx .prop-desc-row{padding-left:56px}
+.pvx .prop-sysline-total{margin-left:auto;font-size:.82rem;font-weight:550;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
 .pvx .prop-sysline-edit{flex-shrink:0}
 .pvx .prop-block .prop-item{border-top:none}
 .pvx .prop-block+.prop-block{border-top:1px solid var(--dv-line,#E4E4DF)}
@@ -324,13 +338,14 @@ const PROP_CSS = `
 .pvx .prop-waived-strike{color:var(--dv-red,#C4553D);text-decoration:line-through;text-decoration-color:var(--dv-red,#C4553D)}
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:600}
-.pvx .prop-item.prop-parent .prop-line-total{font-weight:600;color:var(--dv-ink,#101418)}
+.pvx .prop-item.prop-parent .prop-item-nametext{font-weight:600;font-size:.88rem}
+.pvx .prop-item.prop-parent .prop-line-total{font-weight:650;font-size:.88rem;color:var(--dv-ink,#101418)}
 /* Hover/edit feedback is a faint tint + the gold accent — no heavy fill that competes with content. */
 .pvx .prop-block:hover{background:rgba(17,20,24,.015)}
 .pvx .prop-block:focus-within{background:transparent;border-left-color:var(--dv-gold-text,#8A6A1F)}
 /* Outdoor placement — red name text (an <input>'s value can't be partially colored, so the
    whole name goes red rather than just the "(O)" suffix) */
-.pvx .prop-subadd{padding:2px 12px 7px 30px;background:transparent}
+.pvx .prop-subadd{padding:2px 0 8px 30px;background:transparent}
 /* Lightweight inline "+ Sub-item" — text + small plus, no button chrome */
 .pvx .prop-subadd-btn{display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:4px 6px;margin-left:-6px;border-radius:6px;color:var(--dv-meta,#787D84);font-size:.74rem;font-weight:600;font-family:inherit;cursor:pointer}
 .pvx .prop-subadd-btn:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(17,20,24,.03)}
@@ -392,18 +407,19 @@ const PROP_CSS = `
 .pvx .prop-im-ck{color:var(--dv-green,#2E7D5B);flex:0 0 auto}
 .pvx .prop-im-apply{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
 /* Condition badges on the row (gold = customer-supplied, orange = existing cable). Shown only when set. */
-.pvx .prop-cond{flex:0 0 auto;margin-left:8px;padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
-.pvx .prop-cond.gold{background:#f6edcf;color:#8A6A1F}
-.pvx .prop-cond.orange{background:#f7e4d6;color:#B45B22}
+/* Compact tag: the color lives on the tag only (never the row) — small radius, sentence case, readable. */
+.pvx .prop-cond{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.68rem;font-weight:600;letter-spacing:.01em;line-height:1.5;white-space:nowrap}
+.pvx .prop-cond.gold{background:#f6edcf;color:#7A5C14}
+.pvx .prop-cond.orange{background:#f7e4d6;color:#9A4A17}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
 .pvx .prop-exist-tog.on{background:#eaf5ee;border-color:#bfe0cc;color:#2E7D5B}
 .pvx .prop-exist-tag{flex:0 0 auto;margin-left:8px;padding:2px 9px;border-radius:100px;background:#eaf5ee;color:#2E7D5B;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
-.pvx .prop-cols{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;padding:6px 12px 2px;font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
+.pvx .prop-cols{display:grid;grid-template-columns:1fr 64px 92px 92px 96px 28px;gap:8px;padding:8px 0 2px;font-size:.62rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .pvx .prop-cols.nocost{grid-template-columns:1fr 64px 92px 96px 28px}
 .pvx .prop-cols span.r{text-align:right}
-.pvx .prop-addbar{display:flex;flex-direction:column;gap:9px;align-items:stretch;padding:9px 12px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-addbar{display:flex;flex-direction:column;gap:9px;align-items:stretch;padding:10px 0 2px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-preset-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .pvx .prop-addrow-basic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:none;border-radius:999px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
@@ -428,12 +444,13 @@ const PROP_CSS = `
 .pvx .prop-mini.gold{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-mini.gold:hover{filter:brightness(1.12)}
 .pvx .prop-mini:disabled{opacity:.45;cursor:default}
-.pvx .prop-svc-note{padding:8px 12px;border-top:1px solid var(--dv-line,#E4E4DF);font-size:.74rem;color:var(--dv-meta,#787D84);white-space:pre-wrap}
-.pvx .prop-waiver{width:100%;margin-top:14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;background:var(--dv-paper,#F4F4F2);overflow:hidden}
-.pvx .prop-waiver-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 14px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
+.pvx .prop-svc-note{padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.74rem;color:var(--dv-meta,#787D84);white-space:pre-wrap}
+/* Waivers: a collapsible section on the page (hairline above), not a gray card. */
+.pvx .prop-waiver{width:100%;margin-top:14px;border:none;border-top:1px solid var(--dv-line,#E4E4DF);border-radius:0;background:none;overflow:visible}
+.pvx .prop-waiver-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 0;background:none;border:none;cursor:pointer;font-family:inherit;font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
 .pvx .prop-waiver-head .prop-chev{color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-waiver-count{margin-left:auto;font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);background:var(--dv-line-soft,#EDEDE9);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px 9px}
-.pvx .prop-waiver-body{border-top:1px solid var(--dv-line,#E4E4DF);padding:10px 14px;display:flex;flex-direction:column;gap:3px}
+.pvx .prop-waiver-body{border-top:1px solid var(--dv-line-soft,#EDEDE9);padding:10px 0;display:flex;flex-direction:column;gap:3px}
 .pvx .prop-waiver-bulk{display:flex;gap:8px;margin-bottom:6px}
 .pvx .prop-waiver-bulk button{height:26px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-meta,#787D84);font-size:.7rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-waiver-bulk button:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
@@ -453,10 +470,13 @@ const PROP_CSS = `
 .pvx .prop-minus{color:var(--dv-green,#2E7D5B);white-space:nowrap}
 .pvx .prop-trow-addon span{color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-plus{color:var(--dv-gold-text,#8A6A1F);font-weight:700;white-space:nowrap}
-.pvx .prop-total-big{display:flex;justify-content:space-between;align-items:baseline;gap:18px;margin:6px 0;padding:14px 16px;border-radius:12px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF)}
-.pvx .prop-total-big span{font-size:.9rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.pvx .prop-total-big b{font-size:1.7rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);letter-spacing:-.01em}
-.pvx .prop-plan-terms{font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.4;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:8px 12px;margin:-2px 0 2px}
+/* TOTAL = type, not a card: label left, big gold figure right. A hairline above it only when modifier rows sit above
+   it (the .prop-totals divider already separates it from the lines when it's the only row). */
+.pvx .prop-total-big{display:flex;justify-content:space-between;align-items:baseline;gap:18px;margin:0;padding:2px 0 4px;background:none;border:0;border-radius:0}
+.pvx .prop-trow + .prop-total-big{margin-top:4px;padding-top:12px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-total-big span{font-size:.8rem;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--dv-ink-soft,#3A4048)}
+.pvx .prop-total-big b{font-size:1.6rem;font-weight:650;color:var(--dv-gold-text,#8A6A1F);letter-spacing:-.01em}
+.pvx .prop-plan-terms{font-size:.76rem;color:var(--dv-meta,#787D84);line-height:1.4;padding:0}
 /* Uniform preset buttons + input across Discount / PCP / Tax / Payment-plan rows.
    Same height, same min-width, centered — inputs flush right so every row lines up. */
 .pvx .prop-adj{gap:7px}
@@ -465,15 +485,18 @@ const PROP_CSS = `
 .pvx .prop-tax-btn.on,.pvx .prop-plan-btn.on{background:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418);color:#fff}
 .pvx .prop-trow .tin{width:72px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;text-align:right;padding:0 8px;font-size:.76rem;font-weight:600;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:#fff}
 .pvx .prop-trow .tin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
-/* Payment plan: label above, the four presets on ONE line (each flexes to fit) */
-.pvx .prop-plan-row2{display:flex;flex-direction:column;gap:8px;min-height:28px;margin-bottom:2px}
-.pvx .prop-plan-lbl{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:500}
+/* Payment plan: a header (label · plan signature), then one column per milestone — the amount sits directly under its own
+   term. auto-fit columns: three across on a wide row, wrapping (never scrolling) when the width runs out. */
+.pvx .prop-plan{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:12px;border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-plan-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.pvx .prop-plan-lbl{font-size:.7rem;color:var(--dv-meta,#787D84);font-weight:650;letter-spacing:.07em;text-transform:uppercase}
+.pvx .prop-plan-sig{font-size:.8rem;font-weight:650;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;white-space:nowrap}
 .pvx .prop-plan-ro{font-size:.8rem;color:var(--dv-ink,#101418)}
-.pvx .prop-plan-sched{display:flex;flex-direction:column;gap:4px;width:100%}
-.pvx .prop-sched-row{display:flex;align-items:baseline;gap:8px;font-size:.82rem;line-height:1.3}
-.pvx .prop-sched-pct{flex:0 0 auto;color:var(--dv-ink,#101418);font-weight:700;font-variant-numeric:tabular-nums;min-width:44px}
-.pvx .prop-sched-amt{flex:0 0 auto;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.pvx .prop-sched-when{flex:1 1 auto;text-align:right;color:var(--dv-meta,#787D84);font-size:.76rem;text-transform:capitalize}
+.pvx .prop-plan-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px 24px}
+.pvx .prop-plan-col{display:flex;flex-direction:column;justify-content:space-between;gap:3px;min-width:0}
+.pvx .prop-plan-term{font-size:.8rem;color:var(--dv-meta,#787D84);font-weight:500;line-height:1.3;text-transform:capitalize}
+.pvx .prop-plan-term b{color:var(--dv-ink,#101418);font-weight:650;font-variant-numeric:tabular-nums}
+.pvx .prop-plan-amt{font-size:1.02rem;font-weight:650;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
 .pvx .prop-plan-opts{display:flex;gap:6px;width:100%}
 .pvx .prop-plan-opts .prop-plan-btn{flex:1 1 0;min-width:0;padding:0 6px}
 .pvx .prop-plan-edit{display:flex;flex-direction:column;gap:6px;width:100%}
@@ -485,7 +508,7 @@ const PROP_CSS = `
 .pvx .prop-time-date{position:relative}
 .pvx .prop-time-date input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;font-family:inherit}
 /* Custom schedule: # payments stepper + one compact row per payment */
-.pvx .prop-cplan{background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 12px;margin:2px 0;display:flex;flex-direction:column;gap:8px}
+.pvx .prop-cplan{background:none;border:0;border-radius:0;padding:0;margin:2px 0;display:flex;flex-direction:column;gap:8px}
 .pvx .prop-cplan-head{display:flex;align-items:center;gap:10px;font-size:.78rem;color:var(--dv-meta,#787D84);font-weight:600}
 .pvx .prop-cplan-step{display:inline-flex;align-items:center;gap:9px}
 .pvx .prop-cplan-step button{width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:1rem;line-height:1;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center}
@@ -579,7 +602,7 @@ const PROP_CSS = `
      an editable row gives the name its own full-width row, then a compact qty · price · total row
      underneath; but a camera/parent BLOCK row (no qty/price inputs, just a total) keeps its name,
      total and ✕ together on ONE tight line so the price never drops below the name. */
-  .pvx .prop-item,.pvx .prop-item.nocost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 11px}
+  .pvx .prop-item,.pvx .prop-item.nocost{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 0}
   .pvx .prop-item>span:first-child{flex:1 1 100%;min-width:0}
   .pvx .prop-item>span:first-child input{width:100%}
   .pvx .prop-item .prop-name-ac{flex:1;min-width:0}
@@ -602,7 +625,7 @@ const PROP_CSS = `
   .pvx .prop-cols{display:none}
   /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
      price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
-  .pvx .prop-sysline{flex-wrap:wrap;gap:4px 8px;padding:10px 11px}
+  .pvx .prop-sysline{flex-wrap:wrap;gap:4px 8px;padding:8px 0}
   /* Name takes the free space so the total + Edit sit together on the right (NOT margin-left:auto on
      the total, which would pin it to the edge and force Edit to wrap to its own line). */
   .pvx .prop-sysline-name{white-space:nowrap;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
@@ -620,13 +643,37 @@ const PROP_CSS = `
   .pvx .prop-sysline{gap:4px 6px}
   .pvx .prop-sysline .prop-mini{padding:0 10px;height:28px}
   /* Tighter service header + section rhythm on mobile */
-  .pvx .prop-svc-head{padding:8px 11px}
+  .pvx .prop-svc-head{padding:2px 0 8px}
   .pvx .prop-item.sub input.num{flex:0 0 56px;width:56px}
-  /* Compact sub-item: smaller indent on a phone; the edit row wraps its controls tidily, amount + Done
-     + Remove stay together on the right. */
-  .pvx .prop-sub2{padding-left:22px;gap:6px 8px}
+  /* Compact sub-item: indent stays readable as a child; rows ~44px (padding, not oversized chrome); the edit row wraps
+     its controls tidily, amount + Done + Remove stay together on the right. The compact row's right inset matches the
+     parent's ••• column so amounts line up with the price above. */
+  .pvx .prop-sub2-wrap{margin-left:26px}
+  .pvx .prop-sub2{gap:6px 8px}
+  .pvx button.prop-sub2.compact,.pvx .prop-sub2.static{min-height:44px;padding-right:28px}
   .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 100%}
+  /* Inline edit: qty × price · amount · ✓ · remove fit ONE line at 360px (name keeps its own line above). */
+  .pvx .prop-sub2.editing{gap:6px 4px}
+  .pvx .prop-sub2-qty{width:40px!important}
+  .pvx .prop-sub2-price{width:68px!important}
+  .pvx .prop-sub2.editing .prop-sub2-amt{min-width:0;margin-left:auto}
   .pvx .prop-sub2-amt{min-width:56px}
+  .pvx .prop-subadd{padding-left:26px}
+  /* Description preview takes its own line under the title (never beside it, never forcing the title to wrap). */
+  .pvx .prop-desc-row{flex:1 1 100%;min-width:0;padding-left:52px}
+  /* Keep the ••• column's width on read-only rows (their action is absent) so prices still align with the children. */
+  .pvx .prop-item.prop-parent>.prop-line-total+span:empty{display:block;flex:0 0 22px}
+  .pvx .prop-sysline .prop-im-wrap,.pvx .prop-sysline .prop-im-sp{flex:0 0 22px;margin-left:0}
+  /* Action dock: let the sent stamp shrink to "● Sent" and tighten the buttons so nothing overlaps at 360–430px. */
+  .pvx .prop-dock-row{gap:6px;padding:8px 10px}
+  .pvx .prop-dock-state{flex:1 1 0;min-width:0;overflow:hidden}
+  .pvx .prop-dock-state + .prop-dock-sp{display:none}
+  .pvx .prop-dock-state .prop-status.sent .prop-sent-seg{display:none}
+  .pvx .prop-dock-edit{padding:0 11px}
+  .pvx .prop-dock-cta{padding:0 13px;gap:6px}
+  .pvx .prop-desc-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+  /* Plan columns: two across on a phone (auto-fit wraps the rest), never a horizontal scroll. */
+  .pvx .prop-plan-cols{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px 16px}
   /* Reclaim horizontal room so the parent title fits: tighter card padding + block indent, and the
      inline +Description icon drops out of the title row (still available in the ••• menu). */
   .pvx .prop-body{padding-left:9px;padding-right:9px}
