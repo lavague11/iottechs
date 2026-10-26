@@ -25,6 +25,37 @@ import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Count-up: when a total changes (e.g. an item is added), roll the displayed number from the old
+// figure to the new one instead of snapping. Presentation only — the canonical value is untouched;
+// the first render and a honoured prefers-reduced-motion both show the final number immediately.
+function useCountUp(value, ms = 480) {
+  const target = +value || 0;
+  const [disp, setDisp] = useState(target);
+  const fromRef = useRef(target);
+  const rafRef = useRef(0);
+  useEffect(() => {
+    const from = fromRef.current;
+    const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || from === target) { fromRef.current = target; setDisp(target); return; }
+    const start = performance.now();
+    cancelAnimationFrame(rafRef.current);
+    const tick = (now) => {
+      const t = Math.min(1, (now - start) / ms);
+      const e = 1 - Math.pow(1 - t, 3); // easeOutCubic — fast then settling
+      setDisp(from + (target - from) * e);
+      if (t < 1) rafRef.current = requestAnimationFrame(tick);
+      else { fromRef.current = target; setDisp(target); }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [target, ms]);
+  return disp;
+}
+function CountMoney({ value, className }) {
+  const d = useCountUp(value);
+  return <b className={className} style={{ fontVariantNumeric: "tabular-nums" }}>{money(d)}</b>;
+}
+
 // The deck's Site Survey tool saves to `survey2` (floors[].devices[] with {k, name}); the older
 // tool used `sitesurvey_v2` (floors[].markers[] with {kind, name, mode}). Read survey2 first and
 // adapt it to the marker shape surveyToImport expects — so every camera's NAME (IC1, IC2, …) and
@@ -926,7 +957,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       {!priceable ? (!readOnly && <div className="prop-price-hint">Pricing will appear after you add a service.</div>) : (
       <div className="prop-totals">
         {(!readOnly || hasAdjustments) && (
-          <div className="prop-trow"><span>Subtotal</span><b>{money(totals.sub)}</b></div>
+          <div className="prop-trow"><span>Subtotal</span><CountMoney value={totals.sub} /></div>
         )}
         {(!readOnly || totals.discount > 0) && (
           <div className="prop-trow">
@@ -973,10 +1004,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           <>
             <div className="prop-trow"><span>Original proposal</span><b>{money(fin.base)}</b></div>
             <div className="prop-trow prop-trow-addon"><span>Approved addendums{addons.list?.length > 1 ? ` (${addons.list.length})` : ""}</span><b className="prop-plus">+{money(fin.addons)}</b></div>
-            <div className="prop-total-big"><span>Current total</span><b>{money(fin.current)}</b></div>
+            <div className="prop-total-big"><span>Current total</span><CountMoney value={fin.current} /></div>
           </>
         ) : (
-          <div className="prop-total-big"><span>Total</span><b>{money(totals.grand)}</b></div>
+          <div className="prop-total-big"><span>Total</span><CountMoney value={totals.grand} /></div>
         )}
 
         {/* Payment plan — the canonical schedule (planScheduleRows) as columns: each milestone's amount sits directly
