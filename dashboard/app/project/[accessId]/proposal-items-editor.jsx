@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import { LINE_CONDITIONS, LINE_CONDITION, lineConditions } from "../../../lib/proposal-terms";
@@ -602,12 +602,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // Collapsed recording-system lines that render as numbered items 1..leadCount above the cameras.
   const leadRows = [];
   if (nvrCollapsed) leadRows.push({ key: "nvr", title: `NVR · ${nvrShort(nvrItem.name)}`,
+    summary: nvrSummary(nvrItem, driveItems),
     total: nvrGroupTotal, edit: () => setNvrDone(false),
     // Breakdown so the collapsed line isn't a mystery total — recorder + each drive, priced.
     // qty/price carried so these rows read exactly like a camera's sub-items (qty · price · total).
     items: [{ name: nvrItem.name, qty: +nvrItem.qty || 1, price: +nvrItem.price || 0, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
       ...driveItems.map((d) => ({ name: d.name || "Storage drive", qty: +d.qty || 1, price: +d.price || 0, total: (+d.qty || 1) * (+d.price || 0) }))] });
-  if (dispCollapsed) leadRows.push({ key: "disp", title: "Displays",
+  if (dispCollapsed) leadRows.push({ key: "disp", title: displayItems.length === 1 ? "Display" : "Displays",
+    summary: dispSummary(displayItems),
     total: displaysTotal, edit: () => setDispDone(false),
     // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
     items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
@@ -1074,6 +1076,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
             <InfraBadge kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>
+            {/* CLOSED tells you what's inside — a muted scan-summary built from the children; hidden once
+                expanded (the exact rows below are the detail). Inline on desktop, its own line on mobile. */}
+            {lr.summary && leadOpen[lr.key] === false && <span className="prop-sysline-sum">{lr.summary}</span>}
             <span className="prop-sysline-total">{money(lr.total)}</span>
             {!readOnly && (
               <div className="prop-im-wrap prop-sysline-menu">

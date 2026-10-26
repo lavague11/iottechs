@@ -674,6 +674,30 @@ export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value:
   return { sub: r2(sub), discount: r2(disc), pcpCredit: r2(credit), tax: r2(tax), grand: r2(grand), deposit: r2(grand * (+depositPct || 0) / 100) };
 }
 
+// ---- Collapsed-group scan summaries -----------------------------------------------------------
+// A closed infrastructure group (NVR / Displays) should tell you what's inside without opening it:
+// CLOSED = a human-readable scan line · OPEN = the exact child rows. Built ONLY from the canonical
+// grouped child items — never inferred from the parent name, keyword, label or total — and falling
+// back to "" when the children can't produce one. Presentation-derived; changes no data.
+const _grpTokens = (toks) => { const order = [], cnt = {}; toks.filter(Boolean).forEach((t) => { if (!(t in cnt)) order.push(t); cnt[t] = (cnt[t] || 0) + 1; }); return { order, cnt }; };
+// NVR: "16CH + 8TB + 4TB" (and "32CH + 2×8TB" when a capacity repeats). Channels from the recorder,
+// capacity from each drive; a drive with no TB/GB keeps its de-suffixed name rather than vanishing.
+export function nvrSummary(nvrItem, driveItems) {
+  const chM = String(nvrItem?.name || "").match(/(\d+)\s*-?\s*Channel/i);
+  const ch = chM ? `${chM[1]}CH` : null;
+  const capOf = (nm) => { const m = String(nm || "").match(/(\d+)\s*(TB|GB)\b/i); return m ? `${m[1]}${m[2].toUpperCase()}` : (String(nm || "").replace(/\s*storage drive\s*/i, "").trim() || null); };
+  const { order, cnt } = _grpTokens((driveItems || []).map((d) => capOf(d.name)));
+  const drives = order.map((c) => (cnt[c] > 1 ? `${cnt[c]}×${c}` : c));
+  return [ch, ...drives].filter(Boolean).join(" + ");
+}
+// Displays: "1 CX Provided + 1 Monitor + Mount" (counts when 2+ displays; a bare label for a single one).
+const dispLabel = (d) => { const nm = String(d?.name || "").trim(); if (!nm || /customer provided|cx provided/i.test(nm)) return "CX Provided"; return nm; };
+export function dispSummary(displayItems) {
+  const list = displayItems || [];
+  const { order, cnt } = _grpTokens(list.map(dispLabel));
+  return order.map((l) => (list.length === 1 ? l : `${cnt[l]} ${l}`)).join(" + ");
+}
+
 // ---- Signature binding: content fingerprint of a proposal --------------------------------------
 // A signature must bind to EXACTLY what was signed. We hash a "meaning" projection of the proposal —
 // the customer-visible scope + money terms (option/service/item names, quantities, prices, waived

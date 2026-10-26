@@ -5,6 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { nvrSummary, dispSummary } from "../lib/proposal.js";
 
 const read = (rel) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
 const editor = read("../app/project/[accessId]/proposal-items-editor.jsx");
@@ -28,6 +29,31 @@ test("Displays parent renders one child per distinct display record, named Displ
   assert.ok(/total: displaysTotal/.test(editor));
   assert.ok(/items: displayItems\.map\(\(d\) => \(\{ name: `Display \$\{d\.displaySlot\} · /.test(editor));
   assert.ok(/const displaysTotal = displayItems\.reduce\(\(s, it\) => s \+ itemTotal\(it\)/.test(editor));
+});
+
+test("nvrSummary: channel + each drive capacity, derived from children; repeats collapse to N×", () => {
+  assert.equal(nvrSummary({ name: "NVR (16-Channel)" }, [{ name: "8TB Storage Drive" }, { name: "4TB Storage Drive" }]), "16CH + 8TB + 4TB");
+  assert.equal(nvrSummary({ name: "NVR (8-Channel)" }, [{ name: "8TB Storage Drive" }]), "8CH + 8TB");
+  assert.equal(nvrSummary({ name: "NVR (32-Channel)" }, [{ name: "8TB Storage Drive" }, { name: "8TB Storage Drive" }]), "32CH + 2×8TB");
+  assert.equal(nvrSummary({ name: "NVR (16-Channel)" }, []), "16CH");                 // no drives → channel only
+  assert.equal(nvrSummary({ name: "" }, [{ name: "8TB Storage Drive" }]), "8TB");      // graceful: capacity only
+});
+
+test("dispSummary: counts when 2+ displays, bare label for one; CX Provided normalized", () => {
+  assert.equal(dispSummary([{ name: "Customer Provided" }, { name: "Monitor + Mount" }]), "1 CX Provided + 1 Monitor + Mount");
+  assert.equal(dispSummary([{ name: "Monitor + Mount" }, { name: "Monitor + Mount" }]), "2 Monitor + Mount");
+  assert.equal(dispSummary([{ name: "CX Provided" }, { name: "CX Provided" }]), "2 CX Provided");
+  assert.equal(dispSummary([{ name: "Customer Provided" }]), "CX Provided");            // single → no count
+  assert.equal(dispSummary([]), "");
+});
+
+test("the collapsed summary is derived from children and shown ONLY while collapsed (never expanded)", () => {
+  assert.ok(editor.includes("summary: nvrSummary(nvrItem, driveItems)"), "NVR lead row carries a children-derived summary");
+  assert.ok(editor.includes("summary: dispSummary(displayItems)"), "Displays lead row carries a children-derived summary");
+  assert.ok(/lr\.summary && leadOpen\[lr\.key\] === false &&/.test(editor), "summary renders only when the group is collapsed");
+  assert.ok(editor.includes('displayItems.length === 1 ? "Display" : "Displays"'), "Displays title pluralizes naturally");
+  assert.ok(panel.includes(".pvx .prop-sysline-sum{"), "muted inline summary style exists");
+  assert.ok(/prop-sysline-sum\{order:9;flex:1 1 100%/.test(panel), "on mobile it drops to its own line");
 });
 
 test("children are shown by default (collapse is opt-in) using the existing frameless .prop-sub2 row", () => {

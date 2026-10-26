@@ -373,6 +373,9 @@ const PROP_CSS = `
 /* Infrastructure rows (NVR / Displays / Amp): compact supporting lines — quieter than a numbered endpoint, never a card. */
 .pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:8px 0}
 .pvx .prop-sysline-name{font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
+/* Collapsed-group scan-summary: muted, lighter, inline after the title on desktop; min-width:0 so it
+   ellipses rather than shoving the price. On mobile it drops to its own indented line (see @media). */
+.pvx .prop-sysline-sum{font-size:.78rem;font-weight:500;color:var(--dv-meta,#787D84);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 /* The ••• column is a fixed 28px (same as the line-item grid) so infrastructure totals line up with line prices. */
 .pvx .prop-sysline .prop-im-wrap,.pvx .prop-sysline .prop-im-sp{flex:0 0 28px;margin-left:-2px}
 .pvx .prop-desc-row{padding-left:56px}
@@ -681,6 +684,9 @@ const PROP_CSS = `
      the total, which would pin it to the edge and force Edit to wrap to its own line). */
   .pvx .prop-sysline-name{white-space:nowrap;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .pvx .prop-sysline-total{margin-left:0;flex-shrink:0}
+  /* The scan-summary drops to its own indented line so it never crowds the title or price: ordered
+     last, it wraps below the title+price row at full width (the others keep their natural order). */
+  .pvx .prop-sysline-sum{order:9;flex:1 1 100%;white-space:normal;padding-left:40px}
   /* Title-first: trim the decorative slots so the name column wins the most width — compact number
      badge, tighter price padding, a slimmer drag handle and smaller gaps (no font shrink). */
   .pvx .prop-block-num{min-width:18px;margin-right:5px}
