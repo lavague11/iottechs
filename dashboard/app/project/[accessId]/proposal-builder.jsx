@@ -528,7 +528,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const servicesEmpty = opt.services.length === 0;
   const optHasItems = opt.services.some((s) => (s.items || []).length > 0);
   const priceable = optHasItems || totals.sub > 0;
-  const disc = payload.discount || { type: "flat", value: 0 };
+  const disc = payload.discount || { type: "", value: 0 };
   const pcp = (payload.pcp_credit && typeof payload.pcp_credit === "object") ? payload.pcp_credit : { type: "flat", value: +payload.pcp_credit || 0 };
   const plan = payload.payment_plan || "custom";
   function setDiscount(patch) { patchPayload({ ...payload, discount: { ...disc, ...patch } }); }
@@ -934,9 +934,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             {readOnly ? <b>{totals.discount > 0 ? `−${money(totals.discount)}` : "—"}</b> : (
               <span className="prop-adj">
                 {totals.discount > 0 && <b className="prop-minus">−{money(totals.discount)}</b>}
-                <button type="button" className={`prop-tax-btn${disc.type === "flat" ? " on" : ""}`} onClick={() => setDiscount({ type: "flat" })}>$</button>
-                <button type="button" className={`prop-tax-btn${disc.type === "pct" ? " on" : ""}`} onClick={() => setDiscount({ type: "pct" })}>%</button>
-                <input className="tin" type="number" min="0" step="0.01" value={disc.value || 0} onChange={(e) => setDiscount({ value: e.target.value })} />
+                <button type="button" className={`prop-tax-btn${disc.type === "flat" ? " on" : ""}`} onClick={() => setDiscount(disc.type === "flat" ? { type: "", value: 0 } : { type: "flat" })}>$</button>
+                <button type="button" className={`prop-tax-btn${disc.type === "pct" ? " on" : ""}`} onClick={() => setDiscount(disc.type === "pct" ? { type: "", value: 0 } : { type: "pct" })}>%</button>
+                <input className="tin" type="number" min="0" step="0.01" value={disc.value || 0} onChange={(e) => setDiscount({ type: disc.type || "flat", value: e.target.value })} />
               </span>
             )}
           </div>

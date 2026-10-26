@@ -352,7 +352,7 @@ export function blankOption(i) {
   return { id: OPTION_LETTERS[i], name: OPTION_NAMES[i] || "Option " + OPTION_LETTERS[i], services: [], note: "", includeMockup: false, includeSurvey: false };
 }
 export function blankPayload() {
-  return { options: [blankOption(0)], discount: { type: "flat", value: 0 }, pcp_credit: { type: "flat", value: 0 }, payment_plan: "50_50" };
+  return { options: [blankOption(0)], discount: { type: "", value: 0 }, pcp_credit: { type: "flat", value: 0 }, payment_plan: "50_50" };
 }
 // A blank proposal already scoped to the project's service line — so a new proposal opens ON the
 // service the customer inquired about (Toast job → Toast POS tab), not an empty/camera default.
@@ -1073,7 +1073,8 @@ export function validatePayload(payload) {
     }
   }
   const d = payload.discount;
-  if (d && !(["flat", "pct"].includes(d.type) && +d.value >= 0)) return "Bad discount.";
+  // A cleared discount (empty/absent type) means "no discount" — valid. Only a non-empty type must be well-formed.
+  if (d && d.type && !(["flat", "pct"].includes(d.type) && +d.value >= 0)) return "Bad discount.";
   const pc = payload.pcp_credit;
   if (pc != null) {
     const pv = (pc && typeof pc === "object") ? pc.value : pc;
