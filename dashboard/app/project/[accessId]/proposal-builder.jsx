@@ -720,9 +720,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           // One compact toolset (matches the mobile mockup): Sent · Edit · views · share · download.
           // Copy ("use for another project") is not in the primary toolbar. On mobile the Sent stamp
           // compacts to just "● Sent" (CSS) and the row centers; desktop keeps the full date/sender stamp.
-          // Phase 1: the top band is informational — customer open-count + (Phase-2) + Option. The status
-          // and EVERY action (Submit, Request Signature, Edit, Share, Download, Config) now live in the dock.
-          return <div className="prop-head-slim prop-head-toolbar prop-head-info">{previewChip}{eye}{addOptionBtn}</div>;
+          // The top band only carries the PIN-preview chip + "+ Option"; when neither applies it is empty and
+          // collapses (CSS :empty) — no standalone strip. The customer open-count (eye) moved into the dock's
+          // ••• menu (Views). The status and EVERY action live in the dock.
+          return <div className="prop-head-slim prop-head-toolbar prop-head-info">{previewChip}{addOptionBtn}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -1156,7 +1157,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         changeState={changeState} confirmSend={confirmSend} setConfirmSend={setConfirmSend}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
         dlBusy={dlBusy} copied={copied} onDownload={handleDownload} onCopyLink={shareProposal}
-        onEmail={emailToCustomer} onConfig={() => setPricingOpen("__all__")} />
+        onEmail={emailToCustomer} onConfig={() => setPricingOpen("__all__")}
+        viewCount={viewCount} onViews={isStaffDock && onShowViews && ["sent", "accepted", "changes_requested"].includes(status) ? onShowViews : null} />
     )}
     </>
   );
