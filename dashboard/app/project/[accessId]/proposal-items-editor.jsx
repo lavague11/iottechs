@@ -680,7 +680,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     leadRows.push({ key: "nvr", title: nvrItem ? `NVR · ${nvrShort(nvrItem.name)}` : "NVR",
       summary: nvrItem ? nvrSummary(nvrItem, driveItems) : null,
       total: nvrGroupTotal,
-      add: nvrItem && hddSlots > 0 ? (nextFreeBay() ? { label: "+ Add Hard Drive", pick: "drive" } : { note: `${driveItems.length} / ${hddSlots} bays used` }) : null,
+      add: nvrItem && hddSlots > 0 && nextFreeBay() ? { label: "+ Add Hard Drive", pick: "drive" } : null,   // hidden when every bay is full
       hint: !nvrItem && camCount > 0 ? `Recommended · ${camCount <= 8 ? "8" : camCount <= 16 ? "16" : "32"}-Channel NVR` : null,
       items: nvrChildren });
     if (nvrItem) leadRows.push({ key: "disp", title: displayItems.length === 1 ? "Display" : "Displays",
@@ -1124,13 +1124,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               </div>
             );
           })}
-          {/* Contextual add — component-specific wording, capacity-aware (bays used when full). Adding a
-              hard drive first pops a size picker (don't assume a default); Add Display adds the $0 default. */}
+          {/* Contextual add — component-specific wording, capacity-aware (hidden when no bay/slot is free).
+              Adding a hard drive first pops a size picker (don't assume a default); Add Display adds the $0 default. */}
           {isOpen && !readOnly && lr.add && (
             <div className="prop-subadd prop-subadd-rel">
-              {lr.add.note ? (
-                <span className="prop-subadd-note">{lr.add.note}</span>
-              ) : lr.add.pick === "drive" ? (
+              {lr.add.pick === "drive" ? (
                 <>
                   <button type="button" className="prop-subadd-btn" onClick={() => setDrivePick((v) => !v)} aria-expanded={drivePick} aria-haspopup="menu">
                     <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>

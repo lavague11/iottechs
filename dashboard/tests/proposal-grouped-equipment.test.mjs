@@ -90,8 +90,9 @@ test("contextual add actions are capacity-aware and use component-specific wordi
   assert.ok(editor.includes('label: "+ Add Hard Drive"') && editor.includes('label: "+ Add Display"'), "component-specific add labels");
   assert.ok(editor.includes("Add Component"), "camera + Sub-item renamed to + Add Component");
   assert.ok(!/>\s*Sub-item\s*</.test(editor), "no leftover + Sub-item label");
-  // Capacity comes from the ONE canonical rule (slotsFor/NVR_SLOTS), not re-derived; full → a bays-used note.
-  assert.ok(/nextFreeBay\(\) \? \{ label: "\+ Add Hard Drive", pick: "drive" \} : \{ note: `\$\{driveItems\.length\} \/ \$\{hddSlots\} bays used`/.test(editor), "Add Hard Drive gated by free bays, else a bays-used note");
+  // Capacity comes from the ONE canonical rule (slotsFor/NVR_SLOTS), not re-derived; full → the add is hidden.
+  assert.ok(/nvrItem && hddSlots > 0 && nextFreeBay\(\) \? \{ label: "\+ Add Hard Drive", pick: "drive" \} : null/.test(editor), "Add Hard Drive gated by a free bay, hidden when full");
+  assert.ok(!/bays used/.test(editor), "no bays-used note");
   assert.ok(editor.includes("displayItems.length < 4 ?"), "Add Display capped at 4");
   assert.ok(/for \(let n = 1; n <= hddSlots; n\+\+\) if \(!driveAt\(n\)\)/.test(editor), "free-bay search uses the canonical hddSlots capacity");
 });
