@@ -25,35 +25,42 @@ import { downloadSurveyPdf } from "../../../lib/survey-pdf";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-// Count-up: when a total changes (e.g. an item is added), roll the displayed number from the old
-// figure to the new one instead of snapping. Presentation only — the canonical value is untouched;
-// the first render and a honoured prefers-reduced-motion both show the final number immediately.
-function useCountUp(value, ms = 480) {
+// Count animation: when a total changes, roll the displayed number from the old figure to the new one
+// instead of snapping — UP or DOWN. The digits tint green while rising, red while falling, then ease
+// back to the base colour once settled. Presentation only — the canonical value is untouched; the first
+// render and a honoured prefers-reduced-motion both show the final number immediately with no tint.
+// Returns { disp, dir } where dir is 1 (up) / -1 (down) during the roll, 0 when idle.
+function useCountUp(value, ms = 620) {
   const target = +value || 0;
   const [disp, setDisp] = useState(target);
+  const [dir, setDir] = useState(0);
   const fromRef = useRef(target);
   const rafRef = useRef(0);
+  const holdRef = useRef(0);
   useEffect(() => {
     const from = fromRef.current;
     const reduce = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || from === target) { fromRef.current = target; setDisp(target); return; }
+    if (reduce || from === target) { fromRef.current = target; setDisp(target); setDir(0); return; }
+    setDir(target > from ? 1 : -1);
     const start = performance.now();
     cancelAnimationFrame(rafRef.current);
+    clearTimeout(holdRef.current);
     const tick = (now) => {
       const t = Math.min(1, (now - start) / ms);
       const e = 1 - Math.pow(1 - t, 3); // easeOutCubic — fast then settling
       setDisp(from + (target - from) * e);
       if (t < 1) rafRef.current = requestAnimationFrame(tick);
-      else { fromRef.current = target; setDisp(target); }
+      else { fromRef.current = target; setDisp(target); holdRef.current = setTimeout(() => setDir(0), 260); } // brief colour hold, then fade back
     };
     rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => { cancelAnimationFrame(rafRef.current); clearTimeout(holdRef.current); };
   }, [target, ms]);
-  return disp;
+  return { disp, dir };
 }
 function CountMoney({ value, className }) {
-  const d = useCountUp(value);
-  return <b className={className} style={{ fontVariantNumeric: "tabular-nums" }}>{money(d)}</b>;
+  const { disp, dir } = useCountUp(value);
+  const color = dir > 0 ? "#2f7d5a" : dir < 0 ? "#D64545" : undefined; // green up · red down · base when idle
+  return <b className={className} style={{ fontVariantNumeric: "tabular-nums", color, transition: "color .35s ease" }}>{money(disp)}</b>;
 }
 
 // The deck's Site Survey tool saves to `survey2` (floors[].devices[] with {k, name}); the older
@@ -239,7 +246,18 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   }, [accessId, meta, embedded, isStaffDock]);
 
   const status = meta?.status && meta.payload ? meta.status : (meta?.status || "draft");
-  const readOnly = status !== "draft";
+  // Edit-to-revise: staff edit a SENT/unsigned proposal directly — the workspace is editable and the
+  // first actual edit silently mints the working draft (save() auto-revises), keeping the sent version
+  // immutable. Only a lifecycle-LOCKED proposal (accepted/signed/declined) stays read-only; there an
+  // explicit Revise reopens it. Non-staff never edit.
+  const editableSent = isStaffDock && ["sent", "changes_requested"].includes(status);
+  const readOnly = !(status === "draft" || editableSent);
+  // Canonical footer/header state flags (one definition, used by both the dock and the standalone header).
+  const pubVersion = changeState?.publishedVersion ?? null;
+  const hasUnsent = !!changeState?.hasUnsentChanges && !readOnly;
+  const isSentUnsigned = ["sent", "changes_requested"].includes(status) && !hasUnsent;   // sent, awaiting signature, no pending edits
+  const isDraftNew = status === "draft" && pubVersion == null && !hasUnsent;              // brand-new draft, never published
+  const isLocked = readOnly && !isSentUnsigned;                                           // accepted/signed/declined → explicit Revise
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
   // Services actually in this proposal (union across options — config is project-wide). Proposal
   // Configuration only surfaces these, never the whole company catalog. Reactive: adding/removing a
@@ -404,11 +422,31 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     } catch { /* keep the local edit; a later save/reload reconciles */ }
   }
 
+  const revisingRef = useRef(false);
   async function save() {
     setBusy(true); setErr(null);
+    let expectedUpdatedAt = meta?.updated_at;
+    // Edit-to-revise: a SENT/immutable version can't be written to (the server refuses), so the first
+    // edit mints the working draft first, then persists these edits onto it. We adopt only the new row's
+    // META (id/version/updated_at) — NOT its payload, which would discard the in-progress edit. A ref guards
+    // against two near-simultaneous saves each minting a draft; the autosave `busy` gate covers the rest.
+    if (status !== "draft") {
+      if (revisingRef.current) { setBusy(false); return false; }
+      revisingRef.current = true;
+      const rv = await reviseProposalAction(accessId).catch(() => ({ error: "Couldn’t open an editable revision." }));
+      revisingRef.current = false;
+      if (rv?.error) {
+        setBusy(false);
+        if (/Unauthorized|authenticated/i.test(rv.error)) { setAuthBlocked(true); setErr("Log in to save — PIN preview can't write changes."); }
+        else setErr(rv.error);
+        return false;
+      }
+      setMeta(rv.proposal);
+      expectedUpdatedAt = rv.proposal?.updated_at;
+    }
     // Optimistic concurrency (Phase 5): send the updated_at we loaded so the server can reject a save that
     // would clobber a concurrent edit (another tab/user) instead of silently overwriting it.
-    const r = await saveProposalDraftAction(accessId, { payload, taxRate: +taxRate, depositPct: +depositPct, expectedUpdatedAt: meta?.updated_at });
+    const r = await saveProposalDraftAction(accessId, { payload, taxRate: +taxRate, depositPct: +depositPct, expectedUpdatedAt });
     setBusy(false);
     if (r?.conflict) {
       // Reload the latest so the workspace reflects reality; the user re-applies their change on top.
@@ -670,7 +708,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       {status === "sent" && (() => {
         const by = meta?.sent_by_name ? (String(meta.sent_by_name).includes("@") ? String(meta.sent_by_name).split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) : meta.sent_by_name) : "";
         const when = meta?.sent_at ? fmtSignStamp(meta.sent_at).replace(/,\s*\d{4}/, "").replace(/\s*\bET\b/, "").trim() : "";
-        return <><i className="prop-sent-dot" /><b className="prop-sent-lbl">Sent</b>{when && <span className="prop-sent-seg">· {when}</span>}{by && <span className="prop-sent-seg">· {by}</span>}</>;
+        return <><i className="prop-sent-dot" /><b className="prop-sent-lbl">Sent</b>{when && <span className="prop-sent-seg">{" "}{when}</span>}{by && <span className="prop-sent-seg">{" · "}{by}</span>}</>;
       })()}
       {status === "changes_requested" && "Changes requested"}
       {status === "accepted" && `Accepted · Option ${meta?.selected_option || ""}`}
@@ -725,18 +763,18 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           </button>
         );
-        // Primary action up top too, same handlers/conditions as the footer — so staff never have to
-        // scroll to act. Revise on a sent (readOnly) proposal; Submit on an editable draft. Revising a
-        // sent proposal flips it to a draft, so the button naturally becomes Submit for the re-send.
-        const reviseBtn = readOnly && (
-          <button type="button" className="prop-head-cta prop-head-edit" disabled={busy} onClick={revise} title="Edit — reopen an editable version of this proposal">Edit</button>
+        // Primary action up top too, same state model as the footer. Revise returns only on a lifecycle-
+        // LOCKED proposal (accepted/signed); a sent/unsigned proposal is edited directly (edit-to-revise),
+        // so no Revise there. Submit on a brand-new draft; Send Revision once edits are pending.
+        const reviseBtn = isLocked && isStaff && (
+          <button type="button" className="prop-head-cta prop-head-edit" disabled={busy} onClick={revise} title="Revise — reopen this agreed proposal for changes">Revise</button>
         );
-        const submitBtn = !readOnly && (
-          <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title="Submit this proposal to the customer">Submit</button>
+        const submitBtn = (isDraftNew || hasUnsent) && (
+          <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title={hasUnsent ? "Send the revised proposal to the customer" : "Submit this proposal to the customer"}>{hasUnsent ? "Send Revision" : "Submit"}</button>
         );
         // Request Signature — gold, matching the customer's "Review & Sign". Shown on a sent proposal that's
         // still awaiting a signature (hidden once accepted/signed). Opens the share sheet (link or email).
-        const requestSignBtn = isStaff && ["sent", "changes_requested"].includes(status) && (
+        const requestSignBtn = isStaff && isSentUnsigned && (
           <button type="button" className="prop-head-cta prop-head-sign" disabled={busy} onClick={() => setSigSheet(true)} title="Request the customer’s signature">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
             Request Signature
@@ -1179,12 +1217,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     {embedded && (
       <ProposalFooter status={status} version={meta?.version ?? null} readOnly={readOnly} authBlocked={authBlocked}
         isStaff={isStaffDock} busy={busy} statusChip={statusChip} saveStateEl={saveStateEl}
-        changeState={changeState}
+        changeState={changeState} hasUnsent={hasUnsent} isSentUnsigned={isSentUnsigned} isDraftNew={isDraftNew} isLocked={isLocked}
         emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
-        dlBusy={dlBusy} copied={copied} onDownload={handleDownload} onCopyLink={shareProposal}
-        onEmail={emailToCustomer} onConfig={() => setPricingOpen("__all__")}
-        viewCount={viewCount} onViews={isStaffDock && onShowViews && ["sent", "accepted", "changes_requested"].includes(status) ? onShowViews : null} />
+        dlBusy={dlBusy} onDownload={handleDownload} />
     )}
     </>
   );

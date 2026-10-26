@@ -1,11 +1,16 @@
 "use client";
-// ONE stable, state-driven action footer for the staff proposal workspace (replaces the old floating dock).
-// Pure presentation: every handler is passed in from proposal-builder.jsx and reused verbatim; the
-// "unsent changes" numbers come from getProposalChangeStateAction (proposalChangeState) — nothing is
-// recomputed here. Three states:
-//   1. Draft, never sent      — Draft · save state            | Download · Submit
-//   2. Published, no changes  — Sent · date · by · Version N  | Revise · Download · Request Signature
-//   3. Unsent changes         — N unsent changes since Vn ±$  | View Changes · Download · Send Revision
+// ONE frameless, state-driven action area for the staff proposal workspace. Two rows max: a compact
+// metadata line, then a single action row — primary (gold) + Download (secondary). Pure presentation;
+// every handler comes from proposal-builder.jsx and the state flags (hasUnsent / isSentUnsigned /
+// isDraftNew / isLocked) are computed there against the published-vs-working resolver — nothing is
+// recomputed here. States:
+//   • Draft, never sent      — Draft · save state              → [ Submit ]           [ Download ]
+//   • Sent / unsigned        — Sent · date · by · v4           → [ Request Signature ][ Download ]
+//   • Unsent changes         — N unsent changes · ±$  (tap→diff)→ [ Send Revision ]    [ Download ]
+//   • Signed / locked        — Accepted · v4                   → [ Revise ]            [ Download ]
+// Edit-to-revise: a sent/unsigned proposal is edited directly in the workspace; there is no Revise here —
+// Revise returns only once the proposal is lifecycle-locked (accepted/signed). No ••• menu: Copy Link /
+// Email live inside Request Signature, Views on the header eye, Configuration on the header gear.
 import { useState, useEffect, useRef } from "react";
 import { skipOutsideClose } from "../../../lib/outside-click";
 
@@ -13,26 +18,23 @@ const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("e
 const signed = (n) => `${n > 0 ? "+" : "−"}${money(Math.abs(n))}`;
 
 export default function ProposalFooter({
-  status, version, readOnly, authBlocked, isStaff, busy, statusChip, saveStateEl,
-  changeState, emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
-  dlBusy, copied, onDownload, onCopyLink, onEmail, onConfig, viewCount = 0, onViews = null,
+  status, version, authBlocked, isStaff, busy, statusChip, saveStateEl,
+  changeState, hasUnsent, isSentUnsigned, isDraftNew, isLocked,
+  emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
+  dlBusy, onDownload,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
-  const unsent = !!changeState?.hasUnsentChanges && !readOnly;
   const pubV = changeState?.publishedVersion ?? null;
   const delta = changeState?.financialDelta;
   const n = changeState?.changeCount || 0;
-  // A working draft opened over a published version but not edited yet (nothing to send).
-  const cleanRevision = !readOnly && pubV != null && !unsent && !!changeState;
   const canRequestSign = isStaff && ["sent", "changes_requested"].includes(status);
 
   // After a send/send-revision: ask whether to email the customer (the email is no longer auto-pushed).
   if (emailAsk) {
     return (
-      <div className="prop-dock">
-        <div className="prop-dock-row">
-          <span className="prop-dock-ask">Sent. Email it to the customer now?</span>
-          <span className="prop-dock-sp" />
+      <div className="prop-foot prop-foot-ask">
+        <span className="prop-foot-askq">Sent. Email it to the customer now?</span>
+        <div className="prop-foot-acts">
           <button type="button" className="prop-dock-ghost" disabled={busy} onClick={onEmailDismiss}>Not now</button>
           <button type="button" className="prop-dock-cta" disabled={busy} onClick={onEmailSend}>Send email</button>
         </div>
@@ -40,80 +42,51 @@ export default function ProposalFooter({
     );
   }
 
-  const download = <DockMenu kind="download" dlBusy={dlBusy} onDownload={onDownload} />;
-  const more = <DockMenu kind="more" copied={copied} onCopyLink={onCopyLink} onEmail={onEmail} onConfig={onConfig} viewCount={viewCount} onViews={onViews} />;
+  const download = <DownloadBtn dlBusy={dlBusy} onDownload={onDownload} />;
 
-  let left, right;
-  if (unsent) {
-    left = (
-      <span className="prop-dock-state prop-dock-unsent">
+  // Metadata (left) + primary action (right), by canonical state. Primary dominates; Download is quiet.
+  let meta, primary;
+  if (hasUnsent) {
+    meta = (
+      <button type="button" className="prop-foot-chg" onClick={() => setChangesOpen(true)} title="See what changed">
         <b>{n} unsent {n === 1 ? "change" : "changes"}</b>
-        <span className="prop-dock-meta">since Version {pubV}</span>
-        {typeof delta === "number" && delta !== 0 && <span className={`prop-dock-delta${delta < 0 ? " neg" : ""}`}>· {signed(delta)}</span>}
+        {typeof delta === "number" && delta !== 0 && <span className={`prop-foot-delta${delta < 0 ? " neg" : ""}`}>· {signed(delta)}</span>}
         {saveStateEl}
-      </span>
+      </button>
     );
-    right = (
-      <>
-        <button type="button" className="prop-dock-sec" onClick={() => setChangesOpen(true)}>View Changes</button>
-        {more}
-        {!authBlocked && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send Revision</button>}
-        {download}
-      </>
-    );
-  } else if (!readOnly) {
-    left = (
-      <span className="prop-dock-state">
-        {statusChip}
-        {cleanRevision && <span className="prop-dock-meta">· no changes since Version {pubV}</span>}
-        {saveStateEl}
-      </span>
-    );
-    right = (
-      <>
-        {more}
-        {!authBlocked && !cleanRevision && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Submit</button>}
-        {download}
-      </>
-    );
+    primary = !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send Revision</button> : null;
+  } else if (isSentUnsigned) {
+    meta = <span className="prop-foot-meta">{statusChip}{version != null && <span className="prop-foot-v">· v{version}</span>}</span>;
+    primary = canRequestSign ? (
+      <button type="button" className="prop-dock-cta" disabled={busy} onClick={onRequestSign}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
+        Request Signature
+      </button>
+    ) : null;
+  } else if (isLocked) {
+    meta = <span className="prop-foot-meta">{statusChip}{version != null && <span className="prop-foot-v">· v{version}</span>}</span>;
+    primary = isStaff && !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onRevise} title="Reopen this agreed proposal for changes">Revise</button> : null;
+  } else if (isDraftNew) {
+    meta = <span className="prop-foot-meta">{statusChip}{saveStateEl}</span>;
+    primary = !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Submit</button> : null;
   } else {
-    left = (
-      <span className="prop-dock-state">
-        {statusChip}
-        {version != null && <span className="prop-dock-meta">· Version {version}</span>}
-      </span>
-    );
-    right = (
-      <>
-        {isStaff && !authBlocked && (
-          <button type="button" className="prop-dock-sec" disabled={busy} onClick={onRevise} title="Reopen an editable version of this proposal">Revise</button>
-        )}
-        {more}
-        {canRequestSign && (
-          <button type="button" className="prop-dock-cta" disabled={busy} onClick={onRequestSign}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
-            Request Signature
-          </button>
-        )}
-        {download}
-      </>
-    );
+    // Clean revision opened over a published version, unedited — nothing to send yet.
+    meta = <span className="prop-foot-meta">{statusChip}{pubV != null && <span className="prop-foot-v">· no changes since v{pubV}</span>}{saveStateEl}</span>;
+    primary = null;
   }
 
   return (
-    <div className="prop-dock">
-      <div className="prop-dock-row">
-        {left}
-        <span className="prop-dock-sp" />
-        <div className="prop-dock-acts">{right}</div>
-      </div>
-      {changesOpen && unsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
+    <div className="prop-foot">
+      <div className="prop-foot-metarow">{meta}</div>
+      <div className="prop-foot-acts">{primary}{download}</div>
+      {changesOpen && hasUnsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
     </div>
   );
 }
 
-// Download (Standard / Detailed / Survey) and ••• (Share + Configuration). Both open UPWARD, outside-click / Escape close.
-function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onConfig, viewCount = 0, onViews = null }) {
+// Download — a labelled secondary button that opens a small Standard / Detailed menu (upward),
+// outside-click / Escape close. No Survey here; the proposal PDF modes only.
+function DownloadBtn({ dlBusy, onDownload }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -124,36 +97,17 @@ function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onCon
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [open]);
-  const act = (fn) => () => { fn(); setOpen(false); };
+  const act = (mode) => () => { onDownload(mode); setOpen(false); };
   return (
-    <div className="prop-dock-menuwrap" ref={ref}>
-      {kind === "download" ? (
-        <button type="button" className="prop-dock-more" disabled={dlBusy} aria-label="Download" title={dlBusy ? "Preparing…" : "Download"} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-      ) : (
-        <button type="button" className="prop-dock-more" aria-label="More actions" title="More" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
-        </button>
-      )}
+    <div className="prop-foot-dlwrap" ref={ref}>
+      <button type="button" className="prop-foot-dl" disabled={dlBusy} aria-haspopup="menu" aria-expanded={open} title={dlBusy ? "Preparing…" : "Download"} onClick={() => setOpen((o) => !o)}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download
+      </button>
       {open && (
-        <div className="prop-dock-menu" role="menu">
-          {kind === "download" ? (
-            <>
-              <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("standard"))}>Standard</button>
-              <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("detailed"))}>Detailed</button>
-              <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("survey"))}>Survey</button>
-            </>
-          ) : (
-            <>
-              <div className="prop-dock-mlbl">Share</div>
-              <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onCopyLink)}>Copy Link{copied ? " ✓" : ""}</button>
-              <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onEmail)}>Email Customer</button>
-              <div className="prop-dock-msep" />
-              {onViews && <button type="button" className="prop-dock-mi" role="menuitem" title={viewCount ? `Customer opened this ${viewCount} time${viewCount === 1 ? "" : "s"}` : "Customer hasn't opened it yet"} onClick={act(onViews)}>Views · {viewCount}</button>}
-              <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onConfig)}>Configuration</button>
-            </>
-          )}
+        <div className="prop-dock-menu l" role="menu">
+          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act("standard")}>Standard</button>
+          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act("detailed")}>Detailed</button>
         </div>
       )}
     </div>

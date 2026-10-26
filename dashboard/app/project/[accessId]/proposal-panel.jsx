@@ -84,6 +84,24 @@ const PROP_CSS = `
 .pvx .prop-dock-mi:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-dock-mi:disabled{opacity:.5;cursor:default}
 .pvx .prop-dock-msep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 6px}
+/* Frameless proposal action footer — thin divider, compact metadata row, then one action row.
+   Primary (gold .prop-dock-cta) dominates; Download is a quiet secondary. Desktop collapses to one row. */
+.pvx .prop-foot{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;border-top:1px solid var(--dv-line,#E4E4DF);margin-top:16px;padding-top:14px;margin-bottom:22px}
+.pvx .prop-foot-metarow{flex:1 1 auto;min-width:0;display:flex;align-items:center}
+.pvx .prop-foot-meta{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;min-width:0;font-size:.8rem;color:var(--dv-ink,#101418)}
+.pvx .prop-foot-v{color:var(--dv-meta,#787D84);font-weight:500;white-space:nowrap}
+.pvx .prop-foot-chg{appearance:none;border:0;background:none;font-family:inherit;cursor:pointer;display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;padding:0;text-align:left;font-size:.8rem;color:var(--dv-ink,#101418);min-width:0}
+.pvx .prop-foot-chg b{font-weight:700}
+.pvx .prop-foot-chg:hover b{text-decoration:underline}
+.pvx .prop-foot-delta{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pvx .prop-foot-delta.neg{color:#C0392B}
+.pvx .prop-foot-acts{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pvx .prop-foot-dlwrap{position:relative;display:inline-flex;flex:0 0 auto}
+.pvx .prop-foot-dl{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-foot-dl:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
+.pvx .prop-foot-dl:disabled{opacity:.5;cursor:default}
+.pvx .prop-foot-ask{align-items:center}
+.pvx .prop-foot-askq{flex:1 1 auto;font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
 /* View Changes (read-only modal) */
 .pvx .prop-chg-overlay{position:fixed;inset:0;z-index:200;background:rgba(16,20,24,.45);display:flex;align-items:center;justify-content:center;padding:16px}
 .pvx .prop-chg{width:min(520px,100%);max-height:min(82vh,680px);display:flex;flex-direction:column;background:var(--dv-raise,#FBFBFA);border-radius:14px;box-shadow:0 24px 60px rgba(16,20,24,.28);overflow:hidden}
@@ -704,6 +722,13 @@ const PROP_CSS = `
   .pvx .prop-dock-sec{padding:0 11px}
   .pvx .prop-dock-cta{padding:0 13px;gap:6px;flex:1 1 120px}
   .pvx .prop-dock-row:has(.prop-dock-ask){flex-direction:row;align-items:center;flex-wrap:wrap}
+  /* Frameless footer on a phone: metadata full-width, then one action row with Request Signature / Send
+     Revision dominant (~65%) and Download quiet (~32%) — Download never competes with the primary. */
+  .pvx .prop-foot-metarow{flex:1 1 100%}
+  .pvx .prop-foot-acts{flex:1 1 100%;gap:8px}
+  .pvx .prop-foot-acts .prop-dock-cta{flex:1 1 auto;padding:0 13px;gap:6px}   /* primary fills (~65-70%) */
+  .pvx .prop-foot-acts .prop-foot-dlwrap{flex:0 0 auto}                        /* Download stays compact */
+  .pvx .prop-foot-ask .prop-foot-acts{flex:0 0 auto}
   .pvx .prop-desc-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
   /* Plan columns: two across on a phone (auto-fit wraps the rest), never a horizontal scroll. */
   .pvx .prop-plan-cols{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px 16px}
