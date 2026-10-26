@@ -6043,10 +6043,16 @@ export function getPcpLedger() {
 }
 // Insert a fresh draft, or update the payload of the current draft in place.
 // Sent rows are immutable — callers must reviseProposal() first.
-export function saveProposalDraft(accessId, { payload, taxRate, depositPct }, byName) {
+export function saveProposalDraft(accessId, { payload, taxRate, depositPct, expectedUpdatedAt }, byName) {
   const cur = getActiveProposal(accessId);
   const json = JSON.stringify(payload);
   if (cur && cur.status === "draft") {
+    // Optimistic concurrency (Phase 5): if the caller loaded an OLDER copy of the draft than what is
+    // stored (two tabs / two users editing), reject instead of silently clobbering the other edit. The
+    // caller re-fetches and retries. No expectedUpdatedAt ⇒ no check (back-compat, last-write-wins).
+    if (expectedUpdatedAt != null && cur.updated_at != null && String(cur.updated_at) !== String(expectedUpdatedAt)) {
+      return { conflict: true, updated_at: cur.updated_at };
+    }
     db.prepare("UPDATE proposals SET payload=?, tax_rate=?, deposit_pct=?, updated_at=datetime('now','localtime') WHERE id=?")
       .run(json, +taxRate || 0, +depositPct || 0, cur.id);
     return getActiveProposal(accessId);
@@ -6088,11 +6094,29 @@ export function markProposalSent(accessId, byName) {
 // Office finalizes the auto-created work order (payout reviewed) — this is what lets a tech accept
 // it. `on=false` re-opens it for edits (clears the stamp). No-op if there's no proposal.
 export function setWorkOrderFinalized(accessId, on, byName) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // the WO is finalized against the published version (Phase 5)
   if (!cur) return null;
-  if (on) db.prepare("UPDATE proposals SET wo_finalized_at=datetime('now','localtime'), wo_finalized_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName || null, cur.id);
-  else    db.prepare("UPDATE proposals SET wo_finalized_at=NULL, wo_finalized_by=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
-  return getActiveProposal(accessId);
+  if (on) {
+    // Freeze the work order to THIS published version. wo_finalized_at IS the freeze marker: a later
+    // proposal revision won't move the WO until an admin re-finalizes. Keep exactly one frozen version by
+    // clearing the stamp on all others.
+    db.prepare("UPDATE proposals SET wo_finalized_at=NULL, wo_finalized_by=NULL WHERE project_access_id=? AND id != ?").run(String(accessId), cur.id);
+    db.prepare("UPDATE proposals SET wo_finalized_at=datetime('now','localtime'), wo_finalized_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName || null, cur.id);
+  } else {
+    db.prepare("UPDATE proposals SET wo_finalized_at=NULL, wo_finalized_by=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
+  }
+  return getPublishedProposal(accessId);
+}
+// The proposal version the WORK ORDER is built from: the finalized (frozen) version if the office has
+// finalized one, else the published version. So once a WO is finalized against a version, a later
+// proposal revision never silently changes the technician's scope/payout — the WO stays frozen until an
+// admin re-finalizes. (Phase 5: work-order freeze.) Tech reads + the WO PDF + accept/void resolve this.
+export function getWorkOrderProposal(accessId) {
+  const frozen = db.prepare(
+    "SELECT * FROM proposals WHERE project_access_id=? AND wo_finalized_at IS NOT NULL ORDER BY version DESC, id DESC LIMIT 1"
+  ).get(String(accessId));
+  if (frozen) return { ...frozen, status: effectivePublishedStatus(frozen), created_by_name: resolvePreparerName(frozen.created_by_name) };
+  return getPublishedProposal(accessId);
 }
 // Clone the sent/changes_requested version into a new editable draft; supersede the old row.
 // Mint the next version: clone payload → v+1 (a fresh unsigned DRAFT), mark the old row superseded.
@@ -6241,13 +6265,13 @@ export function markProposalReviewed(accessId, reviewer, reviewed = true) {
 // proposal AND assigns them to the project (projects.tech = name). Only allowed once the
 // customer has accepted — a tech can't accept a work order that isn't live.
 export function acceptWorkOrder(accessId, name, signatureData) {
-  const cur = getActiveProposal(accessId);
+  const cur = getWorkOrderProposal(accessId);   // the tech signs the FROZEN work-order version (Phase 5)
   // The tech can sign as soon as the proposal has been SENT — they don't wait on the customer.
   if (!cur || !cur.sent_at) return null;
   db.prepare("UPDATE proposals SET tech_signed_name=?, tech_signed_at=datetime('now','localtime'), tech_signature_data=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, cur.id);
   db.prepare("UPDATE projects SET tech=? WHERE access_id=?").run(String(name || "").slice(0, 120), String(accessId));
-  return getActiveProposal(accessId);
+  return getWorkOrderProposal(accessId);
 }
 export function getProjectPayments(accessId) {
   return db.prepare("SELECT * FROM project_payments WHERE project_access_id=? ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
@@ -6291,10 +6315,10 @@ export function voidProposalSignature(accessId) {
 // Admin/manager correction: void the technician's work-order signature (which is also their
 // self-assignment) so the work order can be re-accepted/re-assigned. Record preserved, not erased.
 export function voidTechSignature(accessId) {
-  const cur = getActiveProposal(accessId);
+  const cur = getWorkOrderProposal(accessId);   // void the tech signature on the frozen WO version (Phase 5)
   if (!cur) return null;
   db.prepare("UPDATE proposals SET tech_signed_name=NULL, tech_signed_at=NULL, tech_signature_data=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
-  return getActiveProposal(accessId);
+  return getWorkOrderProposal(accessId);
 }
 // Canonical: which customer actions remain OUTSTANDING for a project (proposal signature, change-order
 // signatures, PCP approval). Reads already-authoritative state and resolves it via the pure core — the

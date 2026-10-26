@@ -152,6 +152,42 @@ test("Phase 4: a superseded version's PDF reproduces exactly that version, not t
   assert.ok(!/\$1,200\b/.test(texts), "v1 PDF never shows the later v2 ($1,200) total");
 });
 
+// ---- Phase 5: work-order freeze + optimistic concurrency ----
+test("Phase 5: the work order freezes to the finalized version; a later published revision doesn't move it", () => {
+  const a = project(); sendV1(a);
+  assert.equal(db.getWorkOrderProposal(a).version, 1, "before finalize, the WO reads published v1");
+  db.setWorkOrderFinalized(a, true, "Office");                       // freeze the WO to v1
+  db.reviseProposal(a, "Staff");
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff");
+  db.markProposalSent(a, "Staff");                                   // publish v2
+  assert.equal(db.getPublishedProposal(a).version, 2, "published moved to v2");
+  assert.equal(db.getWorkOrderProposal(a).version, 1, "but the WO stays frozen to the finalized v1");
+  db.setWorkOrderFinalized(a, true, "Office");                       // admin re-finalizes
+  assert.equal(db.getWorkOrderProposal(a).version, 2, "re-finalizing adopts the new published v2");
+});
+
+test("Phase 5: a tech's acceptance on the frozen WO survives a published revision", () => {
+  const a = project(); sendV1(a);
+  db.setWorkOrderFinalized(a, true, "Office");
+  db.acceptWorkOrder(a, "Tess Tech", null);                         // tech signs the frozen v1
+  assert.ok(db.getWorkOrderProposal(a).tech_signed_name, "tech signature recorded on the frozen WO version");
+  db.reviseProposal(a, "Staff"); db.markProposalSent(a, "Staff");    // publish v2
+  assert.ok(db.getWorkOrderProposal(a).tech_signed_name, "WO still frozen to v1 — the acceptance is intact");
+  assert.equal(db.getWorkOrderProposal(a).version, 1);
+});
+
+test("Phase 5: saveProposalDraft optimistic lock rejects a stale write, allows a current one", () => {
+  const a = project();
+  const d = db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "Staff");
+  const conflict = db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50, expectedUpdatedAt: "1999-01-01 00:00:00" }, "Staff");
+  assert.equal(conflict.conflict, true, "a stale expectedUpdatedAt is rejected");
+  assert.ok(conflict.updated_at, "returns the current updated_at so the client can reload");
+  const ok = db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50, expectedUpdatedAt: d.updated_at }, "Staff");
+  assert.equal(ok.conflict, undefined); assert.equal(ok.version, 1, "a matching expectedUpdatedAt saves");
+  const noguard = db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "Staff");
+  assert.equal(noguard.conflict, undefined, "no expectedUpdatedAt ⇒ back-compat last-write-wins");
+});
+
 // ---- Phase 1.1: AR / receivables follows the published version too ----
 test("AR: a signed project with an unsent draft stays in receivables at the PUBLISHED v1 numbers", () => {
   const a = project(); sendV1(a);

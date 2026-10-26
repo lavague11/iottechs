@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, getProposalChangeState, saveProposalDraft, markProposalSent,
+  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -56,9 +56,12 @@ export async function getProposalAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };   // gate reads to the project's own people (mirror getProposalDiffAction) — else any logged-in customer could read a stranger's proposal + signature
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
-  // Staff editors work the live draft (their workspace). Everyone else — customer/tech/vendor/
-  // readonly — reads the PUBLISHED version, so a staff member's unsent edits are never exposed.
-  const row = STAFF_EDIT.has(role) ? getActiveProposal(accessId) : getPublishedProposal(accessId);
+  // Staff editors work the live draft (their workspace). A technician reads the FROZEN work-order
+  // version (Phase 5), so a later proposal revision never moves their scope/payout. Everyone else —
+  // customer/vendor/readonly — reads the PUBLISHED version, so unsent staff edits are never exposed.
+  const row = STAFF_EDIT.has(role) ? getActiveProposal(accessId)
+            : role === "tech" ? getWorkOrderProposal(accessId)
+            : getPublishedProposal(accessId);
   return { ok: true, proposal: sanitizeProposal(row, role) };
 }
 
@@ -101,7 +104,7 @@ export async function saveTechPricingAction(accessId, techMap) {
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
-export async function saveProposalDraftAction(accessId, { payload, taxRate, depositPct }) {
+export async function saveProposalDraftAction(accessId, { payload, taxRate, depositPct, expectedUpdatedAt }) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
   const err = validatePayload(payload);
@@ -122,8 +125,11 @@ export async function saveProposalDraftAction(accessId, { payload, taxRate, depo
     walk(payload, (it) => { it.cost = storedCost.get(it.id) ?? 0; });
   }
 
-  const row = saveProposalDraft(accessId, { payload, taxRate, depositPct }, actorName(tok));
+  const row = saveProposalDraft(accessId, { payload, taxRate, depositPct, expectedUpdatedAt }, actorName(tok));
   if (!row) return { error: "Proposal was already sent — revise it to make changes." };
+  // Optimistic-concurrency conflict (Phase 5): another edit landed since the caller loaded. Tell the
+  // client to reload the latest before saving, rather than clobbering the other write.
+  if (row.conflict) return { conflict: true, updated_at: row.updated_at, error: "This proposal was changed elsewhere — reload to get the latest, then re-apply your edit." };
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
