@@ -9,7 +9,8 @@ import {
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction } from "./proposal-actions";
+import ProposalFooter from "./proposal-footer";
 import AiCommandBar from "./ai-command-bar";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
@@ -88,6 +89,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [overSvc, setOverSvc] = useState(null);   // index currently hovered as the drop target
   const [dragItem, setDragItem] = useState(null); // cross-section line-item drag: { svcIdx, id }
   const [confirmSend, setConfirmSend] = useState(false);
+  const [changeState, setChangeState] = useState(null);   // proposalChangeState — working draft vs published (drives the footer)
+  const changeReq = useRef(0);
   const [importMsg, setImportMsg] = useState(null);
   const [toast, setToast] = useState(null);   // string | { text, onUndo }
   const toastTimer = useRef(null);
@@ -194,6 +197,15 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     // reflect a proposal built/sent in this same session instead of the stale page-load copy.
     onProposalChange?.(p);
   }
+
+  // Footer state: refresh the working-vs-published change state on mount and after every adopt() (save, send,
+  // revise all return a new meta) — read-only, staff-gated server side; the latest request wins.
+  const isStaffDock = ["admin", "manager", "sales"].includes(role);
+  useEffect(() => {
+    if (!embedded || !isStaffDock) return;
+    const id = ++changeReq.current;
+    getProposalChangeStateAction(accessId).then((r) => { if (id === changeReq.current && r?.ok) setChangeState(r.changeState); }).catch(() => {});
+  }, [accessId, meta, embedded, isStaffDock]);
 
   const status = meta?.status && meta.payload ? meta.status : (meta?.status || "draft");
   const readOnly = status !== "draft";
@@ -627,8 +639,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const saveStateEl = !readOnly && !authBlocked && (busy || dirty || savedAt) ? (
     <span className={`prop-dock-save${busy || dirty ? " pending" : ""}`}>· {busy ? "Saving…" : dirty ? "Unsaved…" : `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`}</span>
   ) : null;
-  const isStaffDock = ["admin", "manager", "sales"].includes(role);
-  const showRequestSign = isStaffDock && ["sent", "changes_requested"].includes(status);
 
   return (
     <>
@@ -1129,80 +1139,18 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         />
       )}
     </div>
-    {/* ONE canonical action dock (deck/embedded): status + save state on the left; Edit (sent), the •••
-        document-utilities menu, and the single primary CTA (Submit / Request Signature) on the right.
-        Sticky to the viewport bottom so staff never scroll to act — replaces BOTH the old top toolbar and
-        the old bottom prop-actions row. Handlers are reused verbatim (send / revise / setSigSheet /
-        shareProposal / emailToCustomer / handleDownload / setPricingOpen). */}
+    {/* ONE stable action footer (deck/embedded), inline below the document — never floating. Three
+        states (draft / published / unsent changes) live in proposal-footer.jsx; handlers are reused
+        verbatim (send / revise / setSigSheet / shareProposal / emailToCustomer / handleDownload / setPricingOpen). */}
     {embedded && (
-      <div className="prop-dock">
-        {confirmSend ? (
-          <div className="prop-dock-row">
-            <span className="prop-dock-ask">Submit this proposal to the customer?</span>
-            <span className="prop-dock-sp" />
-            <button type="button" className="prop-dock-ghost" disabled={busy} onClick={() => setConfirmSend(false)}>Cancel</button>
-            <button type="button" className="prop-dock-cta" disabled={busy} onClick={send}>Submit</button>
-          </div>
-        ) : (
-          <div className="prop-dock-row">
-            <span className="prop-dock-state">{statusChip}{saveStateEl}</span>
-            <span className="prop-dock-sp" />
-            {readOnly && !authBlocked && isStaffDock && (
-              <button type="button" className="prop-dock-edit" disabled={busy} onClick={revise} title="Edit — reopen an editable version of this proposal">Edit</button>
-            )}
-            <DockMenu dlBusy={dlBusy} copied={copied} onCopyLink={shareProposal} onEmail={emailToCustomer}
-                      onDownload={handleDownload} onConfig={() => setPricingOpen("__all__")} />
-            {!readOnly && !authBlocked && (
-              <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setConfirmSend(true)}>Submit</button>
-            )}
-            {showRequestSign && (
-              <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setSigSheet(true)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
-                Request Signature
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+      <ProposalFooter status={status} version={meta?.version ?? null} readOnly={readOnly} authBlocked={authBlocked}
+        isStaff={isStaffDock} busy={busy} statusChip={statusChip} saveStateEl={saveStateEl}
+        changeState={changeState} confirmSend={confirmSend} setConfirmSend={setConfirmSend}
+        onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
+        dlBusy={dlBusy} copied={copied} onDownload={handleDownload} onCopyLink={shareProposal}
+        onEmail={emailToCustomer} onConfig={() => setPricingOpen("__all__")} />
     )}
     </>
-  );
-}
-
-// The dock's ••• — document utilities grouped as Share (delivery) / Download (formats) / Configuration.
-// Opens UPWARD (the dock sits at the bottom). Outside-click / Escape close.
-function DockMenu({ dlBusy, copied, onCopyLink, onEmail, onDownload, onConfig }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
-    function onKey(e) { if (e.key === "Escape") setOpen(false); }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
-  }, [open]);
-  const act = (fn) => () => { fn(); setOpen(false); };
-  return (
-    <div className="prop-dock-menuwrap" ref={ref}>
-      <button type="button" className="prop-dock-more" aria-label="More actions" title="More" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
-      </button>
-      {open && (
-        <div className="prop-dock-menu" role="menu">
-          <div className="prop-dock-mlbl">Share</div>
-          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onCopyLink)}>Copy Link{copied ? " ✓" : ""}</button>
-          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onEmail)}>Email Customer</button>
-          <div className="prop-dock-msep" />
-          <div className="prop-dock-mlbl">Download</div>
-          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("standard"))}>Standard</button>
-          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("detailed"))}>Detailed</button>
-          <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("survey"))}>Survey</button>
-          <div className="prop-dock-msep" />
-          <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onConfig)}>Configuration</button>
-        </div>
-      )}
-    </div>
   );
 }
 

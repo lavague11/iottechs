@@ -53,32 +53,63 @@ const PROP_CSS = `
 /* Informational top band (Phase 1): no actions — customer open-count + (Phase-2) + Option only. */
 .pvx .prop-head-info{border-bottom:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-head-info:empty{display:none}
-/* ONE canonical action dock — sticky to the viewport bottom (sibling of .prop-card, outside its
-   overflow:hidden), so staff never scroll to act. Replaces the old top toolbar + bottom prop-actions. */
-.pvx .prop-dock{position:sticky;bottom:0;z-index:40;margin-top:10px;padding-bottom:env(safe-area-inset-bottom)}
-.pvx .prop-dock-row{display:flex;align-items:center;gap:10px;padding:9px 12px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 6px 20px -14px rgba(16,20,24,.28)}
-.pvx .prop-dock-state{display:inline-flex;align-items:center;gap:6px;min-width:0;font-size:.8rem;color:var(--dv-ink,#101418)}
+/* ONE stable action footer — INLINE in the normal flow below the document (never sticky/floating), so it
+   sits in the same place in every state. Left = state, right = actions (one primary). */
+.pvx .prop-dock{margin-top:12px}
+.pvx .prop-dock-row{display:flex;align-items:center;gap:10px;min-height:56px;padding:8px 12px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px}
+.pvx .prop-dock-state{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;min-width:0;font-size:.8rem;color:var(--dv-ink,#101418)}
+.pvx .prop-dock-unsent b{font-weight:700}
+.pvx .prop-dock-meta{color:var(--dv-meta,#787D84)}
+.pvx .prop-dock-delta{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pvx .prop-dock-save{font-size:.74rem;font-weight:500;color:var(--dv-green,#2E7D5B);white-space:nowrap}
 .pvx .prop-dock-save.pending{color:var(--dv-meta,#787D84)}
 .pvx .prop-dock-sp{flex:1 1 auto}
+.pvx .prop-dock-acts{display:flex;align-items:center;gap:8px;flex:0 0 auto}
 .pvx .prop-dock-ask{font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
-.pvx .prop-dock-edit{height:36px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;flex:0 0 auto}
-.pvx .prop-dock-edit:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
+.pvx .prop-dock-sec{height:36px;padding:0 14px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;flex:0 0 auto;white-space:nowrap}
+.pvx .prop-dock-sec:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
+.pvx .prop-dock-sec:disabled{opacity:.5;cursor:default}
 .pvx .prop-dock-ghost{height:36px;padding:0 12px;border:none;background:none;color:var(--dv-meta,#787D84);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-dock-ghost:hover:not(:disabled){color:var(--dv-ink,#101418)}
-.pvx .prop-dock-cta{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 18px;border:none;border-radius:10px;background:#C9A96E;color:#101418;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto}
+.pvx .prop-dock-cta{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 18px;border:none;border-radius:10px;background:#C9A96E;color:#101418;font-size:.86rem;font-weight:700;cursor:pointer;font-family:inherit;flex:0 0 auto;white-space:nowrap}
 .pvx .prop-dock-cta:hover:not(:disabled){filter:brightness(1.06)}
 .pvx .prop-dock-cta:disabled{opacity:.5;cursor:default}
 .pvx .prop-dock-menuwrap{position:relative;display:inline-flex;flex:0 0 auto}
-.pvx .prop-dock-more{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);cursor:pointer}
+.pvx .prop-dock-more{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);cursor:pointer}
 .pvx .prop-dock-more:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
-.pvx .prop-dock-menu{position:absolute;right:0;bottom:calc(100% + 8px);z-index:60;min-width:196px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 12px 32px rgba(16,20,24,.18);padding:6px}
+.pvx .prop-dock-menu{position:absolute;right:0;bottom:calc(100% + 8px);z-index:60;min-width:150px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 12px 32px rgba(16,20,24,.18);padding:6px}
+.pvx .prop-dock-menu.l{left:0;right:auto}
 .pvx .prop-dock-mlbl{font-size:.6rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:6px 10px 3px}
-.pvx .prop-dock-mi{display:block;width:100%;text-align:left;appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);padding:8px 10px;border-radius:7px;cursor:pointer}
+.pvx .prop-dock-mi{display:block;width:100%;text-align:left;appearance:none;border:0;background:none;font-family:inherit;font-size:.82rem;font-weight:500;color:var(--dv-ink,#101418);padding:8px 10px;border-radius:7px;cursor:pointer;white-space:nowrap}
 .pvx .prop-dock-mi:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-dock-mi:disabled{opacity:.5;cursor:default}
 .pvx .prop-dock-msep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 6px}
-@media(max-width:640px){.pvx .prop-dock-row{border-radius:12px 12px 0 0}}
+/* View Changes (read-only modal) */
+.pvx .prop-chg-overlay{position:fixed;inset:0;z-index:200;background:rgba(16,20,24,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.pvx .prop-chg{width:min(520px,100%);max-height:min(82vh,680px);display:flex;flex-direction:column;background:var(--dv-raise,#FBFBFA);border-radius:14px;box-shadow:0 24px 60px rgba(16,20,24,.28);overflow:hidden}
+.pvx .prop-chg-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-chg-title{flex:1 1 auto;min-width:0;font-size:.9rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pvx .prop-chg-x{appearance:none;border:0;background:none;font-size:1.3rem;line-height:1;color:var(--dv-meta,#787D84);cursor:pointer;padding:2px 6px}
+.pvx .prop-chg-x:hover{color:var(--dv-ink,#101418)}
+.pvx .prop-chg-body{overflow:auto;padding:6px 16px 16px;display:flex;flex-direction:column;gap:14px}
+.pvx .prop-chg-opt{display:flex;flex-direction:column;gap:10px;padding-top:10px}
+.pvx .prop-chg-opt + .prop-chg-opt{border-top:1px solid var(--dv-line,#E4E4DF)}
+.pvx .prop-chg-opthead{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-size:.84rem;color:var(--dv-ink,#101418)}
+.pvx .prop-chg-arrow{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--dv-meta,#787D84);font-size:.8rem}
+.pvx .prop-chg-tag{font-size:.64rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:5px}
+.pvx .prop-chg-tag.add,.pvx .prop-chg-lbl.add{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-chg-tag.rem,.pvx .prop-chg-lbl.rem{color:#B3382C}
+.pvx .prop-chg-lbl.chg{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-chg-grp{display:flex;flex-direction:column;gap:6px}
+.pvx .prop-chg-lbl{font-size:.64rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.pvx .prop-chg-line{display:flex;flex-direction:column;gap:3px;font-size:.82rem;color:var(--dv-ink,#101418)}
+.pvx .prop-chg-line.row{flex-direction:row;justify-content:space-between;gap:12px}
+.pvx .prop-chg-name{min-width:0;overflow-wrap:anywhere;font-weight:500}
+.pvx .prop-chg-svc{color:var(--dv-meta,#787D84);font-weight:400}
+.pvx .prop-chg-right{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--dv-meta,#787D84)}
+.pvx .prop-chg-sub{display:flex;justify-content:space-between;gap:12px;font-size:.8rem;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
+.pvx .prop-chg-sub span:last-child{color:var(--dv-ink,#101418);text-align:right}
+@media(max-width:640px){.pvx .prop-chg-overlay{align-items:flex-end;padding:0}.pvx .prop-chg{width:100%;max-height:85vh;border-radius:14px 14px 0 0}}
 /* Internal admin-review banner on a signed contract (staff-only). */
 .pvx .prop-review-bar{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:4px 0 4px 12px;border:0;border-radius:0;background:none}
 .pvx .prop-review-bar.pending{border-left:3px solid #C9A96E}
@@ -664,13 +695,13 @@ const PROP_CSS = `
   /* Keep the ••• column's width on read-only rows (their action is absent) so prices still align with the children. */
   .pvx .prop-item.prop-parent>.prop-line-total+span:empty{display:block;flex:0 0 22px}
   .pvx .prop-sysline .prop-im-wrap,.pvx .prop-sysline .prop-im-sp{flex:0 0 22px;margin-left:0}
-  /* Action dock: let the sent stamp shrink to "● Sent" and tighten the buttons so nothing overlaps at 360–430px. */
-  .pvx .prop-dock-row{gap:6px;padding:8px 10px}
-  .pvx .prop-dock-state{flex:1 1 0;min-width:0;overflow:hidden}
-  .pvx .prop-dock-state + .prop-dock-sp{display:none}
-  .pvx .prop-dock-state .prop-status.sent .prop-sent-seg{display:none}
-  .pvx .prop-dock-edit{padding:0 11px}
-  .pvx .prop-dock-cta{padding:0 13px;gap:6px}
+  /* Action footer: state on its own line, actions below (primary flexes to fill) so nothing overlaps at 360-430px. */
+  .pvx .prop-dock-row{flex-direction:column;align-items:stretch;gap:8px;padding:10px}
+  .pvx .prop-dock-sp{display:none}
+  .pvx .prop-dock-acts{flex-wrap:wrap;justify-content:flex-end;width:100%;gap:6px}
+  .pvx .prop-dock-sec{padding:0 11px}
+  .pvx .prop-dock-cta{padding:0 13px;gap:6px;flex:1 1 120px}
+  .pvx .prop-dock-row:has(.prop-dock-ask){flex-direction:row;align-items:center;flex-wrap:wrap}
   .pvx .prop-desc-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
   /* Plan columns: two across on a phone (auto-fit wraps the rest), never a horizontal scroll. */
   .pvx .prop-plan-cols{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px 16px}
