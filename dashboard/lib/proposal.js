@@ -747,8 +747,14 @@ export function proposalDiff(prev, cur) {
   }
   const tax = (+prev?.tax_rate || 0) !== (+cur?.tax_rate || 0) ? { from: +prev?.tax_rate || 0, to: +cur?.tax_rate || 0 } : null;
   const deposit = (+prev?.deposit_pct || 0) !== (+cur?.deposit_pct || 0) ? { from: +prev?.deposit_pct || 0, to: +cur?.deposit_pct || 0 } : null;
-  if (tax || deposit) any = true;
-  return { any, options, tax, deposit };
+  // Discount + PCP credit are PAYLOAD-level modifiers (pl.discount / pl.pcp_credit), not per-option, so
+  // compare them here as document-level changes. They move the total, so they must register as a change
+  // even when no line item changed. (They are intentionally NOT in proposalFingerprint, which binds the
+  // signature — change-detection is broader than signature-drift.)
+  const discount = JSON.stringify(pp.discount ?? null) !== JSON.stringify(cp.discount ?? null) ? { from: pp.discount ?? null, to: cp.discount ?? null } : null;
+  const pcp = JSON.stringify(pp.pcp_credit ?? null) !== JSON.stringify(cp.pcp_credit ?? null) ? { from: pp.pcp_credit ?? null, to: cp.pcp_credit ?? null } : null;
+  if (tax || deposit || discount || pcp) any = true;
+  return { any, options, tax, deposit, discount, pcp };
 }
 
 // ---- Phase 2: canonical "unsent changes" state (PURE) -----------------------------------------
@@ -774,13 +780,15 @@ export function proposalChangeState(published, working) {
   const none = { hasUnsentChanges: false, publishedVersion, workingVersion, changeCount: 0, structuredChanges: null, financialDelta: null };
   // A separate working draft over a published version is the only shape that can carry "unsent changes".
   if (!published || !working || working.id === published.id) return none;
+  // proposalDiff now captures everything customer-facing — items, options, tax, deposit AND the
+  // payload-level discount/PCP (so anything that moves the total registers). The fingerprint is a
+  // backstop; it covers item/tax/deposit/terms but NOT discount/PCP, so diff.any is the primary signal.
+  const diff = proposalDiff(published, working);
   const fpPub  = proposalFingerprint(published.payload, published.tax_rate, published.deposit_pct);
   const fpWork = proposalFingerprint(working.payload,  working.tax_rate,  working.deposit_pct);
-  if (fpPub === fpWork) return none;   // a draft exists, but nothing customer-facing changed yet
-  const diff = proposalDiff(published, working);
-  // Meaningful change count: line add/remove/change + option add/remove + direct money edits
-  // (discount, PCP, tax, deposit). An option's total MOVE is a consequence of those, so it is not
-  // counted again.
+  if (!diff.any && fpPub === fpWork) return none;   // a draft exists, but nothing customer-facing changed
+  // Meaningful change count: line add/remove/change + option add/remove + money edits (discount, PCP,
+  // tax, deposit). An option's total MOVE is a consequence of those, so it is not counted again.
   let changeCount = 0;
   (diff.options || []).forEach((o) => {
     changeCount += (o.added?.length || 0) + (o.removed?.length || 0) + (o.changed?.length || 0);
@@ -788,8 +796,11 @@ export function proposalChangeState(published, working) {
     if (o.discount) changeCount += 1;
     if (o.pcp) changeCount += 1;
   });
+  if (diff.discount) changeCount += 1;
+  if (diff.pcp) changeCount += 1;
   if (diff.tax) changeCount += 1;
   if (diff.deposit) changeCount += 1;
+  if (changeCount === 0) changeCount = 1;   // a change exists (fingerprint/total) but wasn't itemized — show 1
   return { hasUnsentChanges: true, publishedVersion, workingVersion, changeCount, structuredChanges: diff, financialDelta: financialDeltaOf(diff) };
 }
 

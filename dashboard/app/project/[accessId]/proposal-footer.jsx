@@ -56,8 +56,9 @@ export default function ProposalFooter({
     right = (
       <>
         <button type="button" className="prop-dock-sec" onClick={() => setChangesOpen(true)}>View Changes</button>
-        {download}{more}
+        {more}
         {!authBlocked && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send Revision</button>}
+        {download}
       </>
     );
   } else if (!readOnly) {
@@ -70,8 +71,9 @@ export default function ProposalFooter({
     );
     right = (
       <>
-        {download}{more}
+        {more}
         {!authBlocked && !cleanRevision && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Submit</button>}
+        {download}
       </>
     );
   } else {
@@ -86,13 +88,14 @@ export default function ProposalFooter({
         {isStaff && !authBlocked && (
           <button type="button" className="prop-dock-sec" disabled={busy} onClick={onRevise} title="Reopen an editable version of this proposal">Revise</button>
         )}
-        {download}{more}
+        {more}
         {canRequestSign && (
           <button type="button" className="prop-dock-cta" disabled={busy} onClick={onRequestSign}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 21h18"/><path d="M15.5 4.5a2.12 2.12 0 0 1 3 3L8 18l-4 1 1-4Z"/></svg>
             Request Signature
           </button>
         )}
+        {download}
       </>
     );
   }
@@ -125,8 +128,8 @@ function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onCon
   return (
     <div className="prop-dock-menuwrap" ref={ref}>
       {kind === "download" ? (
-        <button type="button" className="prop-dock-sec" disabled={dlBusy} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
-          {dlBusy ? "Preparing…" : "Download"}
+        <button type="button" className="prop-dock-more" disabled={dlBusy} aria-label="Download" title={dlBusy ? "Preparing…" : "Download"} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
       ) : (
         <button type="button" className="prop-dock-more" aria-label="More actions" title="More" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen((o) => !o)}>
@@ -134,7 +137,7 @@ function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onCon
         </button>
       )}
       {open && (
-        <div className={`prop-dock-menu${kind === "download" ? " l" : ""}`} role="menu">
+        <div className="prop-dock-menu" role="menu">
           {kind === "download" ? (
             <>
               <button type="button" className="prop-dock-mi" role="menuitem" disabled={dlBusy} onClick={act(() => onDownload("standard"))}>Standard</button>
@@ -185,7 +188,7 @@ function ChangesModal({ changeState, onClose }) {
     return () => document.removeEventListener("keydown", k);
   }, [onClose]);
   const delta = changeState.financialDelta;
-  const opts = (diff.options || []).filter((o) => o.optionAdded || o.optionRemoved || o.added?.length || o.removed?.length || o.changed?.length || o.discount || o.pcp);
+  const opts = (diff.options || []).filter((o) => o.optionAdded || o.optionRemoved || o.added?.length || o.removed?.length || o.changed?.length || o.discount || o.pcp || (o.total && o.total.from !== o.total.to));
   return (
     <div className="prop-chg-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="prop-chg" role="dialog" aria-modal="true" aria-label="Changes">
@@ -228,9 +231,11 @@ function ChangesModal({ changeState, onClose }) {
               </Group>}
             </section>
           ))}
-          {(diff.tax || diff.deposit) && (
+          {(diff.tax || diff.deposit || diff.discount || diff.pcp) && (
             <section className="prop-chg-opt">
               <Group label="Payment" tag="chg">
+                {diff.discount && <div className="prop-chg-sub"><span>Discount</span><span>{fmtDisc(diff.discount.from)} → {fmtDisc(diff.discount.to)}</span></div>}
+                {diff.pcp && <div className="prop-chg-sub"><span>PCP credit</span><span>{fmtDisc(diff.pcp.from)} → {fmtDisc(diff.pcp.to)}</span></div>}
                 {diff.deposit && <div className="prop-chg-sub"><span>Deposit</span><span>{fmtPct(diff.deposit.from)} → {fmtPct(diff.deposit.to)}</span></div>}
                 {diff.tax && <div className="prop-chg-sub"><span>Tax</span><span>{fmtPct(diff.tax.from)} → {fmtPct(diff.tax.to)}</span></div>}
               </Group>

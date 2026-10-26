@@ -251,6 +251,27 @@ test("Phase 2: an edited draft surfaces structured changes, a count, and a signe
   assert.ok(cs.structuredChanges && cs.structuredChanges.options?.[0]?.changed?.length === 1, "reuses proposalDiff's structured output");
 });
 
+test("Phase 2: a PCP-credit-only change (nothing moved but the total) still registers as an unsent change", () => {
+  const base = { options: [{ id: "A", name: "A", services: [{ key: "camera", label: "Cameras", items: [{ id: "i1", name: "Camera", qty: 4, price: 150 }] }] }] };
+  const published = { id: 10, version: 1, payload: JSON.stringify(base), tax_rate: 0, deposit_pct: 50 };
+  const working = { id: 11, version: 2, payload: JSON.stringify({ ...base, pcp_credit: { type: "pct", value: 5 } }), tax_rate: 0, deposit_pct: 50 };
+  const cs = proposalChangeState(published, working);
+  assert.equal(cs.hasUnsentChanges, true, "a PCP credit moves the total ⇒ it IS an unsent change");
+  assert.ok(cs.structuredChanges.pcp, "the diff reports the PCP change at the document level");
+  assert.ok(cs.changeCount >= 1, "it counts as at least one change");
+  assert.ok(typeof cs.financialDelta === "number" && cs.financialDelta < 0, "the delta reflects the credit (negative)");
+});
+
+test("Phase 2: a discount-only change registers too", () => {
+  const base = { options: [{ id: "A", name: "A", services: [{ key: "camera", label: "Cameras", items: [{ id: "i1", name: "Camera", qty: 4, price: 150 }] }] }] };
+  const published = { id: 20, version: 1, payload: JSON.stringify(base), tax_rate: 0, deposit_pct: 50 };
+  const working = { id: 21, version: 2, payload: JSON.stringify({ ...base, discount: { type: "flat", value: 100 } }), tax_rate: 0, deposit_pct: 50 };
+  const cs = proposalChangeState(published, working);
+  assert.equal(cs.hasUnsentChanges, true);
+  assert.ok(cs.structuredChanges.discount, "the diff reports the discount change");
+  assert.equal(cs.financialDelta, -100, "net −$100");
+});
+
 test("Phase 2 (pure): proposalChangeState is null-safe and ignores a same-row comparison", () => {
   assert.equal(proposalChangeState(null, null).hasUnsentChanges, false);
   assert.equal(proposalChangeState(null, { id: 1, version: 1, payload: "{}" }).hasUnsentChanges, false); // nothing published
