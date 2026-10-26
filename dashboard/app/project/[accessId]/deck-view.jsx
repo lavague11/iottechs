@@ -329,14 +329,16 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
             </span>
           );
           const goNext = () => { setStatusOpen(false); if (!openNamedTool(chip.openTool)) chip.onClick?.(); };
-          // Button only — the popover itself is rendered once, below the header (position:fixed, clamped).
+          // The chip shows the ACTUAL current state (admin: "Awaiting Deposit"; customer CTA: "Pay Deposit →"),
+          // never a generic "STATUS". A caret appears only when there's a details popover (admin); a customer
+          // CTA has no popover — clicking it goes straight to the action.
           return (
             <div className="dv-chipwrap" data-stop>
               <button className={`dv-chip dv-chip-act dv-chip-status${chip.muted ? " muted" : ""}${statusOpen ? " on" : ""}`} style={{ background: chip.color + "1f", color: chip.color }}
-                aria-expanded={statusOpen} aria-haspopup="dialog" aria-label={`Project status — ${chip.label}`} title={chip.label}
+                aria-expanded={d ? statusOpen : undefined} aria-haspopup={d ? "dialog" : undefined} aria-label={`Project status — ${chip.label}`} title={chip.label}
                 onClick={(e) => { e.stopPropagation(); setMenuOpen(false); d ? (statusOpen ? closeStatus() : openStatusFrom(e.currentTarget)) : goNext(); }}>
-                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">Status</span>
-                <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+                <i className="dv-dot" style={{ background: chip.color }} /><span className="dv-chip-lbl">{chip.label}</span>
+                {d && <svg className="dv-chip-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>}
               </button>
             </div>
           );
@@ -418,17 +420,27 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           <div className="dv-statpop" role="dialog" aria-label="Project status" aria-modal="false"
             style={{ "--stat-c": statusChip.color, top: statusPos.top, left: statusPos.left, width: statusPos.w }}>
             <div className="dv-statpop-kick">Project status</div>
-            <div className="dv-statpop-head"><b>{d.phaseLabel}</b><span>{d.statusWord}</span></div>
-            <ul className="dv-statlist">
-              {d.milestones.map((m, i) => (
-                <li key={i} className={m.done ? "done" : m.active ? "active" : ""}>
-                  <span className="dv-statmk">{m.done && <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>}</span>
-                  <span className="dv-statml">{m.label}</span>
-                  {m.active && <span className="dv-statms">Now</span>}
-                </li>
-              ))}
-            </ul>
-            {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next step</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
+            {/* State-first: the current state is the headline, then one ✓ done + one ○ now line — not a
+                full checklist — then the next operational step and its action. */}
+            <div className="dv-statpop-state"><b>{d.stateLabel}</b></div>
+            {(d.done || d.pending) && (
+              <ul className="dv-statlist">
+                {d.done && (
+                  <li className="done">
+                    <span className="dv-statmk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></span>
+                    <span className="dv-statml">{d.done}</span>
+                  </li>
+                )}
+                {d.pending && (
+                  <li className="active">
+                    <span className="dv-statmk dv-statmk-o" />
+                    <span className="dv-statml">{d.pending}</span>
+                    <span className="dv-statms">Now</span>
+                  </li>
+                )}
+              </ul>
+            )}
+            {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
             {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
           </div>
         </>);
@@ -701,6 +713,9 @@ const CSS = `
 .dv-statpop-head{display:flex;align-items:baseline;gap:8px;margin:5px 0 13px;flex-wrap:wrap}
 .dv-statpop-head b{font-size:16px;font-weight:650;color:var(--dv-ink);letter-spacing:-.015em}
 .dv-statpop-head span{font-size:11.5px;color:var(--stat-c,#787D84);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+/* State-first popover: the current state is the headline (tinted by its tone), then the ✓ done / ○ now lines. */
+.dv-statpop-state{margin:6px 0 12px}
+.dv-statpop-state b{font-size:17px;font-weight:650;color:var(--stat-c,#101418);letter-spacing:-.015em}
 .dv-statlist{list-style:none;margin:0 0 13px;padding:0;display:flex;flex-direction:column;gap:9px}
 .dv-statlist li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dv-meta)}
 .dv-statlist li.done,.dv-statlist li.active{color:var(--dv-ink)}

@@ -40,8 +40,7 @@ import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
-import { projectStatusDetail, phaseHeadline, stageFloorFacts } from "../../../lib/project-status";
-import { customerStatus, customerToneHex } from "../../../lib/customer-status";
+import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -1858,6 +1857,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     }
   }, [bothToolsSubmitted, cView, previewRole]);
   const proposalAccepted = (proposalData?.accepted_options?.length > 0) || proposalData?.status === "accepted";
+  // Published/contractual proposal status for the whole status + next-action system — never regressed by an
+  // unsent working draft (rule: an unsent staff revision must not rewind the customer's status). `lp` is the
+  // project-row (published) status; `proposalData` is the live edited row. Status only moves forward, so take
+  // the MORE-ADVANCED of the two (lp "sent" beats a local draft; yet an in-session send still advances it).
+  const _pRank = (s) => ({ "": 0, draft: 0, sent: 1, changes_requested: 1, accepted: 2 }[s] ?? 0);
+  const pubProposalStatus = (proposalAccepted || lp.proposal_status === "accepted") ? "accepted"
+    : (lp.proposal_status === "changes_requested" || proposalData?.status === "changes_requested") ? "changes_requested"
+    : (_pRank(proposalData?.status || "") > _pRank(lp.proposal_status || "") ? (proposalData?.status || "") : (lp.proposal_status || ""));
   // A QC sign-off counts only while every device passes AND it still matches the checklist's fingerprint.
   const qcSignedCurrent = (key) => !!(toolMeta?.qc?.allPass && acceptances?.[key] && acceptances[key].fingerprint === toolMeta.qc.fingerprint);
   const custFacts = {
@@ -1875,7 +1882,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     install_photos:      acceptLoaded ? (toolMeta?.media?.installPhotos || 0) > 0 : !!lp.install_photos,
     install_confirmed:   acceptLoaded ? !!toolMeta?.schedule?.installConfirmed : !!lp.install_confirmed,
     completion_docs:     !!lp.completed_at,
-    proposal_status:   proposalAccepted ? "accepted" : (proposalData?.status || lp.proposal_status || ""),
+    proposal_status:   pubProposalStatus,
     proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
     deposit_submitted: lp.deposit_submitted,
     deposit_recorded:  lp.deposit_recorded,
@@ -2804,31 +2811,72 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // where the project is and what's next before navigating — never a blind jump (esp. on mobile).
     const officeRole = ["admin", "manager", "sales"].includes(cView);
     const isCustomerView = cView === "customer";
-    // The customer's status uses the REAL install appointment (dispatch-assigned), not custFacts'
-    // survey-date fallback — otherwise every project would read "Installation Confirmed" too early.
-    const custStatusFacts = { ...floorFacts, install_date: (isCustomerView ? pickAppt("install")?.date : floorFacts.install_date) || null };
+    // ONE canonical project status drives the chip + popover. It derives from the SAME facts the lifecycle
+    // gates on (never UI labels) — see lib/project-status.resolveProjectStatus. The install date uses the
+    // REAL appointment (or a confirmed booking), never custFacts' inquiry-date fallback, so nothing reads
+    // "scheduled" before dispatch assigns a day. The existing next-action ladder (headerAction) still
+    // supplies ROUTING; only the LABEL/vocabulary now comes from the canonical state.
+    // Floor to the project's OWN stage (not the per-customer pointer) so the status follows real progression.
+    const sFacts = stageFloorFacts(custFacts, projectStage);
+    const realInstallDate = pickAppt("install")?.date || (sFacts.install_confirmed ? (sFacts.install_date || null) : null);
+    // Status reflects the REAL PROJECT progression, floored to the project's own stage (projectStage) —
+    // NOT the customer pointer. Otherwise a customer who hasn't clicked through an earlier step would see
+    // the status stuck there even though the project has moved on (e.g. a sent proposal reads "Site
+    // Survey"). Admin and customer thus resolve the SAME state; only the words differ. proposal_status is
+    // already the PUBLISHED status (set on custFacts via pubProposalStatus), so an unsent draft never
+    // regresses it. Same facts feed headerAction (routing).
+    const resolverFacts = {
+      survey_required: !sFacts.survey_skipped,
+      survey_skipped: sFacts.survey_skipped,
+      survey_submitted: sFacts.survey_submitted,
+      survey_done: sFacts.survey_done || sFacts.survey_ok,
+      proposal_status: sFacts.proposal_status,
+      proposal_signed: sFacts.proposal_signed,
+      deposit_required: true,                                  // business rule: a 50% deposit is required
+      deposit_recorded: sFacts.deposit_recorded,
+      install_date: realInstallDate,
+      install_confirmed: sFacts.install_confirmed,
+      install_done: sFacts.install_done,
+      completed_at: sFacts.completion_docs,
+      final_paid: sFacts.final_balance_paid,
+      closed_not_completed: !!lp.closed_at && !sFacts.completion_docs,
+    };
+    const projState = acceptLoaded ? resolveProjectStatus(resolverFacts, projectStage) : null;
+    const dateSuffix = projState === "INSTALL_SCHEDULED" && realInstallDate ? ` · ${fmtDate(realInstallDate)}` : "";
     let statusChip = null;
-    if (headerAction) {
-      statusChip = {
-        label: headerAction.label,
-        color: headerAction.muted ? "#2E7D5B" : "#C9A96E",
-        muted: !!headerAction.muted,
-        openTool: headerAction.schedule ? null : headerAction.spot,
-        onClick: headerAction.schedule ? () => openSchedule(headerAction.schedule) : () => browse(headerAction.target),
-        // Customer's action pill is a plain CTA (Review / Sign / Pay) — no internal milestone popover.
-        detail: isCustomerView ? null : projectStatusDetail(custStage, floorFacts, headerAction),
+    if (projState && isCustomerView) {
+      const cs = CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE;
+      // Route the CTA from the canonical STATE (not the pointer-based ladder) so the label and the
+      // destination can never disagree — "Review & Sign Proposal →" always opens the proposal, etc.
+      const CTA_ROUTE = {
+        AWAITING_SURVEY_APPROVAL: { target: "site_survey", spot: "Site Survey" },
+        AWAITING_SIGNATURE:       { target: "proposal", spot: "Proposal" },
+        AWAITING_DEPOSIT:         { target: "approval_deposit", spot: "Approval & Deposit" },
+        AWAITING_FINAL_PAYMENT:   { target: "approval_deposit", spot: "Final Payment" },
       };
-    } else if (isCustomerView && custStage) {
-      // Read-only, human status — Approved → Preparing → Installation Confirmed. Never a task, never scheduling.
-      const cs = customerStatus(custStage, custStatusFacts);
-      statusChip = { label: cs.label, color: customerToneHex(cs.tone), muted: cs.tone !== "gold", readonly: true, sub: cs.sub };
-    } else if (officeRole && custStage) {
-      // Fallback (§13): no single owed action → a neutral status control, never a fake CTA.
+      const route = CTA_ROUTE[projState];
+      if (cs.cta && route) {
+        // Actionable customer status IS the CTA — opens the right flow. No popover, no separate control.
+        statusChip = {
+          label: `${cs.label} →`, color: statusToneHex(cs.tone), muted: cs.tone !== "gold",
+          openTool: route.spot, onClick: () => browse(route.target),
+        };
+      } else {
+        // Plain, read-only state — no caret, no popover, no fake control.
+        statusChip = { label: `${cs.label}${dateSuffix}`, color: statusToneHex(cs.tone), muted: cs.tone !== "gold", readonly: true };
+      }
+    } else if (projState && officeRole) {
+      // Admin: the operational state is ON the chip (never "STATUS ▾"); click it for a compact state+next popover.
+      const as = ADMIN_STATUS[projState] || ADMIN_STATUS.INTAKE;
       statusChip = {
-        label: `${phaseHeadline(custStage).label} · ${phaseHeadline(custStage).statusWord}`,
-        color: "#3E6C9E", muted: true, openTool: null,
-        onClick: () => browse(custStage),
-        detail: projectStatusDetail(custStage, floorFacts, null),
+        label: `${as.label}${dateSuffix}`,
+        color: statusToneHex(as.tone),
+        muted: as.tone === "neutral",
+        openTool: headerAction && !headerAction.schedule ? headerAction.spot : null,
+        onClick: headerAction?.schedule ? () => openSchedule(headerAction.schedule)
+               : headerAction ? () => browse(headerAction.target)
+               : () => browse(custStage),
+        detail: projectStatusView(projState, headerAction),
       };
     }
     // The customer "Visualize" walkthrough is folded into the Consulting page as an `intro` (above),
