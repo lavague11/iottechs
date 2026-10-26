@@ -263,7 +263,7 @@ const PROP_CSS = `
 .pvx .prop-item input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-item input.num{text-align:right}
 .pvx .prop-item input:not(.num){text-transform:capitalize}
-.pvx .prop-item-nametext{flex:1;min-width:0;height:30px;display:flex;align-items:center;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:text;padding:0 8px;border:1px solid transparent;border-radius:7px}
+.pvx .prop-item-nametext{flex:1;min-width:0;min-height:30px;display:flex;align-items:center;font-size:.8rem;font-weight:500;color:var(--dv-ink,#101418);text-transform:capitalize;white-space:normal;overflow:visible;overflow-wrap:anywhere;line-height:1.25;cursor:text;padding:4px 8px;border:1px solid transparent;border-radius:7px}
 .pvx .prop-item-nametext{flex:0 1 auto}
 .pvx .prop-item-nametext:hover{background:var(--dv-paper,#F4F4F2)}
 /* Visible one-click rename on a camera/block name (replaces the hidden double-click). */
@@ -645,11 +645,11 @@ const PROP_CSS = `
   /* Camera / block header rows: the name is the priority column (flex:1, basis 0 so it takes all the
      leftover width); the empty qty/price/cost placeholder spans are hidden so they don't waste flex
      gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
-  .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0}
+  .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0;flex-wrap:wrap;row-gap:2px}
   .pvx .prop-item.prop-parent>span:not(:first-child):empty{display:none}
-  /* Parent name stays on ONE line (ellipsis if long) so the price + ••• never drop below it; the
-     description lives on its own row underneath, not competing with the title. */
-  .pvx .prop-item.prop-parent .prop-item-nametext{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;height:30px}
+  /* Parent name WRAPS (never truncates) — the price + ••• sit in their own flex cells so growing the
+     name's height can't push them below. The description lives on its own row underneath. */
+  .pvx .prop-item.prop-parent .prop-item-nametext{flex:1 1 auto;white-space:normal;overflow:visible;overflow-wrap:break-word;line-height:1.3;min-height:30px;height:auto}
   /* Name grows from a zero basis to fill the space LEFT OF the total (which stays a fixed, non-shrinking
      chip) — not margin-left:auto, which would steal the free space and crush the title. The name
      ellipsizes only if it still doesn't fit, so the price never wraps below it. */

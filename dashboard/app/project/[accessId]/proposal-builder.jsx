@@ -11,7 +11,6 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
-import AiCommandBar from "./ai-command-bar";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
@@ -665,11 +664,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
         );
-        // + Option lives in the toolbar (a second pricing option is a proposal-level action, like Submit /
-        // download / config) rather than a standalone row above the first service.
-        const addOptionBtn = !readOnly && !servicesEmpty && payload.options.length < 3 && (
-          <button type="button" className="prop-opt-add" onClick={addOption} title="Add a second pricing option">+ Option</button>
-        );
         // Eye icon (staff only, once sent) → how many times the customer opened the proposal and when.
         const isStaff = ["admin", "manager", "sales"].includes(role);
         const eye = isStaff && onShowViews && ["sent", "accepted", "changes_requested"].includes(status) && (
@@ -723,7 +717,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           // The top band only carries the PIN-preview chip + "+ Option"; when neither applies it is empty and
           // collapses (CSS :empty) — no standalone strip. The customer open-count (eye) moved into the dock's
           // ••• menu (Views). The status and EVERY action live in the dock.
-          return <div className="prop-head-slim prop-head-toolbar prop-head-info">{previewChip}{addOptionBtn}</div>;
+          return <div className="prop-head-slim prop-head-toolbar prop-head-info">{previewChip}</div>;
         }
         return (
           <div className="pv-tool-head prop-head" style={{ "--tool-c": "var(--prop-accent)" }}>
@@ -766,9 +760,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           full-width row — so permission state never looks like proposal content. Other errors still strip here. */}
       {err && !authBlocked && <div className="prop-note-strip">{err}</div>}
       {importMsg && <div className="prop-svc-sub">{importMsg}</div>}
-      {/* Staff AI "Conversation" bar renders only when the AI_COMMANDS flag is on; it returns null otherwise,
-          so this stays an additive, flag-controlled surface (toggle at /dev → API Keys → AI_COMMANDS). */}
-      {!readOnly && <AiCommandBar accessId={accessId} projectName={customerName} payload={payload} patchPayload={patchPayload} />}
       {!readOnly && reviewDiffs.length > 0 && (
         <PricingReview diffs={reviewDiffs} onDismiss={() => setReviewDiffs([])}
           onApply={(updates) => { if (Object.keys(updates).length) { setPayload((p) => applyPrices(p, updates)); setDirty(true); } }} />

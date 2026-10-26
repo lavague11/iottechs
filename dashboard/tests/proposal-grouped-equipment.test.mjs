@@ -40,9 +40,11 @@ test("infrastructure lead rows never take an endpoint number", () => {
   assert.ok(!/leadRows\.forEach[^\n]*blockNumOf/.test(editor));
 });
 
-test("embedded header strip no longer holds the eye; open-count lives in the ••• menu", () => {
-  assert.ok(/prop-head-info">\{previewChip\}\{addOptionBtn\}<\/div>/.test(builder), "strip = preview chip + Option only");
+test("embedded header strip no longer holds the eye, the AI bar, or + Option; open-count lives in the ••• menu", () => {
+  assert.ok(/prop-head-info">\{previewChip\}<\/div>/.test(builder), "strip = preview chip only (no eye, no + Option)");
   assert.ok(!/prop-head-info">[^<]*\{eye\}/.test(builder));
+  assert.ok(!/<AiCommandBar/.test(builder), "the AI command bar is removed from the proposal top");
+  assert.ok(!/prop-opt-add/.test(builder), "the + Option button is removed");
   assert.ok(panel.includes(".pvx .prop-head-info:empty{display:none}"), "empty strip collapses");
   assert.ok(builder.includes("onViews={") && footer.includes("Views · {viewCount}"), "data + handler still reachable");
   assert.ok(builder.includes("onShowViews"), "recordProposalView/onShowViews plumbing intact");
