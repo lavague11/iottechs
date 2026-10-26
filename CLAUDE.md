@@ -98,6 +98,23 @@ for a project this size the overhead isn't worth it.
 - Run tests after code changes when the project has them for the affected area
 - Verify the build succeeds before committing
 
+## PROPOSAL ARCHITECTURE — LOCKED
+
+The proposal truth-model, settled over Phases 1–2 (resolvers in `dashboard/lib/db.js` + `dashboard/lib/proposal.js`; full note in auto-memory `published-vs-working-proposal`). Treat as locked; do not re-derive or fork it.
+
+- **Staff truth = the WORKING proposal** — `getActiveProposal()` (latest non-superseded row; the editable draft once one exists).
+- **Customer / contractual truth = the PUBLISHED proposal** — `getPublishedProposal()` (latest `sent_at` row; stays published even after a newer draft supersedes it; status normalized from `superseded`). Customer reads, portal, stage facts, contractual financials (`getProjectFinancialState`, `getReceivables`), and customer required-actions ALL read published. Staff workspace reads working.
+- **Payments = a separate ledger** (`project_payments`). Recording a payment is never a proposal revision.
+- **Sent versions are immutable** (row-per-version); **an unsent draft is never visible to the customer.**
+- **Unsent-change state** = `proposalChangeState()` — reuse `proposalFingerprint` (dirty signal) + `proposalDiff` (structured changes). Never build a second diff/version system.
+- **Still owed (later phases, do NOT quietly change):** signature binding must move to the published version; the sign-session void-on-revise still fires (Phase 3); PDF must bind to a target version (Phase 4); work-order scope/payout must freeze at WO creation (Phase 5); concurrency guard on draft saves.
+- **Never:** infer a service from item names · duplicate a financial calculation · duplicate the version system · rewrite an existing primitive (e.g. `reviseProposal`) without cause.
+
+### Change-risk lanes (how much autonomy before acting)
+- **GREEN — execute straight through:** CSS, spacing, typography, borders, responsive layout, labels, moving existing controls without changing handlers, tests.
+- **YELLOW — audit → implement → test → commit (stop only if it contradicts the locked model):** resolver changes, structured diff, component consolidation, moving (not rewriting) existing handlers, new read-only state.
+- **RED — consult before changing behavior:** signatures, customer acceptance, money calculations, payment ledger, historical-version mutation, work-order scope/payout, destructive migrations.
+
 ## Model routing
 
 Route each task to the cheapest model that can do it correctly — don't use one model for everything.
