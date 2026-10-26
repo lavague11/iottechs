@@ -1125,8 +1125,10 @@ export async function submitToolAction(accessId, tool, on = true) {
 export async function finalizeWorkOrderAction(accessId, on = true) {
   const tok = await getSessionRole();
   if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can finalize the work order." };
-  const cur = getActiveProposal(accessId);
-  if (!cur || cur.status === "draft") return { error: "Send the proposal first — the work order builds out on send." };
+  // Guard the PUBLISHED version (what setWorkOrderFinalized freezes) — not the working draft — so an
+  // in-progress revision doesn't block finalizing a work order that's genuinely sent. (Phase 5 LOW-1.)
+  const cur = getPublishedProposal(accessId);
+  if (!cur) return { error: "Send the proposal first — the work order builds out on send." };
   const row = setWorkOrderFinalized(accessId, !!on, actorName(tok));
   if (!row) return { error: "No work order to finalize." };
   await revalidate(accessId);
