@@ -88,6 +88,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [overSvc, setOverSvc] = useState(null);   // index currently hovered as the drop target
   const [dragItem, setDragItem] = useState(null); // cross-section line-item drag: { svcIdx, id }
   const [confirmSend, setConfirmSend] = useState(false);
+  const [emailAsk, setEmailAsk] = useState(false);   // after a send/send-revision: ask whether to email the customer
   const [changeState, setChangeState] = useState(null);   // proposalChangeState — working draft vs published (drives the footer)
   const changeReq = useRef(0);
   const [importMsg, setImportMsg] = useState(null);
@@ -404,6 +405,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
     showToast("Proposal submitted to customer");
+    // The email is no longer pushed automatically — ask the staff member whether to email it now.
+    setEmailAsk(true);
   }
   async function resolveFlag(itemId, label) {
     const r = await resolveFlagAction(accessId, itemId);
@@ -1145,7 +1148,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     {embedded && (
       <ProposalFooter status={status} version={meta?.version ?? null} readOnly={readOnly} authBlocked={authBlocked}
         isStaff={isStaffDock} busy={busy} statusChip={statusChip} saveStateEl={saveStateEl}
-        changeState={changeState} confirmSend={confirmSend} setConfirmSend={setConfirmSend}
+        changeState={changeState}
+        emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
         dlBusy={dlBusy} copied={copied} onDownload={handleDownload} onCopyLink={shareProposal}
         onEmail={emailToCustomer} onConfig={() => setPricingOpen("__all__")}

@@ -168,9 +168,8 @@ export async function sendProposalAction(accessId) {
     if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal is ready to review",
       body: `Review your proposal and sign to get started (${accessId}).`, link: signLink });
   } catch { /* notification is best-effort */ }
-  // Notify the customer their proposal is ready, with the direct signing link baked into the CTA —
-  // fire-and-forget so a slow/failed email never blocks or fails the send. No-op without RESEND_API_KEY.
-  emailSignatureRequest(accessId, primaryOpt).catch(() => {});
+  // The customer EMAIL is no longer pushed automatically on send — staff are asked in the UI whether to
+  // email it (then the client calls emailProposalAction). The in-app notification above still fires.
   await revalidate(accessId);
   return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
 }

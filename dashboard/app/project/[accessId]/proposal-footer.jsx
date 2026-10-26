@@ -14,7 +14,7 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${money(Math.abs(n))}`;
 
 export default function ProposalFooter({
   status, version, readOnly, authBlocked, isStaff, busy, statusChip, saveStateEl,
-  changeState, confirmSend, setConfirmSend, onSend, onRevise, onRequestSign,
+  changeState, emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
   dlBusy, copied, onDownload, onCopyLink, onEmail, onConfig, viewCount = 0, onViews = null,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
@@ -26,14 +26,15 @@ export default function ProposalFooter({
   const cleanRevision = !readOnly && pubV != null && !unsent && !!changeState;
   const canRequestSign = isStaff && ["sent", "changes_requested"].includes(status);
 
-  if (confirmSend) {
+  // After a send/send-revision: ask whether to email the customer (the email is no longer auto-pushed).
+  if (emailAsk) {
     return (
       <div className="prop-dock">
         <div className="prop-dock-row">
-          <span className="prop-dock-ask">{unsent ? `Send Version ${changeState.workingVersion} to the customer?` : "Submit this proposal to the customer?"}</span>
+          <span className="prop-dock-ask">Sent. Email it to the customer now?</span>
           <span className="prop-dock-sp" />
-          <button type="button" className="prop-dock-ghost" disabled={busy} onClick={() => setConfirmSend(false)}>Cancel</button>
-          <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>{unsent ? "Send Revision" : "Submit"}</button>
+          <button type="button" className="prop-dock-ghost" disabled={busy} onClick={onEmailDismiss}>Not now</button>
+          <button type="button" className="prop-dock-cta" disabled={busy} onClick={onEmailSend}>Send email</button>
         </div>
       </div>
     );
@@ -56,7 +57,7 @@ export default function ProposalFooter({
       <>
         <button type="button" className="prop-dock-sec" onClick={() => setChangesOpen(true)}>View Changes</button>
         {download}{more}
-        {!authBlocked && <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setConfirmSend(true)}>Send Revision</button>}
+        {!authBlocked && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send Revision</button>}
       </>
     );
   } else if (!readOnly) {
@@ -70,7 +71,7 @@ export default function ProposalFooter({
     right = (
       <>
         {download}{more}
-        {!authBlocked && !cleanRevision && <button type="button" className="prop-dock-cta" disabled={busy} onClick={() => setConfirmSend(true)}>Submit</button>}
+        {!authBlocked && !cleanRevision && <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Submit</button>}
       </>
     );
   } else {
