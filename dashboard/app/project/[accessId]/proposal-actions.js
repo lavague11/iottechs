@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, saveProposalDraft, markProposalSent,
+  getJobByAccessId, getActiveProposal, getPublishedProposal, getProposalChangeState, saveProposalDraft, markProposalSent,
   reviseProposal, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -60,6 +60,15 @@ export async function getProposalAction(accessId) {
   // readonly — reads the PUBLISHED version, so a staff member's unsent edits are never exposed.
   const row = STAFF_EDIT.has(role) ? getActiveProposal(accessId) : getPublishedProposal(accessId);
   return { ok: true, proposal: sanitizeProposal(row, role) };
+}
+
+// Phase 2 (read-only): the "unsent changes since Version N" state for the staff workspace — working
+// draft vs published version. Staff-only (it describes in-progress staff edits the customer must not
+// see). The future footer reads this; it changes no proposal state.
+export async function getProposalChangeStateAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false };
+  return { ok: true, changeState: getProposalChangeState(accessId) };
 }
 
 // ---- Company-wide price book (shared across devices/users) ----

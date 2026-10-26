@@ -751,6 +751,48 @@ export function proposalDiff(prev, cur) {
   return { any, options, tax, deposit };
 }
 
+// ---- Phase 2: canonical "unsent changes" state (PURE) -----------------------------------------
+// Compares a staff WORKING draft against the PUBLISHED version it revises. This is the single source
+// for the future "N unsent changes since Version X" footer state — it reuses proposalFingerprint (the
+// dirty signal) and proposalDiff (the structured change list); it invents no second diff/version system.
+// Read-only: it never mutates, signs, sends, or sources a PDF. "Unsent changes" exist ONLY when a
+// working draft is a DISTINCT row from the published version AND its customer-facing meaning differs —
+// so the very first (never-sent) draft and a draft edited back to match both report zero.
+//
+// Net $ delta across matched options (to − from). Null = "not safely derivable": no diff, or the option
+// STRUCTURE changed (an option added/removed), where a single number would misrepresent the change.
+function financialDeltaOf(diff) {
+  const opts = diff?.options || [];
+  if (opts.some((o) => o.optionAdded || o.optionRemoved)) return null;
+  let delta = 0, sawTotal = false;
+  for (const o of opts) { if (!o.total) continue; sawTotal = true; delta += (+o.total.to || 0) - (+o.total.from || 0); }
+  return sawTotal ? r2(delta) : null;
+}
+export function proposalChangeState(published, working) {
+  const publishedVersion = published?.version ?? null;
+  const workingVersion = working?.version ?? null;
+  const none = { hasUnsentChanges: false, publishedVersion, workingVersion, changeCount: 0, structuredChanges: null, financialDelta: null };
+  // A separate working draft over a published version is the only shape that can carry "unsent changes".
+  if (!published || !working || working.id === published.id) return none;
+  const fpPub  = proposalFingerprint(published.payload, published.tax_rate, published.deposit_pct);
+  const fpWork = proposalFingerprint(working.payload,  working.tax_rate,  working.deposit_pct);
+  if (fpPub === fpWork) return none;   // a draft exists, but nothing customer-facing changed yet
+  const diff = proposalDiff(published, working);
+  // Meaningful change count: line add/remove/change + option add/remove + direct money edits
+  // (discount, PCP, tax, deposit). An option's total MOVE is a consequence of those, so it is not
+  // counted again.
+  let changeCount = 0;
+  (diff.options || []).forEach((o) => {
+    changeCount += (o.added?.length || 0) + (o.removed?.length || 0) + (o.changed?.length || 0);
+    if (o.optionAdded || o.optionRemoved) changeCount += 1;
+    if (o.discount) changeCount += 1;
+    if (o.pcp) changeCount += 1;
+  });
+  if (diff.tax) changeCount += 1;
+  if (diff.deposit) changeCount += 1;
+  return { hasUnsentChanges: true, publishedVersion, workingVersion, changeCount, structuredChanges: diff, financialDelta: financialDeltaOf(diff) };
+}
+
 // ---- Addendum fingerprint (ledger P4): what the customer agreed to on a change order ------------
 // Title, the customer-visible line items (name/qty/price) and the discount. techPay is internal and
 // excluded — a payout tweak never voids the customer's acceptance; a price/qty change does.

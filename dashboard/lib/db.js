@@ -11,7 +11,7 @@ import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flo
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
+import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
@@ -5864,6 +5864,13 @@ export function getPublishedProposal(accessId) {
   ).get(String(accessId));
   if (!r) return null;
   return { ...r, status: effectivePublishedStatus(r), created_by_name: resolvePreparerName(r.created_by_name) };
+}
+// Phase 2: the "unsent changes" state — the staff working draft compared against the published version.
+// Thin DB wrapper over the pure proposalChangeState (which reuses proposalFingerprint + proposalDiff).
+// Read-only. Returns { hasUnsentChanges, publishedVersion, workingVersion, changeCount, structuredChanges,
+// financialDelta }. The future "N unsent changes since Version X" footer reads this; nothing else changes.
+export function getProposalChangeState(accessId) {
+  return proposalChangeState(getPublishedProposal(accessId), getActiveProposal(accessId));
 }
 // The current (non-superseded) proposal per project, with its project — for the global search Proposals group.
 export function listProposalsForSearch() {

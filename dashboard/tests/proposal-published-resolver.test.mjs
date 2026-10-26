@@ -14,6 +14,7 @@ process.env.DB_DIR = mkdtempSync(path.join(tmpdir(), "pub-resolver-"));
 process.env.TZ = "America/New_York";
 
 let db;
+let proposalChangeState;
 
 // 4 cameras × $150 = $600 (no tax) → grand 600, 50% deposit = 300.
 const PAYLOAD = { options: [{ id: "A", name: "Premium Security", services: [{ key: "camera", label: "Security Cameras", items: [{ id: "i1", name: "Camera", qty: 4, price: 150 }] }] }] };
@@ -24,7 +25,7 @@ let seq = 0;
 const project = () => { seq++; const r = db.createLeadProject(`Resolver ${seq}`, `resolver${seq}@example.com`, `201555${String(1000 + seq)}`, "2503 Jay Pl", "cctv", `Resolver ${seq} Co`); return r.accessId || r.access_id || r; };
 const sendV1 = (a) => { db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "Staff"); db.markProposalSent(a, "Staff"); };
 
-before(async () => { db = await import("../lib/db.js"); });
+before(async () => { db = await import("../lib/db.js"); ({ proposalChangeState } = await import("../lib/proposal.js")); });
 
 test("before first send: no published version (no contract), working draft exists", () => {
   const a = project();
@@ -130,4 +131,46 @@ test("AR: after Send Revision and re-acceptance, receivables bills the republish
   db.markProposalSent(a, "Staff");                                                     // Send Revision (v2 sent)
   db.selectProposalOption(a, "A");                                                     // customer re-accepts v2
   assert.equal(db.getReceivables().find((x) => x.access_id === a)?.total, 1200, "AR bills the re-accepted, republished v2");
+});
+
+// ---- Phase 2: unsent-change state (working vs published, reusing fingerprint + proposalDiff) ----
+test("Phase 2: no unsent changes before first send, or on a sent proposal with no draft", () => {
+  const a = project();
+  db.saveProposalDraft(a, { payload: PAYLOAD, taxRate: 0, depositPct: 50 }, "Staff");  // first draft, never sent
+  let cs = db.getProposalChangeState(a);
+  assert.equal(cs.hasUnsentChanges, false, "the first never-sent draft is not 'unsent changes'");
+  assert.equal(cs.publishedVersion, null);
+  assert.equal(cs.workingVersion, 1);
+  db.markProposalSent(a, "Staff");                                                     // now sent, no draft
+  cs = db.getProposalChangeState(a);
+  assert.equal(cs.hasUnsentChanges, false, "sent with no outstanding draft ⇒ nothing unsent");
+  assert.equal(cs.publishedVersion, 1); assert.equal(cs.workingVersion, 1);
+});
+
+test("Phase 2: a freshly-minted draft with no edits yet reports zero unsent changes (fingerprint match)", () => {
+  const a = project(); sendV1(a);
+  db.reviseProposal(a, "Staff");                                                       // draft v2 clones v1's payload
+  const cs = db.getProposalChangeState(a);
+  assert.equal(cs.hasUnsentChanges, false, "identical draft ⇒ no meaningful change");
+  assert.equal(cs.publishedVersion, 1); assert.equal(cs.workingVersion, 2);
+  assert.equal(cs.changeCount, 0);
+});
+
+test("Phase 2: an edited draft surfaces structured changes, a count, and a signed financial delta", () => {
+  const a = project(); sendV1(a);
+  db.reviseProposal(a, "Staff");
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff"); // $600 → $1,200 on one item
+  const cs = db.getProposalChangeState(a);
+  assert.equal(cs.hasUnsentChanges, true);
+  assert.equal(cs.publishedVersion, 1); assert.equal(cs.workingVersion, 2);
+  assert.equal(cs.changeCount, 1, "one line item changed (price)");
+  assert.equal(cs.financialDelta, 600, "net +$600 vs the published version");
+  assert.ok(cs.structuredChanges && cs.structuredChanges.options?.[0]?.changed?.length === 1, "reuses proposalDiff's structured output");
+});
+
+test("Phase 2 (pure): proposalChangeState is null-safe and ignores a same-row comparison", () => {
+  assert.equal(proposalChangeState(null, null).hasUnsentChanges, false);
+  assert.equal(proposalChangeState(null, { id: 1, version: 1, payload: "{}" }).hasUnsentChanges, false); // nothing published
+  const same = { id: 7, version: 2, payload: JSON.stringify(PAYLOAD), tax_rate: 0, deposit_pct: 50 };
+  assert.equal(proposalChangeState(same, same).hasUnsentChanges, false, "same row id ⇒ not a revision");
 });
