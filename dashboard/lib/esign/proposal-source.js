@@ -13,7 +13,7 @@
 // document. The Download button still carries them. (See LIMITATIONS in the PR.)
 import { downloadProposalPdf } from "../proposal-pdf.js";
 import { sanitizeProposal, proposalFingerprint } from "../proposal.js";
-import { getActiveProposal, getJobByAccessId } from "../db.js";
+import { getPublishedProposal, getActiveProposal, getJobByAccessId } from "../db.js";
 import { projectFileBase } from "../doc-filename.js";
 import { getDocumentInfo, storeDocument, voidDocument, setProposalSignPointers } from "./store.js";
 
@@ -73,7 +73,7 @@ export function appendixHash(clean) {
 // Render the unsigned PDF for one option. Pure of side effects except reading the proposal + project.
 // `appendix` (optional) = client-rendered { surveyImages:[{name,img}], mockupImages:[dataURL] } — appended
 // as the site-survey + mockup pages so the customer reviews and signs the WHOLE document, not just pricing.
-export function buildProposalUnsigned(accessId, optKey, row = getActiveProposal(accessId), appendix = null) {
+export function buildProposalUnsigned(accessId, optKey, row = getPublishedProposal(accessId), appendix = null) {
   const why = signBlocker(row, optKey);
   if (why) throw Object.assign(new Error(why), { code: "NOT_SIGNABLE" });
   const project = getJobByAccessId(accessId);
@@ -110,7 +110,10 @@ const EMPTY_APPENDIX_HASH = appendixHash(cleanAppendix(null));
 // carries (hasSurvey/hasMockup) so the consent step gates the survey/mockup acknowledgments on the ACTUAL
 // signed document, never on anything the client claims.
 export function ensureProposalUnsigned(accessId, optKey, { by = null, appendix = null } = {}) {
-  const row = getActiveProposal(accessId);
+  // The customer signs the PUBLISHED version they received — never a staff working draft. (Phase 3.)
+  // Fall back to the working row ONLY to produce the right blocker message ("hasn't been sent yet") when
+  // nothing has been published — signBlocker then refuses it, so a draft is never actually made signable.
+  const row = getPublishedProposal(accessId) || getActiveProposal(accessId);
   const why = signBlocker(row, optKey);
   if (why) return { error: why };
   const fp = proposalFingerprintOf(row);

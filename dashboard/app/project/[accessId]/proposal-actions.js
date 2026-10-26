@@ -334,7 +334,7 @@ export async function requestChangesAction(accessId, note) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
-  const before = getActiveProposal(accessId);
+  const before = getPublishedProposal(accessId);   // the customer acts on the published version they received
   // A SIGNED proposal is frozen: requesting a modification mints a fresh unsigned version (mint → void
   // → re-lock) rather than mutating the signed row. The signed version stays immutable in history; the
   // customer never authors prices — the request note carries to the new draft for admin to author.
@@ -359,7 +359,8 @@ export async function getProposalDiffAction(accessId) {
   const tok = await getSessionRole();
   // The diff carries retail prices and totals — never for a technician (or a vendor).
   if (!can(tok?.role, "customer.financials.view")) return { ok: true, diff: null };
-  const cur = getActiveProposal(accessId);
+  // The customer-facing re-sign diff compares the signed version vs the PUBLISHED one — never an unsent draft.
+  const cur = getPublishedProposal(accessId);
   if (!cur || cur.signed_name) return { ok: true, diff: null };
   const { getLatestSignedVersion } = await import("../../../lib/db");
   const prev = getLatestSignedVersion(accessId);

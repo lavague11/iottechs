@@ -5,7 +5,7 @@
 //   still the same active, unsigned version with an unchanged fingerprint · the stored PDF still hashes
 //   to what the signer was shown. Nothing the client sends (fingerprint, flattened PDF, ids) is trusted.
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { sqliteHandle, getActiveProposal } from "../db.js";
+import { sqliteHandle, getPublishedProposal } from "../db.js";
 import { getDocumentInfo, documentIntact, recordSignEvent, setProposalSignPointers, newId } from "./store.js";
 import { maySignProposal } from "./access.js";
 import { ensureProposalUnsigned, proposalFingerprintOf, signBlocker, proposalSignerName } from "./proposal-source.js";
@@ -55,7 +55,10 @@ export function validateSession(token, accessId, caller, { now = Date.now() } = 
     if (s.state === "open") h().prepare("UPDATE sign_sessions SET state='expired' WHERE id=? AND state='open'").run(s.id);
     return fail("EXPIRED", MSG.EXPIRED);
   }
-  const row = getActiveProposal(s.project_access_id);
+  // The session binds to the PUBLISHED version the customer received. A staff working draft (a later
+  // non-superseded row) does NOT invalidate it — only PUBLISHING a revision does, which moves the
+  // published row so this id/version check then fails. (Phase 3: signatures bind to published.)
+  const row = getPublishedProposal(s.project_access_id);
   if (!row || row.id !== s.proposal_id || row.version !== s.version) return fail("VOID", MSG.VOID);
   if (row.signed_name) return fail("USED", MSG.USED);
   if (signBlocker(row, s.option_key)) return fail("CHANGED", MSG.CHANGED);

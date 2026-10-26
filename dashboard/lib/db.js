@@ -5999,25 +5999,25 @@ export function getProposalHistory(accessId) {
 // Customer acknowledges the PCP agreement in one click — records their signature + issues
 // an agreement number. Leaves the credit itself PENDING until admin finalizes at payment.
 export function approvePcpAgreement(accessId, name, signatureData) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // customer approves PCP on the published version (Phase 3)
   if (!cur) return null;
   const agrNo = cur.pcp_agreement_no || ("AGR-PCP-" + String(cur.id).padStart(4, "0"));
   db.prepare(`UPDATE proposals SET pcp_agreed_at=datetime('now','localtime'), pcp_agreed_sig=?, pcp_agreement_no=?,
               pcp_status=COALESCE(NULLIF(pcp_status,''),'pending'), updated_at=datetime('now','localtime') WHERE id=?`)
     .run(signatureData || name || null, agrNo, cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Admin/manager correction: void the customer's PCP agreement signature so it can be re-approved.
 // Record preserved (agreement number kept); only the signature + agreed timestamp are cleared.
 export function voidPcpAgreement(accessId) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // PCP state lives on the published version (pairs with approvePcpAgreement)
   if (!cur) return null;
   db.prepare("UPDATE proposals SET pcp_agreed_at=NULL, pcp_agreed_sig=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Admin finalizes / adjusts the discretionary credit at the payment stage (status + grant source).
 export function finalizePcp(accessId, { status, grantSource } = {}) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // PCP credit is a fact of the published contract
   if (!cur) return null;
   const st = ["pending", "approved"].includes(status) ? status : (cur.pcp_status || "pending");
   const gs = grantSource != null ? String(grantSource) : cur.pcp_grant_source;
@@ -6026,7 +6026,7 @@ export function finalizePcp(accessId, { status, grantSource } = {}) {
   } else {
     db.prepare("UPDATE proposals SET pcp_status=?, pcp_grant_source=?, updated_at=datetime('now','localtime') WHERE id=?").run(st, gs, cur.id);
   }
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Every active proposal carrying a PCP credit — raw rows for the ledger page (amounts computed there).
 export function getPcpLedger() {
@@ -6078,6 +6078,11 @@ export function markProposalSent(accessId, byName) {
   if (!cur || cur.status !== "draft") return null;
   db.prepare("UPDATE proposals SET status='sent', sent_at=datetime('now','localtime'), sent_by_name=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(byName || null, cur.id);
+  // Phase 3: publishing this version makes it the new published truth, so any open signing session bound
+  // to an EARLIER version is now stale — void it (the signer is sent back to review the revision). This is
+  // the moment the published content actually changed, not when the draft was first minted (reviseProposal).
+  db.prepare("UPDATE sign_sessions SET state='void', void_reason='revised' WHERE project_access_id=? AND proposal_id != ? AND state='open'")
+    .run(String(accessId), cur.id);
   return getActiveProposal(accessId);
 }
 // Office finalizes the auto-created work order (payout reviewed) — this is what lets a tech accept
@@ -6104,8 +6109,9 @@ export function reviseProposal(accessId, byName, opts = {}) {
   db.prepare("INSERT INTO proposals (project_access_id, version, payload, tax_rate, deposit_pct, created_by_name, change_note, customer_flags) VALUES (?,?,?,?,?,?,?,?)")
     .run(String(accessId), cur.version + 1, cur.payload, cur.tax_rate, cur.deposit_pct, byName || null, note, flags);
   db.prepare("UPDATE proposals SET status='superseded', updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
-  // Any in-flight PDF signing session was bound to THIS version's content — void it so the signer is sent back to review v+1 (lib/esign/session.js).
-  db.prepare("UPDATE sign_sessions SET state='void', void_reason='revised' WHERE proposal_id=? AND state='open'").run(cur.id);
+  // Phase 3: minting a working DRAFT must NOT cancel a valid signing session on the published version —
+  // the customer keeps signing what they received. The session is invalidated only when a revision is
+  // actually PUBLISHED (markProposalSent), which moves the published row. (Was: voided here at mint time.)
   return { proposal: getActiveProposal(accessId), fromVersion: cur.version, wasSigned: !!cur.signed_name };
 }
 // Accepting and declining are tracked as two INDEPENDENT per-option sets so a customer can
@@ -6124,7 +6130,11 @@ function _readOptSets(cur) {
 function _writeOptSets(cur, acc, dec) {
   const any = acc.length > 0;
   const anyDec = Object.keys(dec).length > 0;
-  const status = any ? "accepted" : (anyDec ? "declined" : "sent");
+  let status = any ? "accepted" : (anyDec ? "declined" : "sent");
+  // If a newer working draft already supersedes this published row, KEEP the supersession marker — the
+  // acceptance/decline is still recorded in accepted_options/declined_options, and getPublishedProposal
+  // recovers the effective contractual status from them. (Phase 3: never un-supersede on a customer write.)
+  if (status !== "superseded" && db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND version > ?").get(cur.project_access_id, cur.version)) status = "superseded";
   const now = new Date().toISOString().slice(0, 19).replace("T", " ");
   const firstReason = anyDec ? String(Object.values(dec)[0] || "") : null;
   // Acceptance starts (or preserves) the 30-day signature clock; un-accepting clears it. A re-toggle while
@@ -6133,12 +6143,12 @@ function _writeOptSets(cur, acc, dec) {
   db.prepare("UPDATE proposals SET accepted_options=?, declined_options=?, selected_option=?, selected_at=?, status=?, declined_reason=?, declined_at=?, signature_deadline=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(JSON.stringify(acc), JSON.stringify(dec), any ? acc[0] : null, any ? now : null,
       status, firstReason, anyDec ? now : null, deadline, cur.id);
-  return getActiveProposal(accessId_of(cur));
+  return getPublishedProposal(accessId_of(cur));
 }
 function accessId_of(cur) { return cur.project_access_id; }
 // Toggle an option in the ACCEPTED set. Accepting also clears any prior decline of that same option.
 export function selectProposalOption(accessId, optKey) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // the customer accepts the PUBLISHED version they received (Phase 3)
   if (!cur || !["sent", "changes_requested", "accepted", "declined"].includes(cur.status)) return null;
   const { acc, dec } = _readOptSets(cur);
   const k = String(optKey);
@@ -6150,7 +6160,7 @@ export function selectProposalOption(accessId, optKey) {
 // Toggle an option in the DECLINED set (per option, with a reason). Declining also removes that
 // option from the accepted set, but leaves every OTHER accepted option untouched.
 export function declineOption(accessId, optKey, reason) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // customer decides on the PUBLISHED version (Phase 3)
   if (!cur || !["sent", "changes_requested", "accepted", "declined"].includes(cur.status)) return null;
   const { acc, dec } = _readOptSets(cur);
   const k = String(optKey);
@@ -6160,7 +6170,7 @@ export function declineOption(accessId, optKey, reason) {
 }
 // Staff resolve one customer change-request flag (Mark done / Discard both clear it).
 export function resolveCustomerFlag(accessId, itemId) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // the flag lives on the published row the customer saw
   if (!cur) return null;
   let flags;
   try { flags = JSON.parse(cur.customer_flags || "{}"); } catch { flags = {}; }
@@ -6168,20 +6178,22 @@ export function resolveCustomerFlag(accessId, itemId) {
   const remaining = Object.keys(flags).length;
   db.prepare("UPDATE proposals SET customer_flags=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(JSON.stringify(flags), cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 export function requestProposalChanges(accessId, note) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // the customer requests changes on what they received
   if (!cur || !["sent", "accepted"].includes(cur.status)) return null;
-  db.prepare("UPDATE proposals SET status='changes_requested', change_note=?, updated_at=datetime('now','localtime') WHERE id=?")
-    .run(String(note || "").slice(0, 2000), cur.id);
-  return getActiveProposal(accessId);
+  // Don't un-supersede: if a working draft already exists, keep the marker and only record the note.
+  const superseded = !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND version > ?").get(String(accessId), cur.version);
+  db.prepare("UPDATE proposals SET status=?, change_note=?, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(superseded ? "superseded" : "changes_requested", String(note || "").slice(0, 2000), cur.id);
+  return getPublishedProposal(accessId);
 }
 // Per-line customer revision flags: { itemId: { type:"remove"|"change", note } }. Stored on
 // the active proposal and flips it to changes_requested so staff know to revise. The line
 // items themselves are NOT modified — a flag is just a customer request for us to act on.
 export function setProposalCustomerFlags(accessId, flags, note) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // customer flags items on the published version they saw
   if (!cur || !["sent", "accepted", "changes_requested"].includes(cur.status)) return null;
   const clean = {};
   Object.entries(flags || {}).forEach(([id, f]) => {
@@ -6189,15 +6201,17 @@ export function setProposalCustomerFlags(accessId, flags, note) {
     clean[String(id)] = { type: f.type, note: String(f.note || "").slice(0, 500) };
   });
   const anyFlags = Object.keys(clean).length > 0;
+  const superseded = !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND version > ?").get(String(accessId), cur.version);
+  const nextStatus = superseded ? "superseded" : (anyFlags ? "changes_requested" : cur.status);
   db.prepare("UPDATE proposals SET customer_flags=?, status=?, change_note=?, updated_at=datetime('now','localtime') WHERE id=?")
-    .run(JSON.stringify(clean), anyFlags ? "changes_requested" : cur.status, note != null ? String(note).slice(0, 2000) : cur.change_note, cur.id);
-  return getActiveProposal(accessId);
+    .run(JSON.stringify(clean), nextStatus, note != null ? String(note).slice(0, 2000) : cur.change_note, cur.id);
+  return getPublishedProposal(accessId);
 }
 
 // ---- Signature + payments + stage acceptances (Approval & Deposit stage) ----
 // Customer signs the accepted proposal (typed name, optional drawn signature data URL).
 export function signProposal(accessId, name, signatureData, acks) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // the customer signs the PUBLISHED, accepted version (Phase 3)
   if (!cur || cur.status !== "accepted") return null;
   // Bind the signature to EXACTLY what was signed: capture the content fingerprint + freeze a snapshot
   // of the payload. Any later drift of the signed row voids the gate; the PDF renders from the snapshot.
@@ -6210,18 +6224,18 @@ export function signProposal(accessId, name, signatureData, acks) {
   }
   db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, signed_acks=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, acksJson, cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Internal admin acknowledgment that a SIGNED contract has been reviewed. Separate from customer
 // acceptance — it never changes the signed document or the customer's approval. Idempotent-ish: only a
 // signed proposal can be marked, and re-marking just refreshes the reviewer/timestamp. Pass reviewed=false
 // to clear it (un-review). Returns the active proposal, or null if there's nothing signed to review.
 export function markProposalReviewed(accessId, reviewer, reviewed = true) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // admin reviews the signed (published) contract
   if (!cur || !cur.signed_name) return null;
   db.prepare("UPDATE proposals SET admin_reviewed_at=?, admin_reviewed_by=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(reviewed ? new Date().toISOString().replace("T", " ").slice(0, 19) : null, reviewed ? String(reviewer || "").slice(0, 120) : null, cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Technician accepts the (customer-accepted) work order: records the tech's signature on the
 // proposal AND assigns them to the project (projects.tech = name). Only allowed once the
@@ -6266,13 +6280,13 @@ export function deleteProjectPayment(accessId, id, actor) {
 // Void a customer signature on the active proposal (admin/manager correction path). The proposal
 // record is preserved; only the signature fields are cleared so it can be re-signed.
 export function voidProposalSignature(accessId) {
-  const cur = getActiveProposal(accessId);
+  const cur = getPublishedProposal(accessId);   // void the signature on the published/signed version
   if (!cur) return null;
   db.prepare("UPDATE proposals SET signed_name=NULL, signed_at=NULL, signature_data=NULL, signed_fingerprint=NULL, signed_payload=NULL, updated_at=datetime('now','localtime') WHERE id=?").run(cur.id);
   // E-sign: the stored signed PDF + certificate stay in history (voided, never erased) and the proposal stops pointing at them.
   db.prepare("UPDATE sign_documents SET voided=1 WHERE proposal_id=? AND kind IN ('signed','certificate')").run(cur.id);
   db.prepare("UPDATE proposals SET signed_doc_id=NULL, sign_status=NULL WHERE id=?").run(cur.id);
-  return getActiveProposal(accessId);
+  return getPublishedProposal(accessId);
 }
 // Admin/manager correction: void the technician's work-order signature (which is also their
 // self-assignment) so the work order can be re-accepted/re-assigned. Record preserved, not erased.

@@ -81,11 +81,13 @@ test("saving values slides the expiry forward", () => {
   assert.ok(s.expiresAt > t1 + S.SESSION_TTL_MS - 10);
 });
 
-test("a revision (v+1) voids the open session; the signer is sent back to review", () => {
+test("an unsent draft keeps the session valid; PUBLISHING the revision voids it (signer sent back to review)", () => {
   const a = project("Sess Revise", "5551110003"); sent(a);
   const r = open(a);
   assert.equal(validate(r.token, a).ok, true);
-  db.reviseProposal(a, "Office");
+  db.reviseProposal(a, "Office");                                  // mint draft v2 — published stays v1
+  assert.equal(validate(r.token, a).ok, true, "Phase 3: a mere mint does NOT invalidate the published version's session");
+  db.markProposalSent(a, "Office");                                // publish v2 → the published row moves
   const v = validate(r.token, a);
   assert.equal(v.code, "VOID");
   assert.equal(db.sqliteHandle().prepare("SELECT state, void_reason FROM sign_sessions WHERE id=?").get(r.session.id).void_reason, "revised");

@@ -105,6 +105,37 @@ test("Phase 1.2: an unsent draft doesn't hide (or misattribute) v1's pending sig
   assert.equal(after.version, 1, "the required action references PUBLISHED v1, not the unsent draft v2");
 });
 
+// ---- Phase 3: signatures/acceptance bind to the published version ----
+test("Phase 3: accept + sign resolve the published version; re-sign required once a revision is published", () => {
+  const a = project(); sendV1(a);
+  db.selectProposalOption(a, "A");
+  db.signProposal(a, "Jordan Rivera", null, { terms: true });
+  const pub = db.getPublishedProposal(a);
+  assert.equal(pub.version, 1); assert.ok(pub.signed_name, "published v1 is signed");
+  assert.equal(db.buildStageFacts(a).proposal_signed, true);
+
+  db.reviseProposal(a, "Staff");
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff");
+  db.markProposalSent(a, "Staff");                                   // publish the revision
+  const pub2 = db.getPublishedProposal(a);
+  assert.equal(pub2.version, 2); assert.equal(!!pub2.signed_name, false, "the republished v2 is unsigned");
+  assert.equal(db.buildStageFacts(a).proposal_signed, false, "re-signature required on the published revision");
+  assert.equal(db.getLatestSignedVersion(a).version, 1, "v1's signature stays immutable in history");
+});
+
+test("Phase 3: accepting the published version while a draft exists keeps v1's supersession marker", () => {
+  const a = project(); sendV1(a);
+  db.reviseProposal(a, "Staff");                                     // draft v2; v1 stored-status = superseded
+  db.selectProposalOption(a, "A");                                   // customer accepts the published v1
+  const pub = db.getPublishedProposal(a);
+  assert.equal(pub.version, 1);
+  assert.equal(pub.status, "accepted", "effective published status is accepted");
+  assert.deepEqual(JSON.parse(pub.accepted_options), ["A"]);
+  const stored = db.sqliteHandle().prepare("SELECT status FROM proposals WHERE project_access_id=? AND version=1").get(a);
+  assert.equal(stored.status, "superseded", "v1 stays marked superseded — the version model isn't corrupted");
+  assert.equal(db.getActiveProposal(a).version, 2, "staff workspace is still the draft v2");
+});
+
 // ---- Phase 1.1: AR / receivables follows the published version too ----
 test("AR: a signed project with an unsent draft stays in receivables at the PUBLISHED v1 numbers", () => {
   const a = project(); sendV1(a);

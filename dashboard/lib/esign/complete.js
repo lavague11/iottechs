@@ -3,7 +3,7 @@
 // fingerprint/snapshot, addendum binding, stage auto-advance and role-stripping keep working unchanged.
 // Also writes the certificate of completion, the audit events and the Job Log entry. Replay-proof: the
 // session is claimed atomically (open → completing → signed) so a token can finish exactly once.
-import { sqliteHandle, getActiveProposal, getJobByAccessId, selectProposalOption, signProposal, voidProposalSignature, maybeAutoAdvance, logProjectEvent } from "../db.js";
+import { sqliteHandle, getPublishedProposal, getJobByAccessId, selectProposalOption, signProposal, voidProposalSignature, maybeAutoAdvance, logProjectEvent } from "../db.js";
 import { getDocument, storeDocument, setProposalSignPointers, recordSignEvent, listSignEvents, sha256Hex } from "./store.js";
 import { validateSession } from "./session.js";
 import { missingRequired, requiredAcks } from "./capture.js";
@@ -48,7 +48,7 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
     // The dry-run flatten yielded the event loop: a revision may have minted v+1 meanwhile. v+1 clones the payload,
     // so its fingerprint is IDENTICAL and the fingerprint guard below can't see it. Re-assert, with no await between
     // here and signProposal, that the active proposal is still the exact one this session was opened on.
-    const live = getActiveProposal(accessId);
+    const live = getPublishedProposal(accessId);
     if (!live || live.id !== s.proposal_id || live.version !== s.version || live.signed_name) {
       h().prepare("UPDATE sign_sessions SET state='void', void_reason='revised' WHERE id=?").run(s.id);
       aborted = true;
@@ -114,7 +114,7 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
       }
     } catch { /* admin notification is best-effort — never blocks a completed signature */ }
     const stage = maybeAutoAdvance(accessId);
-    return { ok: true, stage, row: getActiveProposal(accessId), signedDocId: stored.id, certificateDocId: cert.id, signedSha256: signedSha };
+    return { ok: true, stage, row: getPublishedProposal(accessId), signedDocId: stored.id, certificateDocId: cert.id, signedSha256: signedSha };
   } catch (e) {
     // Undo whatever the lifecycle already recorded so a failed completion leaves nothing half-signed.
     try {

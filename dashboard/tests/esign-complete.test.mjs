@@ -191,12 +191,21 @@ test("required fields + acknowledgments are enforced server-side (nothing is sig
   assert.ok((await done(x)).ok, "now complete");
 });
 
-test("an edit (revision) voids the open session; a signed version's documents stay in history on v+1", async () => {
-  const a = project("Done Nine", "5552220009"); sent(a);
-  const open = S.startSession({ accessId: a, optKey: "A", caller: pin(a) });
-  db.reviseProposal(a, "Office");
-  assert.equal((await K.completeSession({ token: open.token, accessId: a, caller: pin(a) })).code, "VOID");
+test("an unsent draft keeps the session valid (signs v1); publishing voids it; signed history stays on v+1", async () => {
+  // Phase 3: minting a working draft must NOT cancel signing of the PUBLISHED version — the customer
+  // signs what they received (v1), and the draft is a separate staff version.
+  const live1 = await ready("Done Nine", "5552220009");
+  db.reviseProposal(live1.a, "Office");                                   // draft v2 — published stays v1
+  const signed = await K.completeSession({ token: live1.token, accessId: live1.a, caller: pin(live1.a) });
+  assert.ok(signed.ok, "signing published v1 succeeds despite an outstanding draft: " + signed.error);
 
+  // But PUBLISHING a revision invalidates a still-open session (the published row moved).
+  const x2 = await ready("Done NineB", "5552221009");
+  db.reviseProposal(x2.a, "Office");
+  db.markProposalSent(x2.a, "Office");                                     // publish v2
+  assert.equal((await K.completeSession({ token: x2.token, accessId: x2.a, caller: pin(x2.a) })).code, "VOID");
+
+  // A signed version's documents stay in history when a later draft is minted.
   const x = await ready("Done Ten", "5552220010");
   const r = await done(x);
   const signedId = r.signedDocId;
@@ -260,21 +269,19 @@ test("multi-option proposal: signing B signs ONLY B (document narrowed to the op
   assert.doesNotMatch(txt, /Camera Location|\bCamera\b.*\$150/, "option A's lines are not in the document the customer signed");
 });
 
-test("mid-completion version bump aborts instead of signing the wrong version (identical-fingerprint v+1)", async () => {
+test("a mid-completion draft mint does NOT abort — the PUBLISHED version is still signed correctly", async () => {
+  // Phase 3: minting v+1 mid-completion no longer aborts, because it doesn't move the published row the
+  // session is bound to. The customer's signing of published v1 completes; the draft v2 stays unsigned.
   const x = await ready("Done Race Rev", "5552220016");
   const v1 = db.getActiveProposal(x.a);
   const p = K.completeSession({ token: x.token, accessId: x.a, caller: pin(x.a) });   // runs sync up to the first await (the dry-run flatten)
-  db.reviseProposal(x.a, "Office");                                                   // …and v+1 (same payload → same fingerprint) lands in that gap
+  db.reviseProposal(x.a, "Office");                                                   // …v+1 (same payload) lands in that gap — published stays v1
   const out = await p;
-  assert.equal(out.ok, false);
-  assert.equal(out.code, "VOID");
+  assert.ok(out.ok, "signing the published v1 completes despite a concurrent draft mint: " + out.error);
+  assert.ok(db.sqliteHandle().prepare("SELECT signed_name FROM proposals WHERE id=?").get(v1.id).signed_name, "v1 (the published version) was signed");
   const v2 = db.getActiveProposal(x.a);
   assert.equal(v2.version, 2);
-  assert.equal(v2.signed_name, null, "the new version was NOT signed");
-  assert.equal(db.sqliteHandle().prepare("SELECT signed_name FROM proposals WHERE id=?").get(v1.id).signed_name, null, "nor the old one");
-  assert.equal(db.sqliteHandle().prepare("SELECT COUNT(*) c FROM sign_documents WHERE proposal_id IN (?,?) AND kind IN ('signed','certificate')").get(v1.id, v2.id).c, 0);
-  assert.equal(db.sqliteHandle().prepare("SELECT state FROM sign_sessions WHERE doc_id=?").get(x.unsignedId).state, "void");
-  assert.equal((await done(x)).code, "VOID", "the token can't be retried");
+  assert.equal(v2.signed_name, null, "the working draft v2 was NOT signed");
 });
 
 test("survey/mockup appendix: the pages are baked into the signed PDF and gate the required acks", async () => {

@@ -21,7 +21,7 @@ test("flatten.js stamps the certification block only when meta.certify, under th
 });
 
 test("complete.js passes the cert meta to the FINAL flatten, not the dry run", () => {
-  const dry = complete.slice(0, complete.indexOf("const live = getActiveProposal"));
+  const dry = complete.slice(0, complete.indexOf("const live = getPublishedProposal"));
   assert.ok(!/certify: true/.test(dry), "the dry-run flatten is left unstamped");
   assert.ok(/reference = `PROP-\$\{String\(row\.id\)\.padStart\(4, "0"\)\}-v\$\{row\.version\}`/.test(complete), "an immutable document reference is built");
   assert.ok(/meta: \{ certify: true, reference, fingerprint: s\.fingerprint, via: s\.via_pin \? "Project PIN" : "Account sign-in", ip \}/.test(complete), "the final flatten receives certify + reference + fingerprint + via + ip");
