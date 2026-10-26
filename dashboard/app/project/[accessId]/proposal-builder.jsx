@@ -560,6 +560,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [sigSheet, setSigSheet] = useState(false);
   const [sigBusy, setSigBusy] = useState(false);
   const [sigCopied, setSigCopied] = useState(false);
+  // Deep-link from the status command center: ?reqsign=1 opens the STAFF Request Signature modal once the
+  // proposal page is up (staff, on a sent/unsigned proposal with NO unsent edits). Waits for the status to
+  // resolve (doesn't clear the flag early); strips the param once consumed so a refresh won't reopen it.
+  const reqSignRef = useRef(typeof window !== "undefined" && searchParams?.get("reqsign") === "1");
+  useEffect(() => {
+    if (!reqSignRef.current || !isStaffDock) return;
+    if (!isSentUnsigned) return;   // not sign-able yet (loading, or has unsent changes → Send Revision first)
+    reqSignRef.current = false;
+    setSigSheet(true);
+    try { const u = new URL(window.location.href); u.searchParams.delete("reqsign"); window.history.replaceState({}, "", u); } catch {}
+  }, [isStaffDock, isSentUnsigned]);
   const signingUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/project/${accessId}?open=proposal&sign=${opt?.id ?? ""}`;
   // Copy the signing link straight to the clipboard and close the sheet — the fast path when you just want the URL.
   async function copySigningLink() {

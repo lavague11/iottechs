@@ -413,35 +413,20 @@ export default function DeckView({ stages = [], idx = 0, onIdx, canAdvance = tru
           project-ID chip). Rendered position:fixed and pre-clamped inside the viewport so it never clips. */}
       {statusChip && !statusChip.readonly && statusChip.detail && statusOpen && statusPos && (() => {
         const d = statusChip.detail;
-        const canGo = !!(statusChip.onClick || statusChip.openTool);
-        const goNext = () => { setStatusOpen(false); if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); };
+        // Command center: WHERE are we stuck (state + one blurb) and the ONE button that unblocks it. The
+        // primary runs the forward action (the canonical routing); a rare secondary just inspects the object.
+        const goPrimary = () => { setStatusOpen(false); if (statusChip.onPrimary) statusChip.onPrimary(); else if (!openNamedTool(statusChip.openTool)) statusChip.onClick?.(); };
+        const goSecondary = () => { setStatusOpen(false); statusChip.onSecondary?.(); };
+        const canPrimary = !!d.primaryLabel && !!(statusChip.onPrimary || statusChip.onClick || statusChip.openTool);
         return (<>
           <div className="dv-statback" onClick={closeStatus} />
           <div className="dv-statpop" role="dialog" aria-label="Project status" aria-modal="false"
             style={{ "--stat-c": statusChip.color, top: statusPos.top, left: statusPos.left, width: statusPos.w }}>
             <div className="dv-statpop-kick">Project status</div>
-            {/* State-first: the current state is the headline, then one ✓ done + one ○ now line — not a
-                full checklist — then the next operational step and its action. */}
             <div className="dv-statpop-state"><b>{d.stateLabel}</b></div>
-            {(d.done || d.pending) && (
-              <ul className="dv-statlist">
-                {d.done && (
-                  <li className="done">
-                    <span className="dv-statmk"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></span>
-                    <span className="dv-statml">{d.done}</span>
-                  </li>
-                )}
-                {d.pending && (
-                  <li className="active">
-                    <span className="dv-statmk dv-statmk-o" />
-                    <span className="dv-statml">{d.pending}</span>
-                    <span className="dv-statms">Now</span>
-                  </li>
-                )}
-              </ul>
-            )}
-            {d.nextLabel && <div className="dv-statnext"><span className="dv-statnext-k">Next</span><span className="dv-statnext-v">{d.nextLabel}</span></div>}
-            {canGo && <button className="dv-statgo" onClick={goNext}>{d.ctaLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
+            {d.blurb && <div className="dv-statpop-blurb">{d.blurb}</div>}
+            {canPrimary && <button className="dv-statgo" onClick={goPrimary}>{d.primaryLabel}<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg></button>}
+            {d.secondaryLabel && statusChip.onSecondary && <button className="dv-statsecond" onClick={goSecondary}>{d.secondaryLabel}</button>}
           </div>
         </>);
       })()}
@@ -713,9 +698,12 @@ const CSS = `
 .dv-statpop-head{display:flex;align-items:baseline;gap:8px;margin:5px 0 13px;flex-wrap:wrap}
 .dv-statpop-head b{font-size:16px;font-weight:650;color:var(--dv-ink);letter-spacing:-.015em}
 .dv-statpop-head span{font-size:11.5px;color:var(--stat-c,#787D84);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
-/* State-first popover: the current state is the headline (tinted by its tone), then the ✓ done / ○ now lines. */
-.dv-statpop-state{margin:6px 0 12px}
+/* Command-center popover: state headline (tinted) + one blurb + the single forward-action button. */
+.dv-statpop-state{margin:6px 0 4px}
 .dv-statpop-state b{font-size:17px;font-weight:650;color:var(--stat-c,#101418);letter-spacing:-.015em}
+.dv-statpop-blurb{font-size:12.5px;color:var(--dv-meta);line-height:1.45;margin:0 0 13px}
+.dv-statsecond{display:block;width:100%;margin-top:9px;background:none;border:0;padding:4px 0;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--dv-meta);cursor:pointer;text-align:center}
+.dv-statsecond:hover{color:var(--dv-ink)}
 .dv-statlist{list-style:none;margin:0 0 13px;padding:0;display:flex;flex-direction:column;gap:9px}
 .dv-statlist li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--dv-meta)}
 .dv-statlist li.done,.dv-statlist li.active{color:var(--dv-ink)}

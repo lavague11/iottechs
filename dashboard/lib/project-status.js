@@ -106,46 +106,38 @@ export const CUSTOMER_STATUS = {
 
 export const statusToneHex = (tone) => (tone === "green" ? "#2E7D5B" : tone === "gold" ? "#C9A96E" : tone === "red" ? "#C4553D" : "#3E6C9E");
 
-// Popover context (admin): the just-completed milestone, the current gap, and the next operational step —
-// the state-first replacement for the old 5-item checklist. One line of history, one line of "now".
-export const STATE_DETAIL = {
-  INTAKE:                 { done: null,                pending: "Setting up the project",        next: "Build the site survey" },
-  BUILD_SURVEY:           { done: null,                pending: "Site survey not built",         next: "Build the site survey" },
-  AWAITING_SURVEY_APPROVAL:{ done: "Site survey sent", pending: "Awaiting customer approval",     next: "Awaiting the customer" },
-  CREATE_PROPOSAL:        { done: "Site survey done",  pending: "No proposal yet",               next: "Create the proposal" },
-  SEND_PROPOSAL:          { done: "Proposal drafted",  pending: "Not sent to the customer",      next: "Send the proposal" },
-  AWAITING_SIGNATURE:     { done: "Proposal sent",     pending: "Awaiting customer signature",   next: "Request the signature" },
-  CHANGES_REQUESTED:      { done: "Customer reviewed", pending: "Changes requested",             next: "Revise the proposal" },
-  AWAITING_DEPOSIT:       { done: "Proposal signed",   pending: "Deposit not yet received",      next: "Record the deposit" },
-  READY_TO_SCHEDULE:      { done: "Deposit received",  pending: "Installation not scheduled",    next: "Schedule the installation" },
-  INSTALL_SCHEDULED:      { done: "Installation booked",pending: "Awaiting the install date",     next: "Run the installation" },
-  INSTALL_IN_PROGRESS:    { done: "Install started",   pending: "Field work in progress",        next: "Complete the installation" },
-  AWAITING_FINAL_PAYMENT: { done: "Installation done", pending: "Final balance due",             next: "Record the final payment" },
-  COMPLETE:               { done: "Balance settled",   pending: null,                            next: null },
-  CLOSED_NOT_COMPLETED:   { done: null,                pending: "Closed — not completed",        next: null },
+// The ONE canonical status → action map (admin command center): for each state, the "where are we stuck"
+// blurb, the SINGLE primary action that moves the project forward, and (rarely) one secondary link. The
+// primary's VERB lives here; its destination/routing is supplied by the caller (gateway headerAction +
+// CTA_ROUTE), so lifecycle logic stays centralized. No "NOW", no "NEXT", no checklist, no history.
+export const STATE_ACTION = {
+  INTAKE:                 { blurb: "Setting up the project.",                                primary: "Build Site Survey",     secondary: null },
+  BUILD_SURVEY:           { blurb: "Site survey has not been completed.",                     primary: "Build Site Survey",     secondary: null },
+  AWAITING_SURVEY_APPROVAL:{ blurb: "Waiting on the customer to approve the site survey.",    primary: "View Survey",           secondary: null },
+  CREATE_PROPOSAL:        { blurb: "Site survey is ready. No proposal has been created.",     primary: "Create Proposal",       secondary: null },
+  SEND_PROPOSAL:          { blurb: "A draft proposal is ready to send.",                      primary: "Open Proposal",         secondary: null },
+  AWAITING_SIGNATURE:     { blurb: "Waiting on customer signature.",                          primary: "Request Signature",     secondary: "View Proposal" },
+  CHANGES_REQUESTED:      { blurb: "Customer requested proposal changes.",                    primary: "Open Proposal",         secondary: null },
+  AWAITING_DEPOSIT:       { blurb: "Waiting on the required deposit.",                        primary: "Record Deposit",        secondary: null },
+  READY_TO_SCHEDULE:      { blurb: "Deposit received. Installation is ready to schedule.",    primary: "Schedule Installation", secondary: null },
+  INSTALL_SCHEDULED:      { blurb: "Installation is scheduled.",                              primary: "View Schedule",         secondary: null },
+  INSTALL_IN_PROGRESS:    { blurb: "Installation is underway.",                               primary: "Open Work Order",       secondary: null },
+  AWAITING_FINAL_PAYMENT: { blurb: "Installation is complete. The balance is unpaid.",        primary: "Record Final Payment",  secondary: null },
+  COMPLETE:               { blurb: "Project complete and paid in full.",                      primary: null,                    secondary: null },
+  CLOSED_NOT_COMPLETED:   { blurb: "Project closed — not completed.",                         primary: null,                    secondary: null },
 };
 
-// Assemble the admin popover payload from the canonical state + the ladder's already-resolved routing
-// action (label/target/spot/schedule/muted). State-first: the current state is the headline; one ✓ done
-// line, one ○ pending line, and the next operational step — never the whole lifecycle.
-export function projectStatusView(state, action = null) {
+// The admin popover payload: state headline + ONE "where are we stuck" blurb + the single forward action
+// (+ optional secondary). The caller owns routing; this just supplies the words. `opts.dateText` enriches
+// a scheduled blurb; `opts.amountText` a deposit/balance blurb (never computed here — passed in).
+export function projectStatusView(state, opts = {}) {
   const a = ADMIN_STATUS[state] || ADMIN_STATUS.INTAKE;
-  const d = STATE_DETAIL[state] || {};
-  const spot = action?.spot || a.label;
-  const ctaLabel = action?.schedule ? "Open scheduling"
-    : action?.muted ? `View ${spot}`
-    : action ? `Continue to ${spot}` : `View ${a.label}`;
-  return {
-    stateLabel: a.label,
-    tone: a.tone,
-    done: d.done || null,
-    pending: d.pending || null,
-    // An actionable next step shows its own verb; a muted "waiting" action shows the operational next step
-    // instead of repeating the state (e.g. "Request the signature", not "Awaiting signature" again).
-    nextLabel: (action && !action.muted && action.label) ? action.label : (d.next || null),
-    action: !!action && !action.muted,
-    ctaLabel,
-  };
+  const act = STATE_ACTION[state] || {};
+  let blurb = act.blurb || null;
+  if (opts.dateText && state === "INSTALL_SCHEDULED") blurb = `Installation is scheduled for ${opts.dateText}.`;
+  if (opts.amountText && state === "AWAITING_DEPOSIT") blurb = `Waiting on the ${opts.amountText} deposit.`;
+  if (opts.amountText && state === "AWAITING_FINAL_PAYMENT") blurb = `Installation is complete. ${opts.amountText} balance remains.`;
+  return { stateLabel: a.label, tone: a.tone, blurb, primaryLabel: act.primary || null, secondaryLabel: act.secondary || null };
 }
 
 // A project's stage is only reached by satisfying every earlier stage's requirements (advancement is

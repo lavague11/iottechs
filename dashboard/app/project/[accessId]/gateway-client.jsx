@@ -2866,8 +2866,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         statusChip = { label: `${cs.label}${dateSuffix}`, color: statusToneHex(cs.tone), muted: cs.tone !== "gold", readonly: true };
       }
     } else if (projState && officeRole) {
-      // Admin: the operational state is ON the chip (never "STATUS ▾"); click it for a compact state+next popover.
+      // Admin: the operational state is ON the chip (never "STATUS ▾"); click it for a command-center popover
+      // (state + one blurb + the single forward-action button that unblocks the project).
       const as = ADMIN_STATUS[projState] || ADMIN_STATUS.INTAKE;
+      // The primary action deep-links to the actual tool. Request Signature opens the canonical signer modal
+      // on the proposal page (via ?sign=1, which the proposal builder reads); the rest reuse the chip routing.
+      const onPrimary = projState === "AWAITING_SIGNATURE"
+        ? () => { window.location.href = `/project/${lp.access_id}?open=proposal&reqsign=1`; }   // ?reqsign opens the STAFF Request Signature modal (≠ ?sign, the customer signer)
+        : null;
+      const onSecondary = projState === "AWAITING_SIGNATURE" ? () => browse("proposal") : null;
       statusChip = {
         label: `${as.label}${dateSuffix}`,
         color: statusToneHex(as.tone),
@@ -2876,7 +2883,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         onClick: headerAction?.schedule ? () => openSchedule(headerAction.schedule)
                : headerAction ? () => browse(headerAction.target)
                : () => browse(custStage),
-        detail: projectStatusView(projState, headerAction),
+        onPrimary, onSecondary,
+        detail: projectStatusView(projState, { dateText: realInstallDate ? fmtDate(realInstallDate) : null }),
       };
     }
     // The customer "Visualize" walkthrough is folded into the Consulting page as an `intro` (above),

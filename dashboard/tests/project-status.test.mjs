@@ -72,20 +72,32 @@ test("M + mapping: every state renders for BOTH audiences; same state, different
   assert.equal(CUSTOMER_STATUS.READY_TO_SCHEDULE.cta, false);
 });
 
-test("projectStatusView: state-first popover — headline state, ✓done/○now, next step (not a checklist)", () => {
-  // Muted 'waiting' action → NEXT is the operational step, not a repeat of the state.
-  const waiting = projectStatusView("AWAITING_SIGNATURE", { label: "Awaiting signature", spot: "Proposal", muted: true });
-  assert.equal(waiting.stateLabel, "Awaiting Signature");
-  assert.equal(waiting.done, "Proposal sent");
-  assert.equal(waiting.pending, "Awaiting customer signature");
-  assert.equal(waiting.nextLabel, "Request the signature");          // not "Awaiting signature"
-  assert.equal(waiting.ctaLabel, "View Proposal");
-  assert.equal(waiting.action, false);
-  // Actionable action → its own verb + a "Continue to" CTA.
-  const act = projectStatusView("AWAITING_DEPOSIT", { label: "Record deposit", spot: "Approval & Deposit" });
-  assert.equal(act.nextLabel, "Record deposit");
-  assert.equal(act.action, true);
-  assert.equal(act.ctaLabel, "Continue to Approval & Deposit");
+test("projectStatusView: command-center — state + one blurb + ONE forward-action button (no checklist/NOW/NEXT)", () => {
+  const sig = projectStatusView("AWAITING_SIGNATURE");
+  assert.equal(sig.stateLabel, "Awaiting Signature");
+  assert.equal(sig.blurb, "Waiting on customer signature.");
+  assert.equal(sig.primaryLabel, "Request Signature");       // the action that unblocks it, not "Request the signature"
+  assert.equal(sig.secondaryLabel, "View Proposal");          // the one optional secondary
+  // No checklist / NOW / NEXT fields anymore.
+  assert.equal(sig.done, undefined); assert.equal(sig.pending, undefined); assert.equal(sig.nextLabel, undefined);
+  // Each actionable state maps to one primary verb; terminal states have none.
+  assert.equal(projectStatusView("AWAITING_DEPOSIT").primaryLabel, "Record Deposit");
+  assert.equal(projectStatusView("CREATE_PROPOSAL").primaryLabel, "Create Proposal");
+  assert.equal(projectStatusView("BUILD_SURVEY").primaryLabel, "Build Site Survey");
+  assert.equal(projectStatusView("READY_TO_SCHEDULE").primaryLabel, "Schedule Installation");
+  assert.equal(projectStatusView("COMPLETE").primaryLabel, null);
+  assert.equal(projectStatusView("CLOSED_NOT_COMPLETED").primaryLabel, null);
+  // Enrichment: a passed-in date/amount sharpens the blurb (never computed here).
+  assert.equal(projectStatusView("INSTALL_SCHEDULED", { dateText: "Nov 4" }).blurb, "Installation is scheduled for Nov 4.");
+  assert.match(projectStatusView("AWAITING_DEPOSIT", { amountText: "$607.77" }).blurb, /\$607\.77/);
+});
+
+test("every state has a command-center entry; STATE_ACTION is the single map", () => {
+  for (const s of PROJECT_STATES) {
+    const v = projectStatusView(s);
+    assert.ok(v.stateLabel && v.blurb, `blurb for ${s}`);
+    assert.ok("primaryLabel" in v && "secondaryLabel" in v, `action fields for ${s}`);
+  }
 });
 
 test("milestones remain history, not the primary status (the state answers 'now')", () => {
