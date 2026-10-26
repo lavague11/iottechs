@@ -2126,23 +2126,27 @@ function financialStateFromRow(r, { total, paid, pendingPay, lastPay }) {
 export function getReceivables() {
   const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
   const iso = (d) => (d instanceof Date ? d.toISOString() : (d || null));
+  // AR is CONTRACTUAL money → it joins the PUBLISHED version (latest sent), never the staff working
+  // draft. LEFT JOIN so a lost deal with no sent proposal still appears via lost_at. (Was: non-
+  // superseded resolver, which joined an in-progress draft and dropped a signed/accepted project from
+  // AR the moment it was revised, because the draft's status/signature failed the WHERE filter.)
   return db.prepare(
     `SELECT p.access_id, p.customer, p.contact_name, p.address, p.stage, p.category,
             p.contact_phone, p.contact_email, p.completed_at, p.lost_at, p.lost_reason, p.lost_kind,
             p.lost_by, p.lost_prev_stage, p.reopened_at, p.ar_archived_at,
             pr.status, pr.payload, pr.tax_rate, pr.deposit_pct,
-            pr.accepted_options, pr.selected_option, pr.selected_at, pr.signed_name, pr.signed_at,
+            pr.accepted_options, pr.declined_options, pr.selected_option, pr.selected_at, pr.signed_name, pr.signed_at,
             pr.signature_deadline, pr.declined_at, pr.declined_reason, pr.sent_at, pr.updated_at
        FROM projects p
-       JOIN proposals pr
-         ON pr.project_access_id = p.access_id
-        AND pr.id = (SELECT x.id FROM proposals x
-                      WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
+       LEFT JOIN proposals pr
+         ON pr.id = (SELECT x.id FROM proposals x
+                      WHERE x.project_access_id = p.access_id AND x.sent_at IS NOT NULL
                       ORDER BY x.version DESC, x.id DESC LIMIT 1)
-      WHERE pr.status IN ('sent','changes_requested','accepted','declined')
-         OR pr.signed_name IS NOT NULL OR p.lost_at IS NOT NULL
+      WHERE pr.id IS NOT NULL OR p.lost_at IS NOT NULL
       ORDER BY p.id DESC`
   ).all().map((r) => {
+    // A published row a newer draft has superseded reports its real contractual status, not 'superseded'.
+    r.status = effectivePublishedStatus(r);
     let grand = 0;
     try {
       const pl = JSON.parse(r.payload);

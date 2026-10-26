@@ -90,3 +90,31 @@ test("stage facts read published: revising a signed proposal does NOT rewind the
   assert.equal(facts.proposal_status, "accepted", "contractual status stays accepted");
   assert.equal(facts.proposal_version, 1, "stage facts reflect the published version number");
 });
+
+// ---- Phase 1.1: AR / receivables follows the published version too ----
+test("AR: a signed project with an unsent draft stays in receivables at the PUBLISHED v1 numbers", () => {
+  const a = project(); sendV1(a);
+  db.selectProposalOption(a, "A");
+  db.signProposal(a, "Jordan Rivera", null, { terms: true });
+  const before = db.getReceivables().find((x) => x.access_id === a);
+  assert.ok(before, "signed project is in AR");
+  assert.equal(before.total, 600, "AR total = signed v1 ($600)");
+
+  db.reviseProposal(a, "Staff");                                                       // mint draft v2
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff"); // draft doubles the price
+  const after = db.getReceivables().find((x) => x.access_id === a);
+  assert.ok(after, "the project does NOT disappear from AR while an unsent draft exists");
+  assert.equal(after.total, 600, "AR still bills the published v1 ($600), not the unsent draft ($1,200)");
+  assert.equal(after.status, "accepted", "AR status normalized from 'superseded' back to 'accepted'");
+});
+
+test("AR: after Send Revision and re-acceptance, receivables bills the republished v2", () => {
+  const a = project(); sendV1(a);
+  db.selectProposalOption(a, "A");                                                     // accept v1 → $600 receivable
+  assert.equal(db.getReceivables().find((x) => x.access_id === a)?.total, 600, "accepted v1 is a $600 receivable");
+  db.reviseProposal(a, "Staff");
+  db.saveProposalDraft(a, { payload: PAYLOAD_V2, taxRate: 0, depositPct: 50 }, "Staff");
+  db.markProposalSent(a, "Staff");                                                     // Send Revision (v2 sent)
+  db.selectProposalOption(a, "A");                                                     // customer re-accepts v2
+  assert.equal(db.getReceivables().find((x) => x.access_id === a)?.total, 1200, "AR bills the re-accepted, republished v2");
+});
