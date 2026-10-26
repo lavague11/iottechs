@@ -505,6 +505,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   function removeSub(pid, sid) {
     patchItems(svc.items.map((it) => (it.id === pid ? { ...it, sub: it.sub.filter((x) => x.id !== sid) } : it)));
   }
+  // Duplicate a sub-item (bundle component) right below the source with a fresh id — same pattern as
+  // duplicateItem, for the inline edit bar so a repeated component (another drop, another mount) is one tap.
+  function duplicateSub(pid, sid) {
+    patchItems(svc.items.map((it) => {
+      if (it.id !== pid) return it;
+      const sub = it.sub || [];
+      const idx = sub.findIndex((x) => x.id === sid);
+      if (idx < 0) return it;
+      const next = sub.slice();
+      next.splice(idx + 1, 0, { ...sub[idx], id: newItemId() });
+      return { ...it, sub: next };
+    }));
+  }
   // Toast "Existing" toggle on a Line Drop line: flip between a new Cat6 run ("Line Drop", $150)
   // and an existing cable ("Line Drop — Existing", $50 test & map). Swaps the line's name + price
   // from the price book; the office can still hand-edit the price after.
@@ -838,12 +851,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
             {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
             <span className="prop-sub2-amt">{money(amount)}</span>
-            <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setSubEditId(null)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-            </button>
-            <button type="button" className="prop-sub2-del" title="Remove from bundle" aria-label="Remove from bundle" onClick={() => removeSub(parent.id, x.id)}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-            </button>
+            {/* Action bar: Done · Duplicate · Remove — icon-only, grouped so they read as one control set. */}
+            <span className="prop-sub2-bar">
+              <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setSubEditId(null)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+              </button>
+              <button type="button" className="prop-sub2-dup" title="Duplicate" aria-label="Duplicate sub-item" onClick={() => duplicateSub(parent.id, x.id)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button type="button" className="prop-sub2-del" title="Remove from bundle" aria-label="Remove from bundle" onClick={() => removeSub(parent.id, x.id)}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+              </button>
+            </span>
           </div>
         ) : (
           <button type="button" className="prop-sub2 compact" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Sub-item ${letter}: ${x.name || "Sub-item"}`}>

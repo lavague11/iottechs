@@ -354,11 +354,15 @@ const PROP_CSS = `
 .pvx .prop-sub2-price{width:76px!important}
 .pvx .prop-sub2-cost{width:64px!important}
 .pvx .prop-sub2-mul{color:var(--dv-meta,#787D84);font-size:.8rem;flex-shrink:0}
-.pvx .prop-sub2-done,.pvx .prop-sub2-del{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0}
+/* Inline sub-item action bar: Done · Duplicate · Remove, grouped in one subtle pill so they read as a set. */
+.pvx .prop-sub2-bar{display:inline-flex;align-items:center;gap:1px;flex-shrink:0;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);padding:1px}
+.pvx .prop-sub2-done,.pvx .prop-sub2-dup,.pvx .prop-sub2-del{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0}
 .pvx .prop-sub2-done{color:var(--dv-green,#2E7D5B)}
-.pvx .prop-sub2-done:hover{background:rgba(46,125,91,.08)}
+.pvx .prop-sub2-done:hover{background:rgba(46,125,91,.1)}
+.pvx .prop-sub2-dup{color:var(--dv-meta,#787D84)}
+.pvx .prop-sub2-dup:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
 .pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
-.pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.08)}
+.pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.1)}
 .pvx .prop-block{border-left:2px solid transparent;transition:background .12s,border-color .12s;border-top:1px solid var(--dv-line,#E4E4DF);position:relative}
 /* Expanded parent: one restrained gold left accent marks the open group — never a full-group fill.
    Group boundary: a little extra breathing room below an expanded group (and below each infra lead)

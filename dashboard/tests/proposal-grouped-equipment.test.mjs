@@ -76,6 +76,15 @@ test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR 
   assert.ok(/aria-label=\{`Sub-item \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
 });
 
+test("sub-item edit bar = Done · Duplicate · Remove; duplicateSub deep-copies with a fresh id below the source", () => {
+  assert.ok(editor.includes('className="prop-sub2-bar"'), "the three actions are grouped in one bar");
+  assert.ok(editor.includes('className="prop-sub2-dup"') && /aria-label="Duplicate sub-item"/.test(editor), "Duplicate control added");
+  assert.ok(editor.includes("duplicateSub(parent.id, x.id)"), "Duplicate is wired to the handler");
+  const fn = editor.slice(editor.indexOf("function duplicateSub"), editor.indexOf("function duplicateSub") + 420);
+  assert.ok(/id: newItemId\(\)/.test(fn) && /splice\(idx \+ 1, 0,/.test(fn), "fresh id, inserted right after the source");
+  assert.ok(panel.includes(".pvx .prop-sub2-bar{"), "the action bar has grouping styles");
+});
+
 test("child badge + zebra are presentation-only: subordinate badge, neutral tint, hover still distinct", () => {
   assert.ok(panel.includes(".pvx .prop-sub2-badge{"), "child badge style exists");
   assert.ok(/prop-sub2-wrap\.alt>\.prop-sub2\{background:rgba\(17,20,24,\.022\)\}/.test(panel), "zebra is a very light NEUTRAL tint");
