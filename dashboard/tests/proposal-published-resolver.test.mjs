@@ -91,6 +91,19 @@ test("stage facts read published: revising a signed proposal does NOT rewind the
   assert.equal(facts.proposal_version, 1, "stage facts reflect the published version number");
 });
 
+// ---- Phase 1.2: customer required-actions read the published version ----
+test("Phase 1.2: an unsent draft doesn't hide (or misattribute) v1's pending signature requirement", () => {
+  const a = project(); sendV1(a);                                   // v1 sent, awaiting signature
+  const before = db.resolveCustomerRequiredActions(a).find((x) => x.documentType === "proposal");
+  assert.ok(before && before.action === "signature", "a sent-but-unsigned v1 needs a signature");
+  assert.equal(before.version, 1);
+
+  db.reviseProposal(a, "Staff");                                    // mint unsent draft v2
+  const after = db.resolveCustomerRequiredActions(a).find((x) => x.documentType === "proposal");
+  assert.ok(after && after.action === "signature", "the pending signature on published v1 is still surfaced");
+  assert.equal(after.version, 1, "the required action references PUBLISHED v1, not the unsent draft v2");
+});
+
 // ---- Phase 1.1: AR / receivables follows the published version too ----
 test("AR: a signed project with an unsent draft stays in receivables at the PUBLISHED v1 numbers", () => {
   const a = project(); sendV1(a);

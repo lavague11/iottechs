@@ -6280,7 +6280,9 @@ export function voidTechSignature(accessId) {
 // project knows exactly what the customer still has to do, regardless of which pages they visited.
 export function resolveCustomerRequiredActions(accessId) {
   let proposal = null, pcp = null, addendums = [];
-  const prop = getActiveProposal(accessId);
+  // What the CUSTOMER must still do is contractual truth — read the PUBLISHED version. An unsent staff
+  // draft must never suppress (or fabricate) a customer signature/approval requirement on what they received.
+  const prop = getPublishedProposal(accessId);
   if (prop) {
     const fp = proposalFingerprint(prop.payload, prop.tax_rate, prop.deposit_pct);
     const signedCurrent = !!prop.signed_name && (!prop.signed_fingerprint || prop.signed_fingerprint === fp);
