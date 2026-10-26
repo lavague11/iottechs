@@ -356,7 +356,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
-  const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays lead row -> breakdown expanded
+  const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays/Amp group -> children; open by default, false = user collapsed it
   const [dispShown, setDispShown] = useState(1);  // display slots revealed (start at 1, "+ Add display" reveals more)
   const [askCam, setAskCam] = useState(null);     // preset awaiting a "how many cameras?" count (first camera only)
   const [camN, setCamN] = useState(4);
@@ -602,20 +602,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // Collapsed recording-system lines that render as numbered items 1..leadCount above the cameras.
   const leadRows = [];
   if (nvrCollapsed) leadRows.push({ key: "nvr", title: `NVR · ${nvrShort(nvrItem.name)}`,
-    sub: driveItems.length ? `${driveItems.length} drive${driveItems.length !== 1 ? "s" : ""}` : "No drives",
     total: nvrGroupTotal, edit: () => setNvrDone(false),
     // Breakdown so the collapsed line isn't a mystery total — recorder + each drive, priced.
     // qty/price carried so these rows read exactly like a camera's sub-items (qty · price · total).
     items: [{ name: nvrItem.name, qty: +nvrItem.qty || 1, price: +nvrItem.price || 0, total: (+nvrItem.qty || 1) * (+nvrItem.price || 0) },
       ...driveItems.map((d) => ({ name: d.name || "Storage drive", qty: +d.qty || 1, price: +d.price || 0, total: (+d.qty || 1) * (+d.price || 0) }))] });
   if (dispCollapsed) leadRows.push({ key: "disp", title: "Displays",
-    sub: `${displayItems.length} display${displayItems.length !== 1 ? "s" : ""}`,
     total: displaysTotal, edit: () => setDispDone(false),
     // Each display slot + what it costs — so it's clear what's driving the total, not just a lump sum.
     items: displayItems.map((d) => ({ name: `Display ${d.displaySlot} · ${d.name || "—"}`, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
   const ampCollapsed = soundMode && ampDone && !!ampItem;
   if (ampCollapsed) leadRows.push({ key: "amp", title: `Amp · ${ampItem.name}`,
-    sub: rackItem ? rackItem.name : "No rack", total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
+    total: itemTotal(ampItem) + (rackItem ? itemTotal(rackItem) : 0), edit: () => setAmpDone(false),
     items: [ampItem, ...(rackItem ? [rackItem] : [])].map((d) => ({ name: d.name, qty: +d.qty || 1, price: +d.price || 0, total: itemTotal(d) })) });
   const leadCount = leadRows.length;
   // Number ONLY endpoints (cameras / speakers / sensors), from 1 — infrastructure in the list gets an icon, not
@@ -1071,12 +1069,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <div key={lr.key} className={`prop-block prop-lead${!readOnly ? " has-drag" : ""}`}>
           <div className="prop-sysline">
             {lr.items?.length > 0 ? (
-              <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] ? "Hide breakdown" : "Show breakdown"}
-                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: !o[lr.key] }))}>{leadOpen[lr.key] ? "▾" : "▸"}</button>
+              <button className="prop-chev" style={{ color: svcColor }} title={leadOpen[lr.key] !== false ? "Hide breakdown" : "Show breakdown"}
+                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: o[lr.key] === false }))}>{leadOpen[lr.key] !== false ? "▾" : "▸"}</button>
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
             <InfraBadge kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>
-            <span className="prop-sysline-sub">{lr.sub}</span>
             <span className="prop-sysline-total">{money(lr.total)}</span>
             {!readOnly && (
               <div className="prop-im-wrap prop-sysline-menu">
@@ -1090,7 +1087,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {/* Read-only keeps the ••• column's width so every price lines up with the editable layout. */}
             {readOnly && <span className="prop-im-sp" aria-hidden="true" />}
           </div>
-          {leadOpen[lr.key] && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
+          {leadOpen[lr.key] !== false && lr.items?.length > 0 && lr.items.map((bi, bidx) => (
             // The same compact child-row component as a camera's expanded sub-item (name … amount, "N × $unit" when
             // qty > 1) — display-only: you edit these via the block's Edit action.
             <div key={bidx} className="prop-sub2-wrap">

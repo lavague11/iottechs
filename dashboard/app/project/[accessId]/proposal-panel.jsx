@@ -309,6 +309,9 @@ const PROP_CSS = `
 .pvx button.prop-sub2.compact{border:none;border-top:1px solid var(--dv-line-soft,#EDEDE9);text-align:left;cursor:pointer;min-height:38px;padding-right:36px}
 .pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.025)}
 .pvx .prop-sub2.static{padding-right:36px;min-height:38px}
+/* Grouped equipment (NVR / Displays / Amp): the real child rows indent under the parent's NAME (past chevron + badge), not the page edge. */
+.pvx .prop-lead .prop-sub2-wrap{margin-left:60px}
+.pvx .prop-lead .prop-sub2-name{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.3;overflow-wrap:anywhere}
 /* Children: regular weight, slightly smaller than the parent, still full-strength ink (never disabled-gray). */
 .pvx .prop-sub2-name{flex:1;min-width:0;font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:capitalize}
 .pvx .prop-sub2-math{font-size:.72rem;color:var(--dv-meta,#787D84);white-space:nowrap;flex-shrink:0}
@@ -351,8 +354,7 @@ const PROP_CSS = `
 .pvx .prop-sys-done:hover{filter:brightness(1.12)}
 /* Infrastructure rows (NVR / Displays / Amp): compact supporting lines — quieter than a numbered endpoint, never a card. */
 .pvx .prop-sysline{display:flex;align-items:center;gap:10px;padding:8px 0}
-.pvx .prop-sysline-name{font-size:.84rem;font-weight:550;color:var(--dv-ink,#101418)}
-.pvx .prop-sysline-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
+.pvx .prop-sysline-name{font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
 /* The ••• column is a fixed 28px (same as the line-item grid) so infrastructure totals line up with line prices. */
 .pvx .prop-sysline .prop-im-wrap,.pvx .prop-sysline .prop-im-sp{flex:0 0 28px;margin-left:-2px}
 .pvx .prop-desc-row{padding-left:56px}
@@ -655,13 +657,12 @@ const PROP_CSS = `
   .pvx .prop-item.prop-parent .prop-im-wrap{flex:0 0 auto}
   .pvx .prop-cols{display:none}
   /* NVR / Displays lead row: keep the product title on one line ("8-Channel" doesn't break), the
-     price + Edit stay right, and the "No drives" secondary metadata drops to its own indented line. */
+     price + Edit stay right; the grouped children render below as .prop-sub2 rows. */
   .pvx .prop-sysline{flex-wrap:wrap;gap:4px 8px;padding:8px 0}
   /* Name takes the free space so the total + Edit sit together on the right (NOT margin-left:auto on
      the total, which would pin it to the edge and force Edit to wrap to its own line). */
   .pvx .prop-sysline-name{white-space:nowrap;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .pvx .prop-sysline-total{margin-left:0;flex-shrink:0}
-  .pvx .prop-sysline-sub{flex:1 1 100%;order:9;margin-left:37px;margin-top:-2px}
   /* Title-first: trim the decorative slots so the name column wins the most width — compact number
      badge, tighter price padding, a slimmer drag handle and smaller gaps (no font shrink). */
   .pvx .prop-block-num{min-width:18px;margin-right:5px}
@@ -669,7 +670,7 @@ const PROP_CSS = `
   .pvx button.prop-price-toggle{padding-left:6px}
   .pvx .prop-block.has-drag{padding-left:15px}
   .pvx .prop-drag-handle{width:15px}
-  /* NVR / lead row: keep name · total · Edit on ONE line (No drives on its own line) — tighter gaps
+  /* NVR / lead row: keep name · total · ••• on ONE line — tighter gaps
      + a compact Edit button so the action never wraps to a standalone row. */
   .pvx .prop-sysline{gap:4px 6px}
   .pvx .prop-sysline .prop-mini{padding:0 10px;height:28px}
@@ -680,6 +681,7 @@ const PROP_CSS = `
      its controls tidily, amount + Done + Remove stay together on the right. The compact row's right inset matches the
      parent's ••• column so amounts line up with the price above. */
   .pvx .prop-sub2-wrap{margin-left:26px}
+  .pvx .prop-lead .prop-sub2-wrap{margin-left:50px}
   .pvx .prop-sub2{gap:6px 8px}
   .pvx button.prop-sub2.compact,.pvx .prop-sub2.static{min-height:44px;padding-right:28px}
   .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 100%}

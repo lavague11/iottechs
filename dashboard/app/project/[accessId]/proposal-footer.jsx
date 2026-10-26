@@ -15,7 +15,7 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${money(Math.abs(n))}`;
 export default function ProposalFooter({
   status, version, readOnly, authBlocked, isStaff, busy, statusChip, saveStateEl,
   changeState, confirmSend, setConfirmSend, onSend, onRevise, onRequestSign,
-  dlBusy, copied, onDownload, onCopyLink, onEmail, onConfig,
+  dlBusy, copied, onDownload, onCopyLink, onEmail, onConfig, viewCount = 0, onViews = null,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
   const unsent = !!changeState?.hasUnsentChanges && !readOnly;
@@ -40,7 +40,7 @@ export default function ProposalFooter({
   }
 
   const download = <DockMenu kind="download" dlBusy={dlBusy} onDownload={onDownload} />;
-  const more = <DockMenu kind="more" copied={copied} onCopyLink={onCopyLink} onEmail={onEmail} onConfig={onConfig} />;
+  const more = <DockMenu kind="more" copied={copied} onCopyLink={onCopyLink} onEmail={onEmail} onConfig={onConfig} viewCount={viewCount} onViews={onViews} />;
 
   let left, right;
   if (unsent) {
@@ -109,7 +109,7 @@ export default function ProposalFooter({
 }
 
 // Download (Standard / Detailed / Survey) and ••• (Share + Configuration). Both open UPWARD, outside-click / Escape close.
-function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onConfig }) {
+function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onConfig, viewCount = 0, onViews = null }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -146,6 +146,7 @@ function DockMenu({ kind, dlBusy, copied, onCopyLink, onEmail, onDownload, onCon
               <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onCopyLink)}>Copy Link{copied ? " ✓" : ""}</button>
               <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onEmail)}>Email Customer</button>
               <div className="prop-dock-msep" />
+              {onViews && <button type="button" className="prop-dock-mi" role="menuitem" title={viewCount ? `Customer opened this ${viewCount} time${viewCount === 1 ? "" : "s"}` : "Customer hasn't opened it yet"} onClick={act(onViews)}>Views · {viewCount}</button>}
               <button type="button" className="prop-dock-mi" role="menuitem" onClick={act(onConfig)}>Configuration</button>
             </>
           )}
