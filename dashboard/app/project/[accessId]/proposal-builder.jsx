@@ -375,8 +375,16 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
 
   async function save() {
     setBusy(true); setErr(null);
-    const r = await saveProposalDraftAction(accessId, { payload, taxRate: +taxRate, depositPct: +depositPct });
+    // Optimistic concurrency (Phase 5): send the updated_at we loaded so the server can reject a save that
+    // would clobber a concurrent edit (another tab/user) instead of silently overwriting it.
+    const r = await saveProposalDraftAction(accessId, { payload, taxRate: +taxRate, depositPct: +depositPct, expectedUpdatedAt: meta?.updated_at });
     setBusy(false);
+    if (r?.conflict) {
+      // Reload the latest so the workspace reflects reality; the user re-applies their change on top.
+      try { const latest = await getProposalAction(accessId); if (latest?.proposal) adopt(latest.proposal); } catch { /* best-effort reload */ }
+      setErr("This proposal was changed elsewhere — reloaded the latest. Re-apply your change and save again.");
+      return false;
+    }
     if (r?.error) {
       if (/Unauthorized|authenticated/i.test(r.error)) {
         setAuthBlocked(true);
