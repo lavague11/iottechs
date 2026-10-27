@@ -184,8 +184,12 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
         </div>
       ) : (
         <>
-          {!isSub && onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
+          {/* Fixed order (owner): Add description · Duplicate · Remove, then Conditions, then Waive LAST. */}
           {!isSub && onDescribe && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDescribe(); onClose(); }}>{hasDesc ? "Edit description" : "Add description"}</button>}
+          {!isSub && onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
+          {onRemove && (
+            <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
+          )}
           {!isSub && onToggleCondition && (
             <>
               <div className="prop-im-sep" />
@@ -206,12 +210,11 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
               )}
             </>
           )}
-          {!isSub && (onToggleWaive || onRemove) && <div className="prop-im-sep" />}
           {onToggleWaive && (
-            <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Unwaive" : "Waive"}</button>
-          )}
-          {onRemove && (
-            <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
+            <>
+              {(onDescribe || onDuplicate || onRemove || onToggleCondition) && <div className="prop-im-sep" />}
+              <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Unwaive" : "Waive"}</button>
+            </>
           )}
         </>
       )}
@@ -846,7 +849,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     return (
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
          style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
-      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 4, ...(hasSub ? { cursor: "pointer" } : null) }}
+            onClick={hasSub ? (e) => { if (e.target === e.currentTarget) toggle(it.id); } : undefined}>
         {/* LEFT = hierarchy. A subtle disclosure chevron (same language as the NVR/Displays rows), shown only
             when the row expands into sub-items. A description is a one-line muted preview below the row, not a
             disclosure target, so a flat row (even one with a description) gets a spacer. */}
@@ -900,16 +904,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {reqFlags[it.id].type === "remove" ? "Removal requested" : "Change requested"}{reqFlags[it.id].note ? `: ${reqFlags[it.id].note}` : ""}
           </span>
         )}
-        {/* Description toggle (top-level, editable) — a speech bubble with a + (add) that becomes a − once the
-            description is showing (remove). Replaces the old rename pencil; rename is double-click on the name. */}
-        {/* MIDDLE: a lightweight "+ Description" after the name (only when there's no description yet and the
-            editor isn't open). An existing description shows as a preview below the row; the ••• menu can also
-            open the editor. */}
-        {!parent && !readOnly && !(it.desc && it.desc.trim()) && !descOpen.has(it.id) && (
-          <button type="button" className="prop-desc-add2" title="Add a description" aria-label="Add description" onClick={() => openDesc(it.id)}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /><line x1="9" y1="10" x2="15" y2="10" /><line x1="12" y1="7" x2="12" y2="13" /></svg>
-          </button>
-        )}
+        {/* No inline "+ Description" icon here — adding a description lives in the ••• menu (first item). An
+            existing description still shows as a one-line preview below the row (tap to edit). */}
         {parent && /^line drop/i.test(it.name || "") && (
           readOnly
             ? (/existing/i.test(it.name || "") && <span className="prop-exist-tag" title="Existing cable — test &amp; map">Existing</span>)

@@ -469,9 +469,8 @@ const PROP_CSS = `
 .pvx .prop-item-x:hover{color:var(--dv-red,#C4553D)}
 /* Left disclosure spacer — keeps flat rows aligned with chevron'd ones */
 .pvx .prop-disc-sp{width:17px;flex:0 0 auto}
-/* "+ Description" inline affordance (after the name) + collapsed preview + the editor's Done check */
-.pvx .prop-desc-add2{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:none;border:none;color:var(--dv-meta,#787D84);font-family:inherit;cursor:pointer;padding:0;border-radius:5px;flex-shrink:0;margin-left:6px}
-.pvx .prop-desc-add2:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
+/* Description: the collapsed preview + the editor's Done check (the inline "+ Description" icon was
+   removed — adding one lives in the ••• menu). */
 /* Dictation mic inside the open description editor — pure enhancement, hidden where unsupported */
 .pvx .prop-desc-mic{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:5px;flex-shrink:0}
 .pvx .prop-desc-mic:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
@@ -861,10 +860,8 @@ const PROP_CSS = `
   .pvx .prop-desc-preview{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
   /* Plan columns: two across on a phone (auto-fit wraps the rest), never a horizontal scroll. */
   .pvx .prop-plan-cols{grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px 16px}
-  /* Reclaim horizontal room so the parent title fits: tighter card padding + block indent, and the
-     inline +Description icon drops out of the title row (still available in the ••• menu). */
+  /* Reclaim horizontal room so the parent title fits: tighter card padding + block indent. */
   .pvx .prop-body{padding-left:9px;padding-right:9px}
   .pvx .prop-block.has-drag{padding-left:13px}
-  .pvx .prop-item.prop-parent .prop-desc-add2{display:none}
 }
 `;
