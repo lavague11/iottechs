@@ -44,6 +44,7 @@ import { TaglinePill, Wordmark } from "../../components/brand";
 import EsignSigner from "./esign/esign-signer";
 import ProposalItemsEditor from "./proposal-items-editor";
 import ProposalFinancialSummary from "./proposal-financial-summary";
+import ProposalPaymentPlan from "./proposal-payment-plan";
 import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -859,22 +860,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       </>)}
 
       <div className="pcv-pay-region" ref={payRef}>
-      <div className="pcv-section-hd">Payment Terms</div>
-      {/* Stacked milestones (no table on mobile) — phase + % on the left with its due date,
-          amount on the right. The plan's prose terms line is dropped when the milestones already
-          spell out the schedule, so we don't repeat "50% before we begin · 50% on completion". */}
-      <div className="pcv-pay-list">
-        {payPhases.map(([ph, trig, pct, amt], i) => (
-          <div key={i} className={"pcv-pay-item" + (i === 0 ? " first" : "")}>
-            <div className="pcv-pay-left">
-              <span className="pcv-pay-phase">{ph}{pct ? <em> · {pct}</em> : null}</span>
-              <span className="pcv-pay-due">{trig}</span>
-            </div>
-            <span className="pcv-pay-amt">{money(amt)}</span>
-          </div>
-        ))}
-      </div>
-      {payTerms && payPhases.length <= 1 && <div className="pcv-pay-terms">{payTerms}</div>}
+      {/* Payment plan — the SAME compact read-only plan staff see (PAYMENT PLAN · 50 / 50, a column per
+          milestone), replacing the old stacked payment cards. Its own label is the section header. */}
+      <div className="pcv-fin"><ProposalPaymentPlan sched={paySched} plan={payPlan} grand={t.grand} deposit={t.deposit} fullDate={fullDate} /></div>
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
       </div>{/* /pcv-pay-region */}
 
