@@ -567,12 +567,11 @@ const PROP_CSS = `
 .pvx .prop-addbar{display:flex;flex-direction:column;gap:9px;align-items:stretch;padding:10px 0 2px;border-top:1px solid var(--dv-line,#E4E4DF)}
 .pvx .prop-preset-row{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
 .pvx .prop-addrow-basic{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:none;border-radius:999px;background:var(--dv-ink,#101418);color:#fff;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
-/* Color-coded preset chips (green / yellow / orange) so each bundle is distinct at a glance */
-.pvx .prop-preset-chip.c0{background:#2E7D5B}
-.pvx .prop-preset-chip.c1{background:#C79A1E}
-.pvx .prop-preset-chip.c2{background:#C56B2C}
-.pvx .prop-preset-chip:hover{filter:brightness(1.12)}
+/* Preset chip = the service color (gold for camera, etc.), dark label — same identity as the
+   line-item number/infra badges, so a bundle button reads as "adds to THIS service". Background is
+   set inline from svcColor; the dark ink works on every (light/mid) service color. */
+.pvx .prop-preset-chip{display:inline-flex;align-items:center;height:30px;padding:0 13px;border:none;border-radius:999px;background:var(--dv-gold,#C9A96E);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-preset-chip:hover{filter:brightness(1.05)}
 .pvx .prop-preset-edit{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 11px;border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .pvx .prop-preset-edit:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-addbar select{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;max-width:240px}

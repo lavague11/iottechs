@@ -1347,8 +1347,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               Configuration Center; these chips just add items. Hidden when the service has no presets. */}
           {(presets.length > 0 || askCam) && (
           <div className="prop-preset-row">
-            {presets.map((p, pi) => (
-              <button key={p.id} className={`prop-preset-chip c${pi % 3}`} title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
+            {presets.map((p) => (
+              <button key={p.id} className="prop-preset-chip" style={{ background: svcColor }} title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
             ))}
             {askCam && (
               <span className="prop-camask">
