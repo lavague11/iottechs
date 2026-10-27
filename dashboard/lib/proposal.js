@@ -434,6 +434,40 @@ export function planScheduleRows(plan, custRows, currentTotal = 0, fullDate = nu
   const byDate = (plan === "100" || plan === "100_end") && fullDate ? ("by " + fmtPlanDate(fullDate)) : null;
   return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when: byDate || when }));
 }
+// Live milestone progress — allocate the confirmed PAID total across the plan's milestones IN ORDER
+// (money fills the first milestone, then the next), and derive each one's state. Pure/presentational:
+// it reuses the canonical paid total (never a second ledger) and the canonical schedule rows, so the
+// payment plan can show WHAT PORTION of the obligation is satisfied. Status per milestone:
+//   paid    — fully funded
+//   partial — some money applied, not the full amount
+//   due     — unpaid and its trigger is met (the deposit once SIGNED; a later milestone once installDone)
+//   pending — the deposit, unpaid, BEFORE signature (money isn't contractually "due" until signed)
+//   future  — unpaid and its trigger isn't met yet
+// Money and lifecycle stay separate: an early-funded deposit reads "paid" here, but whether the project
+// has advanced past Awaiting Deposit is the status resolver's call (signed), not this view's.
+export function milestoneProgress(rows = [], paidTotal = 0, { signed = false, installDone = false } = {}) {
+  let remaining = Math.max(0, +paidTotal || 0);
+  let activeAssigned = false;   // the first not-fully-paid milestone is the "active" one (money goes in order)
+  return (rows || []).map((r, i) => {
+    const required = Math.max(0, +r.amount || 0);
+    const applied = r2(Math.min(remaining, required));
+    remaining = r2(remaining - applied);
+    const rem = r2(Math.max(0, required - applied));
+    const isBegin = i === 0 || /begin|deposit|to begin/i.test(r.when || "");
+    let status;
+    if (required > 0 && rem <= 0.005) {
+      status = "paid";
+    } else {
+      const isActive = !activeAssigned;   // this is the first milestone that isn't fully funded
+      activeAssigned = true;
+      if (applied > 0.005) status = "partial";                 // the active, partially-funded milestone
+      else if (!isActive) status = "future";                   // a later one — the earlier obligation comes first
+      else if (isBegin) status = signed ? "due" : "pending";   // the deposit: due once signed, pending before
+      else status = installDone ? "due" : "future";            // a completion milestone: due once installed
+    }
+    return { pctLabel: r.pctLabel, when: r.when, required, applied, remaining: rem, status };
+  });
+}
 // THE canonical "deposit due up front" percentage — the single source of truth every stage must use for
 // "deposit due" (Record-a-Payment, Approval, the customer summary, gates), so the app can never show two
 // different deposits for one proposal. It is derived from the PAYMENT PLAN, never the legacy deposit_pct

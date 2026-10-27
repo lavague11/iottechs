@@ -3,7 +3,7 @@
 // "Deposit 100% + Final 0%" split. Multi-phase plans keep their milestones; amounts track the total.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planScheduleRows, fmtPlanDate, planDepositPct, projectFinancials } from "../lib/proposal.js";
+import { planScheduleRows, fmtPlanDate, planDepositPct, projectFinancials, milestoneProgress } from "../lib/proposal.js";
 import { downloadProposalPdf } from "../lib/proposal-pdf.js";
 
 // The ONE canonical "deposit due up front" %, derived from the payment PLAN — every stage (customer
@@ -17,6 +17,42 @@ test("planDepositPct: up-front % comes from the plan, never a drifted deposit_pc
   assert.equal(planDepositPct({ payment_plan: "custom", custom_plan: { rows: [{ pct: 30 }, { pct: 70 }] } }, 50), 30, "custom → first installment %");
   assert.equal(planDepositPct({}, 50), 50, "no plan → fall back to deposit_pct");
   assert.equal(planDepositPct(null, 25), 25);
+});
+
+test("milestoneProgress: allocates PAID across milestones in order and derives each state (50/50)", () => {
+  const rows = planScheduleRows("50_50", null, 1961.90);   // [50% begin $980.95, 50% completion $980.95]
+  // No payments, signed → deposit DUE, final FUTURE.
+  let p = milestoneProgress(rows, 0, { signed: true });
+  assert.equal(p[0].status, "due");   assert.equal(p[0].remaining, 980.95);
+  assert.equal(p[1].status, "future");
+  // No payments, NOT signed → the deposit is PENDING (not "due" until signed), not an alarm.
+  p = milestoneProgress(rows, 0, { signed: false });
+  assert.equal(p[0].status, "pending");
+  // $500 partial → deposit PARTIAL with the right remaining; final untouched.
+  p = milestoneProgress(rows, 500, { signed: true });
+  assert.equal(p[0].status, "partial"); assert.equal(p[0].applied, 500); assert.equal(p[0].remaining, 480.95);
+  assert.equal(p[1].applied, 0);
+  // Full deposit → deposit PAID, final FUTURE (install not done).
+  p = milestoneProgress(rows, 980.95, { signed: true });
+  assert.equal(p[0].status, "paid");  assert.equal(p[1].status, "future");
+  // EARLY full deposit before signing → still reads PAID here (money ≠ lifecycle; the resolver keeps
+  // the project at Awaiting Signature).
+  p = milestoneProgress(rows, 980.95, { signed: false });
+  assert.equal(p[0].status, "paid");
+  // Deposit paid + install done + final partial → final PARTIAL, remaining correct.
+  p = milestoneProgress(rows, 980.95 + 400, { signed: true, installDone: true });
+  assert.equal(p[0].status, "paid"); assert.equal(p[1].status, "partial"); assert.equal(p[1].remaining, 580.95);
+  // Paid in full → both PAID.
+  p = milestoneProgress(rows, 1961.90, { signed: true, installDone: true });
+  assert.ok(p.every((m) => m.status === "paid"));
+});
+
+test("milestoneProgress: 50/30/20 — money fills the first, then the second milestone", () => {
+  const rows = planScheduleRows("50_30_20", null, 2000);   // $1000 / $600 / $400
+  const p = milestoneProgress(rows, 1300, { signed: true, installDone: true });
+  assert.equal(p[0].status, "paid");                              // $1000 filled
+  assert.equal(p[1].status, "partial"); assert.equal(p[1].applied, 300); assert.equal(p[1].remaining, 300);
+  assert.equal(p[2].status, "future");                            // nothing reached it; install done but prior unpaid
 });
 
 test("projectFinancials + planDepositPct: a 100%-on-completion plan owes $0 deposit (not 50% of the total)", () => {

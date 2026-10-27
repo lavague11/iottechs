@@ -636,6 +636,32 @@ const PROP_CSS = `
 .pvx .prop-plan-term{font-size:.8rem;color:var(--dv-meta,#787D84);font-weight:500;line-height:1.3;text-transform:capitalize}
 .pvx .prop-plan-term b{color:var(--dv-ink,#101418);font-weight:650;font-variant-numeric:tabular-nums}
 .pvx .prop-plan-amt{font-size:1.02rem;font-weight:650;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+/* Live payment progress — Balance (dominant, "still owed"), per-milestone status + a compact history.
+   Semantic colour: green = paid, gold = due/partial/pending, gray = future. No giant coloured surfaces. */
+.pvx .prop-plan-bal{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:2px}
+.pvx .prop-plan-bal span{font-size:.7rem;color:var(--dv-meta,#787D84);font-weight:650;letter-spacing:.07em;text-transform:uppercase}
+.pvx .prop-plan-bal b{font-size:1.25rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.pvx .prop-plan-bal b.paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-plan-term{display:flex;align-items:center;gap:6px}
+.pvx .prop-plan-mark{flex:0 0 auto;font-size:.7rem;line-height:1;color:var(--dv-faint,#A1A6AC)}
+.pvx .prop-plan-mark.st-paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-plan-mark.st-due,.pvx .prop-plan-mark.st-partial,.pvx .prop-plan-mark.st-pending{color:var(--dv-gold,#C9A96E)}
+.pvx .prop-plan-when{font-size:.74rem;color:var(--dv-meta,#787D84);font-weight:500;line-height:1.3}
+.pvx .prop-plan-col.st-paid .prop-plan-amt{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-plan-st{font-size:.64rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.pvx .prop-plan-st.st-paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-plan-st.st-due,.pvx .prop-plan-st.st-partial,.pvx .prop-plan-st.st-pending{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-plan-st.st-future{color:var(--dv-faint,#A1A6AC)}
+.pvx .prop-plan-rem{font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-pay-hist{display:flex;flex-direction:column;gap:5px;margin-top:4px;padding-top:10px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
+.pvx .prop-pay-hist-hd{font-size:.7rem;color:var(--dv-meta,#787D84);font-weight:650;letter-spacing:.07em;text-transform:uppercase}
+.pvx .prop-pay-hrow{display:flex;align-items:center;gap:10px;font-size:.8rem}
+.pvx .prop-pay-hdate{flex:0 0 auto;color:var(--dv-meta,#787D84);font-weight:500;min-width:64px}
+.pvx .prop-pay-hmethod{flex:1 1 auto;min-width:0;color:var(--dv-ink,#101418);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pvx .prop-pay-hamt{flex:0 0 auto;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pvx .prop-pay-hok{flex:0 0 auto;color:var(--dv-green,#2E7D5B)}
+.pvx .prop-pay-viewall{align-self:flex-start;background:none;border:none;padding:2px 0;font-family:inherit;font-size:.76rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F);cursor:pointer}
+.pvx .prop-pay-viewall:hover{text-decoration:underline}
 .pvx .prop-plan-opts{display:flex;gap:6px;width:100%}
 .pvx .prop-plan-opts .prop-plan-btn{flex:1 1 0;min-width:0;padding:0 6px}
 .pvx .prop-plan-edit{display:flex;flex-direction:column;gap:6px;width:100%}

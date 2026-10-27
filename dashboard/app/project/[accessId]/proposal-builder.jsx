@@ -5,11 +5,11 @@ import { skipOutsideClose } from "../../../lib/outside-click";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides,
-  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, fmtSignStamp, cameraNameOverrides,
+  toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, milestoneProgress, fmtSignStamp, cameraNameOverrides,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -119,6 +119,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [depositPct, setDepositPct] = useState(initial?.deposit_pct ?? 50);
   const [cadOpen, setCadOpen] = useState(false);   // custom-plan cadence gear menu
   const [addons, setAddons] = useState({ total: 0, list: [] });   // approved job-site add-ons (amend the contract)
+  const [payments, setPayments] = useState([]);                   // the project's recorded payments (live balance + milestone progress)
   const [activeOpt, setActiveOpt] = useState(initial?.payload?.options?.[0]?.id || "A");
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -209,6 +210,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   useEffect(() => {
     let live = true;
     const load = () => getProjectAddonsAction(accessId).then((a) => { if (live && a) setAddons({ total: +a.total || 0, list: a.list || [] }); }).catch(() => {});
+    load();
+    const id = setInterval(load, 15000);
+    return () => { live = false; clearInterval(id); };
+  }, [accessId]);
+
+  // Recorded payments — drives the live Balance + milestone progress in the payment plan. Poll so a
+  // payment recorded elsewhere (or the Record Payment modal) flows in; refreshPayments() updates it now.
+  const refreshPayments = () => getApprovalDataAction(accessId).then((r) => { if (r?.ok) setPayments(r.payments || []); }).catch(() => {});
+  useEffect(() => {
+    let live = true;
+    const load = () => getApprovalDataAction(accessId).then((r) => { if (live && r?.ok) setPayments(r.payments || []); }).catch(() => {});
     load();
     const id = setInterval(load, 15000);
     return () => { live = false; clearInterval(id); };
@@ -602,8 +614,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
 
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
   // Canonical contract math: base proposal (this doc) + approved add-ons = current contract total.
-  // The base proposal is never rewritten — add-ons show as a separate amendment line.
-  const fin = projectFinancials(totals.grand, addons.total, 0, depositPct);
+  // The base proposal is never rewritten — add-ons show as a separate amendment line. Paid = CONFIRMED
+  // payments only (pending doesn't reduce the balance); fin.balance is the live Balance the plan shows.
+  const paidTotal = (payments || []).filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const fin = projectFinancials(totals.grand, addons.total, paidTotal, depositPct);
   // Conditional financial disclosure (presentation only — canonical values, no recalculation): in a read-only
   // proposal, a row earns its place only when it actually moves the price. When subtotal === total with no
   // non-zero modifier, Subtotal and Tax collapse away and only Total shows, then straight into Payment Terms.
@@ -670,6 +684,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // schedule's own percentages: "100%" for one milestone, "50 / 50" / "50 / 30 / 20" for several.
   const planSched = planScheduleRows(plan, custRows, fin.current, payload.full_date || null);
   const planSig = planSched.length === 1 ? planSched[0].pctLabel : planSched.map((r) => r.pctLabel.replace("%", "")).join(" / ");
+  // Live progress: allocate the confirmed PAID total across the milestones (canonical helper — no second
+  // ledger). `signed` comes from the proposal; install isn't done during the proposal phase, so a later
+  // milestone reads "future", not "due".
+  const planProgress = milestoneProgress(planSched, paidTotal, { signed: !!meta?.signed_name, installDone: false });
+  const anyPayments = (payments || []).some((x) => x.status !== "pending");
   function commitPlan(next) {
     patchPayload({ ...payload, payment_plan: "custom", custom_plan: next });
     setDepositPct(+next.rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
@@ -1037,6 +1056,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             under its own term. Read-only shows the plan signature (50 / 50); edit mode shows the preset picker instead.
             Presentation only — the schedule, amounts and deposit all come from the existing canonical values. */}
         <div className="prop-plan">
+          {/* Live Balance — what's still owed (contract total − confirmed payments). The contract TOTAL
+              stays above, unchanged; this is the "still owed" number and only appears once money is in. */}
+          {anyPayments && (
+            <div className="prop-plan-bal"><span>Balance</span><b className={fin.balance <= 0.005 ? "paid" : ""}>{money(fin.balance)}</b></div>
+          )}
           <div className="prop-plan-head">
             <span className="prop-plan-lbl">Payment plan</span>
             {readOnly && planSched.length > 0 && <span className="prop-plan-sig">{planSig}</span>}
@@ -1063,15 +1087,47 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           )}
           {planSched.length > 0 && !(plan === "custom" && !readOnly) && (
             <div className="prop-plan-cols">
-              {planSched.map((r, i) => (
-                <div className="prop-plan-col" key={i}>
-                  <span className="prop-plan-term"><b>{r.pctLabel}</b>{r.when ? ` ${/begin/i.test(r.when) ? "due before we begin" : r.when}` : ""}</span>
-                  {r.amount != null && <span className="prop-plan-amt">{money(r.amount)}</span>}
-                </div>
-              ))}
+              {planProgress.map((m, i) => {
+                const n = planProgress.length;
+                const name = n === 1 ? (/completion/i.test(m.when || "") ? "Final" : "Payment") : i === 0 ? "Deposit" : i === n - 1 ? "Final" : "Progress";
+                const when = m.when ? (/begin/i.test(m.when) ? "Due before we begin" : m.when.charAt(0).toUpperCase() + m.when.slice(1)) : "";
+                const stLabel = { paid: "Paid", partial: "Partial", due: "Due", pending: "Pending signature", future: "Not yet due" }[m.status];
+                const mark = m.status === "paid" ? "✓" : m.status === "future" ? "○" : "●";
+                return (
+                  <div className={`prop-plan-col st-${m.status}`} key={i}>
+                    <span className="prop-plan-term"><span className={`prop-plan-mark st-${m.status}`} aria-hidden="true">{mark}</span><b>{name} · {m.pctLabel}</b></span>
+                    {when && <span className="prop-plan-when">{when}</span>}
+                    <span className="prop-plan-amt">{m.status === "partial" ? `${money(m.applied)} / ${money(m.required)}` : money(m.required)}</span>
+                    <span className={`prop-plan-st st-${m.status}`}>{stLabel}</span>
+                    {m.status === "partial" && <span className="prop-plan-rem">{money(m.remaining)} remaining</span>}
+                  </div>
+                );
+              })}
             </div>
           )}
           {readOnly && planSched.length === 0 && <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>}
+          {/* Compact payment history — quiet, only when money has been recorded. "View all" opens the
+              Record Payment modal (which carries the full ledger). No permanent giant ledger here. */}
+          {anyPayments && (() => {
+            const conf = (payments || []).filter((x) => x.status !== "pending").sort((a, b) => String(b.paid_at || b.created_at).localeCompare(String(a.paid_at || a.created_at)));
+            const shown = conf.slice(0, 4);
+            return (
+              <div className="prop-pay-hist">
+                <div className="prop-pay-hist-hd">Payments</div>
+                {shown.map((p) => (
+                  <div className="prop-pay-hrow" key={p.id}>
+                    <span className="prop-pay-hdate">{fmtShortDate(p.paid_at || p.created_at)}</span>
+                    <span className="prop-pay-hmethod">{p.method}</span>
+                    <span className="prop-pay-hamt">{money(p.amount)}</span>
+                    <svg className="prop-pay-hok" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-label="Received"><polyline points="20 6 9 17 4 12"/></svg>
+                  </div>
+                ))}
+                {conf.length > shown.length && (
+                  <button type="button" className="prop-pay-viewall" onClick={() => setPayModalOpen(true)}>View all payments →</button>
+                )}
+              </div>
+            );
+          })()}
         </div>
         {plan === "custom" && !readOnly && (
           <div className="prop-cplan">
@@ -1209,7 +1265,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)} />
     )}
     <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
-      onClose={() => setPayModalOpen(false)} showToast={showToast} />
+      onClose={() => setPayModalOpen(false)} showToast={showToast}
+      onRecorded={(r) => { if (r?.payments) setPayments(r.payments); else refreshPayments(); }} />
     </>
   );
 }
