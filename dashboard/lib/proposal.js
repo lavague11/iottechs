@@ -257,7 +257,7 @@ export const PRICE_FIELDS = [
 ];
 const PRICE_FIELD_NAMES = new Set(PRICE_FIELDS.flatMap((g) => g.names));
 
-const emptyBook = () => ({ prices: {}, names: {}, hidden: {}, custom: {}, presets: [] });
+const emptyBook = () => ({ prices: {}, names: {}, hidden: {}, custom: {}, presets: [], conditions: [] });
 
 // Client-side cache of the company price book (localStorage). Shape: { prices, names,
 // hidden, custom } — see lib/db.js getPriceBook/setPriceBook for the DB-backed source of truth.
@@ -266,7 +266,7 @@ export function loadPriceBook() {
   try {
     if (typeof localStorage === "undefined") return emptyBook();
     const d = JSON.parse(localStorage.getItem(PRICE_KEY) || "{}") || {};
-    return { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [] };
+    return { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [], conditions: Array.isArray(d.conditions) ? d.conditions : [] };
   } catch { return emptyBook(); }
 }
 export function savePriceBookCache(book) {

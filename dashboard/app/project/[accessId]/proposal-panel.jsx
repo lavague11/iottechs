@@ -584,6 +584,10 @@ const PROP_CSS = `
 .pvx .prop-im-cdot{width:8px;height:8px;border-radius:2px;flex:0 0 auto}
 .pvx .prop-im-cdot.gold{background:#C79A1E}
 .pvx .prop-im-cdot.orange{background:#C56B2C}
+.pvx .prop-im-cdot.blue{background:#5FB8DB}
+.pvx .prop-im-cdot.green{background:#6FBF73}
+.pvx .prop-im-cdot.red{background:#C4553D}
+.pvx .prop-im-cdot.grey{background:#9AA1AC}
 .pvx .prop-im-cname{flex:1}
 .pvx .prop-im-cond.on{font-weight:700}
 .pvx .prop-im-ck{color:var(--dv-green,#2E7D5B);flex:0 0 auto}
@@ -593,6 +597,10 @@ const PROP_CSS = `
 .pvx .prop-cond{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.68rem;font-weight:600;letter-spacing:.01em;line-height:1.5;white-space:nowrap}
 .pvx .prop-cond.gold{background:#f6edcf;color:#7A5C14}
 .pvx .prop-cond.orange{background:#f7e4d6;color:#9A4A17}
+.pvx .prop-cond.blue{background:#d9eef6;color:#1C5A72}
+.pvx .prop-cond.green{background:#ddf0de;color:#256A2C}
+.pvx .prop-cond.red{background:#f6ddd6;color:#8A2F1C}
+.pvx .prop-cond.grey{background:#e7e8ea;color:#4A4F57}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}

@@ -28,13 +28,15 @@ test("Proposal Configuration is handed only the proposal's active services", () 
   assert.ok(/<ProposalConfig[\s\S]*?services=\{activeServices\}/.test(builder), "and is passed to ProposalConfig");
 });
 
-test("ProposalConfig scopes default pricing to active services and empty-states gracefully", () => {
+test("ProposalConfig: Pricing (service-scoped), Presets, Conditions — no redundant Default Pricing tab", () => {
   const pricing = read("../app/project/[accessId]/proposal-pricing.jsx");
   assert.ok(/const svcKeys = services\.map\(\(s\) => s\.key\)/.test(pricing), "derives the active service keys");
-  assert.ok(/scopeKeys=\{svcKeys\}/.test(pricing), "Default Pricing is scoped to the active services (not the whole catalog)");
+  assert.ok(!/>Default Pricing</.test(pricing), "the redundant Default Pricing tab is removed");
+  assert.ok(/tab === "service"/.test(pricing) && /scopeKey=\{svc\}/.test(pricing), "Pricing is scoped to the selected service");
+  assert.ok(/tab === "conditions" && <ConditionEditor/.test(pricing), "a Conditions tab is present");
   assert.ok(/svcKeys\.includes\(startService\) \? startService : \(svcKeys\[0\]/.test(pricing), "the selected service is always a valid active one");
   assert.ok(/No services in this proposal yet/.test(pricing), "a blank proposal shows an empty state, not every service");
-  // sectionsFor accepts an array of keys (scoped) as well as one / all
+  // sectionsFor still accepts an array of keys (scoped) as well as one / all
   assert.ok(/const keys = Array\.isArray\(scope\) \? scope : scope \? \[scope\] : PROPOSAL_SERVICES\.map/.test(pricing),
     "sectionsFor handles a scoped key array");
 });

@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
-import { LINE_CONDITIONS, LINE_CONDITION, lineConditions } from "../../../lib/proposal-terms";
+import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap } from "../../../lib/proposal-terms";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -174,7 +174,7 @@ function useMenuFlip(ref) {
   }, []);
   return up;
 }
-function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose }) {
+function ItemMenu({ isSub = false, hasDesc = false, conditions = [], conditionDefs = LINE_CONDITIONS, onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
   const up = useMenuFlip(ref);
@@ -210,7 +210,7 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
             <>
               <div className="prop-im-sep" />
               <div className="prop-im-grouplbl">Conditions</div>
-              {LINE_CONDITIONS.map((c) => {
+              {conditionDefs.map((c) => {
                 const on = conditions.includes(c.key);
                 return (
                   <button key={c.key} type="button" className={`prop-im-item prop-im-cond${on ? " on" : ""}`} role="menuitemcheckbox" aria-checked={on}
@@ -763,6 +763,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // click drops the whole bundle as a block (header + sub-items priced from the book).
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = presetsForService(svc.key, loadPriceBook());
+  // Line-item conditions, with the admin's Configuration Center ▸ Conditions display edits applied (badge /
+  // label / colour). Recomputes on save (priceBookVersion bump). The ••• submenu lists condDefs; badges read condMap.
+  const condDefs = loadConditions(loadPriceBook());
+  const condMap = conditionMap(loadPriceBook());
   void priceBookVersion; // chips recompute when the Configuration Center saves presets (bumps priceBookVersion)
   // ---- Waiver: comp a whole line off the invoice (keeps it visible at its original price, struck). A line
   // is waivable if it carries value (or is already waived) — INCLUDING the infrastructure lines (NVR, storage
@@ -924,7 +928,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
             managed from the ••• Conditions submenu. Each maps to one signed acknowledgment at signing. */}
         {!parent && lineConditions(it).map((k) => (
-          <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
+          <span key={k} className={`prop-cond ${(condMap[k] || LINE_CONDITION[k]).tone}`} title={(condMap[k] || LINE_CONDITION[k]).note}>{(condMap[k] || LINE_CONDITION[k]).badge}</span>
         ))}
         {/* Waived marker — compact, inline, in place (no separate waiver list). The price shows struck. */}
         {!parent && it.waived && <span className="prop-wvd" title="Waived — removed from this proposal's price">Waived</span>}
@@ -996,6 +1000,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               isSub={!!parent}
               hasDesc={!parent && !!(it.desc && it.desc.trim())}
               conditions={!parent ? lineConditions(it) : []}
+              conditionDefs={condDefs}
               onDuplicate={parent ? null : () => duplicateItem(it.id)}
               onDescribe={parent ? null : () => openDesc(it.id)}
               onToggleCondition={parent ? null : (key, on) => setCondition(it.id, key, on)}
@@ -1064,7 +1069,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const conds = lineConditions(x);
     const canWaive = canWaiveItem(x);
     const condBadges = conds.map((k) => (
-      <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
+      <span key={k} className={`prop-cond ${(condMap[k] || LINE_CONDITION[k]).tone}`} title={(condMap[k] || LINE_CONDITION[k]).note}>{(condMap[k] || LINE_CONDITION[k]).badge}</span>
     ));
     const waivedMark = x.waived ? <span className="prop-wvd" title="Waived — comped off this block's price">Waived</span> : null;
     const amtDisplay = x.waived
@@ -1079,7 +1084,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
         </button>
         {menuOpen === x.id && (
-          <ItemMenu isSub conditions={conds}
+          <ItemMenu isSub conditions={conds} conditionDefs={condDefs}
             onDuplicate={() => duplicateSub(parent.id, x.id)}
             onToggleCondition={(key, on) => setSubCondition(parent.id, x.id, key, on)}
             waived={canWaive ? !!x.waived : undefined}

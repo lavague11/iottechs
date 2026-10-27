@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   LINE_CONDITIONS, LINE_CONDITION, LINE_CONDITION_KEYS,
   lineConditions, normalizeConditions, inferPresetConditions, optionConditions, PROPOSAL_ACKS,
+  loadConditions, conditionMap,
 } from "../lib/proposal-terms.js";
 import { lineConditionBadges } from "../lib/proposal-terms.js";
 import { makePresetBlock, proposalFingerprint, validatePayload } from "../lib/proposal.js";
@@ -64,6 +65,29 @@ test("optionConditions scans top-level lines AND sub-items of the chosen option"
   // Deduped by type: the same condition on a line and a sub-item yields one entry.
   const dup = { options: [{ id: "A", services: [{ items: [{ conditions: ["cxEquip"] }, { sub: [{ conditions: ["cxEquip"] }] }] }] }] };
   assert.deepEqual(optionConditions(dup, "A"), ["cxEquip"], "line + sub-item with the same condition → one ack");
+});
+
+test("loadConditions: book overrides re-word the display (badge/label/note/tone) but NEVER the key or ack", () => {
+  // No overrides → canonical defaults.
+  assert.deepEqual(loadConditions({}), LINE_CONDITIONS);
+  assert.deepEqual(loadConditions(null), LINE_CONDITIONS);
+  // Display override applies; key + ack stay canonical.
+  const book = { conditions: [{ key: "cxEquip", badge: "Cust. Gear", label: "Customer Gear", tone: "blue" }] };
+  const map = conditionMap(book);
+  assert.equal(map.cxEquip.badge, "Cust. Gear", "badge overridden");
+  assert.equal(map.cxEquip.label, "Customer Gear", "label overridden");
+  assert.equal(map.cxEquip.tone, "blue", "tone overridden");
+  assert.equal(map.cxEquip.ack, LINE_CONDITION.cxEquip.ack, "ack is NEVER overridden — stays the canonical signed sentence");
+  assert.equal(map.existingCable.badge, LINE_CONDITION.existingCable.badge, "an untouched condition keeps its default");
+  // Blank / invalid override fields fall back to the default; an unknown tone is ignored.
+  const book2 = { conditions: [{ key: "cxEquip", badge: "  ", tone: "chartreuse" }] };
+  assert.equal(conditionMap(book2).cxEquip.badge, LINE_CONDITION.cxEquip.badge, "blank badge → default");
+  assert.equal(conditionMap(book2).cxEquip.tone, LINE_CONDITION.cxEquip.tone, "invalid tone → default");
+  // An override for an unknown key is dropped (no new condition TYPES from here).
+  assert.deepEqual(loadConditions({ conditions: [{ key: "madeUp", badge: "X" }] }), LINE_CONDITIONS);
+  // The customer badge model reflects an override when passed the map.
+  assert.equal(lineConditionBadges({ conditions: ["cxEquip"] }, map)[0].label, "Customer Gear");
+  assert.equal(lineConditionBadges({ conditions: ["cxEquip"] })[0].label, LINE_CONDITION.cxEquip.label, "defaults without a map");
 });
 
 test("PROPOSAL_ACKS has one required, condKey-gated acknowledgment per condition type", () => {

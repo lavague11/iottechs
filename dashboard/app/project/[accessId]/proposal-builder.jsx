@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
-  optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, serviceColor, savePriceOverrides,
+  optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, serviceColor, savePriceOverrides, savePriceBookCache,
   toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, milestoneProgress, fmtSignStamp, cameraNameOverrides,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
@@ -187,9 +187,14 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       .then((j) => { if (live && j?.ok) setCamRoster(Array.isArray(j.cameras) ? j.cameras : []); }).catch(() => {});
     loadRoster();
     rosterReloadRef.current = loadRoster;
-    // Sync the company-wide price book to the local cache FIRST, so auto-import prices correctly.
+    // Sync the company-wide price book to the local cache FIRST, so auto-import prices correctly and the
+    // builder reflects server-side condition overrides (edited in Config ▸ Conditions) on a fresh load.
     getPriceBookAction()
-      .then((pb) => { if (live && pb?.ok && pb.prices) savePriceOverrides(pb.prices); })
+      .then((pb) => {
+        if (!live || !pb?.ok) return;
+        const b = loadPriceBook();
+        savePriceBookCache({ ...b, prices: pb.prices || b.prices, conditions: Array.isArray(pb.conditions) ? pb.conditions : b.conditions });
+      })
       .catch(() => {})
       .finally(() => getProposalAction(accessId).then((r) => {
         if (!live || dirty) return;
@@ -1245,13 +1250,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
       </div>)}
 
-      {/* ONE Configuration Center (top gear): Default Pricing · Service Pricing · Presets. A service's
-          "Configure pricing" (if surfaced) opens it straight to the Service tab via setPricingOpen(key).
-          Stays open on Save so you can configure more than one tab in a sitting. */}
+      {/* ONE Configuration Center (top gear): Pricing · Presets · Conditions. A service's gear opens it
+          straight to Pricing for that service via setPricingOpen(key). Stays open on Save so you can
+          configure more than one tab in a sitting. */}
       {pricingOpen && (
         <ProposalConfig
           services={activeServices}
-          startTab={pricingOpen === "__all__" ? "default" : "service"}
+          startTab="service"
           startService={pricingOpen === "__all__"
             ? (activeServices.find((s) => s.key === defaultService)?.key || activeServices[0]?.key || "camera")
             : pricingOpen}

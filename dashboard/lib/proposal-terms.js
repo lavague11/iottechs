@@ -463,15 +463,41 @@ export const LINE_CONDITIONS = [
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
 export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
 
+// DISPLAY overrides for the built-in conditions, edited in the Configuration Center ▸ Conditions and
+// stored on the price book (`book.conditions`, like presets). Admins may re-word the admin `badge`, the
+// customer-facing `label`, the `note` tooltip, and the colour `tone` — but NOT the `key` or the legal
+// `ack` (that stays the canonical sentence the customer initials, so signing is unaffected). Unknown keys
+// in the override list are ignored (no new condition TYPES from here — those would need new acks).
+export function loadConditions(book) {
+  const ov = Array.isArray(book?.conditions) ? book.conditions : [];
+  const byKey = Object.fromEntries(ov.filter((c) => c && LINE_CONDITION[c.key]).map((c) => [c.key, c]));
+  return LINE_CONDITIONS.map((def) => {
+    const o = byKey[def.key];
+    if (!o) return def;
+    return {
+      ...def,
+      badge: (typeof o.badge === "string" && o.badge.trim()) || def.badge,
+      label: (typeof o.label === "string" && o.label.trim()) || def.label,
+      note: (typeof o.note === "string" && o.note.trim()) || def.note,
+      tone: CONDITION_TONES.includes(o.tone) ? o.tone : def.tone,
+      // ack + key are never overridden — the legal acknowledgment stays canonical.
+    };
+  });
+}
+export const conditionMap = (book) => Object.fromEntries(loadConditions(book).map((c) => [c.key, c]));
+// The colour tokens a condition may use (each renderer maps the token to its own space).
+export const CONDITION_TONES = ["gold", "orange", "blue", "green", "red", "grey"];
+
 // The valid conditions on a line (unknown keys dropped). Works on a top-level line OR a sub-item — both
 // may carry conditions (a single reused "Existing cable" drop, a customer-supplied component, …).
 export function lineConditions(it) {
   return Array.isArray(it?.conditions) ? it.conditions.filter((k) => LINE_CONDITION[k]) : [];
 }
 // Customer-facing render model for a line's conditions — the ONE shape every customer surface consumes
-// (customer proposal, PDF, invoice). Never derived from the name/preset/price.
-export function lineConditionBadges(it) {
-  return lineConditions(it).map((k) => ({ key: k, label: LINE_CONDITION[k].label, tone: LINE_CONDITION[k].tone }));
+// (customer proposal, PDF, invoice). Never derived from the name/preset/price. Pass a `map` (from
+// conditionMap(book)) to reflect the admin's label/colour edits; defaults to the canonical definitions.
+export function lineConditionBadges(it, map = LINE_CONDITION) {
+  return lineConditions(it).map((k) => ({ key: k, label: (map[k] || LINE_CONDITION[k]).label, tone: (map[k] || LINE_CONDITION[k]).tone }));
 }
 export function normalizeConditions(arr) {
   return Array.isArray(arr) ? [...new Set(arr.filter((k) => LINE_CONDITION[k]))] : [];

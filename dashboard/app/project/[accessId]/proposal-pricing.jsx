@@ -6,6 +6,7 @@ import {
 } from "../../../lib/proposal";
 import { getPriceBookAction, savePriceBookAction } from "./proposal-actions";
 import PresetEditor from "./proposal-preset-editor";
+import ConditionEditor from "./proposal-condition-editor";
 
 const nice = (name) => name.replace(/^NVR \(|\)$/g, "").replace(/ Storage Drive$/, "");
 const LABOR_NAMES = new Set(PRICE_FIELDS[0].names);
@@ -108,6 +109,7 @@ export default function PricingDefaults({ onClose, onSaved, scopeKey, scopeKeys,
     const clean = {
       prices: {}, names: {}, hidden: book.hidden || {}, custom: {},
       presets: Array.isArray(book.presets) ? book.presets : [], // preserve preset bundles across a price save
+      conditions: Array.isArray(book.conditions) ? book.conditions : [], // preserve condition overrides too
     };
     Object.entries(book.prices || {}).forEach(([k, v]) => { if (v !== "" && +v >= 0) clean.prices[k] = +v; });
     Object.entries(book.names || {}).forEach(([k, v]) => { if (v && v.trim()) clean.names[k] = v.trim(); });
@@ -246,15 +248,16 @@ const PRC_CSS = `
 .pvx .prc-save:disabled{opacity:.6;cursor:default}
 `;
 
-// The one proposal Configuration Center. ONE modal, three tabs over the EXISTING editors (never a second
-// pricing engine): Default Pricing (company-wide catalog), Service Pricing (per-service catalog), Presets
-// (per-service bundles). Scopes stay distinct — only the UI location is merged. Tab + service are remembered
-// while the modal is open. `services` = the configurable services to offer in the Service/Presets selectors.
-export function ProposalConfig({ onClose, onSaved, startTab = "default", startService = "camera", services = PROPOSAL_SERVICES }) {
+// The one proposal Configuration Center. ONE modal over the EXISTING editors (never a second pricing
+// engine): Pricing (per-service catalog, selected by the Service dropdown), Presets (per-service bundles),
+// Conditions (company-wide line-item condition display). The old "Default Pricing" tab (same editor, every
+// service at once) was removed — it duplicated Service Pricing. Tab + service are remembered while open.
+// `services` = the configurable services to offer in the Pricing/Presets selectors.
+export function ProposalConfig({ onClose, onSaved, startTab = "service", startService = "camera", services = PROPOSAL_SERVICES }) {
   // Only the services actually in this proposal are configurable here (passed by the builder). The
   // company catalog/pricing/presets for other services are untouched — just not surfaced in this project.
   const svcKeys = services.map((s) => s.key);
-  const [tab, setTab] = useState(startTab);
+  const [tab, setTab] = useState(startTab === "default" ? "service" : startTab);
   const [svc, setSvc] = useState(svcKeys.includes(startService) ? startService : (svcKeys[0] || "camera"));
   const needsSel = tab === "service" || tab === "presets";
   const noServices = services.length === 0;
@@ -269,9 +272,9 @@ export function ProposalConfig({ onClose, onSaved, startTab = "default", startSe
           <div className="cfg-body"><div className="cfg-empty">No services in this proposal yet.<br />Add a service to configure its pricing and presets.</div></div>
         ) : (<>
         <div className="cfg-tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "default"} className={tab === "default" ? "on" : ""} onClick={() => setTab("default")}>Default Pricing</button>
-          <button type="button" role="tab" aria-selected={tab === "service"} className={tab === "service" ? "on" : ""} onClick={() => setTab("service")}>Service Pricing</button>
+          <button type="button" role="tab" aria-selected={tab === "service"} className={tab === "service" ? "on" : ""} onClick={() => setTab("service")}>Pricing</button>
           <button type="button" role="tab" aria-selected={tab === "presets"} className={tab === "presets" ? "on" : ""} onClick={() => setTab("presets")}>Presets</button>
+          <button type="button" role="tab" aria-selected={tab === "conditions"} className={tab === "conditions" ? "on" : ""} onClick={() => setTab("conditions")}>Conditions</button>
         </div>
         {needsSel && (
           <div className="cfg-svcsel">
@@ -282,9 +285,9 @@ export function ProposalConfig({ onClose, onSaved, startTab = "default", startSe
           </div>
         )}
         <div className="cfg-body">
-          {tab === "default" && <PricingDefaults embedded scopeKeys={svcKeys} onSaved={onSaved} />}
           {tab === "service" && <PricingDefaults embedded key={`svc-${svc}`} scopeKey={svc} onSaved={onSaved} />}
           {tab === "presets" && <PresetEditor embedded key={`pst-${svc}`} serviceKey={svc} onSaved={onSaved} />}
+          {tab === "conditions" && <ConditionEditor embedded onSaved={onSaved} />}
         </div>
         </>)}
         <style>{CFG_CSS}</style>

@@ -6918,11 +6918,11 @@ export function getPriceBook() {
   const r = db.prepare("SELECT prices FROM price_book WHERE id=1").get();
   try {
     const d = JSON.parse(r?.prices || "{}") || {};
-    const looksStructured = d && (d.prices || d.names || d.hidden || d.custom || d.presets);
+    const looksStructured = d && (d.prices || d.names || d.hidden || d.custom || d.presets || d.conditions);
     return looksStructured
-      ? { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [] }
-      : { prices: d || {}, names: {}, hidden: {}, custom: {}, presets: [] }; // legacy flat map
-  } catch { return { prices: {}, names: {}, hidden: {}, custom: {}, presets: [] }; }
+      ? { prices: d.prices || {}, names: d.names || {}, hidden: d.hidden || {}, custom: d.custom || {}, presets: Array.isArray(d.presets) ? d.presets : [], conditions: Array.isArray(d.conditions) ? d.conditions : [] }
+      : { prices: d || {}, names: {}, hidden: {}, custom: {}, presets: [], conditions: [] }; // legacy flat map
+  } catch { return { prices: {}, names: {}, hidden: {}, custom: {}, presets: [], conditions: [] }; }
 }
 export function setPriceBook(book, byName) {
   const cleanPrices = {};
@@ -6951,7 +6951,19 @@ export function setPriceBook(book, byName) {
         .map((x) => ({ name: String(x.name).slice(0, 120), qty: (+x.qty > 0 && +x.qty <= 999) ? +x.qty : 1 })),
     }))
     .filter((p) => p.items.length);
-  const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom, presets: cleanPresets };
+  // Condition DISPLAY overrides: { key, badge?, label?, note?, tone? }. Key + the legal ack are never
+  // stored here (the ack stays canonical in proposal-terms.js); loadConditions ignores unknown keys.
+  const cleanConditions = (Array.isArray(book?.conditions) ? book.conditions : [])
+    .filter((c) => c && c.key)
+    .slice(0, 20)
+    .map((c) => ({
+      key: String(c.key).slice(0, 40),
+      ...(c.badge != null ? { badge: String(c.badge).slice(0, 40) } : {}),
+      ...(c.label != null ? { label: String(c.label).slice(0, 80) } : {}),
+      ...(c.note != null ? { note: String(c.note).slice(0, 120) } : {}),
+      ...(c.tone != null ? { tone: String(c.tone).slice(0, 16) } : {}),
+    }));
+  const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom, presets: cleanPresets, conditions: cleanConditions };
   db.prepare("UPDATE price_book SET prices=?, updated_by=?, updated_at=datetime('now','localtime') WHERE id=1")
     .run(JSON.stringify(clean), byName || null);
   return clean;
