@@ -118,6 +118,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [taxRate, setTaxRate] = useState(initial?.tax_rate ?? 0);
   const [depositPct, setDepositPct] = useState(initial?.deposit_pct ?? 50);
   const [cadOpen, setCadOpen] = useState(false);   // custom-plan cadence gear menu
+  const [custEditing, setCustEditing] = useState(false);   // custom-plan editor open (summary otherwise)
+  const custSnap = useRef(null);                            // plan state when the editor opened — Cancel restores it
   const [addons, setAddons] = useState({ total: 0, list: [] });   // approved job-site add-ons (amend the contract)
   const [payments, setPayments] = useState([]);                   // the project's recorded payments (live balance + milestone progress)
   const [activeOpt, setActiveOpt] = useState(initial?.payload?.options?.[0]?.id || "A");
@@ -674,11 +676,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     const p = pcts || defaultPcts(n); const dates = dueDatesFor(n, cadence, start);
     return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
   }
-  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "monthly");
+  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "biweekly");
   // Normalize whatever is stored: chronological dates (older plans may have out-of-order dates) and
   // clean 2-decimal percentages (older plans may hold float garbage like 12.959999999999994).
   const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, pct: r2(+r.pct || 0), due: ordered[i] })); })();
-  const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
+  const custCadence = custPlan.cadence === "monthly" ? "monthly" : "biweekly";   // new plans default biweekly; a saved "monthly" stays
   const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
   // Canonical payment schedule for DISPLAY (same function + base the customer view uses). The signature is just the
   // schedule's own percentages: "100%" for one milestone, "50 / 50" / "50 / 30 / 20" for several.
@@ -717,7 +719,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     // full_date only applies to the pay-in-full plans (100 / 100_end): a chosen date renders as
     // "by <date>" instead of before/upon. Clear it for every other plan so it never lingers.
     patch.full_date = (key === "100" || key === "100_end") ? (fullDate || null) : null;
-    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "monthly");
+    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "biweekly");
+    // Entering Custom opens the editor (remembering what to restore on Cancel); leaving it closes the editor.
+    if (key === "custom" && plan !== "custom") { custSnap.current = { plan, custom_plan: payload.custom_plan, full_date: payload.full_date ?? null, depositPct }; setCustEditing(true); }
+    if (key !== "custom") setCustEditing(false);
     patchPayload(patch);
     if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
     const pp = PAYMENT_PLANS[key];
@@ -1049,21 +1054,28 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <div className="prop-total-big"><span>Current total</span><CountMoney value={fin.current} /></div>
           </>
         ) : (
-          <div className="prop-total-big"><span>Total</span><CountMoney value={totals.grand} /></div>
+          <div className="prop-total-big prop-tb"><span>Total</span><CountMoney value={totals.grand} /></div>
+        )}
+        {/* Balance — what's still owed (contract total − confirmed payments); same type system as Total, only once money is in. */}
+        {anyPayments && (
+          <div className="prop-total-big prop-tb prop-bal"><span>Balance</span><b className={fin.balance <= 0.005 ? "paid" : ""}>{money(fin.balance)}</b></div>
         )}
 
         {/* Payment plan — the canonical schedule (planScheduleRows) as columns: each milestone's amount sits directly
             under its own term. Read-only shows the plan signature (50 / 50); edit mode shows the preset picker instead.
             Presentation only — the schedule, amounts and deposit all come from the existing canonical values. */}
         <div className="prop-plan">
-          {/* Live Balance — what's still owed (contract total − confirmed payments). The contract TOTAL
-              stays above, unchanged; this is the "still owed" number and only appears once money is in. */}
-          {anyPayments && (
-            <div className="prop-plan-bal"><span>Balance</span><b className={fin.balance <= 0.005 ? "paid" : ""}>{money(fin.balance)}</b></div>
-          )}
           <div className="prop-plan-head">
             <span className="prop-plan-lbl">Payment plan</span>
-            {readOnly && planSched.length > 0 && <span className="prop-plan-sig">{planSig}</span>}
+            <span className="prop-plan-headr">
+              {plan === "custom" && !readOnly && !custEditing && (
+                <button type="button" className="prop-plan-edit-ic" aria-label="Edit plan" title="Edit"
+                        onClick={() => { custSnap.current = { plan, custom_plan: payload.custom_plan, full_date: payload.full_date ?? null, depositPct }; setCustEditing(true); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                </button>
+              )}
+              {planSched.length > 0 && (readOnly || (plan === "custom" && !custEditing)) && <span className="prop-plan-sig">{plan === "custom" ? "Custom" : planSig}</span>}
+            </span>
           </div>
           {!readOnly && (
             <div className="prop-plan-edit">
@@ -1085,26 +1097,36 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
               )}
             </div>
           )}
-          {planSched.length > 0 && !(plan === "custom" && !readOnly) && (
-            <div className="prop-plan-cols">
-              {planProgress.map((m, i) => {
-                const n = planProgress.length;
-                const name = n === 1 ? (/completion/i.test(m.when || "") ? "Final" : "Payment") : i === 0 ? "Deposit" : i === n - 1 ? "Final" : "Progress";
-                const when = m.when ? (/begin/i.test(m.when) ? "Due before we begin" : m.when.charAt(0).toUpperCase() + m.when.slice(1)) : "";
-                const stLabel = { paid: "Paid", partial: "Partial", due: "Due", pending: "Pending signature", future: "Not yet due" }[m.status];
-                const mark = m.status === "paid" ? "✓" : m.status === "future" ? "○" : "●";
-                return (
-                  <div className={`prop-plan-col st-${m.status}`} key={i}>
-                    <span className="prop-plan-term"><span className={`prop-plan-mark st-${m.status}`} aria-hidden="true">{mark}</span><b>{name} · {m.pctLabel}</b></span>
-                    {when && <span className="prop-plan-when">{when}</span>}
-                    <span className="prop-plan-amt">{m.status === "partial" ? `${money(m.applied)} / ${money(m.required)}` : money(m.required)}</span>
-                    <span className={`prop-plan-st st-${m.status}`}>{stLabel}</span>
-                    {m.status === "partial" && <span className="prop-plan-rem">{money(m.remaining)} remaining</span>}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          {planSched.length > 0 && !(plan === "custom" && custEditing && !readOnly) && (() => {
+            // ONE line states the agreement; one compact row per milestone shows progress (amount applied,
+            // state). The trigger text lives only in the agreement line — not repeated per row.
+            const n = planProgress.length;
+            const nm = (i) => n === 1 ? "" : i === 0 ? "Deposit" : i === n - 1 ? "Final" : "Progress";
+            const wh = (m) => m.when ? (/begin/i.test(m.when) ? "due before we begin" : m.when) : "";
+            const agreement = plan === "custom"
+              ? planProgress.map((m) => `${m.pctLabel} ${wh(m)}`.trim()).join(" · ")
+              : planProgress.map((m, i) => `${nm(i)} ${m.pctLabel} ${wh(m)}`.trim()).join(" · ");
+            return (
+              <>
+                <div className="prop-plan-terms">{agreement}</div>
+                <div className="prop-ms-list">
+                  {planProgress.map((m, i) => {
+                    const stLabel = { paid: "Paid", partial: "Partial", due: "Due", pending: "Pending signature", future: "Not yet due" }[m.status];
+                    return (
+                      <div className={`prop-ms st-${m.status}`} key={i}>
+                        <span className="prop-ms-n">{nm(i) || "Payment"}</span>
+                        <span className="prop-ms-amt">{m.status === "partial" ? `${money(m.applied)} / ${money(m.required)}` : money(m.required)}</span>
+                        <span className={`prop-ms-st st-${m.status}`}>
+                          {m.status === "paid" && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>}
+                          {stLabel}{m.status === "partial" ? ` · ${money(m.remaining)} remaining` : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            );
+          })()}
           {readOnly && planSched.length === 0 && <b className="prop-plan-ro">{PAYMENT_PLANS[plan]?.label || `${depositPct}% deposit`}</b>}
           {/* Compact payment history — quiet, only when money has been recorded. "View all" opens the
               Record Payment modal (which carries the full ledger). No permanent giant ledger here. */}
@@ -1129,7 +1151,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             );
           })()}
         </div>
-        {plan === "custom" && !readOnly && (
+        {plan === "custom" && !readOnly && custEditing && (
           <div className="prop-cplan">
             <div className="prop-cplan-head">
               <span>Payments</span>
@@ -1162,7 +1184,16 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
                 <span className="prop-cplan-amt"><span className="prop-cplan-amt-s">$</span><input className="prop-cplan-amtin" type="number" min="0" step="1" value={Math.round(totals.grand * (+r.pct || 0) / 100)} onChange={(e) => setCustAmt(i, e.target.value)} /></span>
               </div>
             ))}
-            <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
+            <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct === 100 ? "100% scheduled" : `${custSumPct}% scheduled · ${r2(100 - custSumPct)}% remaining`}</div>
+            <div className="prop-cplan-acts">
+              <button type="button" className="prop-mini" onClick={() => {
+                const s = custSnap.current; setCustEditing(false); setCadOpen(false);
+                if (!s) return;
+                patchPayload({ ...payload, payment_plan: s.plan, custom_plan: s.custom_plan, full_date: s.full_date });
+                setDepositPct(s.depositPct); setDirty(true);
+              }}>Cancel</button>
+              <button type="button" className="prop-mini gold" disabled={custSumPct !== 100} onClick={() => { setCustEditing(false); setCadOpen(false); }}>Save</button>
+            </div>
           </div>
         )}
         {/* Fallback only: with no renderable schedule, keep the one-line terms + deposit so the plan is never silent.

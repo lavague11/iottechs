@@ -666,6 +666,24 @@ const PROP_CSS = `
 .pvx .prop-plan-st.st-due,.pvx .prop-plan-st.st-partial,.pvx .prop-plan-st.st-pending{color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-plan-st.st-future{color:var(--dv-faint,#A1A6AC)}
 .pvx .prop-plan-rem{font-size:.72rem;font-weight:600;color:var(--dv-gold-text,#8A6A1F)}
+/* Staff builder: Total and Balance share one type system (balance is the actionable number once money is in). */
+.pvx .prop-total-big.prop-tb b{font-size:1.25rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pvx .prop-total-big.prop-bal b{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-total-big.prop-bal b.paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-plan-headr{display:inline-flex;align-items:center;gap:8px}
+.pvx .prop-plan-edit-ic{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:none;border-radius:7px;background:none;color:var(--dv-meta,#787D84);cursor:pointer}
+.pvx .prop-plan-edit-ic:hover{background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418)}
+/* Milestone progress: one compact row each — name · applied / required · state */
+.pvx .prop-ms-list{display:flex;flex-direction:column;gap:5px}
+.pvx .prop-ms{display:grid;grid-template-columns:64px auto 1fr;align-items:baseline;gap:10px;font-size:.8rem}
+.pvx .prop-ms-n{color:var(--dv-meta,#787D84);font-weight:500}
+.pvx .prop-ms-amt{font-weight:650;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
+.pvx .prop-ms-st{display:inline-flex;align-items:center;gap:4px;font-size:.72rem;font-weight:700;letter-spacing:.02em}
+.pvx .prop-ms-st.st-paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-ms-st.st-due,.pvx .prop-ms-st.st-partial,.pvx .prop-ms-st.st-pending{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-ms-st.st-future{color:var(--dv-faint,#A1A6AC)}
+.pvx .prop-ms.st-paid .prop-ms-amt{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-cplan-acts{display:flex;justify-content:flex-end;gap:8px}
 .pvx .prop-pay-hist{display:flex;flex-direction:column;gap:5px;margin-top:4px;padding-top:10px;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
 .pvx .prop-pay-hist-hd{font-size:.7rem;color:var(--dv-meta,#787D84);font-weight:650;letter-spacing:.07em;text-transform:uppercase}
 .pvx .prop-pay-hrow{display:flex;align-items:center;gap:10px;font-size:.8rem}
