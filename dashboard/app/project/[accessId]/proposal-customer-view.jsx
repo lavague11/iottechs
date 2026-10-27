@@ -43,6 +43,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 import { TaglinePill, Wordmark } from "../../components/brand";
 import EsignSigner from "./esign/esign-signer";
 import ProposalItemsEditor from "./proposal-items-editor";
+import ProposalFinancialSummary from "./proposal-financial-summary";
 import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -770,7 +771,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Line items — the SAME renderer staff build with, in read-only customer mode (grouped NVR/Displays,
           A/B/C children, condition badges, alignment). Every row improvement now reaches both views. The
           per-line pen opens a change request; Placement jumps to the floor-plan map. */}
-      <div className="pcv-items pvx">
+      <div className="pcv-items">
         {(opt.services || []).map((s, i) => (
           s.items?.length ? (
             <ProposalItemsEditor
@@ -818,11 +819,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         );
       })()}
 
-      {hasMods && <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>}
-      {t.discount > 0 && <div className="pcv-subtotal-row main"><span>Discount</span><span>−{money(t.discount)}</span></div>}
-      {t.pcpCredit > 0 && <div className="pcv-subtotal-row main"><span>PCP Credit{pcpApproved ? "" : " (pending)"}</span><span>−{money(t.pcpCredit)}</span></div>}
-      {t.tax > 0 && <div className="pcv-subtotal-row main"><span>Sales Tax ({p.tax_rate}%)</span><span>+{money(t.tax)}</span></div>}
-      <div className="pcv-grand"><span>Grand Total</span><span>{money(t.grand)}</span></div>
+      {/* Financial summary — the SAME read-only renderer the staff workspace uses, so the customer sees
+          the identical conditional rows (Subtotal only when a modifier moves the price) + Total. */}
+      <div className="pcv-fin"><ProposalFinancialSummary totals={t} taxRate={p.tax_rate} pcpPending={!pcpApproved} /></div>
 
       {camBlocks.length > 0 && (
         <>
