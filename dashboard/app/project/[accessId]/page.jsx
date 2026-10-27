@@ -9,17 +9,29 @@ import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
 
 // Deliberately generic social preview. A project link that gets texted/forwarded must preview as a
-// neutral, branded "Project Portal" card — never the customer's name, address, or stage. The matching
-// og:image is app/project/[accessId]/opengraph-image.jpg (static, fetches nothing, so it can't leak).
-// The signing link (/sign/<id>) has its own distinct card — don't fold this one into it.
-export function generateMetadata() {
-  const title = "IOT TECHS · Project Portal";
-  const description = "Track your project — every step from start to finish.";
+// neutral, branded card — never the customer's name, address, or stage (fetches nothing, can't leak).
+//
+// Two cards, chosen by the link's own intent (the query string — OG image is per-PATH under the file
+// convention, which the actual signer URL `/project/<id>?open=proposal&sign=1` can't vary, so the cards
+// live in /public and are selected here instead):
+//   • default           → "Project Portal" card  (public/og-project.jpg)
+//   • ?sign (any value)  → "Review & Sign" card   (public/og-sign.jpg) — the real signing link
+// The short /sign/<id> link shares the same Sign card via its own route. Both noindex.
+export async function generateMetadata({ searchParams }) {
+  const sp = await searchParams;
+  const signing = sp?.sign != null && sp.sign !== "" && sp.sign !== "0" && sp.sign !== "false";
+  const title = signing ? "Review & Sign · IOT TECHS" : "IOT TECHS · Project Portal";
+  const cardTitle = signing ? "Review & Sign Your Proposal" : "IOT TECHS · Project Portal";
+  const description = signing
+    ? "Review and sign your IOT TECHS proposal."
+    : "Track your project — every step from start to finish.";
+  const image = { url: signing ? "/og-sign.jpg" : "/og-project.jpg", width: 1200, height: 675,
+    alt: signing ? "Review and sign your IOT TECHS proposal." : "IOT TECHS Project Portal — track your project from start to finish." };
   return {
     title,
     description,
-    openGraph: { title, description, siteName: "IOT TECHS", type: "website" },
-    twitter: { card: "summary_large_image", title, description },
+    openGraph: { title: cardTitle, description, siteName: "IOT TECHS", type: "website", images: [image] },
+    twitter: { card: "summary_large_image", title: cardTitle, description, images: [image] },
     robots: { index: false, follow: false },
   };
 }
