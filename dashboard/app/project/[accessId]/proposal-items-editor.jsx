@@ -852,10 +852,14 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     // breakdown lines carry that.
     const hasSub = !parent && !!it.sub && it.sub.length > 0;
     const expandable = !parent;
-    // The empty qty/price cells of a lead row become part of the expand target, so a click anywhere
-    // in the blank middle of the row — from after the name up to just before the price total — toggles
-    // the breakdown. The price total and the ••• menu are NOT included, so it never fights a real control.
-    const expandCell = hasSub ? { onClick: () => toggle(it.id), style: { cursor: "pointer" }, "aria-hidden": true } : null;
+    // ONE money number per line. A lead row's amount is a read-only TOTAL of its children, so the WHOLE
+    // line — the blank middle, the empty cells, and the total itself — toggles the breakdown (you edit the
+    // children, not the sum). A flat line shows a single editable amount; clicking its blank area just
+    // drops focus into the name. (Quantity isn't a separate control — Duplicate a line for multiples.)
+    const focusName = (e) => e.currentTarget.closest(".prop-item")?.querySelector(".prop-name-ac input")?.focus();
+    const expandCell = hasSub ? { onClick: () => toggle(it.id), style: { cursor: "pointer" } } : null;
+    const editCell = (!hasSub && !readOnly) ? { onClick: focusName, style: { cursor: "text" } } : null;
+    const blankCell = expandCell || editCell;
     // A camera line's label is the survey's location name (single source of truth). We DISPLAY the
     // survey name (camName) but edit it.name; entering edit mode seeds it.name from the survey name,
     // and on blur a camera line linked by camera_id writes the new name back to the survey (→ survey +
@@ -867,7 +871,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
          style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
       <span style={{ display: "flex", alignItems: "center", gap: 4, ...(hasSub ? { cursor: "pointer" } : null) }}
-            onClick={hasSub ? (e) => { if (e.target === e.currentTarget) toggle(it.id); } : undefined}>
+            onClick={(e) => { if (e.target !== e.currentTarget) return; if (hasSub) toggle(it.id); else if (!readOnly) focusName(e); }}>
         {/* LEFT = hierarchy. A subtle disclosure chevron (same language as the NVR/Displays rows), shown only
             when the row expands into sub-items. A description is a one-line muted preview below the row, not a
             disclosure target, so a flat row (even one with a description) gets a spacer. */}
@@ -946,33 +950,27 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           </span>
         )}
       </span>
-      {hasSub ? <span {...expandCell} /> : (
-        <input className="num" type="number" min="0" value={it.qty} disabled={readOnly}
-               onFocus={parent ? () => { preEdit.current[`${it.id}_qty`] = it.qty; } : undefined}
-               onBlur={parent ? () => maybeBulk(parent, it, "qty") : undefined}
-               onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
-               onChange={(e) => (parent ? patchSub(parent.id, it.id, { qty: e.target.value }) : patchItem(it.id, { qty: e.target.value }))} />
-      )}
-      {hasSub ? <span {...expandCell} /> : (
-        <input className="num" type="number" step="0.01" value={it.price} disabled={readOnly}
-               onFocus={parent ? () => { preEdit.current[`${it.id}_price`] = it.price; } : undefined}
-               onBlur={parent ? () => maybeBulk(parent, it, "price") : undefined}
-               onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
-               onChange={(e) => (parent ? patchSub(parent.id, it.id, { price: e.target.value }) : patchItem(it.id, { price: e.target.value }))} />
-      )}
+      {/* QTY + PRICE columns are folded into the single amount on the right. For a lead row they're part
+          of the expand target; for a flat row they're blank space that drops focus into the name. */}
+      {hasSub ? <span {...expandCell} /> : <span {...editCell} />}
+      {hasSub ? <span {...expandCell} /> : <span {...editCell} />}
       {showCost && (hasSub ? <span {...expandCell} /> : (
         <input className="num" type="number" min="0" step="0.01" value={it.cost ?? 0} disabled={readOnly}
                title="Internal cost — never shown to sales or customers"
-               onChange={(e) => (parent ? patchSub(parent.id, it.id, { cost: e.target.value }) : patchItem(it.id, { cost: e.target.value }))} />
+               onChange={(e) => patchItem(it.id, { cost: e.target.value })} />
       ))}
-      {/* RIGHT = money, then actions. The price is calm — no expand/delete controls beside it (expand is the
-          left chevron; delete lives in •••). */}
-      {(() => {
-        const priceEl = (!parent && it.waived)
-          ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s>
-          : hasSub ? money(itemTotal(it)) : parent ? money((+it.qty || 0) * (+it.price || 0)) : money(itemTotal(it));
-        return <span className="prop-line-total">{priceEl}</span>;
-      })()}
+      {/* THE one money number. Lead row: a read-only TOTAL of the children — click it (or anywhere on the
+          line) to expand; you edit the children, not the sum. Flat row: the single editable amount (= qty ×
+          price; editing sets the price and keeps any quantity). Waived: struck, read-only. */}
+      {hasSub ? (
+        <span className="prop-line-total" {...expandCell}>{money(itemTotal(it))}</span>
+      ) : it.waived ? (
+        <span className="prop-line-total"><s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s></span>
+      ) : (
+        <input className="num prop-line-amt" type="number" step="0.01" value={(+it.qty || 0) * (+it.price || 0)} disabled={readOnly}
+               title="Price" aria-label="Price"
+               onChange={(e) => { const total = +e.target.value || 0; const q = +it.qty || 1; patchItem(it.id, { price: q ? total / q : total }); }} />
+      )}
       {!readOnly ? (
         <div className="prop-im-wrap">
           <button type="button" className="prop-item-menu" aria-label="Line item actions" title="Actions"
@@ -1055,21 +1053,18 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <div className="prop-sub2 editing">
             <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
             <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog}
+              autoFocus={!String(x.name || "").trim()}
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
               onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
-            <input className="num prop-sub2-qty" type="number" min="0" step="1" value={x.qty} disabled={readOnly} title="Quantity"
-              onFocus={() => { preEdit.current[`${x.id}_qty`] = x.qty; }} onBlur={() => maybeBulk(parent, x, "qty")}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
-              onChange={(e) => patchSub(parent.id, x.id, { qty: e.target.value })} />
-            <span className="prop-sub2-mul">×</span>
-            <input className="num prop-sub2-price" type="number" step="0.01" value={x.price} disabled={readOnly} title="Unit price"
-              onFocus={() => { preEdit.current[`${x.id}_price`] = x.price; }} onBlur={() => maybeBulk(parent, x, "price")}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
-              onChange={(e) => patchSub(parent.id, x.id, { price: e.target.value })} />
+            {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
+            {/* ONE editable number — the sub-item's amount (qty × price). Editing sets the price and keeps
+                any quantity; use Duplicate for more of the same. No separate qty/unit-price fields. */}
+            <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price" autoFocus={!!String(x.name || "").trim()}
+              onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
+              onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />
             {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
-            {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
-            <span className="prop-sub2-amt">{money(amount)}</span>
             {/* Action bar: Done · Duplicate · Remove — icon-only, grouped so they read as one control set. */}
             <span className="prop-sub2-bar">
               <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setSubEditId(null)}>
@@ -1154,11 +1149,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         </div>
       )}
 
-      {/* Column captions only when a flat (qty × price) line exists — bundle blocks carry just a total, so Qty/Price
-          captions over empty columns would be noise. Presentation only; the rows themselves are unchanged. */}
-      {svc.items.length > 0 && visibleItems.some((it) => !((it.sub || []).length > 0)) && (
+      {/* Column captions. Each line now carries a single amount in the Total column (qty/price are folded
+          into it), so the only captions are Item and Total — Qty/Price captions over empty columns would
+          be noise. Presentation only; the rows themselves are unchanged. */}
+      {svc.items.length > 0 && (
         <div className={`prop-cols${gridClass}`}>
-          <span>Item</span><span className="r">Qty</span><span className="r">Price</span>
+          <span>Item</span><span /><span />
           {showCost && <span className="r">Cost</span>}
           <span className="r hcell-lt">Total</span><span />
         </div>

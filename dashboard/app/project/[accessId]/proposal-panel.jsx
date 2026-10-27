@@ -358,7 +358,11 @@ const PROP_CSS = `
 .pvx .prop-sub2-qty{width:46px!important}
 .pvx .prop-sub2-price{width:76px!important}
 .pvx .prop-sub2-cost{width:64px!important}
+/* Single editable amount in sub-item edit mode — pushed to the right where the amount sat. */
+.pvx .prop-sub2-amt-edit{width:92px!important;font-weight:500;margin-left:auto}
 .pvx .prop-sub2-mul{color:var(--dv-meta,#787D84);font-size:.8rem;flex-shrink:0}
+/* Flat line's single editable amount, in the Total column — reads like the total it replaced. */
+.pvx .prop-line-amt{font-weight:600}
 /* Inline sub-item action bar: Done · Duplicate · Remove, grouped in one subtle pill so they read as a set. */
 .pvx .prop-sub2-bar{display:inline-flex;align-items:center;gap:1px;flex-shrink:0;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);padding:1px}
 .pvx .prop-sub2-done,.pvx .prop-sub2-dup,.pvx .prop-sub2-del{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0}
