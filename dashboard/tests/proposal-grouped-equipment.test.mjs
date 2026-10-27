@@ -74,8 +74,8 @@ test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR 
   assert.ok(badges >= 3, `badge appears in all child renderers (compact, editing, lead) — found ${badges}`);
   // Zebra: alternating class on both child renderers.
   assert.ok(/prop-sub2-wrap\$\{idx % 2 \? " alt" : ""\}/.test(editor) && /prop-sub2-wrap\$\{bidx % 2 \? " alt" : ""\}/.test(editor), "both renderers alternate rows");
-  // Decorative: the badge is aria-hidden; the compact row keeps an accessible 'Sub-item A: <name>' label.
-  assert.ok(/aria-label=\{`Sub-item \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
+  // Decorative: the badge is aria-hidden; the compact row keeps an accessible 'Component A: <name>' label.
+  assert.ok(/aria-label=\{`Component \$\{letter\}: \$\{x\.name/.test(editor), "accessible label, not a bare letter");
 });
 
 test("NVR/Displays/Amp are inline-editable (no Edit-mode form takeover); every sysbar form is gone", () => {
@@ -125,13 +125,17 @@ test("an NVR downgrade that drops drives is confirmed, never silent (#7)", () =>
   assert.ok(panel.includes(".pvx .prop-conflict{"), "the conflict dialog has styles");
 });
 
-test("sub-item edit bar = Done · Duplicate · Remove; duplicateSub deep-copies with a fresh id below the source", () => {
-  assert.ok(editor.includes('className="prop-sub2-bar"'), "the three actions are grouped in one bar");
-  assert.ok(editor.includes('className="prop-sub2-dup"') && /aria-label="Duplicate sub-item"/.test(editor), "Duplicate control added");
-  assert.ok(editor.includes("duplicateSub(parent.id, x.id)"), "Duplicate is wired to the handler");
+test("camera component actions live in a ••• menu (Duplicate · Remove · Conditions), no Done; duplicateSub deep-copies with a fresh id below the source", () => {
+  // The subRow (camera bundle component) drops its inline Done/Duplicate/Remove bar for the same ItemMenu
+  // the top-level rows use. (The grouped NVR/Display/Amp children keep their own selector editor + bar.)
+  const sr = editor.slice(editor.indexOf("const subRow ="), editor.indexOf("const subRow =") + 3000);
+  assert.ok(!sr.includes('className="prop-sub2-bar"'), "subRow drops the inline Done/Dup/Del bar");
+  assert.ok(/aria-label="Component actions"/.test(sr), "each component gets a ••• menu button");
+  assert.ok(sr.includes("duplicateSub(parent.id, x.id)")
+    && sr.includes("removeSub(parent.id, x.id)")
+    && sr.includes("setSubCondition(parent.id, x.id"), "Duplicate · Remove · Conditions wired on the component menu");
   const fn = editor.slice(editor.indexOf("function duplicateSub"), editor.indexOf("function duplicateSub") + 420);
   assert.ok(/id: newItemId\(\)/.test(fn) && /splice\(idx \+ 1, 0,/.test(fn), "fresh id, inserted right after the source");
-  assert.ok(panel.includes(".pvx .prop-sub2-bar{"), "the action bar has grouping styles");
 });
 
 test("child badge + zebra are presentation-only: subordinate badge, neutral tint, hover still distinct", () => {

@@ -463,7 +463,8 @@ export const LINE_CONDITIONS = [
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
 export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
 
-// The valid conditions on a line item (unknown keys dropped). Top-level lines only — sub-items never carry them.
+// The valid conditions on a line (unknown keys dropped). Works on a top-level line OR a sub-item — both
+// may carry conditions (a single reused "Existing cable" drop, a customer-supplied component, …).
 export function lineConditions(it) {
   return Array.isArray(it?.conditions) ? it.conditions.filter((k) => LINE_CONDITION[k]) : [];
 }
@@ -484,15 +485,19 @@ export function inferPresetConditions(name) {
   if (/\bexisting\s+(cable|cabling|wir\w*|line|run|drop)/.test(n)) out.push("existingCable");
   return out;
 }
-// Which condition keys are present across a proposal OPTION (top-level lines). Drives which per-condition
-// acknowledgments the signer must initial. Defaults to the first option when no key is given.
+// Which condition keys are present across a proposal OPTION — scanning both top-level lines AND their
+// sub-items (components), so a condition tagged on a single bundle component still drives its one
+// acknowledgment. Deduped by type (one ack per condition no matter how many lines carry it). Drives which
+// per-condition acknowledgments the signer must initial. Defaults to the first option when no key is given.
 export function optionConditions(payload, optionKey) {
   const opts = payload?.options || [];
   const opt = (optionKey && opts.find((o) => o.id === optionKey)) || opts[0];
   if (!opt) return [];
   const set = new Set();
-  for (const svc of opt.services || []) for (const it of svc.items || [])
+  for (const svc of opt.services || []) for (const it of svc.items || []) {
     for (const k of lineConditions(it)) set.add(k);
+    for (const sub of it.sub || []) for (const k of lineConditions(sub)) set.add(k);
+  }
   return [...set];
 }
 

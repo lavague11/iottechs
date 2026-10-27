@@ -48,17 +48,22 @@ test("makePresetBlock carries conditions (explicit wins over inferred; none → 
 
 const optWith = (items) => ({ options: [{ id: "A", services: [{ key: "camera", items }] }] });
 
-test("optionConditions scans top-level lines of the chosen option (sub-items ignored)", () => {
+test("optionConditions scans top-level lines AND sub-items of the chosen option", () => {
   const pl = {
     options: [
       { id: "A", services: [{ items: [{ conditions: ["cxEquip"] }, { sub: [{ conditions: ["existingCable"] }] }] }] },
       { id: "B", services: [{ items: [{ conditions: ["existingCable"] }] }] },
     ],
   };
-  assert.deepEqual(optionConditions(pl, "A"), ["cxEquip"], "A has only the top-level cxEquip; sub-item is ignored");
+  // A carries cxEquip on a top-level line AND existingCable on a sub-item (component) — both surface, so
+  // a condition tagged on a single component still drives its acknowledgment.
+  assert.deepEqual(optionConditions(pl, "A").sort(), ["cxEquip", "existingCable"], "top-level + sub-item conditions both count");
   assert.deepEqual(optionConditions(pl, "B"), ["existingCable"]);
-  assert.deepEqual(optionConditions(pl), ["cxEquip"], "defaults to the first option");
+  assert.deepEqual(optionConditions(pl).sort(), ["cxEquip", "existingCable"], "defaults to the first option");
   assert.deepEqual(optionConditions({ options: [] }), []);
+  // Deduped by type: the same condition on a line and a sub-item yields one entry.
+  const dup = { options: [{ id: "A", services: [{ items: [{ conditions: ["cxEquip"] }, { sub: [{ conditions: ["cxEquip"] }] }] }] }] };
+  assert.deepEqual(optionConditions(dup, "A"), ["cxEquip"], "line + sub-item with the same condition → one ack");
 });
 
 test("PROPOSAL_ACKS has one required, condKey-gated acknowledgment per condition type", () => {

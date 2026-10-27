@@ -198,13 +198,15 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
         </div>
       ) : (
         <>
-          {/* Fixed order (owner): Add description · Duplicate · Remove, then Conditions, then Waive LAST. */}
+          {/* Fixed order (owner): Add description · Duplicate · Remove, then Conditions, then Waive LAST.
+              Duplicate + Conditions are available on sub-items too (not just top-level); description/waive
+              stay top-level only. */}
           {!isSub && onDescribe && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDescribe(); onClose(); }}>{hasDesc ? "Edit description" : "Add description"}</button>}
-          {!isSub && onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
+          {onDuplicate && <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onDuplicate(); onClose(); }}>Duplicate</button>}
           {onRemove && (
             <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
           )}
-          {!isSub && onToggleCondition && (
+          {onToggleCondition && (
             <>
               <div className="prop-im-sep" />
               <div className="prop-im-grouplbl">Conditions</div>
@@ -728,6 +730,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     if (on === cur.includes(key)) return;
     patchItem(id, { conditions: on ? [...cur, key] : cur.filter((k) => k !== key) });
   }
+  // Same, for a sub-item (bundle component) — conditions now attach to sub-items too, not just top-level
+  // lines, so a single component (e.g. a reused "Existing cable" drop) can carry its own flag + ack.
+  function setSubCondition(pid, sid, key, on) {
+    const parent = svc.items.find((x) => x.id === pid); const x = parent?.sub?.find((s) => s.id === sid);
+    if (!x || !LINE_CONDITION[key]) return;
+    const cur = lineConditions(x);
+    if (on === cur.includes(key)) return;
+    patchSub(pid, sid, { conditions: on ? [...cur, key] : cur.filter((k) => k !== key) });
+  }
   // Bulk-apply: copy THIS line's conditions onto every peer endpoint line in one pass (additive — a peer's
   // own conditions are kept). Infrastructure rows (NVR/Displays/amp) are skipped.
   function applyLineConditionsToPeers(id) {
@@ -1047,17 +1058,41 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const isExisting = /existing/i.test(x.name || "");
     const editing = !readOnly && (subEditId === x.id || !String(x.name || "").trim());
     const letter = String.fromCharCode(65 + (idx % 26));   // A, B, C… local to this parent (decorative)
+    const conds = lineConditions(x);
+    const condBadges = conds.map((k) => (
+      <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
+    ));
+    // ••• menu for a component — the same control the top-level rows use (reused ItemMenu): Duplicate ·
+    // Remove · Conditions (CX supplied / Existing cable). No Done — editing commits on blur / Enter.
+    const subMenu = !readOnly && (
+      <div className="prop-im-wrap">
+        <button type="button" className="prop-item-menu" aria-label="Component actions" title="Actions"
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === x.id ? null : x.id); }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+        </button>
+        {menuOpen === x.id && (
+          <ItemMenu isSub conditions={conds}
+            onDuplicate={() => duplicateSub(parent.id, x.id)}
+            onToggleCondition={(key, on) => setSubCondition(parent.id, x.id, key, on)}
+            onRemove={() => removeSub(parent.id, x.id)}
+            removeLabel={`${x.name || "Component"} · ${money(amount)}`}
+            onClose={() => setMenuOpen(null)} />
+        )}
+      </div>
+    );
     return (
       <div key={x.id} className={`prop-sub2-wrap${idx % 2 ? " alt" : ""}`} style={bulkPrompt?.subId === x.id ? { position: "relative", zIndex: 5 } : undefined}>
         {editing ? (
-          <div className="prop-sub2 editing">
+          <div className="prop-sub2 editing"
+               onBlur={(e) => { const box = e.currentTarget; setTimeout(() => { if (box && !box.contains(document.activeElement) && menuOpen !== x.id && subEditId === x.id) setSubEditId(null); }, 0); }}>
             <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
             <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog}
               autoFocus={!String(x.name || "").trim()}
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
               onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
+            {condBadges}
             {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
-            {/* ONE editable number — the sub-item's amount (qty × price). Editing sets the price and keeps
+            {/* ONE editable number — the component's amount (qty × price). Editing sets the price and keeps
                 any quantity; use Duplicate for more of the same. No separate qty/unit-price fields. */}
             <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price" autoFocus={!!String(x.name || "").trim()}
               onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
@@ -1065,26 +1100,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />
             {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
-            {/* Action bar: Done · Duplicate · Remove — icon-only, grouped so they read as one control set. */}
-            <span className="prop-sub2-bar">
-              <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setSubEditId(null)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-              </button>
-              <button type="button" className="prop-sub2-dup" title="Duplicate" aria-label="Duplicate sub-item" onClick={() => duplicateSub(parent.id, x.id)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              </button>
-              <button type="button" className="prop-sub2-del" title="Remove from bundle" aria-label="Remove from bundle" onClick={() => removeSub(parent.id, x.id)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-              </button>
-            </span>
+            {subMenu}
           </div>
         ) : (
-          <button type="button" className="prop-sub2 compact" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Sub-item ${letter}: ${x.name || "Sub-item"}`}>
-            <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
-            <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
-            {q > 1 && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
-            <span className="prop-sub2-amt">{money(amount)}</span>
-          </button>
+          <div className="prop-sub2 compact">
+            <button type="button" className="prop-sub2-hit" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Component ${letter}: ${x.name || "Component"}`}>
+              <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
+              <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
+              {condBadges}
+              {q > 1 && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
+              <span className="prop-sub2-amt">{money(amount)}</span>
+            </button>
+            {subMenu}
+          </div>
         )}
         {bulkPrompt?.subId === x.id && (
           <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />

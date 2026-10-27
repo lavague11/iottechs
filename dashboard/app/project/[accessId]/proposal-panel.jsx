@@ -332,6 +332,15 @@ const PROP_CSS = `
 .pvx button.prop-sub2.compact{border:none;border-top:1px solid var(--dv-line-soft,#EDEDE9);text-align:left;cursor:pointer;min-height:38px;padding-right:36px}
 .pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.055)}
 .pvx .prop-sub2.static{padding-right:36px;min-height:38px}
+/* Camera component compact row = a hit button (click → edit) + an inline ••• menu, so it's a div (a button
+   can't nest the ••• button). The amount right-aligns within the hit; the ••• sits in the row like the
+   parent's, so child amounts still line up with the parent price above. */
+.pvx div.prop-sub2.compact{min-height:38px}
+.pvx div.prop-sub2.compact:hover{background:rgba(17,20,24,.055)}
+.pvx .prop-sub2-hit{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:none;border:none;padding:0;margin:0;font-family:inherit;cursor:pointer;text-align:left;color:inherit}
+.pvx .prop-sub2-hit .prop-sub2-name{flex:0 1 auto}
+.pvx .prop-sub2-hit .prop-sub2-amt{margin-left:auto}
+.pvx .prop-sub2 .prop-im-wrap{flex:0 0 auto}
 /* ONE canonical child-row grammar (camera sub-items · NVR · Displays): a local A/B/C badge — subordinate
    to the parent number badge (smaller, pale gold, lower contrast) — plus a very light alternating surface.
    The badge is decorative (aria-hidden); the title stays the semantic label. */
