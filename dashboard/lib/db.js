@@ -3095,6 +3095,26 @@ export function getProjectsByContactEmail(email) {
     .all(String(email).trim().toLowerCase()).map(decorate);
 }
 
+// The e-sign landing path for a customer who still owes a signature, else null. The login flows use it to
+// drop a customer straight onto the signer (?sign=1 opens the PDF-first signer) when a proposal they own
+// is submitted and awaiting their signature — instead of the projects list. Matched by email; newest
+// awaiting-signature project wins (projects come back id DESC). Never throws.
+export function customerSignLandingPath(user) {
+  if (user?.role !== "customer" || !user?.email) return null;
+  let projects = [];
+  try { projects = getProjectsByContactEmail(user.email) || []; } catch { return null; }
+  for (const p of projects) {
+    try {
+      const f = buildStageFacts(p.access_id);
+      // Awaiting signature = a sent/accepted proposal the customer hasn't signed yet. The signer handles
+      // option selection + signing together, so it's the right landing even before an option is picked.
+      if (f && !f.proposal_signed && (f.proposal_status === "sent" || f.proposal_status === "accepted"))
+        return `/project/${p.access_id}?open=proposal&sign=1`;
+    } catch { /* skip a project whose facts can't build */ }
+  }
+  return null;
+}
+
 export function searchProjects(q) {
   const like = `%${q}%`;
   return db

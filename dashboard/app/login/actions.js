@@ -2,12 +2,16 @@
 
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { verifyUserByCredential, recordLogin, recordLogout, getUserByEmail, getUserByPhone, userHasPassword, createCustomerUser, updateUser, loginTwoFactorEnabled, setLoginTwoFactor } from "../../lib/db";
+import { verifyUserByCredential, recordLogin, recordLogout, getUserByEmail, getUserByPhone, userHasPassword, createCustomerUser, updateUser, loginTwoFactorEnabled, setLoginTwoFactor, customerSignLandingPath } from "../../lib/db";
 import { smsVerifyConfigured, toE164, startVerification, checkVerification } from "../../lib/sms-verify";
 import { makeToken, parseToken } from "../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
 const maskPhone = (e164) => { const d = String(e164 || "").replace(/\D/g, "").slice(-10); return d.length === 10 ? `(•••) •••-${d.slice(6)}` : "your number"; };
+
+// Where a CUSTOMER lands after signing in: straight to the signer when a proposal they own is awaiting
+// their signature (customerSignLandingPath), otherwise their normal role home.
+const customerHome = (user) => customerSignLandingPath(user) || ROLE_HOME[user?.role] || "/dashboard";
 
 async function getRequestMeta() {
   const hdrs = await headers();
@@ -37,7 +41,7 @@ export async function loginAction(formData) {
     maxAge: 60 * 60 * 8,
   });
 
-  const dest = next && next !== "/" ? next : (ROLE_HOME[user.role] || "/dashboard");
+  const dest = next && next !== "/" ? next : customerHome(user);
   // Return the destination and let the CLIENT navigate (window.location.assign) instead of a
   // server-side redirect(). The Hostinger CDN intermittently drops the redirect response for the
   // POST server-action, showing "This page couldn't load"; a plain client navigation avoids it —
@@ -78,7 +82,7 @@ export async function signupAction(formData) {
   const token = await makeToken(user);
   const jar = await cookies();
   jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
-  const dest = next && next !== "/" ? next : "/my-projects";
+  const dest = next && next !== "/" ? next : (customerSignLandingPath(user) || "/my-projects");
   return { ok: true, dest };   // client navigates (see loginAction note) — dodges the CDN redirect drop
 }
 
@@ -135,7 +139,7 @@ export async function verify2faAction(phoneRaw, code, next) {
   const token = await makeToken(user);
   const jar = await cookies();
   jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
-  const dest = next && next !== "/" ? next : (ROLE_HOME[user.role] || "/dashboard");
+  const dest = next && next !== "/" ? next : customerHome(user);
   return { ok: true, dest };   // client navigates (see loginAction note)
 }
 

@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { makeToken } from "../../../lib/auth";
-import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace } from "../../../lib/db";
+import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace, customerSignLandingPath } from "../../../lib/db";
 
 // Face-first login (1:N). The client sends a live face embedding; we cosine-match
 // it against every verified enrolled face, and — the two-step the owner asked for
@@ -105,5 +105,7 @@ export async function POST(request) {
   logIdentityEvent(u.user_id, { kind: "login_match", detail: `Face login (face ${best.score.toFixed(3)}${idScore != null ? `, id ${idScore.toFixed(3)}` : ""})`, score: best.score });
 
   const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
-  return Response.json({ ok: true, name: u.name, role: u.role, home: ROLE_HOME[u.role] || "/dashboard" });
+  // A customer awaiting signature lands straight on the signer, same as the /login flows.
+  const home = customerSignLandingPath({ role: u.role, email: u.email }) || ROLE_HOME[u.role] || "/dashboard";
+  return Response.json({ ok: true, name: u.name, role: u.role, home });
 }
