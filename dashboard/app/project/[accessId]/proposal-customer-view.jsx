@@ -813,12 +813,15 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
                             {flags[it.id].type === "remove" ? "Removal requested" : "Relocation requested"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
                           </span>
                         )}
-                        {/* Direct per-line request control — the customer can't delete; the ✕ files a
-                            removal/relocation request for the team. Shows a ↩ once a request is on. */}
+                        {/* Direct per-line request control — the customer can't delete; this pen opens a
+                            change/relocation request for the team. A pen reads as "ask to change this",
+                            not "delete it"; the request-on state goes gold (the flag chip above names it). */}
                         {canReq && (
-                          <button type="button" className={`pcv-x${flags[it.id] ? " on" : ""}`} title="Request removal or relocation"
-                                  aria-label="Request removal or relocation" onClick={(e) => { e.stopPropagation(); openMenu(it.id); }}>
-                            {flags[it.id] ? "↩" : "✕"}
+                          <button type="button" className={`pcv-x${flags[it.id] ? " on" : ""}`}
+                                  title={flags[it.id] ? "Edit your request" : "Request a change to this item"}
+                                  aria-label={flags[it.id] ? "Edit your request" : "Request a change to this item"}
+                                  onClick={(e) => { e.stopPropagation(); openMenu(it.id); }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                           </button>
                         )}
                         {!hasSub && (+it.qty || 1) > 1 && <span className="pcv-rowmath">{(+it.qty || 1)} × {money(it.price)}</span>}
@@ -1486,8 +1489,8 @@ button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-lm-btn:hover{filter:brightness(1.05)}
 .pcv-linemenu-foot{font-size:.68rem;color:var(--dv-faint,#A1A6AC);line-height:1.4}
 /* Per-line request control — a quiet ✕ that files a request (never a real delete); flips to ↩ once set. */
-.pcv-x{margin-left:auto;flex-shrink:0;width:22px;height:22px;border-radius:6px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-red,#C4553D);font-size:.8rem;font-weight:500;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;transition:background .12s,border-color .12s}
-.pcv-x:hover{background:rgba(196,85,61,.08);border-color:var(--dv-red,#C4553D)}
+.pcv-x{margin-left:auto;flex-shrink:0;width:22px;height:22px;border-radius:6px;border:1px solid var(--dv-line,#E4E4DF);background:transparent;color:var(--dv-meta,#787D84);line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
+.pcv-x:hover{background:rgba(201,169,110,.1);border-color:rgba(201,169,110,.4);color:var(--dv-gold-text,#8A6A1F)}
 .pcv-x.on{background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.40);color:var(--dv-gold-text,#8A6A1F)}
 
 .pcv-accept-actions{display:flex;gap:10px;flex-wrap:wrap}
