@@ -588,8 +588,10 @@ const PROP_CSS = `
 .pvx .prop-im-cdot.green{background:#6FBF73}
 .pvx .prop-im-cdot.red{background:#C4553D}
 .pvx .prop-im-cdot.grey{background:#9AA1AC}
-.pvx .prop-im-cname{flex:1}
+.pvx .prop-im-cname{flex:1;display:flex;align-items:center;gap:7px;min-width:0}
+.pvx .prop-im-cbadge{flex:0 0 auto;min-width:24px;text-align:center;font-size:.58rem;font-weight:700;letter-spacing:.02em;color:var(--dv-meta,#787D84);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:4px;padding:1px 4px}
 .pvx .prop-im-cond.on{font-weight:700}
+.pvx .prop-im{min-width:208px}
 .pvx .prop-im-ck{color:var(--dv-green,#2E7D5B);flex:0 0 auto}
 .pvx .prop-im-apply{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
 /* Condition badges on the row (gold = customer-supplied, orange = existing cable). Shown only when set. */

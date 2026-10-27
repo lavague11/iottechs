@@ -136,8 +136,9 @@ test("validatePayload rejects malformed conditions", () => {
 test("customer-facing label is spelled out and distinct from the admin badge", () => {
   assert.equal(LINE_CONDITION.cxEquip.label, "Customer-Provided Equipment");
   assert.equal(LINE_CONDITION.existingCable.label, "Existing Cable");
-  assert.equal(LINE_CONDITION.cxEquip.badge, "CX supplied", "admin shorthand stays on the builder badge");
-  assert.notEqual(LINE_CONDITION.cxEquip.label, LINE_CONDITION.cxEquip.badge, "customer PDF never shows CX shorthand");
+  assert.equal(LINE_CONDITION.cxEquip.badge, "CPE", "builder uses the compact acronym");
+  assert.equal(LINE_CONDITION.existingCable.badge, "EC", "builder uses the compact acronym");
+  assert.notEqual(LINE_CONDITION.cxEquip.label, LINE_CONDITION.cxEquip.badge, "customer PDF never shows the acronym alone");
 });
 
 test("lineConditionBadges is the customer render model (label + tone, present only)", () => {

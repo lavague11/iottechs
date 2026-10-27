@@ -216,7 +216,7 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], conditionDe
                   <button key={c.key} type="button" className={`prop-im-item prop-im-cond${on ? " on" : ""}`} role="menuitemcheckbox" aria-checked={on}
                           title={c.note} onClick={() => onToggleCondition(c.key, !on)}>
                     <span className={`prop-im-cdot ${c.tone}`} aria-hidden="true" />
-                    <span className="prop-im-cname">{c.badge}</span>
+                    <span className="prop-im-cname"><span className="prop-im-cbadge">{c.badge}</span>{c.label}</span>
                     {on && <svg className="prop-im-ck" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>}
                   </button>
                 );
@@ -927,9 +927,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
         {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
             managed from the ••• Conditions submenu. Each maps to one signed acknowledgment at signing. */}
-        {!parent && lineConditions(it).map((k) => (
-          <span key={k} className={`prop-cond ${(condMap[k] || LINE_CONDITION[k]).tone}`} title={(condMap[k] || LINE_CONDITION[k]).note}>{(condMap[k] || LINE_CONDITION[k]).badge}</span>
-        ))}
+        {!parent && lineConditions(it).map((k) => { const d = condMap[k] || LINE_CONDITION[k]; return (
+          <span key={k} className={`prop-cond ${d.tone}`} title={`${d.label}${d.note ? ` — ${d.note}` : ""}`}>{d.badge}</span>
+        ); })}
         {/* Waived marker — compact, inline, in place (no separate waiver list). The price shows struck. */}
         {!parent && it.waived && <span className="prop-wvd" title="Waived — removed from this proposal's price">Waived</span>}
         {/* Customer read-only: a Placement link to the floor-plan map, and a pending-request chip. */}
@@ -1068,9 +1068,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const letter = String.fromCharCode(65 + (idx % 26));   // A, B, C… local to this parent (decorative)
     const conds = lineConditions(x);
     const canWaive = canWaiveItem(x);
-    const condBadges = conds.map((k) => (
-      <span key={k} className={`prop-cond ${(condMap[k] || LINE_CONDITION[k]).tone}`} title={(condMap[k] || LINE_CONDITION[k]).note}>{(condMap[k] || LINE_CONDITION[k]).badge}</span>
-    ));
+    const condBadges = conds.map((k) => { const d = condMap[k] || LINE_CONDITION[k]; return (
+      <span key={k} className={`prop-cond ${d.tone}`} title={`${d.label}${d.note ? ` — ${d.note}` : ""}`}>{d.badge}</span>
+    ); });
     const waivedMark = x.waived ? <span className="prop-wvd" title="Waived — comped off this block's price">Waived</span> : null;
     const amtDisplay = x.waived
       ? <s className="prop-waived-strike" title="Comped off this block's price — the value stays visible">{money(amount)}</s>
