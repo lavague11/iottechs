@@ -12,9 +12,10 @@ const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 // and shows a type-ahead of matching catalog entries across every service — entries from
 // the service currently being edited sort first, so "cat" while adding to Toast surfaces
 // Toast's own "Cat6 Drop" before camera's or wiring's identical-priced entry.
-function ItemNameField({ value, onChange, onPick, currentService, allCatalog, disabled, placeholder, style }) {
+function ItemNameField({ value, onChange, onPick, currentService, allCatalog, disabled, placeholder, style, autoFocus, onBlur }) {
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
+  const inputRef = useRef(null);
 
   useEffect(() => {
     if (!open) return;
@@ -22,6 +23,14 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
     document.addEventListener("mousedown", onDocDown);
     return () => document.removeEventListener("mousedown", onDocDown);
   }, [open]);
+
+  // A freshly-created "+ Item" row lands here focused with the cursor ready (and selects any seeded
+  // text), so the user types immediately — no second click. Mount-only.
+  useEffect(() => {
+    if (!autoFocus || !inputRef.current) return;
+    inputRef.current.focus();
+    if (value) inputRef.current.select();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Strictly scoped to the CURRENT service by canonical service id (never by name/keyword). A Security
   // Cameras editor only ever offers Security Cameras catalog items — no cross-service leakage.
@@ -42,8 +51,13 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
 
   return (
     <div className="prop-name-ac" ref={boxRef}>
-      <input value={value} disabled={disabled} placeholder={placeholder} style={style}
-             onChange={handleChange} onFocus={() => setOpen(true)} />
+      <input ref={inputRef} value={value} disabled={disabled} placeholder={placeholder} style={style}
+             onChange={handleChange} onFocus={() => setOpen(true)}
+             onKeyDown={(e) => {
+               if (e.key === "Enter") { e.preventDefault(); setOpen(false); e.currentTarget.blur(); }   // commit + leave the field
+               else if (e.key === "Escape") { e.preventDefault(); setOpen(false); e.currentTarget.blur(); } // untouched blank rows are dropped on blur
+             }}
+             onBlur={() => { setOpen(false); onBlur?.(); }} />
       {open && !disabled && matches.length > 0 && (
         <div className="prop-name-menu">
           {matches.map((c, i) => (
@@ -448,6 +462,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   }, [priceBookVersion]);
   const [open, setOpen] = useState({});   // parent item id -> expanded
   const [editingId, setEditingId] = useState(null);   // camera/block name shown as text; dbl-click to edit
+  const [focusNewId, setFocusNewId] = useState(null); // a just-added "+ Item" row to autofocus for inline naming
   const [leadOpen, setLeadOpen] = useState({});   // collapsed NVR/Displays/Amp group -> children; open by default, false = user collapsed it
   const [leadEditId, setLeadEditId] = useState(null);   // which NVR/Display child row is inline-editing (one at a time)
   const [nvrConflict, setNvrConflict] = useState(null); // pending NVR downgrade that would drop drives → confirm first
@@ -725,8 +740,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       return add.length ? { ...it, conditions: [...cur, ...add] } : it;
     }));
   }
+  // + Item: create the row immediately and (when blank) hand focus to its name field so the user types
+  // right away — spreadsheet-style. A blank, unpriced row that's abandoned is dropped on blur (see render).
   function addItem(name = "", price = 0) {
-    patchItems([...svc.items, { id: newItemId(), name, qty: 1, price, cost: 0 }]);
+    const id = newItemId();
+    patchItems([...svc.items, { id, name, qty: 1, price, cost: 0 }]);
+    if (!name) setFocusNewId(id);
+    return id;
   }
   // Preset bundles for this service (default "Full Camera Install" + any admin-added). One
   // click drops the whole bundle as a block (header + sub-items priced from the book).
@@ -752,13 +772,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   function clickPreset(p) {
     if (svc.key === "camera" && camCount === 0) { setCamN(4); setAskCam(p); }
     else addPresetBlock(p);
-  }
-  function quickAdd(e) {
-    const v = e.target.value;
-    if (!v) return;
-    const c = catalog[+v];
-    if (c) addItem(c.name, c.price);
-    e.target.value = "";
   }
 
   const gridClass = showCost ? "" : " nocost";
@@ -839,6 +852,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     // breakdown lines carry that.
     const hasSub = !parent && !!it.sub && it.sub.length > 0;
     const expandable = !parent;
+    // The empty qty/price cells of a lead row become part of the expand target, so a click anywhere
+    // in the blank middle of the row — from after the name up to just before the price total — toggles
+    // the breakdown. The price total and the ••• menu are NOT included, so it never fights a real control.
+    const expandCell = hasSub ? { onClick: () => toggle(it.id), style: { cursor: "pointer" }, "aria-hidden": true } : null;
     // A camera line's label is the survey's location name (single source of truth). We DISPLAY the
     // survey name (camName) but edit it.name; entering edit mode seeds it.name from the survey name,
     // and on blur a camera line linked by camera_id writes the new name back to the survey (→ survey +
@@ -877,11 +894,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           )
         ) : (
           <ItemNameField
-            value={it.name} disabled={readOnly} placeholder={parent ? "Sub-item" : "Item"}
+            value={it.name} disabled={readOnly} placeholder={parent ? "Sub-item" : "Item name"}
+            autoFocus={!parent && it.id === focusNewId}
             style={{ ...(parent ? { marginLeft: 18 } : null), ...(!parent && it.outdoor ? { color: "var(--red)", fontWeight: 700 } : null) }}
             currentService={svc.key} allCatalog={allCatalog}
             onChange={(v) => (parent ? patchSub(parent.id, it.id, { name: v }) : patchItem(it.id, { name: v }))}
             onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
+            onBlur={!parent ? () => { setFocusNewId((f) => (f === it.id ? null : f)); if (!String(it.name || "").trim() && !(+it.price)) removeItem(it.id); } : undefined}
           />
         )}
         {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
@@ -927,21 +946,21 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           </span>
         )}
       </span>
-      {hasSub ? <span /> : (
+      {hasSub ? <span {...expandCell} /> : (
         <input className="num" type="number" min="0" value={it.qty} disabled={readOnly}
                onFocus={parent ? () => { preEdit.current[`${it.id}_qty`] = it.qty; } : undefined}
                onBlur={parent ? () => maybeBulk(parent, it, "qty") : undefined}
                onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { qty: e.target.value }) : patchItem(it.id, { qty: e.target.value }))} />
       )}
-      {hasSub ? <span /> : (
+      {hasSub ? <span {...expandCell} /> : (
         <input className="num" type="number" step="0.01" value={it.price} disabled={readOnly}
                onFocus={parent ? () => { preEdit.current[`${it.id}_price`] = it.price; } : undefined}
                onBlur={parent ? () => maybeBulk(parent, it, "price") : undefined}
                onKeyDown={parent ? (e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } } : undefined}
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { price: e.target.value }) : patchItem(it.id, { price: e.target.value }))} />
       )}
-      {showCost && (hasSub ? <span /> : (
+      {showCost && (hasSub ? <span {...expandCell} /> : (
         <input className="num" type="number" min="0" step="0.01" value={it.cost ?? 0} disabled={readOnly}
                title="Internal cost — never shown to sales or customers"
                onChange={(e) => (parent ? patchSub(parent.id, it.id, { cost: e.target.value }) : patchItem(it.id, { cost: e.target.value }))} />
@@ -1339,9 +1358,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {!readOnly && (
         <div className="prop-addbar">
-          {/* Preset bundles — one-click line groups (ACTIONS). The preset EDITOR lives in the top gear's
-              Configuration Center; these chips just add items. Hidden when the service has no presets. */}
-          {(presets.length > 0 || askCam) && (
+          {/* ONE quick-add row: preset bundles (one click each) then + Item. No Catalog select — browsing
+              the internal price catalog to build a line is gone; the catalog lives in the Configuration
+              Center. + Item makes a blank row and drops you straight into typing its name. */}
           <div className="prop-preset-row">
             {presets.map((p) => (
               <button key={p.id} className="prop-preset-chip" style={{ background: svcColor }} title={`Add bundle: ${p.name}`} onClick={() => clickPreset(p)}>+ {p.name}</button>
@@ -1356,18 +1375,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 <button type="button" className="prop-camask-x" onClick={() => setAskCam(null)}>Cancel</button>
               </span>
             )}
-          </div>
-          )}
-          <div className="prop-addrow-basic">
-            <button className="prop-mini" onClick={() => addItem()}>+ Item</button>
-            {catalog.length > 0 && (
-              <select defaultValue="" onChange={quickAdd}>
-                <option value="" disabled>Catalog…</option>
-                {catalog.map((c, i) => (
-                  <option key={c.name} value={i}>{c.name} · {money(c.price)}</option>
-                ))}
-              </select>
-            )}
+            <button type="button" className="prop-mini prop-additem" onClick={() => addItem()}>+ Item</button>
           </div>
         </div>
       )}

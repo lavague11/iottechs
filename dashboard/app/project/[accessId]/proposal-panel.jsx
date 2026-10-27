@@ -523,6 +523,31 @@ const PROP_CSS = `
 .pwm-btn.gold{margin-left:auto;background:#C9A96E;color:#101418}
 .pwm-btn.gold:hover{filter:brightness(1.06)}
 @media(max-width:640px){.pwm-overlay{align-items:flex-end;padding:0}.pwm-panel{max-width:100%;border-radius:16px 16px 0 0}.pwm-btn.gold{margin-left:0;flex:1 1 auto}}
+/* Add Service picker — full-viewport modal (portaled to <body>, so UNSCOPED like .pwm-*). Compact service
+   tiles with a restrained per-service accent; a two-column grid on desktop, a bottom sheet on phones. */
+.pvx .psm-overlay,.psm-overlay{position:fixed;inset:0;z-index:1300;display:flex;align-items:center;justify-content:center;background:rgba(16,20,24,.46);padding:20px;font-family:var(--font-sans),inherit}
+.psm-panel{width:100%;max-width:480px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.24);max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.psm-head{display:flex;align-items:center;gap:9px;padding:16px 18px 10px}
+.psm-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
+.psm-x{margin-left:auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:8px}
+.psm-x:hover{background:rgba(16,20,24,.05);color:var(--dv-ink,#101418)}
+.psm-grid{overflow:auto;padding:4px 12px 14px;display:flex;flex-direction:column;gap:4px}
+.psm-tile{display:flex;align-items:center;gap:12px;width:100%;padding:10px 12px;border:1px solid transparent;border-radius:10px;background:none;cursor:pointer;font-family:inherit;text-align:left}
+.psm-tile:hover{background:var(--dv-raise,#FBFBFA);border-color:var(--dv-line,#E4E4DF)}
+.psm-tile:focus-visible{outline:none;background:var(--dv-raise,#FBFBFA);border-color:var(--dv-gold-text,#8A6A1F)}
+.psm-ic{flex:0 0 auto;width:34px;height:34px;display:inline-flex;align-items:center;justify-content:center;border-radius:9px}
+.psm-name{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418)}
+.psm-custom{padding:6px 18px 18px;display:flex;flex-direction:column;gap:12px}
+.psm-cinput{height:40px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);padding:0 12px;font-size:.9rem;color:var(--dv-ink,#101418);font-family:inherit;outline:none}
+.psm-cinput:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.psm-cacts{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.psm-btn{height:38px;padding:0 18px;border-radius:9px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid transparent}
+.psm-btn.ghost{background:none;border-color:var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84)}
+.psm-btn.ghost:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
+.psm-btn.gold{background:#C9A96E;color:#101418}
+.psm-btn.gold:hover{filter:brightness(1.06)}
+@media(min-width:560px){.psm-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}}
+@media(max-width:560px){.psm-overlay{align-items:flex-end;padding:0}.psm-panel{max-width:100%;border-radius:16px 16px 0 0;max-height:86vh}}
 .pvx .prop-item-menu:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-im{position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:172px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 32px rgba(16,20,24,.17);padding:5px}
 /* Flip up when opening down would clip against the card's bottom (late rows) */
