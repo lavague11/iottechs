@@ -163,9 +163,12 @@ function useMenuFlip(ref) {
 // Compact condition marker (CXS / EXC). Click explains the condition; editing stays in the ••• menu.
 function CondMarker({ cond }) {
   const [open, setOpen] = useState(false);
+  const [up, setUp] = useState(false);   // flip above the marker when there's no room below (rows sit near the card's clipped bottom edge)
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return;
+    // Open above if the popover (~90px) wouldn't fit below within the viewport — the service card clips overflow.
+    try { const r = ref.current?.getBoundingClientRect(); if (r) setUp(window.innerHeight - r.bottom < 110); } catch { /* no DOM */ }
     function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
     function onKey(e) { if (e.key === "Escape") setOpen(false); }
     document.addEventListener("mousedown", onDown);
@@ -177,7 +180,7 @@ function CondMarker({ cond }) {
       <button type="button" className={`prop-cond ${cond.tone}`} aria-label={`${cond.internal} condition`} aria-expanded={open}
               onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>{cond.code}</button>
       {open && (
-        <span className="prop-cpop" role="tooltip">
+        <span className={`prop-cpop${up ? " up" : ""}`} role="tooltip">
           <span className="prop-cpop-h">{cond.internal}</span>
           <span className="prop-cpop-b">{cond.desc}</span>
         </span>

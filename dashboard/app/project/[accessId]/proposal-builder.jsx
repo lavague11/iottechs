@@ -1294,7 +1294,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
         dlBusy={dlBusy} onDownload={handleDownload}
         canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)}
-        onCreateWorkOrder={canRecordPayment ? onCreateWorkOrder : undefined} />
+        onCreateWorkOrder={onCreateWorkOrder} />
     )}
     <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
       onClose={() => setPayModalOpen(false)} showToast={showToast}

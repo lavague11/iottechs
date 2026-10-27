@@ -560,6 +560,7 @@ const PROP_CSS = `
 .pvx .prop-cond:focus-visible{outline:2px solid var(--dv-gold-text,#8A6A1F);outline-offset:2px}
 .pvx .prop-cpop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:220px;max-width:80vw;display:flex;flex-direction:column;gap:3px;padding:9px 11px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 14px 38px rgba(16,20,24,.16);text-align:left;white-space:normal}
 .pvx .prop-cpop-h{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-ink,#101418)}
+.pvx .prop-cpop.up{top:auto;bottom:calc(100% + 6px)}
 .pvx .prop-cpop-b{font-size:.78rem;line-height:1.4;color:var(--dv-meta,#787D84)}
 .pvx .prop-item.has-cond.cond-gold{box-shadow:inset 3px 0 0 #C79A1E}
 .pvx .prop-item.has-cond.cond-orange{box-shadow:inset 3px 0 0 #C56B2C}
