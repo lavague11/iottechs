@@ -2426,11 +2426,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div></AccordionProvider>
             ) });
         }
-        // Staff don't need the Approval & Deposit SECTION on the project page until the approval step is
-        // actually live (proposal accepted, or a payment already on file). Before that, Record Payment
-        // lives in the proposal action row (an on-demand modal) — no always-open payment form cluttering
-        // the page. The customer keeps their accept/deposit panel throughout.
-        const apprLive = cView === "customer" || custFacts.proposal_status === "accepted" || custFacts.deposit_recorded;
+        // The Approval & Deposit SECTION shows only once its step is actually the next action — never as a
+        // duplicate of the proposal's own Review & Sign:
+        //  • STAFF: once the proposal is accepted (they then see signature + deposit status) or a payment is
+        //    on file. Before that, Record Payment lives in the proposal action row (an on-demand modal).
+        //  • CUSTOMER: once they've SIGNED (deposit is then the real next action = Pay Deposit) or a payment
+        //    is on file. While still awaiting signature — even 'accepted' but unsigned — their one action is
+        //    Review & Sign in the proposal itself, so the old "Approve & Sign above to continue" block was a
+        //    pure duplicate gate. Dropped here.
+        // Customer: strictly SIGNED-gates the block (their deposit — even one staff recorded early — is
+        // surfaced after they sign; while awaiting signature their one action stays Review & Sign). Staff:
+        // accepted OR a payment on file.
+        const apprLive = cView === "customer"
+          ? custFacts.proposal_signed
+          : (custFacts.proposal_status === "accepted" || custFacts.deposit_recorded);
         if (sees(cView, "ph_proposal", "Approval & Deposit") && apprLive) {
           tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
             // Done once signed AND the deposit is recorded by the office (green); until then it's the

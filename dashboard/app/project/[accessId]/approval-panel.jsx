@@ -130,6 +130,10 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
   const p = data.proposal;
   const accepted = p && p.payload && p.status === "accepted";
   if (!accepted) {
+    // CUSTOMER, pre-acceptance: nothing to show here. Their one action is Review & Sign in the proposal
+    // itself, so the old "Approve & Sign the proposal above to continue" gate (and the Final-Payment
+    // variant) was pure duplication. Render nothing — the proposal's own CTA is the single signal.
+    if (isCustomer) return null;
     // Same gate, different truth depending on who's looking and what the proposal is actually
     // waiting on — staff need to know if THEY still owe an action (build/send/revise) or if the
     // ball's in the customer's court; the customer only ever sees their own next move.
