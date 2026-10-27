@@ -127,11 +127,12 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
         {!fin ? (
           <div className="rpm-loading">{err || "Loading balance…"}</div>
         ) : (<>
-          {/* Quiet money context — two rows, not three dashboard cards. */}
+          {/* Quiet money context — two rows, not three dashboard cards. Be precise: "Remaining Balance"
+              is the whole remaining contract balance; the second row is what's currently due right now. */}
           <div className="rpm-ctx">
-            <div className="rpm-ctx-row"><span>Balance</span><b>{money(fin.balance)}</b></div>
+            <div className="rpm-ctx-row"><span>Remaining Balance</span><b>{money(fin.balance)}</b></div>
             {fin.currentlyDue > 0 && (
-              <div className="rpm-ctx-row"><span>{isFinal ? "Final payment due" : "Deposit due"}</span><b className="rpm-due">{money(fin.currentlyDue)}</b></div>
+              <div className="rpm-ctx-row"><span>{isFinal ? "Final Payment Due" : "Deposit Due"}</span><b className="rpm-due">{money(fin.currentlyDue)}</b></div>
             )}
           </div>
           {dueNote && <div className="rpm-note-manual">{dueNote}</div>}
@@ -194,7 +195,7 @@ const RPM_CSS = `
 .rpm-ctx-row{display:flex;justify-content:space-between;align-items:baseline;font-size:.82rem}
 .rpm-ctx-row span{color:var(--dv-meta,#787D84);font-weight:500}
 .rpm-ctx-row b{color:var(--dv-ink,#101418);font-weight:700}
-.rpm-ctx-row b.rpm-due{color:var(--dv-red,#C4553D)}
+.rpm-ctx-row b.rpm-due{color:var(--dv-gold-text,#8A6A1F)}
 .rpm-note-manual{font-size:.75rem;color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.1);border:1px solid rgba(201,169,110,.26);border-radius:8px;padding:7px 11px;margin-bottom:10px;line-height:1.4}
 .rpm-err{font-size:.8rem;font-weight:600;color:var(--dv-red,#C4553D);background:#fbe9e6;border:1px solid #e3b4ab;border-radius:8px;padding:8px 11px;margin-bottom:10px}
 .rpm-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
