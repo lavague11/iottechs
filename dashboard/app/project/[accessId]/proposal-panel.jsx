@@ -694,6 +694,11 @@ const PROP_CSS = `
 .pvx .prop-cplan-cadmenu button:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-text,#8A6A1F);font-weight:700}
 .pvx .prop-cplan-row{display:flex;align-items:center;gap:6px}
+/* Live status on a custom installment row — same semantic colours as the plan (green paid, gold due/partial/pending, gray future). */
+.pvx .prop-cplan-st{flex:0 0 auto;font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;margin-left:2px}
+.pvx .prop-cplan-st.st-paid{color:var(--dv-green,#2E7D5B)}
+.pvx .prop-cplan-st.st-due,.pvx .prop-cplan-st.st-partial,.pvx .prop-cplan-st.st-pending{color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-cplan-st.st-future{color:var(--dv-faint,#A1A6AC)}
 .pvx .prop-cplan-n{width:18px;height:18px;flex-shrink:0;border-radius:50%;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:flex;align-items:center;justify-content:center}
 .pvx .prop-cplan-row .tin{width:44px;flex-shrink:0;padding:0 5px}
 .pvx .prop-cplan-pc{color:var(--dv-meta,#787D84);font-size:.72rem;margin-left:-2px;flex-shrink:0}

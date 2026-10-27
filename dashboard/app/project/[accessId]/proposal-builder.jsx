@@ -1151,7 +1151,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
                 )}
               </div>
             </div>
-            {custRows.map((r, i) => (
+            {custRows.map((r, i) => {
+              // Live status for this row: the progress list skips 0% installments (planScheduleRows drops them), so
+              // walk the rows in order and pair each non-zero row with its allocated progress entry.
+              const pIdx = custRows.slice(0, i).filter((x) => (+x.pct || 0) > 0.005).length;
+              const prog = (+r.pct || 0) > 0.005 ? planProgress[pIdx] : null;
+              const stLabel = prog ? ({ paid: "Paid", partial: `Partial · ${money(prog.remaining)} left`, due: "Due", pending: "Pending signature", future: "Not yet due" }[prog.status]) : null;
+              return (
               <div className="prop-cplan-row" key={i}>
                 <span className="prop-cplan-n">{i + 1}</span>
                 <input className="tin" type="number" min="0" max="100" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
@@ -1160,8 +1166,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
                   <input type="date" value={r.due || ""} min={i > 0 ? (custRows[i - 1]?.due || undefined) : undefined} onChange={(e) => setCustDue(i, e.target.value)} />
                 </label>
                 <span className="prop-cplan-amt"><span className="prop-cplan-amt-s">$</span><input className="prop-cplan-amtin" type="number" min="0" step="1" value={Math.round(totals.grand * (+r.pct || 0) / 100)} onChange={(e) => setCustAmt(i, e.target.value)} /></span>
+                {stLabel && <span className={`prop-cplan-st st-${prog.status}`}>{stLabel}</span>}
               </div>
-            ))}
+              );
+            })}
             <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
           </div>
         )}
