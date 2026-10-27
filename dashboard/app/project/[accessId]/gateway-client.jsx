@@ -2856,10 +2856,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       };
       const route = CTA_ROUTE[projState];
       if (cs.cta && route) {
-        // Actionable customer status IS the CTA — opens the right flow. No popover, no separate control.
+        // Actionable customer status IS the CTA — and it OPENS the canonical flow, not just a page.
+        // "Review & Sign Proposal" opens the customer signer directly (?sign=1 → the e-sign PDF viewer,
+        // which the customer proposal view auto-opens); Pay Deposit / Final Payment Due / Approve Survey
+        // land on their page with the payment/approval control right there.
+        const toSigner = projState === "AWAITING_SIGNATURE";
         statusChip = {
           label: `${cs.label} →`, color: statusToneHex(cs.tone), muted: cs.tone !== "gold",
-          openTool: route.spot, onClick: () => browse(route.target),
+          openTool: toSigner ? null : route.spot,
+          onClick: toSigner
+            ? () => { window.location.href = `/project/${lp.access_id}?open=proposal&sign=1`; }
+            : () => browse(route.target),
         };
       } else {
         // Plain, read-only state — no caret, no popover, no fake control.
