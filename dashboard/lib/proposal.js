@@ -694,8 +694,9 @@ export function infraKindOf(src) {
   return "generic";
 }
 // An item's full total includes its sub-items (a camera block = camera + drop + labor).
-// A waived item is comped off the invoice — it still appears, but contributes $0.
-export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + lineTotal(x), 0);
+// A waived item is comped off the invoice — it still appears, but contributes $0. A waived SUB-item is
+// comped the same way (itemTotal(x) is 0 when x.waived), so a single component can be waived off a block.
+export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + itemTotal(x), 0);
 export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + itemTotal(it), 0);
 export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50, pcpCredit = 0) {
   const sub = (opt.services || []).reduce((s, svc) => s + svcSubtotal(svc), 0);
@@ -752,7 +753,15 @@ function _fpHash(str) {
 }
 const _fpItem = (it) => {
   const base = { n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0, w: !!it?.waived,
-    s: (it?.sub || []).map((x) => ({ n: x?.name || "", q: +x?.qty || 0, p: +x?.price || 0 })) };
+    s: (it?.sub || []).map((x) => {
+      // A sub-item's waived flag and conditions are customer-visible meaning too (a waived component is
+      // comped off the price; a sub condition drives a signed ack), so hash them — but ONLY when present,
+      // so proposals without waived/tagged components hash exactly as before.
+      const sb = { n: x?.name || "", q: +x?.qty || 0, p: +x?.price || 0 };
+      const sc = lineConditions(x);
+      const extra = { ...(x?.waived ? { w: true } : null), ...(sc.length ? { c: [...sc].sort() } : null) };
+      return Object.keys(extra).length ? { ...sb, ...extra } : sb;
+    }) };
   // Conditions are part of what the customer agreed to (they drive a signed acknowledgment), so a change
   // voids the signature. Added only when present, so items without conditions hash exactly as before.
   const c = lineConditions(it);
@@ -774,7 +783,7 @@ function _diffItems(o) {
   const m = new Map();
   (o?.services || []).forEach((s) => (s.items || []).forEach((it) => {
     const key = it?.id || `${s?.name || ""}|${it?.name || ""}`;
-    const subSum = (it?.sub || []).reduce((a, x) => a + (+x?.qty || 0) * (+x?.price || 0), 0);
+    const subSum = (it?.sub || []).reduce((a, x) => a + (x?.waived ? 0 : (+x?.qty || 0) * (+x?.price || 0)), 0);
     m.set(key, { name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
   }));
   return m;

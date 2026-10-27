@@ -60,7 +60,8 @@ test("the collapsed summary is derived from children and shown ONLY while collap
 test("children are shown by default (collapse is opt-in) via the inline-editable .prop-sub2 rows", () => {
   assert.ok(editor.includes("isOpen && lr.items?.length > 0 && lr.items.map"));
   // Children are now click-to-edit (compact) / editing — the SAME grammar as a camera sub-item, not a static form.
-  assert.ok(editor.includes('className="prop-sub2 compact"') && editor.includes('className="prop-sub2 editing"'), "inline compact/editing child rows");
+  // (compact carries a template `${waived ? " waived" : ""}` modifier, so match the base class, not the exact string.)
+  assert.ok(/className=\{`prop-sub2 compact\$\{/.test(editor) && editor.includes('className="prop-sub2 editing"'), "inline compact/editing child rows");
 });
 
 test("ONE canonical child-row grammar: local A/B/C badge + zebra on camera, NVR AND Displays alike", () => {

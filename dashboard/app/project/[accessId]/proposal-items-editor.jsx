@@ -773,6 +773,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const svcWaivable = (svc.items || []).filter(canWaiveItem);
   const svcWaivedCount = svcWaivable.filter((it) => it.waived).length;
   const setItemWaived = (id, waived) => patchItems((svc.items || []).map((it) => (it.id === id ? { ...it, waived } : it)));
+  // Waive a single component (sub-item) off its block — itemTotal(x) drops to $0 while the value stays
+  // visible (struck). Same it.waived model as a top-level waive; the block total recomputes.
+  const setSubWaived = (pid, sid, waived) => patchSub(pid, sid, { waived });
   const waiveAllInSvc = (v) => patchItems((svc.items || []).map((it) => (canWaiveItem(it) ? { ...it, waived: v } : it)));
   function addPresetBlock(preset, count = 1) {
     const book = loadPriceBook();
@@ -1059,11 +1062,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const editing = !readOnly && (subEditId === x.id || !String(x.name || "").trim());
     const letter = String.fromCharCode(65 + (idx % 26));   // A, B, C… local to this parent (decorative)
     const conds = lineConditions(x);
+    const canWaive = canWaiveItem(x);
     const condBadges = conds.map((k) => (
       <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
     ));
+    const waivedMark = x.waived ? <span className="prop-wvd" title="Waived — comped off this block's price">Waived</span> : null;
+    const amtDisplay = x.waived
+      ? <s className="prop-waived-strike" title="Comped off this block's price — the value stays visible">{money(amount)}</s>
+      : money(amount);
     // ••• menu for a component — the same control the top-level rows use (reused ItemMenu): Duplicate ·
-    // Remove · Conditions (CX supplied / Existing cable). No Done — editing commits on blur / Enter.
+    // Remove · Conditions (CX supplied / Existing cable) · Waive. No Done — editing commits on blur / Enter.
     const subMenu = !readOnly && (
       <div className="prop-im-wrap">
         <button type="button" className="prop-item-menu" aria-label="Component actions" title="Actions"
@@ -1074,6 +1082,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <ItemMenu isSub conditions={conds}
             onDuplicate={() => duplicateSub(parent.id, x.id)}
             onToggleCondition={(key, on) => setSubCondition(parent.id, x.id, key, on)}
+            waived={canWaive ? !!x.waived : undefined}
+            onToggleWaive={canWaive ? () => setSubWaived(parent.id, x.id, !x.waived) : null}
             onRemove={() => removeSub(parent.id, x.id)}
             removeLabel={`${x.name || "Component"} · ${money(amount)}`}
             onClose={() => setMenuOpen(null)} />
@@ -1091,25 +1101,31 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
               onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
             {condBadges}
+            {waivedMark}
             {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title="Existing cable — test &amp; map only ($50) instead of a new Cat6 run ($150)" onClick={() => toggleExisting(parent, x)}>Existing</button>}
             {/* ONE editable number — the component's amount (qty × price). Editing sets the price and keeps
-                any quantity; use Duplicate for more of the same. No separate qty/unit-price fields. */}
-            <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price" autoFocus={!!String(x.name || "").trim()}
-              onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
-              onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />
+                any quantity; use Duplicate for more of the same. A waived component shows struck (comped). */}
+            {x.waived ? (
+              <span className="prop-sub2-amt prop-sub2-amt-edit">{amtDisplay}</span>
+            ) : (
+              <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price" autoFocus={!!String(x.name || "").trim()}
+                onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
+                onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />
+            )}
             {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
             {subMenu}
           </div>
         ) : (
-          <div className="prop-sub2 compact">
+          <div className={`prop-sub2 compact${x.waived ? " waived" : ""}`}>
             <button type="button" className="prop-sub2-hit" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Component ${letter}: ${x.name || "Component"}`}>
               <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
               <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
               {condBadges}
-              {q > 1 && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
-              <span className="prop-sub2-amt">{money(amount)}</span>
+              {waivedMark}
+              {q > 1 && !x.waived && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
+              <span className="prop-sub2-amt">{amtDisplay}</span>
             </button>
             {subMenu}
           </div>
