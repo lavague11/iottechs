@@ -1084,7 +1084,10 @@ const PCV_CSS = `
 .pcv-diff-note{font-size:.76rem;color:var(--dv-meta,#787D84);padding:6px 22px 0}
 /* One continuous document rail — no giant outer card. Sections flow through it, sharing the same 22px
    gutters and separated by thin hairlines, so the proposal reads as one page, not a stack of cards. */
-.pcv-root{background:transparent;border:0;border-radius:0;overflow:visible;max-width:1500px;margin:0 auto;
+/* Fill the deck pane the SAME way the staff proposal does (no narrow centered "PDF sheet"). As a flex
+   item in .prop-wrap, auto side margins with no width shrank this to its content (~650px) and left big
+   empty side bands; width:100% makes it stretch to the pane, capped + centred only on ultra-wide. */
+.pcv-root{background:transparent;border:0;border-radius:0;overflow:visible;width:100%;max-width:1500px;margin:0 auto;
   font-family:var(--font-sans,inherit)}
 .pcv-header{background:transparent;padding:4px 22px 16px;display:flex;justify-content:space-between;
   align-items:flex-start;flex-wrap:wrap;gap:14px;border-bottom:1px solid var(--dv-line,#E4E4DF)}
