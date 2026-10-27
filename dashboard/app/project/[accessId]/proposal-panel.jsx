@@ -603,6 +603,8 @@ const PROP_CSS = `
 .pvx .prop-cond.green{background:#ddf0de;color:#256A2C}
 .pvx .prop-cond.red{background:#f6ddd6;color:#8A2F1C}
 .pvx .prop-cond.grey{background:#e7e8ea;color:#4A4F57}
+.pvx .prop-cond-more{background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);border:1px solid var(--dv-line,#E4E4DF);cursor:pointer;font-family:inherit}
+.pvx .prop-cond-more:hover{color:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418)}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}

@@ -75,6 +75,28 @@ function ItemNameField({ value, onChange, onPick, currentService, allCatalog, di
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Compact condition markers for a row: up to `max` acronym badges inline, the rest collapsed into a
+// quiet "+N" chip (hover lists them; click expands them in place). Each badge hovers to its full label +
+// tooltip. Keeps a crowded row from wrapping/pushing the price off. Same component on parent + sub rows.
+function CondBadges({ keys, condMap, max = 2 }) {
+  const [all, setAll] = useState(false);
+  const defs = (keys || []).map((k) => condMap[k] || LINE_CONDITION[k]).filter(Boolean);
+  if (!defs.length) return null;
+  const shown = all ? defs : defs.slice(0, max);
+  const hiddenDefs = all ? [] : defs.slice(max);
+  return (
+    <>
+      {shown.map((d) => (
+        <span key={d.key} className={`prop-cond ${d.tone}`} title={`${d.label}${d.note ? ` — ${d.note}` : ""}`}>{d.badge}</span>
+      ))}
+      {hiddenDefs.length > 0 && (
+        <button type="button" className="prop-cond prop-cond-more" title={hiddenDefs.map((d) => d.label).join(", ")}
+                onClick={(e) => { e.stopPropagation(); setAll(true); }}>+{hiddenDefs.length}</button>
+      )}
+    </>
+  );
+}
+
 // Dark / inverted equipment badge (gold glyph) that sits where the number badge would — the one visual cue that
 // a line is infrastructure, not a numbered endpoint. Same footprint as .prop-block-num.
 function InfraBadge({ kind = "generic", color }) {
@@ -947,9 +969,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
         {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
             managed from the ••• Conditions submenu. Each maps to one signed acknowledgment at signing. */}
-        {!parent && lineConditions(it).map((k) => { const d = condMap[k] || LINE_CONDITION[k]; return (
-          <span key={k} className={`prop-cond ${d.tone}`} title={`${d.label}${d.note ? ` — ${d.note}` : ""}`}>{d.badge}</span>
-        ); })}
+        {!parent && <CondBadges keys={lineConditions(it)} condMap={condMap} />}
         {/* Waived marker — compact, inline, in place (no separate waiver list). The price shows struck. */}
         {!parent && it.waived && <span className="prop-wvd" title="Waived — removed from this proposal's price">Waived</span>}
         {/* Customer read-only: a Placement link to the floor-plan map, and a pending-request chip. */}
@@ -1092,9 +1112,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const letter = String.fromCharCode(65 + (idx % 26));   // A, B, C… local to this parent (decorative)
     const conds = lineConditions(x);
     const canWaive = canWaiveItem(x);
-    const condBadges = conds.map((k) => { const d = condMap[k] || LINE_CONDITION[k]; return (
-      <span key={k} className={`prop-cond ${d.tone}`} title={`${d.label}${d.note ? ` — ${d.note}` : ""}`}>{d.badge}</span>
-    ); });
+    const condBadges = <CondBadges keys={conds} condMap={condMap} />;
     const waivedMark = x.waived ? <span className="prop-wvd" title="Waived — comped off this block's price">Waived</span> : null;
     const amtDisplay = x.waived
       ? <s className="prop-waived-strike" title="Comped off this block's price — the value stays visible">{money(amount)}</s>
