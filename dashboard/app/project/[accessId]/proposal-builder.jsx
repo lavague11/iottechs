@@ -11,6 +11,7 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
+import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
@@ -258,6 +259,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const isSentUnsigned = ["sent", "changes_requested"].includes(status) && !hasUnsent;   // sent, awaiting signature, no pending edits
   const isDraftNew = status === "draft" && pubVersion == null && !hasUnsent;              // brand-new draft, never published
   const isLocked = readOnly && !isSentUnsigned;                                           // accepted/signed/declined → explicit Revise
+  // Record Payment is on-demand ledger entry (modal), available to staff once there's a billable
+  // proposal in play — one has been PUBLISHED (sent at least once → pubVersion set, even while a clean
+  // draft revision is open over it) or the working row is itself sent/accepted. Recording is a ledger
+  // write — it never revises the proposal or clears unsent changes; the status resolver derives state.
+  const canRecordPayment = ["admin", "manager"].includes(role)
+    && (pubVersion != null || ["sent", "changes_requested", "accepted"].includes(status));
+  const [payModalOpen, setPayModalOpen] = useState(false);
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
   // Services actually in this proposal (union across options — config is project-wide). Proposal
   // Configuration only surfaces these, never the whole company catalog. Reactive: adding/removing a
@@ -1231,8 +1239,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         changeState={changeState} hasUnsent={hasUnsent} isSentUnsigned={isSentUnsigned} isDraftNew={isDraftNew} isLocked={isLocked}
         emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
-        dlBusy={dlBusy} onDownload={handleDownload} />
+        dlBusy={dlBusy} onDownload={handleDownload}
+        canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)} />
     )}
+    <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
+      onClose={() => setPayModalOpen(false)} showToast={showToast} />
     </>
   );
 }

@@ -4,6 +4,7 @@ import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials, planD
 import { lineConditions, LINE_CONDITION } from "../../../lib/proposal-terms";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import RecordPaymentModal from "./record-payment-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
 import { useAccordionItem } from "./flow-accordion";
 
@@ -82,6 +83,7 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
   const [woCreated, setWoCreated] = useState(false);
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
+  const [payModalOpen, setPayModalOpen] = useState(false);   // on-demand Record Payment modal (staff)
   const [localOpen, setLocalOpen] = useState(true);   // whole-panel collapse (tool-card style chevron)
   // Accordion: inside the proposal phase this panel shares one-open-at-a-time with the proposal
   // document — accepting+signing the proposal hands the open slot to this deposit panel.
@@ -165,22 +167,17 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
       gRemaining = Math.max(0, gTotal - paid);
       gHasNums = grand > 0;
     }
-    // Payment is a REQUIRED step (deposit, then final balance): red while money is still owed,
-    // green once it's settled, gold only before there are any numbers to bill against.
-    const payOwed = isFinal ? gRemaining > 0 : gDepDue > 0;
-    const payDone = gHasNums && !payOwed;
-    const payAccent = !gHasNums ? "#C9A96E" : payDone ? "#2f7d5a" : "#D64545";
-    const payIcon = !gHasNums ? { background: "#f8f0e0", color: "#8a6d2f" } : payDone ? { background: "#e7f6ec", color: "#2f7d5a" } : { background: "#fdecec", color: "#c0392b" };
-    const payStatus = !gHasNums
-      ? { cls: "pending", txt: "Billing open" }
-      : payDone ? { cls: "done", txt: "Paid" }
-      : { cls: "due", txt: isFinal ? "Balance due" : "Deposit due" };
-    // Surface the actual money owed right on the card header (the owner asked for the remaining
-    // balance to be visible without opening the card).
-    const paySub = !gHasNums ? "Log a deposit or payment against the balance"
-      : payDone ? `Paid in full — ${money(gTotal)}`
-      : isFinal ? `${money(gRemaining)} remaining of ${money(gTotal)}`
-      : `${money(gDepDue)} deposit due · ${money(gRemaining)} balance`;
+    // PRE-ACCEPTANCE: the proposal isn't accepted/signed, so nothing is contractually DUE yet — the
+    // deposit becomes due at signature (canonical rule). Staff may still record an early/manual payment,
+    // but we never label it "due" here (that was the lifecycle inconsistency: Awaiting Signature + "Deposit
+    // due"). Gold "billing open", green once something's paid — never a red due state before acceptance.
+    const anyPaid = gatePayments.some((x) => x.status !== "pending");
+    const payAccent = anyPaid ? "#2f7d5a" : "#C9A96E";
+    const payIcon = anyPaid ? { background: "#e7f6ec", color: "#2f7d5a" } : { background: "#f8f0e0", color: "#8a6d2f" };
+    const payStatus = anyPaid ? { cls: "done", txt: "Payment on file" } : { cls: "pending", txt: "Billing open" };
+    const paySub = !gHasNums ? "Record an early payment if one comes in"
+      : anyPaid ? `${money(gRemaining)} balance of ${money(gTotal)}`
+      : `${money(gTotal)} total · deposit due after signing`;
     return (
       <div className="apv-root">
         <style>{APV_CSS}</style>
@@ -245,31 +242,20 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
                   ))}
                 </div>
               )}
-              {gHasNums && (
-                <div className="apv-balbar">
-                  <div className="apv-baltile"><span>Total</span><b>{money(gTotal)}</b></div>
-                  {gDepDue > 0 && <div className="apv-baltile"><span>Deposit due</span><b className="apv-due">{money(gDepDue)}</b></div>}
-                  <div className="apv-baltile"><span>Remaining</span><b className={gRemaining > 0 ? "apv-due" : "apv-ok"}>{money(gRemaining)}</b></div>
-                </div>
-              )}
-              <div className="apv-payform-grid">
-                <label className="apv-fld"><span>Amount</span>
-                  <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00" value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
-                <label className="apv-fld"><span>Method</span>
-                  <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-                    <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
-                  </select></label>
-                <label className="apv-fld"><span>Date paid</span>
-                  <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} /></label>
-                <label className="apv-fld"><span>Note / reference <em>(optional)</em></span>
-                  <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} /></label>
-              </div>
-              <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>Record Payment</button>
-              <div className="apv-fine">Record a payment anytime.</div>
+              <button className="apv-btn gold apv-payform-btn" onClick={() => setPayModalOpen(true)}>Record Payment</button>
             </div>
             )}
           </>
         )}
+        {toast && (
+          <div className="apv-toast">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            {toast}
+          </div>
+        )}
+        <RecordPaymentModal open={payModalOpen} accessId={accessId} stage={stage}
+          onClose={() => setPayModalOpen(false)} showToast={showToast}
+          onRecorded={(r) => { setData((d) => ({ ...d, payments: r.payments })); }} />
       </div>
     );
   }
@@ -559,11 +545,18 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
           <div className="apv-await">No payments recorded yet.</div>
         )}
 
-        {/* Record a payment — a clean, labeled form (no more cramped single row) */}
-        {(isCustomer ? balance > 0 : true) && (
+        {/* Staff record payments through the on-demand modal (no always-open form); the customer keeps
+            their inline "Make a payment" form here. */}
+        {isStaff && (
+          <div className="apv-payform-cta">
+            <button className="apv-btn gold apv-payform-btn" onClick={() => setPayModalOpen(true)}>Record Payment</button>
+          </div>
+        )}
+        {/* Customer payment form — a clean, labeled form (no more cramped single row) */}
+        {isCustomer && balance > 0 && (
         <div className="apv-payform">
           <button type="button" className="apv-payform-hd apv-payform-toggle" onClick={() => setPayFormOpen((o) => !o)}>
-            <span>{isCustomer ? "Make a payment" : "Record a payment"}</span>
+            <span>Make a payment</span>
             <svg className={`apv-payform-chev${payFormOpen ? " open" : ""}`} viewBox="0 0 10 6" width="11" height="7" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
           </button>
           {payFormOpen && (<div style={{ display: "contents" }}>
@@ -649,6 +642,10 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
           {toast}
         </div>
       )}
+
+      <RecordPaymentModal open={payModalOpen} accessId={accessId} stage={stage}
+        onClose={() => setPayModalOpen(false)} showToast={showToast}
+        onRecorded={(r) => { setData((d) => ({ ...d, payments: r.payments })); followStage(r.stage); }} />
     </div>
   );
 }
@@ -821,6 +818,7 @@ select.apv-input{cursor:pointer}
 .apv-fld .apv-input{width:100%;height:40px}
 .apv-fld-wide{grid-column:1 / -1}
 .apv-payform-btn{flex:1 1 auto;min-width:150px;align-self:stretch;height:42px;padding:0 26px}
+.apv-payform-cta{display:flex;margin-top:14px}
 @media(max-width:560px){.apv-payform-grid{grid-template-columns:1fr}}
 /* ---- Mobile: tighter payment card, compact banner + summary tiles, denser form rhythm ---- */
 @media (max-width:600px){

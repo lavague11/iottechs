@@ -21,7 +21,7 @@ export default function ProposalFooter({
   status, version, authBlocked, isStaff, busy, statusChip, saveStateEl,
   changeState, hasUnsent, isSentUnsigned, isDraftNew, isLocked,
   emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
-  dlBusy, onDownload,
+  dlBusy, onDownload, canRecordPayment, onRecordPayment,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
   const pubV = changeState?.publishedVersion ?? null;
@@ -43,6 +43,14 @@ export default function ProposalFooter({
   }
 
   const download = <DownloadBtn dlBusy={dlBusy} onDownload={onDownload} />;
+  // Record Payment — on-demand ledger entry (opens a modal); a quiet secondary utility, never the
+  // gold primary. Available to staff whenever there's a priced proposal to bill against.
+  const recordPay = canRecordPayment ? (
+    <button type="button" className="prop-foot-pay" disabled={busy} onClick={onRecordPayment} title="Record a payment">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+      Record Payment
+    </button>
+  ) : null;
 
   // Metadata (left) + primary action (right), by canonical state. Primary dominates; Download is quiet.
   let meta, primary;
@@ -78,7 +86,7 @@ export default function ProposalFooter({
   return (
     <div className="prop-foot">
       <div className="prop-foot-metarow">{meta}</div>
-      <div className="prop-foot-acts">{primary}{download}</div>
+      <div className="prop-foot-acts">{primary}{recordPay}{download}</div>
       {changesOpen && hasUnsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
     </div>
   );

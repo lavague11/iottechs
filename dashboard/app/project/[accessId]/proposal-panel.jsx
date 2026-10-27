@@ -100,6 +100,10 @@ const PROP_CSS = `
 .pvx .prop-foot-dl{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .pvx .prop-foot-dl:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
 .pvx .prop-foot-dl:disabled{opacity:.5;cursor:default}
+/* Record Payment — a quiet secondary utility beside Download (never competes with the gold primary). */
+.pvx .prop-foot-pay{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap;flex:0 0 auto}
+.pvx .prop-foot-pay:hover:not(:disabled){border-color:var(--dv-ink,#101418)}
+.pvx .prop-foot-pay:disabled{opacity:.5;cursor:default}
 .pvx .prop-foot-ask{align-items:center}
 .pvx .prop-foot-askq{flex:1 1 auto;font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
 /* View Changes (read-only modal) */

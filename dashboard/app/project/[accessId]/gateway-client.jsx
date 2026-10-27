@@ -2426,7 +2426,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div></AccordionProvider>
             ) });
         }
-        if (sees(cView, "ph_proposal", "Approval & Deposit")) {
+        // Staff don't need the Approval & Deposit SECTION on the project page until the approval step is
+        // actually live (proposal accepted, or a payment already on file). Before that, Record Payment
+        // lives in the proposal action row (an on-demand modal) — no always-open payment form cluttering
+        // the page. The customer keeps their accept/deposit panel throughout.
+        const apprLive = cView === "customer" || custFacts.proposal_status === "accepted" || custFacts.deposit_recorded;
+        if (sees(cView, "ph_proposal", "Approval & Deposit") && apprLive) {
           tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
             // Done once signed AND the deposit is recorded by the office (green); until then it's the
             // open step (yellow). The stale acceptances.approval_deposit flag was never set.
