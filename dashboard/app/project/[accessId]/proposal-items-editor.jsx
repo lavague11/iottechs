@@ -729,11 +729,22 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const nextConds = (cur, key, on) => (on
     ? [...cur.filter((k) => k !== key && !exclusiveWith(key).includes(k)), key]
     : cur.filter((k) => k !== key));
+  const waivesKey = (k) => !!(condMap[k] || LINE_CONDITION[k])?.waivePrice;
+  // Build the patch for a condition toggle. A condition configured to WAIVE PRICE comps the row via the
+  // canonical `waived` flag (reuses the waiver — reversible, counts as a change). We only touch `waived`
+  // when the toggled condition is a waive-price one, so a manual ••• Waive is never clobbered; the row
+  // stays waived while ANY waive-price condition remains on it.
+  const condPatch = (cur, key, on) => {
+    const conditions = nextConds(cur, key, on);
+    const p = { conditions };
+    if (waivesKey(key)) p.waived = conditions.some(waivesKey);
+    return p;
+  };
   function setCondition(id, key, on) {
     const it = svc.items.find((x) => x.id === id); if (!it || !LINE_CONDITION[key]) return;
     const cur = lineConditions(it);
     if (on === cur.includes(key)) return;
-    patchItem(id, { conditions: nextConds(cur, key, on) });
+    patchItem(id, condPatch(cur, key, on));
   }
   // Same, for a sub-item (bundle component) — conditions now attach to sub-items too, not just top-level
   // lines, so a single component (e.g. a reused "Existing cable" drop) can carry its own flag + ack.
@@ -742,7 +753,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     if (!x || !LINE_CONDITION[key]) return;
     const cur = lineConditions(x);
     if (on === cur.includes(key)) return;
-    patchSub(pid, sid, { conditions: nextConds(cur, key, on) });
+    patchSub(pid, sid, condPatch(cur, key, on));
   }
   // Bulk-apply: copy THIS line's conditions onto every peer endpoint line in one pass (additive — a peer's
   // own conditions are kept). Infrastructure rows (NVR/Displays/amp) are skipped.
@@ -990,7 +1001,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           line) to expand; you edit the children, not the sum. Flat row: the single editable amount (= qty ×
           price; editing sets the price and keeps any quantity). Waived: struck, read-only. */}
       {hasSub ? (
-        <span className="prop-line-total" {...expandCell}>{money(itemTotal(it))}</span>
+        <span className="prop-line-total" {...expandCell}>
+          {it.waived
+            ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s>
+            : money(itemTotal(it))}
+        </span>
       ) : it.waived ? (
         <span className="prop-line-total"><s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s></span>
       ) : (

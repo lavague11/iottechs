@@ -492,11 +492,22 @@ export function loadConditions(book) {
       label: (typeof o.label === "string" && o.label.trim()) || def.label,
       note: (typeof o.note === "string" && o.note.trim()) || def.note,
       tone: CONDITION_TONES.includes(o.tone) ? o.tone : def.tone,
-      // ack + key are never overridden — the legal acknowledgment stays canonical.
+      // `waivePrice` IS an admin-settable effect (comps the row it's applied to); ack + key are never
+      // overridden — the legal acknowledgment stays canonical.
+      waivePrice: typeof o.waivePrice === "boolean" ? o.waivePrice : !!def.waivePrice,
     };
   });
 }
 export const conditionMap = (book) => Object.fromEntries(loadConditions(book).map((c) => [c.key, c]));
+// Does a condition comp the price of the row it's applied to? (admin-configured effect)
+export const conditionWaives = (key, book) => !!conditionMap(book)[key]?.waivePrice;
+// Human-readable effect tags for a condition (for the editor + any effect display).
+export function conditionEffects(c) {
+  const out = ["Informational"];
+  if (c?.waivePrice) out.push("Waives price");
+  if (c?.ack) out.push("Acknowledgment");
+  return out;
+}
 // The colour tokens a condition may use (each renderer maps the token to its own space).
 export const CONDITION_TONES = ["gold", "orange", "blue", "green", "red", "grey"];
 

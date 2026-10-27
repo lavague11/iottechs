@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import {
   LINE_CONDITIONS, LINE_CONDITION, LINE_CONDITION_KEYS,
   lineConditions, normalizeConditions, inferPresetConditions, optionConditions, PROPOSAL_ACKS,
-  loadConditions, conditionMap, exclusiveWith,
+  loadConditions, conditionMap, exclusiveWith, conditionWaives, conditionEffects,
 } from "../lib/proposal-terms.js";
 import { lineConditionBadges } from "../lib/proposal-terms.js";
 import { makePresetBlock, proposalFingerprint, validatePayload } from "../lib/proposal.js";
@@ -105,6 +105,17 @@ test("PROPOSAL_ACKS: ack-bearing conditions are condKey-gated; informational con
     assert.ok(!PROPOSAL_ACKS.some((x) => x.condKey === key), `${key} is informational — no ack entry`);
     assert.ok(!LINE_CONDITION[key].ack, `${key} has no ack text`);
   }
+});
+
+test("waivePrice is an admin-settable effect, merged from the book, surfaced by conditionWaives/Effects", () => {
+  assert.equal(conditionWaives("cxEquip", {}), false, "nothing waives by default");
+  assert.equal(conditionWaives("existingCable", null), false);
+  const book = { conditions: [{ key: "existingCable", waivePrice: true }] };
+  assert.equal(conditionWaives("existingCable", book), true, "the override enables the waive-price effect");
+  assert.equal(conditionWaives("cxEquip", book), false, "other conditions untouched");
+  assert.deepEqual(conditionEffects(conditionMap(book).existingCable), ["Informational", "Waives price", "Acknowledgment"]);
+  assert.deepEqual(conditionEffects(LINE_CONDITION.tested), ["Informational"], "Tested is informational only");
+  assert.deepEqual(conditionEffects(LINE_CONDITION.cxEquip), ["Informational", "Acknowledgment"], "CPE: informational + ack, no waive");
 });
 
 test("Tested / Not Tested are a mutually-exclusive group; other conditions have no group", () => {

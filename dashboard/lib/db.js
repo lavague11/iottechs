@@ -6962,6 +6962,7 @@ export function setPriceBook(book, byName) {
       ...(c.label != null ? { label: String(c.label).slice(0, 80) } : {}),
       ...(c.note != null ? { note: String(c.note).slice(0, 120) } : {}),
       ...(c.tone != null ? { tone: String(c.tone).slice(0, 16) } : {}),
+      ...(typeof c.waivePrice === "boolean" ? { waivePrice: c.waivePrice } : {}),
     }));
   const clean = { prices: cleanPrices, names: cleanNames, hidden: cleanHidden, custom: cleanCustom, presets: cleanPresets, conditions: cleanConditions };
   db.prepare("UPDATE price_book SET prices=?, updated_by=?, updated_at=datetime('now','localtime') WHERE id=1")

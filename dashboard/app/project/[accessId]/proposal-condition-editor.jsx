@@ -38,6 +38,7 @@ export default function ConditionEditor({ onSaved, embedded = false }) {
       if (c.label !== def.label) o.label = c.label;
       if (c.note !== def.note) o.note = c.note;
       if (c.tone !== def.tone) o.tone = c.tone;
+      if (!!c.waivePrice !== !!def.waivePrice) o.waivePrice = !!c.waivePrice;
       return Object.keys(o).length > 1 ? o : null;
     }).filter(Boolean);
     const r = await savePriceBookAction({ ...book, conditions: overrides });
@@ -88,10 +89,20 @@ export default function ConditionEditor({ onSaved, embedded = false }) {
                   ))}
                 </div>
               </div>
-              <div className="cnd-ack">
-                <span className="cnd-lbl">Signed acknowledgment <em>(fixed)</em></span>
-                <p className="cnd-ack-txt">{c.ack}</p>
+              <div className="cnd-field cnd-effects">
+                <span className="cnd-lbl">Effects</span>
+                <div className="cnd-eff-list">
+                  <label className="cnd-eff on" title="Every condition shows as a flag"><input type="checkbox" checked disabled /> Informational</label>
+                  <label className="cnd-eff"><input type="checkbox" checked={!!c.waivePrice} onChange={(e) => patch(c.key, { waivePrice: e.target.checked })} /> Waives price</label>
+                  <label className={`cnd-eff${c.ack ? " on" : " off"}`} title={c.ack ? "Customer initials one acknowledgment at signing" : "No acknowledgment"}><input type="checkbox" checked={!!c.ack} disabled /> Acknowledgment</label>
+                </div>
               </div>
+              {c.ack && (
+                <div className="cnd-ack">
+                  <span className="cnd-lbl">Signed acknowledgment <em>(fixed)</em></span>
+                  <p className="cnd-ack-txt">{c.ack}</p>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -123,6 +134,11 @@ const CND_CSS = `
 .pvx .cnd-tones{display:flex;gap:6px}
 .pvx .cnd-tone{width:24px;height:24px;border-radius:6px;border:2px solid transparent;cursor:pointer;padding:0}
 .pvx .cnd-tone.on{border-color:var(--dv-ink,#101418);box-shadow:0 0 0 2px var(--dv-raise,#FBFBFA) inset}
+.pvx .cnd-eff-list{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+.pvx .cnd-eff{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;color:var(--dv-ink,#101418);cursor:pointer}
+.pvx .cnd-eff input{accent-color:var(--dv-gold-text,#8A6A1F);cursor:pointer}
+.pvx .cnd-eff input:disabled{cursor:default}
+.pvx .cnd-eff.off{color:var(--dv-meta,#787D84)}
 .pvx .cnd-ack{padding:8px 14px 12px}
 .pvx .cnd-ack-txt{margin:5px 0 0;font-size:.76rem;line-height:1.5;color:var(--dv-ink-soft,#3A4048);background:var(--dv-paper,#F4F4F2);border-radius:8px;padding:9px 11px}
 .pvx .cnd-acts{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 18px;border-top:1px solid var(--dv-line,#E4E4DF)}
