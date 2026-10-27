@@ -21,7 +21,7 @@ export default function ProposalFooter({
   status, version, authBlocked, isStaff, busy, statusChip, saveStateEl,
   changeState, hasUnsent, isSentUnsigned, isDraftNew, isLocked,
   emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
-  dlBusy, onDownload, canRecordPayment, onRecordPayment,
+  dlBusy, onDownload, canRecordPayment, onRecordPayment, onCreateWorkOrder,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
   const pubV = changeState?.publishedVersion ?? null;
@@ -49,6 +49,14 @@ export default function ProposalFooter({
     <button type="button" className="prop-foot-pay" disabled={busy} onClick={onRecordPayment} title="Record a payment">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
       Record Payment
+    </button>
+  ) : null;
+  // Create Work Order — opens the work-order modal (assign tech, payout, create). The modal carries the
+  // canonical deposit/internal-job gate; the button is offered wherever Record Payment is.
+  const createWo = onCreateWorkOrder ? (
+    <button type="button" className="prop-foot-pay" disabled={busy} onClick={onCreateWorkOrder} title="Create work order">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>
+      Create Work Order
     </button>
   ) : null;
 
@@ -86,7 +94,7 @@ export default function ProposalFooter({
   return (
     <div className="prop-foot">
       <div className="prop-foot-metarow">{meta}</div>
-      <div className="prop-foot-acts">{primary}{recordPay}{download}</div>
+      <div className="prop-foot-acts">{primary}{recordPay}{createWo}{download}</div>
       {changesOpen && hasUnsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
     </div>
   );

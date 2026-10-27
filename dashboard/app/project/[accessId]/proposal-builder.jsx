@@ -106,7 +106,7 @@ function ensureSurveyCameraIds(accessId) {
 
 // Staff proposal builder (admin / manager / sales). Sales get no Cost column and no
 // margin strip — and the server strips cost from their reads AND writes regardless.
-export default function ProposalBuilder({ fileBase = null, accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService }) {
+export default function ProposalBuilder({ fileBase = null, accessId, role, initial, onProposalChange, viewCount = 0, onShowViews, customerName, customerAddress, customerPhone, customerEmail, embedded = false, defaultService, onCreateWorkOrder }) {
   const showCost = false; // cost/margin removed from the builder; pricing lives in the gear (default price book)
   const [dlBusy, setDlBusy] = useState(false);
   const [dlError, setDlError] = useState("");                // building the proposal PDF
@@ -1262,7 +1262,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
         dlBusy={dlBusy} onDownload={handleDownload}
-        canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)} />
+        canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)}
+        onCreateWorkOrder={canRecordPayment ? onCreateWorkOrder : undefined} />
     )}
     <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
       onClose={() => setPayModalOpen(false)} showToast={showToast}

@@ -1772,6 +1772,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [expOpen,    setExpOpen]        = useState(false);
   const [reqOpen,    setReqOpen]        = useState(false);
   const [pvwOpen,    setPvwOpen]        = useState(false);   // Proposal Views modal (header icon)
+  const [woOpen,     setWoOpen]         = useState(false);   // Create Work Order modal (proposal action row)
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeSaving,    setCloseSaving]    = useState(false);
   const [closeErr,       setCloseErr]       = useState("");
@@ -2422,7 +2423,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                   viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
-                  signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
+                  signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null}
+                  onCreateWorkOrder={sees(cView, "ph_proposal", "Create Work Order") && proposalData?.payload?.options?.length > 0 ? () => setWoOpen(true) : undefined} />
               </div></AccordionProvider>
             ) });
         }
@@ -2437,9 +2439,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Customer: strictly SIGNED-gates the block (their deposit — even one staff recorded early — is
         // surfaced after they sign; while awaiting signature their one action stays Review & Sign). Staff:
         // accepted OR a payment on file.
-        const apprLive = cView === "customer"
-          ? custFacts.proposal_signed
-          : (custFacts.proposal_status === "accepted" || custFacts.deposit_recorded);
+        // STAFF no longer get this section at all: payments are summarized under the proposal's payment plan and
+        // recorded from the action row's Record Payment modal, so a permanent staff copy was pure duplication.
+        const apprLive = cView === "customer" && custFacts.proposal_signed;
         if (sees(cView, "ph_proposal", "Approval & Deposit") && apprLive) {
           tools.push({ name: "Approval & Deposit", label: "Approval & deposit", heavy: true,
             // Done once signed AND the deposit is recorded by the office (green); until then it's the
@@ -2455,16 +2457,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div></AccordionProvider>
             ) });
         }
-        if (sees(cView, "ph_proposal", "Create Work Order") && proposalData?.payload?.options?.length > 0) {
-          tools.push({ name: "Create Work Order", label: "Work order", state: workOrders?.length ? "done" : undefined,
-            node: (
-              <div style={{ padding: "16px 18px" }}>
-                <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
-                  assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
-                  onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
-              </div>
-            ) });
-        }
+        // Create Work Order is no longer a permanent card: it's a button in the proposal action row that opens
+        // the work-order modal (rendered with the deck below).
         // Customer: MERGE Proposal + Approval & Deposit into one full-width page, both always open.
         if (cView === "customer") {
           const propTool = tools.find((t) => t.name === "Proposal");
@@ -2955,6 +2949,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onEvents={applySchedEvents}
                 onCount={schedModal === "install" ? setInstallEvents : undefined}
                 onBooked={schedModal === "install" ? undefined : onSurveyBooked} />
+            </div>
+          </div>
+        </div>
+      )}
+      {woOpen && (
+        <div className="pv-modal-bg" onClick={(e) => { if (e.target.classList.contains("pv-modal-bg")) setWoOpen(false); }}>
+          <div className="pv-modal pv-sched-modal pv-wo-modal" role="dialog" aria-modal="true" aria-label="Work order">
+            <button className="pv-modal-x" onClick={() => setWoOpen(false)} aria-label="Close">✕</button>
+            <h2 className="pv-modal-title">Work Order</h2>
+            <div className="pv-sched-body">
+              <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
+                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
+                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
             </div>
           </div>
         </div>
@@ -4612,6 +4619,12 @@ const PV_CSS = `
 .pvx .pv-sched-modal{max-width:600px;width:100%;max-height:88vh;display:flex;flex-direction:column;padding:24px 24px 20px}
 .pvx .pv-sched-modal .pv-modal-title{margin-bottom:14px}
 .pvx .pv-sched-body{overflow-y:auto;flex:1;min-height:0;margin:0 -6px;padding:0 6px}
+.pvx .pv-wo-modal .woc-card{border:0;border-radius:0;margin:0;background:transparent;overflow:visible}
+.pvx .pv-wo-modal .woc-body{padding:0}
+@media(max-width:640px){
+  .pvx .pv-modal-bg:has(.pv-wo-modal){align-items:flex-end;padding:0}
+  .pvx .pv-wo-modal{max-width:100%;max-height:92vh;border-radius:16px 16px 0 0;padding-bottom:calc(20px + env(safe-area-inset-bottom,0))}
+}
 .pvx .pv-modal-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.18rem;margin:0 0 4px}
 .pvx .pv-modal-sub{font-size:.86rem;color:var(--muted);margin:0 0 18px}
 .pvx .pv-close-reasons{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:6px}
