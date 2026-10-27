@@ -1298,62 +1298,61 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             };
             const removable = bi.kind === "drive" || bi.kind === "display" || bi.kind === "rack";   // not the recorder/amp
             const removeChild = () => { if (bi.kind === "drive") setSlotDrive(bi.slot, ""); else if (bi.kind === "display") setSlotDisplay(bi.slot, ""); else if (bi.kind === "rack") setRack(false); setLeadEditId(null); };
+            // ••• menu — the SAME control + grammar the camera components use (Waive / Remove), shown in both
+            // the compact row and edit mode (no more ✓/🗑 bar), so a grouped child is built just like a sub-item.
+            const canW = bi.ref && canWaiveItem(bi.ref);
+            const childMenu = (!readOnly && bi.ref && (canW || removable)) ? (
+              <div className="prop-im-wrap">
+                <button type="button" className="prop-item-menu" aria-label={`${bi.name} actions`} title="Actions"
+                        onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `child-${bi.ref.id}` ? null : `child-${bi.ref.id}`); }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+                </button>
+                {menuOpen === `child-${bi.ref.id}` && (
+                  <ItemMenu isSub
+                    waived={canW ? !!bi.ref.waived : undefined}
+                    onToggleWaive={canW ? () => setItemWaived(bi.ref.id, !bi.ref.waived) : null}
+                    onRemove={removable ? removeChild : undefined}
+                    removeLabel={`${bi.name}${bi.total ? ` · ${money(bi.total)}` : ""}`}
+                    onClose={() => setMenuOpen(null)} />
+                )}
+              </div>
+            ) : null;
             return (
               <div key={bi.ref?.id || `${lr.key}-${bidx}`} className={`prop-sub2-wrap${bidx % 2 ? " alt" : ""}`}>
                 {editing ? (
-                  <div className="prop-sub2 editing">
+                  <div className="prop-sub2 editing"
+                       onBlur={(e) => { const box = e.currentTarget; const id = bi.ref?.id; setTimeout(() => { if (box && id && !box.contains(document.activeElement) && menuOpen !== `child-${id}` && leadEditId === id) setLeadEditId(null); }, 0); }}>
                     <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
                     {leadSelect(bi)}
                     {bi.ref?.baseName === "__custom__" && (
                       <input className="num prop-sub2-cname" type="text" placeholder="Custom display…" value={bi.ref.name} disabled={readOnly}
                              title="Custom display name" onChange={(e) => setDisplayField(bi.slot, { name: e.target.value })} />
                     )}
-                    {bi.ref && (
-                      <input className="num prop-sub2-price" type="number" min="0" step="0.01" value={bi.ref.price} disabled={readOnly} title="Price"
-                             onChange={(e) => setField({ price: e.target.value })} />
-                    )}
+                    {/* ONE editable amount (= qty × price; editing sets the price), matching the camera
+                        components — no separate price box + read-only total. A waived child shows struck. */}
+                    {bi.ref && (bi.ref.waived
+                      ? <span className="prop-sub2-amt prop-sub2-amt-edit"><s className="prop-waived-strike" title="Comped off this block's price">{money(itemTotal({ ...bi.ref, waived: false }))}</s></span>
+                      : <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" min="0" step="0.01" value={bi.total} disabled={readOnly} title="Price" aria-label="Price"
+                               onChange={(e) => { const t = +e.target.value || 0; const q = +bi.qty || 1; setField({ price: q ? t / q : t }); }} />)}
                     {bi.ref && showCost && (
                       <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={bi.ref.cost ?? 0} disabled={readOnly} title="Internal cost"
                              onChange={(e) => setField({ cost: e.target.value })} />
                     )}
-                    <span className="prop-sub2-amt">{money(bi.total)}</span>
-                    <span className="prop-sub2-bar">
-                      {bi.ref && <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setLeadEditId(null)}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                      </button>}
-                      {bi.ref && removable && <button type="button" className="prop-sub2-del" title="Remove" aria-label={`Remove ${bi.name}`} onClick={removeChild}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                      </button>}
-                    </span>
+                    {childMenu}
                   </div>
-                ) : (<>
-                  <button type="button" className={`prop-sub2 compact${bi.ref?.waived ? " waived" : ""}`} disabled={readOnly} title={readOnly ? undefined : "Edit"}
-                          aria-label={`${letter}: ${bi.name}${bi.ref?.waived ? " (waived)" : ""}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
-                    <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
-                    <span className="prop-sub2-name">{bi.name}</span>
-                    {bi.ref?.waived && <span className="prop-wvd">Waived</span>}
-                    {(+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
-                    <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
-                  </button>
-                  {/* ••• — same control the endpoint rows use, so a grouped line (NVR / drive / display) can be
-                      waived/restored (and removed, when removable) without opening the editor. Sits in the
-                      36px the compact row already reserves on its right. */}
-                  {!readOnly && bi.ref && canWaiveItem(bi.ref) && (
-                    <div className="prop-im-wrap prop-sub2-cmenu">
-                      <button type="button" className="prop-item-menu" aria-label={`${bi.name} actions`} title="Actions"
-                              onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `child-${bi.ref.id}` ? null : `child-${bi.ref.id}`); }}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
-                      </button>
-                      {menuOpen === `child-${bi.ref.id}` && (
-                        <ItemMenu isSub waived={!!bi.ref.waived}
-                          onToggleWaive={() => setItemWaived(bi.ref.id, !bi.ref.waived)}
-                          onRemove={removable ? removeChild : undefined}
-                          removeLabel={`${bi.name}${bi.total ? ` · ${money(bi.total)}` : ""}`}
-                          onClose={() => setMenuOpen(null)} />
-                      )}
-                    </div>
-                  )}
-                </>)}
+                ) : (
+                  <div className={`prop-sub2 compact${bi.ref?.waived ? " waived" : ""}`}>
+                    <button type="button" className="prop-sub2-hit" disabled={readOnly} title={readOnly ? undefined : "Edit"}
+                            aria-label={`${letter}: ${bi.name}${bi.ref?.waived ? " (waived)" : ""}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
+                      <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
+                      <span className="prop-sub2-name">{bi.name}</span>
+                      {bi.ref?.waived && <span className="prop-wvd">Waived</span>}
+                      {(+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
+                      <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
+                    </button>
+                    {childMenu}
+                  </div>
+                )}
               </div>
             );
           })}
