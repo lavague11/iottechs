@@ -368,6 +368,12 @@ const PROP_CSS = `
 .pvx .prop-sub2-dup:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
 .pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
 .pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.1)}
+/* Waive / Restore a grouped infrastructure child (NVR / drive / display) from its inline editor. */
+.pvx .prop-sub2-waivebtn{display:inline-flex;align-items:center;height:28px;padding:0 9px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0;font-family:inherit;font-size:.72rem;font-weight:700;letter-spacing:.02em;color:var(--dv-meta,#787D84)}
+.pvx .prop-sub2-waivebtn:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
+.pvx .prop-sub2-waivebtn.on{color:var(--dv-gold-text,#8A6A1F)}
+/* A waived grouped child reads muted (the amount shows struck via .prop-waived-strike + a Waived marker). */
+.pvx .prop-sub2.compact.waived .prop-sub2-name{color:var(--dv-meta,#787D84)}
 /* Inline grouped-item child editor: the selector (recorder/drive/display) + a custom-name field. One
    grammar with the camera sub-item editor — no separate form. */
 .pvx .prop-lead-sel{flex:1 1 150px;min-width:120px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;box-sizing:border-box}

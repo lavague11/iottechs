@@ -728,11 +728,12 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = presetsForService(svc.key, loadPriceBook());
   void priceBookVersion; // chips recompute when the Configuration Center saves presets (bumps priceBookVersion)
-  // ---- Waiver: comp a whole line off the invoice (keeps it visible at its original price, struck). Same
-  // model as before — a line is waivable if it carries value (or is already waived) and isn't a drive slot.
-  // Management moved OUT of a permanent page section into contextual actions: item ••• (Waive/Restore) and
-  // the service gear's "Waive Items…" batch manager. The accounting is unchanged (it.waived drives itemTotal).
-  const canWaiveItem = (it) => it.slot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
+  // ---- Waiver: comp a whole line off the invoice (keeps it visible at its original price, struck). A line
+  // is waivable if it carries value (or is already waived) — INCLUDING the infrastructure lines (NVR, storage
+  // drive / HDD, displays), which are grouped under the system bar but are still real priced lines you may
+  // comp. Management lives in contextual actions: item ••• (Waive/Restore) and the service gear's "Waive
+  // Items…" batch manager. The accounting is unchanged (it.waived drives itemTotal).
+  const canWaiveItem = (it) => it.waived || itemTotal({ ...it, waived: false }) > 0;
   const svcWaivable = (svc.items || []).filter(canWaiveItem);
   const svcWaivedCount = svcWaivable.filter((it) => it.waived).length;
   const setItemWaived = (id, waived) => patchItems((svc.items || []).map((it) => (it.id === id ? { ...it, waived } : it)));
@@ -1213,6 +1214,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                     )}
                     <span className="prop-sub2-amt">{money(bi.total)}</span>
                     <span className="prop-sub2-bar">
+                      {bi.ref && canWaiveItem(bi.ref) && <button type="button" className={`prop-sub2-waivebtn${bi.ref.waived ? " on" : ""}`} title={bi.ref.waived ? "Restore to the invoice" : "Waive — comp off the invoice"} aria-label={bi.ref.waived ? "Restore" : "Waive"} onClick={() => setItemWaived(bi.ref.id, !bi.ref.waived)}>{bi.ref.waived ? "Restore" : "Waive"}</button>}
                       {bi.ref && <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setLeadEditId(null)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                       </button>}
@@ -1222,12 +1224,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                     </span>
                   </div>
                 ) : (
-                  <button type="button" className="prop-sub2 compact" disabled={readOnly} title={readOnly ? undefined : "Edit"}
-                          aria-label={`${letter}: ${bi.name}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
+                  <button type="button" className={`prop-sub2 compact${bi.ref?.waived ? " waived" : ""}`} disabled={readOnly} title={readOnly ? undefined : "Edit"}
+                          aria-label={`${letter}: ${bi.name}${bi.ref?.waived ? " (waived)" : ""}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
                     <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
                     <span className="prop-sub2-name">{bi.name}</span>
-                    {(+bi.qty || 1) > 1 && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
-                    <span className="prop-sub2-amt">{money(bi.total)}</span>
+                    {bi.ref?.waived && <span className="prop-wvd">Waived</span>}
+                    {(+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
+                    <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
                   </button>
                 )}
               </div>
