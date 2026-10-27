@@ -42,6 +42,7 @@ function ProposalDiff({ diff, fromVersion, toVersion, signedAt, fmtMoney }) {
 }
 import { TaglinePill, Wordmark } from "../../components/brand";
 import EsignSigner from "./esign/esign-signer";
+import ProposalItemsEditor from "./proposal-items-editor";
 import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -766,103 +767,56 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {(<>
       <div className="pcv-cost-region" ref={costRef}>
       <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
-      <div className="pcv-table">
-        <div className="pcv-table-head">
-          <span>#</span><span>Description</span><span className="r">Total</span>
-        </div>
-        {(opt.services || []).map((s, i) => {
-          if (!s.items?.length) return null;
-          let blockN = 0;
-          let secTotal = 0;
-          const svcColor = serviceColor(s.key);
-          return (
-            <div key={i}>
-              <div className="pcv-svc-head" style={{ borderLeft: `3px solid ${svcColor}` }}>{s.label.toUpperCase()}</div>
-              {s.items.map((it, idx) => {
-                const hasSub = (it.sub || []).length > 0;
-                const expanded = !!openItems[it.id];
-                // Endpoint numbering: cameras/endpoints get the next number; infrastructure (NVR/storage/
-                // display) stays blank so it never distorts the endpoint count — mirrors the PDF.
-                const blockNum = lineRole(it) === "infrastructure" ? "" : ++blockN;
-                secTotal += itemTotal(it);
-                return (
-                  <div key={it.id} className="pcv-row-wrap">
-                    <div className={`pcv-row${idx % 2 ? " alt" : ""}${(reviseMode || hasSub) ? " expandable" : ""}${flags[it.id] ? " flagged flag-" + flags[it.id].type : ""}${reviseMode ? " revising" : ""}`}
-                         onClick={reviseMode ? () => openMenu(it.id) : (hasSub ? () => toggleItem(it.id) : undefined)}
-                         title={reviseMode ? "Request a change or removal" : (hasSub ? (expanded ? "Hide breakdown" : "Show breakdown") : (it.outdoor ? "Outdoor placement" : undefined))}>
-                      <span className="pcv-rownum">{blockNum}</span>
-                      <span className="pcv-rowdesc">
-                        {reviseMode && <span className="pcv-flagdot">⚑</span>}
-                        {!reviseMode && hasSub && <span className="pcv-chev">{expanded ? "▾" : "▸"}</span>}
-                        {itemNameNode(camNames.get(it.id) || it.name, it.outdoor)}{it.slot ? ` · Slot ${it.slot}` : ""}
-                        {/* View Placement — jumps to this exact camera on the floor-plan mini-map, matched
-                            by its stable camera_id (never by name). Only when there's a layout to show. */}
-                        {it.camera_id && hasLayout && (
-                          <button type="button" className="pcv-place" title="See where this camera goes on your floor plan"
-                                  aria-label="View placement" onClick={(e) => { e.stopPropagation(); viewPlacement(it.camera_id); }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
-                            Placement
-                          </button>
-                        )}
-                        {it.waived && <span className="pcv-waived-chip">Waived</span>}
-                        {lineConditionBadges(it).map((c) => (
-                          <span key={c.key} className={`pcv-cond ${c.tone}`}>{c.label}</span>
-                        ))}
-                        {flags[it.id] && (
-                          <span className={`pcv-flag-chip ${flags[it.id].type}`}>
-                            {flags[it.id].type === "remove" ? "Removal requested" : "Relocation requested"}{flags[it.id].note ? `: ${flags[it.id].note}` : ""}
-                          </span>
-                        )}
-                        {/* Direct per-line request control — the customer can't delete; this pen opens a
-                            change/relocation request for the team. A pen reads as "ask to change this",
-                            not "delete it"; the request-on state goes gold (the flag chip above names it). */}
-                        {canReq && (
-                          <button type="button" className={`pcv-x${flags[it.id] ? " on" : ""}`}
-                                  title={flags[it.id] ? "Edit your request" : "Request a change to this item"}
-                                  aria-label={flags[it.id] ? "Edit your request" : "Request a change to this item"}
-                                  onClick={(e) => { e.stopPropagation(); openMenu(it.id); }}>
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                          </button>
-                        )}
-                        {!hasSub && (+it.qty || 1) > 1 && <span className="pcv-rowmath">{(+it.qty || 1)} × {money(it.price)}</span>}
-                        {it.desc && <span className="pcv-rowblurb">{it.desc}</span>}
-                      </span>
-                      <span className="r b">{it.waived ? <s className="pcv-waived-strike">{money(itemTotal({ ...it, waived: false }))}</s> : money(itemTotal(it))}</span>
-                    </div>
-
-                    {menuFor === it.id && (
-                      <div className="pcv-linemenu" onClick={(e) => e.stopPropagation()}>
-                        <div className="pcv-linemenu-head">
-                          <span className="pcv-linemenu-title">{titleCase(it.name)}</span>
-                          <button type="button" className="pcv-linemenu-x" aria-label="Close" title="Close" onClick={() => setMenuFor(null)}>✕</button>
-                        </div>
-                        <textarea className="pcv-linemenu-note" rows={2} placeholder="Add a note for our team (optional)…"
-                                  value={menuNote} onChange={(e) => setMenuNote(e.target.value)} />
-                        <div className="pcv-linemenu-actions">
-                          <button type="button" className="pcv-lm-btn remove" onClick={() => applyFlag(it.id, "remove")}>Request Removal</button>
-                          <button type="button" className="pcv-lm-btn change" onClick={() => applyFlag(it.id, "change")}>Request Relocation</button>
-                          {flags[it.id] && <button type="button" className="pcv-lm-btn clear" onClick={() => clearFlag(it.id)}>Withdraw</button>}
-                        </div>
-                        <div className="pcv-linemenu-foot">Our team reviews each request.</div>
-                      </div>
-                    )}
-
-                    {!reviseMode && hasSub && expanded && it.sub.map((x) => (
-                      <div key={x.id} className="pcv-row sub">
-                        <span className="pcv-rownum" />
-                        <span className="pcv-rowdesc">· {titleCase(x.name)}{(+x.qty || 1) > 1 ? <span className="pcv-rowmath">{(+x.qty || 1)} × {money(x.price)}</span> : null}</span>
-                        <span className="r b">{money((+x.qty || 0) * (+x.price || 0))}</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-              {s.note && <div className="pcv-svc-note">{s.note}</div>}
-              {pricedSvcCount > 1 && <div className="pcv-subtotal-row"><span>{s.label} Subtotal</span><span>{money(secTotal)}</span></div>}
-            </div>
-          );
-        })}
+      {/* Line items — the SAME renderer staff build with, in read-only customer mode (grouped NVR/Displays,
+          A/B/C children, condition badges, alignment). Every row improvement now reaches both views. The
+          per-line pen opens a change request; Placement jumps to the floor-plan map. */}
+      <div className="pcv-items pvx">
+        {(opt.services || []).map((s, i) => (
+          s.items?.length ? (
+            <ProposalItemsEditor
+              key={s.key + i}
+              svc={s}
+              showCost={false}
+              readOnly
+              customer
+              onChange={() => {}}
+              cameraNames={camNames}
+              payload={p.payload}
+              activeOptId={opt.id}
+              optionCount={p.payload.options.length}
+              hasLayout={hasLayout}
+              onViewPlacement={viewPlacement}
+              requestFlags={flags}
+              onRequestChange={canReq ? openMenu : undefined}
+            />
+          ) : null
+        ))}
       </div>
+
+      {/* Change-request modal — opened by the per-line pen. Same handlers/flow as before (applyFlag /
+          clearFlag); centred instead of an inline popover now that the rows are the shared renderer. */}
+      {menuFor && (() => {
+        const it = (opt.services || []).flatMap((s) => s.items || []).find((x) => x.id === menuFor);
+        if (!it) return null;
+        return (
+          <div className="pcv-reqov" onMouseDown={(e) => { if (e.target === e.currentTarget) setMenuFor(null); }}>
+            <div className="pcv-linemenu pcv-linemenu-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="pcv-linemenu-head">
+                <span className="pcv-linemenu-title">{titleCase(it.name)}</span>
+                <button type="button" className="pcv-linemenu-x" aria-label="Close" title="Close" onClick={() => setMenuFor(null)}>✕</button>
+              </div>
+              <textarea className="pcv-linemenu-note" rows={2} placeholder="Add a note for our team (optional)…"
+                        value={menuNote} onChange={(e) => setMenuNote(e.target.value)} />
+              <div className="pcv-linemenu-actions">
+                <button type="button" className="pcv-lm-btn remove" onClick={() => applyFlag(it.id, "remove")}>Request Removal</button>
+                <button type="button" className="pcv-lm-btn change" onClick={() => applyFlag(it.id, "change")}>Request Relocation</button>
+                {flags[it.id] && <button type="button" className="pcv-lm-btn clear" onClick={() => clearFlag(it.id)}>Withdraw</button>}
+              </div>
+              <div className="pcv-linemenu-foot">Our team reviews each request.</div>
+            </div>
+          </div>
+        );
+      })()}
 
       {hasMods && <div className="pcv-subtotal-row main"><span>Project Subtotal</span><span>{money(t.sub)}</span></div>}
       {t.discount > 0 && <div className="pcv-subtotal-row main"><span>Discount</span><span>−{money(t.discount)}</span></div>}
@@ -1475,6 +1429,10 @@ button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-flag-chip.change{background:rgba(201,169,110,.14);color:var(--dv-gold-text,#8A6A1F)}
 
 .pcv-linemenu{position:absolute;z-index:40;left:34px;top:calc(100% - 2px);width:min(300px,80vw);background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:11px;box-shadow:0 1px 2px rgba(16,20,24,.04);padding:12px;display:flex;flex-direction:column;gap:9px}
+/* Centred change-request modal (opened by the per-line pen on the shared renderer). */
+.pcv-reqov{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;background:rgba(16,20,24,.42);padding:20px}
+.pcv-linemenu-modal{position:static;left:auto;top:auto;width:min(380px,100%);box-shadow:0 18px 48px rgba(16,20,24,.22);padding:16px}
+@media(max-width:640px){.pcv-reqov{align-items:flex-end;padding:0}.pcv-linemenu-modal{width:100%;border-radius:14px 14px 0 0}}
 .pcv-linemenu-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .pcv-linemenu-title{font-size:.78rem;font-weight:600;color:var(--dv-ink,#101418)}
 .pcv-linemenu-x{border:none;background:none;color:var(--dv-meta,#787D84);font-size:.9rem;line-height:1;cursor:pointer;padding:2px 4px;border-radius:6px}

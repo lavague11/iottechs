@@ -478,6 +478,16 @@ const PROP_CSS = `
 /* Line-item ••• action menu */
 .pvx .prop-im-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center}
 .pvx .prop-item-menu{background:none;border:none;color:var(--dv-meta,#787D84);cursor:pointer;padding:3px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center}
+/* Customer read-only affordances (shared renderer in customer mode): a pen that opens a change request,
+   a Placement link to the floor-plan map, and a pending-request chip. Pen reads as "ask to change", not delete. */
+.pvx .prop-reqpen{width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:6px;background:transparent;color:var(--dv-meta,#787D84);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .12s,border-color .12s,color .12s}
+.pvx .prop-reqpen:hover{background:rgba(201,169,110,.1);border-color:rgba(201,169,110,.4);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-reqpen.on{background:rgba(201,169,110,.14);border-color:rgba(201,169,110,.4);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-place{flex:0 0 auto;margin-left:8px;display:inline-flex;align-items:center;gap:3px;padding:1px 7px 1px 5px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:transparent;color:var(--dv-meta,#787D84);font-size:.68rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-place:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-place svg{flex:0 0 auto}
+.pvx .prop-reqflag{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.68rem;font-weight:600;line-height:1.5;white-space:nowrap;background:rgba(201,169,110,.14);color:var(--dv-gold-text,#8A6A1F)}
+.pvx .prop-reqflag.remove{background:rgba(196,85,61,.1);color:var(--dv-red,#C4553D)}
 .pvx .prop-item-menu:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-im{position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:172px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 32px rgba(16,20,24,.17);padding:5px}
 /* Flip up when opening down would clip against the card's bottom (late rows) */

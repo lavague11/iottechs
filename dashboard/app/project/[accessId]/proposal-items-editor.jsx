@@ -306,8 +306,15 @@ function DictateButton({ onText, title = "Dictate" }) {
 // NVR — and Rack & Mount is its add-on, like a Display slot. Both live in the bar, not the item list.
 const AMP_ADDON = "Rack & Mount";
 
-export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag, itemDrag, payload, activeOptId, optionCount = 1, onBulkApply }) {
+export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange, onRemove, onOpenPricing, priceBookVersion, customerFlags, onResolveFlag, cameraNames, onCameraRename, svcDrag, itemDrag, payload, activeOptId, optionCount = 1, onBulkApply,
+  // Customer read-only capabilities — this same renderer powers the customer proposal. These are no-ops
+  // for staff (undefined), so staff rendering is unchanged. `customer` turns on the customer-facing
+  // per-line affordances: a pen that opens a change request (onRequestChange) and a Placement link
+  // (onViewPlacement) when the camera is on a floor plan (hasLayout). `requestFlags` shows which lines
+  // already have a pending request.
+  customer = false, onRequestChange, onViewPlacement, requestFlags, hasLayout = false }) {
   const flags = customerFlags || {};
+  const reqFlags = requestFlags || {};
   // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
   // other matching sub-items that still hold the OLD value. `preEdit` snapshots the value at focus so we can
   // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
@@ -799,6 +806,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         {!parent && lineConditions(it).map((k) => (
           <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
         ))}
+        {/* Customer read-only: a Placement link to the floor-plan map, and a pending-request chip. */}
+        {customer && !parent && it.camera_id && hasLayout && onViewPlacement && (
+          <button type="button" className="prop-place" title="See where this goes on your floor plan"
+                  aria-label="View placement" onClick={(e) => { e.stopPropagation(); onViewPlacement(it.camera_id); }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            Placement
+          </button>
+        )}
+        {customer && !parent && reqFlags[it.id] && (
+          <span className={`prop-reqflag ${reqFlags[it.id].type}`}>
+            {reqFlags[it.id].type === "remove" ? "Removal requested" : "Change requested"}{reqFlags[it.id].note ? `: ${reqFlags[it.id].note}` : ""}
+          </span>
+        )}
         {/* Description toggle (top-level, editable) — a speech bubble with a + (add) that becomes a − once the
             description is showing (remove). Replaces the old rename pencil; rename is double-click on the name. */}
         {/* MIDDLE: a lightweight "+ Description" after the name (only when there's no description yet and the
@@ -878,6 +898,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onClose={() => setMenuOpen(null)}
             />
           )}
+        </div>
+      ) : (customer && onRequestChange && !parent) ? (
+        <div className="prop-im-wrap">
+          <button type="button" className={`prop-reqpen${reqFlags[it.id] ? " on" : ""}`}
+                  title={reqFlags[it.id] ? "Edit your request" : "Request a change to this item"}
+                  aria-label={reqFlags[it.id] ? "Edit your request" : "Request a change to this item"}
+                  onClick={(e) => { e.stopPropagation(); onRequestChange(it.id); }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
         </div>
       ) : <span />}
       {/* Optional customer-facing description (top-level). Editor while editing; a muted one-line PREVIEW when
