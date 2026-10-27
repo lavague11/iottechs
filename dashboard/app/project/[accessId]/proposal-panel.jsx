@@ -434,7 +434,8 @@ const PROP_CSS = `
    original price struck through on the right so you can still see the amount waived. */
 .pvx .prop-block.prop-waived{border-left-color:var(--dv-green,#2E7D5B)}
 .pvx .prop-waived-banner{font-size:.64rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--dv-green,#2E7D5B);border-radius:100px;padding:2px 9px;white-space:nowrap}
-.pvx .prop-waived-strike{color:var(--dv-red,#C4553D);text-decoration:line-through;text-decoration-color:var(--dv-red,#C4553D)}
+/* Waived price — muted strike, not red (a waiver is a deliberate comp, not an error). */
+.pvx .prop-waived-strike{color:var(--dv-meta,#787D84);text-decoration:line-through;text-decoration-color:var(--dv-meta,#787D84)}
 /* Camera group header: bolder name, prominent block total, no per-line price of its own */
 .pvx .prop-item.prop-parent input{font-weight:600}
 .pvx .prop-item.prop-parent .prop-item-nametext{font-weight:600;font-size:.88rem}
@@ -488,6 +489,35 @@ const PROP_CSS = `
 .pvx .prop-place svg{flex:0 0 auto}
 .pvx .prop-reqflag{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.68rem;font-weight:600;line-height:1.5;white-space:nowrap;background:rgba(201,169,110,.14);color:var(--dv-gold-text,#8A6A1F)}
 .pvx .prop-reqflag.remove{background:rgba(196,85,61,.1);color:var(--dv-red,#C4553D)}
+/* Waived marker — compact, inline, muted (a deliberate comp, not an error). The row's price shows struck. */
+.pvx .prop-wvd{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.64rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:1.6;white-space:nowrap;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84)}
+/* Service gear "Waive Items…" with an optional count pill. */
+.pvx .prop-im-waive{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pvx .prop-im-count{flex:0 0 auto;min-width:18px;height:18px;padding:0 6px;border-radius:100px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);font-size:.66rem;font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+/* Batch waiver manager (service gear ▸ Waive Items…): centred modal, phone bottom sheet. */
+.pvx .pwm-overlay,.pwm-overlay{position:fixed;inset:0;z-index:1200;display:flex;align-items:center;justify-content:center;background:rgba(16,20,24,.42);padding:20px;font-family:var(--font-sans),inherit}
+.pwm-panel{width:100%;max-width:440px;background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.22);max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.pwm-head{display:flex;align-items:baseline;gap:9px;padding:16px 18px 12px;flex-wrap:wrap}
+.pwm-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
+.pwm-svc{font-size:.78rem;font-weight:600;color:var(--dv-meta,#787D84)}
+.pwm-x{margin-left:auto;width:30px;height:30px;border:none;background:none;color:var(--dv-meta,#787D84);font-size:1.4rem;line-height:1;cursor:pointer;border-radius:8px}
+.pwm-x:hover{background:rgba(16,20,24,.05);color:var(--dv-ink,#101418)}
+.pwm-list{overflow:auto;padding:2px 10px;display:flex;flex-direction:column}
+.pwm-row{display:flex;align-items:center;gap:11px;padding:10px 8px;border-radius:9px;cursor:pointer;font-size:.86rem}
+.pwm-row:hover{background:var(--dv-raise,#FBFBFA)}
+.pwm-row input{width:17px;height:17px;flex:0 0 auto;accent-color:var(--dv-gold-text,#8A6A1F);cursor:pointer}
+.pwm-name{flex:1;min-width:0;font-weight:600;color:var(--dv-ink,#101418);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pwm-row.on .pwm-name{color:var(--dv-meta,#787D84);text-decoration:line-through}
+.pwm-amt{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums;color:var(--dv-ink,#101418)}
+.pwm-row.on .pwm-amt{color:var(--dv-gold-text,#8A6A1F);text-decoration:none}
+.pwm-acts{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 18px 16px;border-top:1px solid var(--dv-line,#E4E4DF);margin-top:4px}
+.pwm-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:.84rem;font-weight:600;color:var(--dv-ink,#101418)}
+.pwm-btn{height:38px;padding:0 16px;border-radius:9px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid transparent}
+.pwm-btn.ghost{background:none;border-color:var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84)}
+.pwm-btn.ghost:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
+.pwm-btn.gold{margin-left:auto;background:#C9A96E;color:#101418}
+.pwm-btn.gold:hover{filter:brightness(1.06)}
+@media(max-width:640px){.pwm-overlay{align-items:flex-end;padding:0}.pwm-panel{max-width:100%;border-radius:16px 16px 0 0}.pwm-btn.gold{margin-left:0;flex:1 1 auto}}
 .pvx .prop-item-menu:hover{color:var(--dv-ink,#101418);background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-im{position:absolute;right:0;top:calc(100% + 4px);z-index:60;min-width:172px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 12px 32px rgba(16,20,24,.17);padding:5px}
 /* Flip up when opening down would clip against the card's bottom (late rows) */

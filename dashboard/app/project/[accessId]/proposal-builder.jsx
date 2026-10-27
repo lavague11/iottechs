@@ -147,7 +147,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [surveyFloors, setSurveyFloors] = useState([]); // [{index, name, count}] for the import picker
   const [camRoster, setCamRoster] = useState([]);        // survey camera roster → live location names on camera lines
   const [syncConfirm, setSyncConfirm] = useState(false); // two-tap confirm for the destructive "Sync from survey" rebuild
-  const [waiveOpen, setWaiveOpen] = useState(false);     // waiver tool panel
   const [bodyOpenState, setBodyOpen] = useState(true);   // whole-card collapse (matches the other proposal-phase cards)
   // Reuse a previous proposal: the start strip on an empty draft, the post-copy pricing review,
   // and the "use for another project" destination picker (see proposal-start.jsx).
@@ -706,19 +705,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (pp && pp.depositPct != null) { setDepositPct(pp.depositPct); setDirty(true); }
   }
 
-  // ---- Waiver tool: comp a whole line item off the invoice (keeps it visible at $0) ----
-  // A line is "waivable" if it carries real value (or is already waived). NVR/drives live in the
-  // camera sysbar (slot) and aren't individually waivable; displays (displaySlot) CAN be comped.
-  const canWaive = (it) => it.slot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
-  const waivable = [];
-  opt.services.forEach((s) => (s.items || []).forEach((it) => { if (canWaive(it)) waivable.push({ svcLabel: s.label, it }); }));
-  const waivedCount = waivable.filter((w) => w.it.waived).length;
-  function setWaived(id, waived) {
-    patchOption({ services: opt.services.map((s) => ({ ...s, items: (s.items || []).map((it) => (it.id === id ? { ...it, waived } : it)) })) });
-  }
-  function waiveAll(v) {
-    patchOption({ services: opt.services.map((s) => ({ ...s, items: (s.items || []).map((it) => (canWaive(it) ? { ...it, waived: v } : it)) })) });
-  }
+  // Waiver management now lives in ProposalItemsEditor (service gear ▸ Waive Items… + line ••• ▸ Waive /
+  // Restore), using the same it.waived model — no builder-level waiver UI or handlers needed here.
 
   // Lifted to component scope so BOTH the card header and the new bottom action dock use one definition.
   const statusChip = (
@@ -983,31 +971,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       )}
 
 
-      {/* Waiver tool — comp select line items off the invoice. Only shows items that carry value. */}
-      {!readOnly && waivable.length > 0 && (
-        <div className="prop-waiver">
-          <button type="button" className="prop-waiver-head" onClick={() => setWaiveOpen((v) => !v)}>
-            <span className="prop-chev">{waiveOpen ? "▾" : "▸"}</span>
-            <span>Waive items</span>
-            {waivedCount > 0 && <span className="prop-waiver-count">{waivedCount} waived</span>}
-          </button>
-          {waiveOpen && (
-            <div className="prop-waiver-body">
-              <div className="prop-waiver-bulk">
-                <button type="button" onClick={() => waiveAll(true)}>Waive all</button>
-                <button type="button" onClick={() => waiveAll(false)}>Reset all</button>
-              </div>
-              {waivable.map(({ svcLabel, it }) => (
-                <label key={it.id} className={`prop-waiver-row${it.waived ? " on" : ""}`}>
-                  <input type="checkbox" checked={!!it.waived} onChange={(e) => setWaived(it.id, e.target.checked)} />
-                  <span className="prop-waiver-name">{it.name || "Untitled item"}<span className="prop-waiver-svc">{svcLabel}</span></span>
-                  <span className="prop-waiver-amt">{it.waived ? "Waived" : money(itemTotal({ ...it, waived: false }))}</span>
-                </label>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Waiver management moved OUT of a permanent page section into contextual actions — each service's
+          gear ▸ "Waive Items…" (batch) and each line's ••• ▸ Waive / Restore. Waived rows show inline,
+          struck, in place. See proposal-items-editor.jsx. */}
 
       {/* Pricing engine + payment terms — revealed only once there's something to price. Before that, a single
           quiet line stands in for the whole $0 subtotal→discount→tax→total→plan→deposit stack. */}

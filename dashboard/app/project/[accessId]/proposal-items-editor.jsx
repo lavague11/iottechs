@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
@@ -159,7 +160,7 @@ function useMenuFlip(ref) {
   }, []);
   return up;
 }
-function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, onRemove, removeLabel, onClose }) {
+function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
   const up = useMenuFlip(ref);
@@ -206,6 +207,9 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
             </>
           )}
           {!isSub && <div className="prop-im-sep" />}
+          {onToggleWaive && (
+            <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Restore" : "Waive"}</button>
+          )}
           <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
         </>
       )}
@@ -239,7 +243,7 @@ function SysRowMenu({ onEdit, onRemove, removeLabel = "Remove", onClose }) {
 }
 // Service-header gear menu (replaces the old remove-service ✕): this service's pricing & presets, plus the
 // (destructive) remove-service at the bottom.
-function SvcHeadMenu({ onPricing, onRemove, onClose }) {
+function SvcHeadMenu({ onPricing, onWaiveItems, waivedCount = 0, onRemove, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
   const up = useMenuFlip(ref);
@@ -264,12 +268,74 @@ function SvcHeadMenu({ onPricing, onRemove, onClose }) {
       ) : (
         <>
           <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onPricing(); onClose(); }}>Pricing &amp; presets</button>
+          {onWaiveItems && (
+            <button type="button" className="prop-im-item prop-im-waive" role="menuitem" onClick={() => { onWaiveItems(); onClose(); }}>
+              Waive Items…{waivedCount > 0 && <span className="prop-im-count">{waivedCount}</span>}
+            </button>
+          )}
           <div className="prop-im-sep" />
           <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove service</button>
         </>
       )}
     </div>
   );
+}
+// Batch waiver manager for ONE service — replaces the old permanent "Waive items" page section. Checkboxes
+// apply live (same as the old inline list); Done closes. Waive All confirms (it comps the whole service).
+// Desktop = centred modal, phone = bottom sheet (CSS). Reuses the canonical it.waived model — no new math.
+function WaiveBatchModal({ svcLabel, items, onToggle, onWaiveAll, onClose }) {
+  const ref = useRef(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  const waivedN = items.filter((it) => it.waived).length;
+  const anyActive = items.some((it) => !it.waived);
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key === "Escape") { e.preventDefault(); onClose(); return; }
+      if (e.key !== "Tab") return;
+      const nodes = [...(ref.current?.querySelectorAll('button,input,[tabindex]:not([tabindex="-1"])') || [])].filter((n) => !n.disabled && n.offsetParent !== null);
+      if (!nodes.length) return;
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  // Portal to <body>: the deck slides use CSS transforms, which would make a position:fixed overlay
+  // resolve against the slide instead of the viewport (off-centre). Portalling escapes that.
+  const overlay = (
+    <div className="pwm-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="pwm-panel" role="dialog" aria-modal="true" aria-label="Waive items" ref={ref}>
+        <div className="pwm-head">
+          <span className="pwm-title">Waive Items</span>
+          <span className="pwm-svc">{svcLabel}{waivedN > 0 ? ` · ${waivedN} waived` : ""}</span>
+          <button type="button" className="pwm-x" aria-label="Close" onClick={onClose}>×</button>
+        </div>
+        <div className="pwm-list">
+          {items.map((it) => (
+            <label key={it.id} className={`pwm-row${it.waived ? " on" : ""}`}>
+              <input type="checkbox" checked={!!it.waived} onChange={(e) => onToggle(it.id, e.target.checked)} />
+              <span className="pwm-name">{it.name || "Untitled item"}</span>
+              <span className="pwm-amt">{it.waived ? "Waived" : money(itemTotal({ ...it, waived: false }))}</span>
+            </label>
+          ))}
+        </div>
+        <div className="pwm-acts">
+          {confirmAll ? (
+            <span className="pwm-confirm">Waive all in {svcLabel}?
+              <button type="button" className="pwm-btn ghost" onClick={() => setConfirmAll(false)}>Cancel</button>
+              <button type="button" className="pwm-btn gold" onClick={() => { onWaiveAll(true); setConfirmAll(false); }}>Waive All</button>
+            </span>
+          ) : (<>
+            {waivedN > 0 && <button type="button" className="pwm-btn ghost" onClick={() => onWaiveAll(false)}>Restore All</button>}
+            {anyActive && <button type="button" className="pwm-btn ghost" onClick={() => setConfirmAll(true)}>Waive All</button>}
+            <button type="button" className="pwm-btn gold" onClick={onClose}>Done</button>
+          </>)}
+        </div>
+      </div>
+    </div>
+  );
+  return typeof document !== "undefined" ? createPortal(overlay, document.body) : overlay;
 }
 // Dictation: a mic button that fills a text field by voice (Web Speech API). Renders nothing when the
 // browser has no SpeechRecognition (and stays quiet if the mic is blocked — e.g. inside the preview pane),
@@ -320,6 +386,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
   const preEdit = useRef({});                 // { [subId_field]: oldValue } captured onFocus
   const [bulkPrompt, setBulkPrompt] = useState(null);  // { parentId, subId, field, name, oldValue, newValue, cur:[], all:[] }
+  const [waiveBatchOpen, setWaiveBatchOpen] = useState(false);  // the service's "Waive Items…" batch manager
   // Optional customer descriptions are progressive-disclosure: hidden until "+ Description" is clicked (or the
   // item already has one). descOpen = ids whose editor is open; emptying the field just clears it (no confirm).
   const [descOpen, setDescOpen] = useState(() => new Set());
@@ -661,6 +728,15 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const presets = presetsForService(svc.key, loadPriceBook());
   void priceBookVersion; // chips recompute when the Configuration Center saves presets (bumps priceBookVersion)
+  // ---- Waiver: comp a whole line off the invoice (keeps it visible at its original price, struck). Same
+  // model as before — a line is waivable if it carries value (or is already waived) and isn't a drive slot.
+  // Management moved OUT of a permanent page section into contextual actions: item ••• (Waive/Restore) and
+  // the service gear's "Waive Items…" batch manager. The accounting is unchanged (it.waived drives itemTotal).
+  const canWaiveItem = (it) => it.slot == null && (it.waived || itemTotal({ ...it, waived: false }) > 0);
+  const svcWaivable = (svc.items || []).filter(canWaiveItem);
+  const svcWaivedCount = svcWaivable.filter((it) => it.waived).length;
+  const setItemWaived = (id, waived) => patchItems((svc.items || []).map((it) => (it.id === id ? { ...it, waived } : it)));
+  const waiveAllInSvc = (v) => patchItems((svc.items || []).map((it) => (canWaiveItem(it) ? { ...it, waived: v } : it)));
   function addPresetBlock(preset, count = 1) {
     const book = loadPriceBook();
     const blocks = Array.from({ length: Math.max(1, +count || 1) }, () => makePresetBlock(preset, book));
@@ -806,6 +882,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         {!parent && lineConditions(it).map((k) => (
           <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
         ))}
+        {/* Waived marker — compact, inline, in place (no separate waiver list). The price shows struck. */}
+        {!parent && it.waived && <span className="prop-wvd" title="Waived — removed from this proposal's price">Waived</span>}
         {/* Customer read-only: a Placement link to the floor-plan map, and a pending-request chip. */}
         {customer && !parent && it.camera_id && hasLayout && onViewPlacement && (
           <button type="button" className="prop-place" title="See where this goes on your floor plan"
@@ -893,6 +971,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onToggleCondition={parent ? null : (key, on) => setCondition(it.id, key, on)}
               onApplyPeers={parent ? null : () => applyLineConditionsToPeers(it.id)}
               peerLabel={`Apply to all ${svc.key === "camera" ? "cameras" : "lines"}`}
+              waived={!parent && canWaiveItem(it) ? !!it.waived : undefined}
+              onToggleWaive={!parent && canWaiveItem(it) ? () => setItemWaived(it.id, !it.waived) : null}
               onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
               removeLabel={`${camName || it.name || "Item"}${!parent ? ` · ${money(itemTotal(it))}` : ""}`}
               onClose={() => setMenuOpen(null)}
@@ -1034,6 +1114,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {svcMenuOpen && (
               <SvcHeadMenu
                 onPricing={() => onOpenPricing && onOpenPricing(svc.key)}
+                onWaiveItems={svcWaivable.length ? () => setWaiveBatchOpen(true) : null}
+                waivedCount={svcWaivedCount}
                 onRemove={onRemove}
                 onClose={() => setSvcMenuOpen(false)}
               />
@@ -1273,6 +1355,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       )}
 
       {svc.note && <div className="prop-svc-note">{svc.note}</div>}
+
+      {waiveBatchOpen && (
+        <WaiveBatchModal svcLabel={svc.label} items={svcWaivable}
+          onToggle={setItemWaived} onWaiveAll={waiveAllInSvc} onClose={() => setWaiveBatchOpen(false)} />
+      )}
     </div>
   );
 }
