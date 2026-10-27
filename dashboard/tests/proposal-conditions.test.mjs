@@ -15,7 +15,7 @@ import { downloadProposalPdf } from "../lib/proposal-pdf.js";
 test("catalog: two condition types, each with a key/badge/tone/ack", () => {
   assert.deepEqual(LINE_CONDITION_KEYS, ["cxEquip", "existingCable"]);
   for (const c of LINE_CONDITIONS) {
-    assert.ok(c.key && c.badge && c.tone && c.ack, "every condition is fully specified");
+    assert.ok(c.key && c.code && c.internal && c.desc && c.tone && c.ack, "every condition is fully specified");
     assert.equal(LINE_CONDITION[c.key], c, "indexed by key");
   }
 });
@@ -104,11 +104,13 @@ test("validatePayload rejects malformed conditions", () => {
   assert.equal(validatePayload(bad), "Bad conditions.", "a non-array is rejected");
 });
 
-test("customer-facing label is spelled out and distinct from the admin badge", () => {
+test("customer-facing label is spelled out and distinct from the builder code", () => {
   assert.equal(LINE_CONDITION.cxEquip.label, "Customer-Provided Equipment");
   assert.equal(LINE_CONDITION.existingCable.label, "Existing Cable");
-  assert.equal(LINE_CONDITION.cxEquip.badge, "CX supplied", "admin shorthand stays on the builder badge");
-  assert.notEqual(LINE_CONDITION.cxEquip.label, LINE_CONDITION.cxEquip.badge, "customer PDF never shows CX shorthand");
+  assert.equal(LINE_CONDITION.cxEquip.code, "CXS", "builder marker is the short code");
+  assert.equal(LINE_CONDITION.existingCable.code, "EXC");
+  assert.notEqual(LINE_CONDITION.cxEquip.label, LINE_CONDITION.cxEquip.code, "customer PDF never shows the code");
+  assert.equal(new Set(LINE_CONDITIONS.map((c) => c.code)).size, LINE_CONDITIONS.length, "codes are unique");
 });
 
 test("lineConditionBadges is the customer render model (label + tone, present only)", () => {

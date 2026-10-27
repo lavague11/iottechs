@@ -447,17 +447,20 @@ The signature covers the entire Agreement. The customer initials each required a
 ];
 
 // Line-item CONDITIONS — site/supply facts that attach to a single proposal line (the customer is
-// supplying the gear, or the run reuses existing cable). Each is the ONE canonical source for its badge
+// supplying the gear, or the run reuses existing cable). Each is the ONE canonical source for its marker
 // (builder), its colour, and the acknowledgment the customer initials once per type at signing — grouped
 // by type, never repeated per line. `ack` is the exact initialed sentence; keep it plain and honest.
-// `badge` is the admin shorthand (compact builder chip); `label` is the customer-facing name used on the
+// `code` is the compact builder marker (CXS / EXC); `internal` is the staff name (menu + marker popover);
+// `desc` is the one-line explanation shown on demand. `label` is the customer-facing name used on the
 // customer proposal, the PDF, the invoice and the acknowledgment — always spelled out, never shorthand, so
 // a grayscale printout still reads correctly. `tone` is the shared colour token each renderer maps to its
 // own space (CSS vars on the web, RGB in the PDF).
 export const LINE_CONDITIONS = [
-  { key: "cxEquip", badge: "CX supplied", label: "Customer-Provided Equipment", tone: "gold", note: "Customer-provided equipment",
+  { key: "cxEquip", code: "CXS", internal: "Customer Supplied", label: "Customer-Provided Equipment", tone: "gold",
+    desc: "Customer is providing this equipment.",
     ack: "Customer-provided equipment: I'm supplying one or more devices for this project. IOT TECHS isn't responsible for the condition, compatibility, firmware, or warranty of equipment I provide, and added charges may apply if it's defective or incompatible." },
-  { key: "existingCable", badge: "Existing cable", label: "Existing Cable", tone: "orange", note: "Reuses existing cabling",
+  { key: "existingCable", code: "EXC", internal: "Existing Cable", label: "Existing Cable", tone: "orange",
+    desc: "Reuses existing cabling.",
     ack: "Existing cabling: this project reuses existing cable runs. IOT TECHS will test and map reused cabling but isn't responsible for faults in cable it didn't install, and replacing failed existing cable may be billable." },
 ];
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));

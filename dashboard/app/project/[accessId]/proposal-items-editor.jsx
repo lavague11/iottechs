@@ -160,6 +160,31 @@ function useMenuFlip(ref) {
   }, []);
   return up;
 }
+// Compact condition marker (CXS / EXC). Click explains the condition; editing stays in the ••• menu.
+function CondMarker({ cond }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e) { if (skipOutsideClose(e)) return; if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    function onKey(e) { if (e.key === "Escape") setOpen(false); }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+  return (
+    <span className="prop-cond-wrap" ref={ref}>
+      <button type="button" className={`prop-cond ${cond.tone}`} aria-label={`${cond.internal} condition`} aria-expanded={open}
+              onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>{cond.code}</button>
+      {open && (
+        <span className="prop-cpop" role="tooltip">
+          <span className="prop-cpop-h">{cond.internal}</span>
+          <span className="prop-cpop-b">{cond.desc}</span>
+        </span>
+      )}
+    </span>
+  );
+}
 function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
@@ -194,9 +219,9 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
                 const on = conditions.includes(c.key);
                 return (
                   <button key={c.key} type="button" className={`prop-im-item prop-im-cond${on ? " on" : ""}`} role="menuitemcheckbox" aria-checked={on}
-                          title={c.note} onClick={() => onToggleCondition(c.key, !on)}>
+                          title={c.desc} onClick={() => onToggleCondition(c.key, !on)}>
                     <span className={`prop-im-cdot ${c.tone}`} aria-hidden="true" />
-                    <span className="prop-im-cname">{c.badge}</span>
+                    <span className="prop-im-cname"><b>{c.code}</b> {c.internal}</span>
                     {on && <svg className="prop-im-ck" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>}
                   </button>
                 );
@@ -843,8 +868,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const camName = svc.key === "camera" && cameraNames ? cameraNames.get(it.id) : null;
     const startCamEdit = () => { if (readOnly) return; if (camName && camName !== it.name) patchItem(it.id, { name: camName }); setEditingId(it.id); };
     const writeCamName = () => { if (svc.key === "camera" && it.camera_id && onCameraRename) onCameraRename(it.camera_id, it.name); };  // survey write-back on rename
+    const condKeys = !parent ? lineConditions(it) : [];
     return (
-    <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
+    <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}${condKeys.length ? ` has-cond cond-${LINE_CONDITION[condKeys[0]].tone}` : ""}`}
          style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
       <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
         {/* LEFT = hierarchy. A subtle disclosure chevron (same language as the NVR/Displays rows), shown only
@@ -882,9 +908,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         )}
         {/* Condition badges (top-level) — customer-provided equipment / existing cable. Shown only when set;
             managed from the ••• Conditions submenu. Each maps to one signed acknowledgment at signing. */}
-        {!parent && lineConditions(it).map((k) => (
-          <span key={k} className={`prop-cond ${LINE_CONDITION[k].tone}`} title={LINE_CONDITION[k].note}>{LINE_CONDITION[k].badge}</span>
-        ))}
+        {condKeys.map((k) => <CondMarker key={k} cond={LINE_CONDITION[k]} />)}
         {/* Waived marker — compact, inline, in place (no separate waiver list). The price shows struck. */}
         {!parent && it.waived && <span className="prop-wvd" title="Waived — removed from this proposal's price">Waived</span>}
         {/* Customer read-only: a Placement link to the floor-plan map, and a pending-request chip. */}

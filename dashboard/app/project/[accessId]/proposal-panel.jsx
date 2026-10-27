@@ -551,11 +551,18 @@ const PROP_CSS = `
 .pvx .prop-im-cond.on{font-weight:700}
 .pvx .prop-im-ck{color:var(--dv-green,#2E7D5B);flex:0 0 auto}
 .pvx .prop-im-apply{color:var(--dv-gold-text,#8A6A1F);font-weight:600}
-/* Condition badges on the row (gold = customer-supplied, orange = existing cable). Shown only when set. */
-/* Compact tag: the color lives on the tag only (never the row) — small radius, sentence case, readable. */
-.pvx .prop-cond{flex:0 0 auto;margin-left:8px;padding:1px 7px;border-radius:5px;font-size:.68rem;font-weight:600;letter-spacing:.01em;line-height:1.5;white-space:nowrap}
-.pvx .prop-cond.gold{background:#f6edcf;color:#7A5C14}
-.pvx .prop-cond.orange{background:#f7e4d6;color:#9A4A17}
+/* Condition markers on the row (gold = CXS, orange = EXC). Shown only when set. Colour = tag outline + a 3px
+   left accent on the row (never a full-row outline — that reads as an error). Click explains via popover. */
+.pvx .prop-cond-wrap{position:relative;display:inline-flex;flex:0 0 auto;margin-left:8px}
+.pvx .prop-cond{display:inline-flex;align-items:center;height:22px;padding:0 6px;border:1px solid;border-radius:5px;background:transparent;font-family:inherit;font-size:.66rem;font-weight:700;letter-spacing:.04em;line-height:1;cursor:pointer;white-space:nowrap}
+.pvx .prop-cond.gold{color:#7A5C14;border-color:#C79A1E}
+.pvx .prop-cond.orange{color:#9A4A17;border-color:#C56B2C}
+.pvx .prop-cond:focus-visible{outline:2px solid var(--dv-gold-text,#8A6A1F);outline-offset:2px}
+.pvx .prop-cpop{position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:220px;max-width:80vw;display:flex;flex-direction:column;gap:3px;padding:9px 11px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;box-shadow:0 14px 38px rgba(16,20,24,.16);text-align:left;white-space:normal}
+.pvx .prop-cpop-h{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-ink,#101418)}
+.pvx .prop-cpop-b{font-size:.78rem;line-height:1.4;color:var(--dv-meta,#787D84)}
+.pvx .prop-item.has-cond.cond-gold{box-shadow:inset 3px 0 0 #C79A1E}
+.pvx .prop-item.has-cond.cond-orange{box-shadow:inset 3px 0 0 #C56B2C}
 /* Toast "Existing" toggle on a Line Drop line — off = new $150 run, on = existing $50 test & map */
 .pvx .prop-exist-tog{flex:0 0 auto;margin-left:8px;padding:2px 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;background:var(--dv-paper,#F4F4F2);color:var(--dv-meta,#787D84);font-family:inherit;font-size:.64rem;font-weight:800;letter-spacing:.03em;text-transform:uppercase;cursor:pointer;transition:.12s;white-space:nowrap}
 .pvx .prop-exist-tog:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
@@ -785,8 +792,8 @@ const PROP_CSS = `
      gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
   .pvx .prop-item.prop-parent>span:first-child{flex:1 1 0;min-width:0;flex-wrap:wrap;row-gap:2px}
   .pvx .prop-item.prop-parent>span:not(:first-child):empty{display:none}
-  /* Condition badge (CX supplied / existing) drops to its own line so the name keeps the full first line. */
-  .pvx .prop-item.prop-parent .prop-cond{flex:0 0 100%;margin-top:2px}
+  /* Condition marker (CXS / EXC) drops to its own line so the name keeps the full first line. */
+  .pvx .prop-item.prop-parent .prop-cond-wrap{flex:0 0 100%;margin:2px 0 0}
   /* Parent name stays on ONE line (matches the NVR/Displays lead rows) — ellipsizes only if it truly
      can't fit; the price + ••• sit in their own flex cells on the right. */
   .pvx .prop-item.prop-parent .prop-item-nametext{flex:1 1 0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3;min-height:30px;height:auto}
