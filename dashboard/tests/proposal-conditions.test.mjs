@@ -6,19 +6,22 @@ import assert from "node:assert/strict";
 import {
   LINE_CONDITIONS, LINE_CONDITION, LINE_CONDITION_KEYS,
   lineConditions, normalizeConditions, inferPresetConditions, optionConditions, PROPOSAL_ACKS,
-  loadConditions, conditionMap,
+  loadConditions, conditionMap, exclusiveWith,
 } from "../lib/proposal-terms.js";
 import { lineConditionBadges } from "../lib/proposal-terms.js";
 import { makePresetBlock, proposalFingerprint, validatePayload } from "../lib/proposal.js";
 import { requiredAcks, missingRequired } from "../lib/esign/capture.js";
 import { downloadProposalPdf } from "../lib/proposal-pdf.js";
 
-test("catalog: two condition types, each with a key/badge/tone/ack", () => {
-  assert.deepEqual(LINE_CONDITION_KEYS, ["cxEquip", "existingCable"]);
+test("catalog: four condition types (CPE, EC, Tested, Not Tested), each fully specified", () => {
+  assert.deepEqual(LINE_CONDITION_KEYS, ["cxEquip", "existingCable", "tested", "notTested"]);
   for (const c of LINE_CONDITIONS) {
-    assert.ok(c.key && c.badge && c.tone && c.ack, "every condition is fully specified");
+    assert.ok(c.key && c.badge && c.label && c.tone && c.note, "every condition has key/badge/label/tone/note");
     assert.equal(LINE_CONDITION[c.key], c, "indexed by key");
   }
+  // CPE + EC carry a signed ack; Tested / Not Tested are informational (no ack).
+  assert.ok(LINE_CONDITION.cxEquip.ack && LINE_CONDITION.existingCable.ack, "ack-bearing conditions have ack text");
+  assert.ok(!LINE_CONDITION.tested.ack && !LINE_CONDITION.notTested.ack, "informational conditions have no ack");
 });
 
 test("lineConditions keeps only known keys; normalizeConditions dedupes + drops junk", () => {
@@ -90,12 +93,27 @@ test("loadConditions: book overrides re-word the display (badge/label/note/tone)
   assert.equal(lineConditionBadges({ conditions: ["cxEquip"] })[0].label, LINE_CONDITION.cxEquip.label, "defaults without a map");
 });
 
-test("PROPOSAL_ACKS has one required, condKey-gated acknowledgment per condition type", () => {
-  for (const key of LINE_CONDITION_KEYS) {
+test("PROPOSAL_ACKS: ack-bearing conditions are condKey-gated; informational conditions carry no ack", () => {
+  // CPE + EC carry a signed acknowledgment.
+  for (const key of ["cxEquip", "existingCable"]) {
     const a = PROPOSAL_ACKS.find((x) => x.key === key);
     assert.ok(a?.required && a.condKey === key, `${key} ack is required + gated on its condition`);
     assert.equal(a.label, LINE_CONDITION[key].ack, "the ack text is the canonical condition ack");
   }
+  // Tested / Not Tested are informational — no acknowledgment, no ack text.
+  for (const key of ["tested", "notTested"]) {
+    assert.ok(!PROPOSAL_ACKS.some((x) => x.condKey === key), `${key} is informational — no ack entry`);
+    assert.ok(!LINE_CONDITION[key].ack, `${key} has no ack text`);
+  }
+});
+
+test("Tested / Not Tested are a mutually-exclusive group; other conditions have no group", () => {
+  assert.equal(LINE_CONDITION.tested.badge, "T");
+  assert.equal(LINE_CONDITION.notTested.badge, "NT");
+  assert.deepEqual(exclusiveWith("tested"), ["notTested"], "Tested excludes Not Tested");
+  assert.deepEqual(exclusiveWith("notTested"), ["tested"], "Not Tested excludes Tested");
+  assert.deepEqual(exclusiveWith("cxEquip"), [], "CPE has no exclusive group");
+  assert.deepEqual(exclusiveWith("existingCable"), [], "EC has no exclusive group");
 });
 
 test("requiredAcks surfaces a condition ack only when a line carries it", () => {

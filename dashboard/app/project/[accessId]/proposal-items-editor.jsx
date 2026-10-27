@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
-import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap } from "../../../lib/proposal-terms";
+import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith } from "../../../lib/proposal-terms";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -724,11 +724,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   }
   // Line-item CONDITIONS (customer-provided equipment, existing cable). Toggle on a single line, or apply
   // additively across every peer line in this service (never removes a peer's existing conditions).
+  // Toggle a condition, enforcing mutual exclusivity: turning one on drops any peer in the same
+  // exclusiveGroup (e.g. Tested ⇄ Not Tested), so a line is never both at once.
+  const nextConds = (cur, key, on) => (on
+    ? [...cur.filter((k) => k !== key && !exclusiveWith(key).includes(k)), key]
+    : cur.filter((k) => k !== key));
   function setCondition(id, key, on) {
     const it = svc.items.find((x) => x.id === id); if (!it || !LINE_CONDITION[key]) return;
     const cur = lineConditions(it);
     if (on === cur.includes(key)) return;
-    patchItem(id, { conditions: on ? [...cur, key] : cur.filter((k) => k !== key) });
+    patchItem(id, { conditions: nextConds(cur, key, on) });
   }
   // Same, for a sub-item (bundle component) — conditions now attach to sub-items too, not just top-level
   // lines, so a single component (e.g. a reused "Existing cable" drop) can carry its own flag + ack.
@@ -737,7 +742,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     if (!x || !LINE_CONDITION[key]) return;
     const cur = lineConditions(x);
     if (on === cur.includes(key)) return;
-    patchSub(pid, sid, { conditions: on ? [...cur, key] : cur.filter((k) => k !== key) });
+    patchSub(pid, sid, { conditions: nextConds(cur, key, on) });
   }
   // Bulk-apply: copy THIS line's conditions onto every peer endpoint line in one pass (additive — a peer's
   // own conditions are kept). Infrastructure rows (NVR/Displays/amp) are skipped.
@@ -748,7 +753,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       if (it.id === id || lineRole(it) === "infrastructure") return it;
       const cur = lineConditions(it);
       const add = keys.filter((k) => !cur.includes(k));
-      return add.length ? { ...it, conditions: [...cur, ...add] } : it;
+      if (!add.length) return it;
+      // Additive, but drop any peer condition the added keys are mutually exclusive with (e.g. adding
+      // Tested removes an existing Not Tested), so a bulk apply never leaves a line in both states.
+      const excluded = new Set(add.flatMap((k) => exclusiveWith(k)));
+      return { ...it, conditions: [...cur.filter((k) => !excluded.has(k)), ...add] };
     }));
   }
   // + Item: create the row immediately and (when blank) hand focus to its name field so the user types

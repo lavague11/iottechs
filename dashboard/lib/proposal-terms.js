@@ -459,7 +459,19 @@ export const LINE_CONDITIONS = [
     ack: "Customer-provided equipment: I'm supplying one or more devices for this project. IOT TECHS isn't responsible for the condition, compatibility, firmware, or warranty of equipment I provide, and added charges may apply if it's defective or incompatible." },
   { key: "existingCable", badge: "EC", label: "Existing Cable", tone: "orange", note: "Existing cabling is being reused.",
     ack: "Existing cabling: this project reuses existing cable runs. IOT TECHS will test and map reused cabling but isn't responsible for faults in cable it didn't install, and replacing failed existing cable may be billable." },
+  // Testing status — informational only (no acknowledgment). The two are mutually exclusive: an item is
+  // either Tested or Not Tested, never both (enforced generically via `exclusiveGroup`). "Not Tested" means
+  // no testing was performed/recorded — NOT a failure.
+  { key: "tested", badge: "T", label: "Tested", tone: "green", note: "This item/cable was tested.", exclusiveGroup: "testing" },
+  { key: "notTested", badge: "NT", label: "Not Tested", tone: "grey", note: "No testing was performed or recorded.", exclusiveGroup: "testing" },
 ];
+// Condition keys that are mutually exclusive with `key` (same exclusiveGroup) — toggling one on removes the
+// others in its group. Empty for conditions with no group.
+export function exclusiveWith(key) {
+  const g = LINE_CONDITION[key]?.exclusiveGroup;
+  if (!g) return [];
+  return LINE_CONDITIONS.filter((c) => c.key !== key && c.exclusiveGroup === g).map((c) => c.key);
+}
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
 export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
 
