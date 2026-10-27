@@ -14,14 +14,18 @@ import SvcNotFound from "./svc-not-found";
 // literally the same code. Service-call specifics (diagnostic + invoice cards) already live in
 // that page as FlowStep tool cards, driven by the linked call.
 
-// Neutral, non-leaking social preview — a service-call link that gets texted/forwarded must
-// preview as a branded "secure access" card, never the customer's name or issue. Fetches nothing.
+// Neutral, non-leaking social preview — a service-call link that gets texted/forwarded must preview as
+// the branded "Project Portal" card (opengraph-image.jpg in this segment), never the customer's name or
+// issue. Fetches nothing, so it can't leak. Same card as /project and /adt.
 export function generateMetadata() {
+  const title = "IOT TECHS · Project Portal";
+  const description = "Track your project — every step from start to finish.";
   return {
     title: "IOT TECHS · Service Call",
-    description: "Secure access — authorized only.",
+    description,
     robots: { index: false, follow: false },
-    openGraph: { title: "IOT TECHS", description: "Secure access link — authorized only.", type: "website" },
+    openGraph: { title, description, siteName: "IOT TECHS", type: "website" },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 

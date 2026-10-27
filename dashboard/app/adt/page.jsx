@@ -8,7 +8,15 @@ const maskTax = (digits, comm) => { const d = String(digits || "").replace(/\D/g
 import AdtPortalClient from "./adt-portal-client";
 import AdtGate from "./adt-gate";
 
-export const metadata = { title: "ADT Project Portal · IOT TECHS" };
+// Branded "Project Portal" social card (opengraph-image.jpg in this route) — same card as /project and
+// /service-call. Neutral, no customer data; noindex since the link gets forwarded.
+export const metadata = {
+  title: "ADT Project Portal · IOT TECHS",
+  description: "Track your project — every step from start to finish.",
+  robots: { index: false, follow: false },
+  openGraph: { title: "IOT TECHS · Project Portal", description: "Track your project — every step from start to finish.", siteName: "IOT TECHS", type: "website" },
+  twitter: { card: "summary_large_image", title: "IOT TECHS · Project Portal", description: "Track your project — every step from start to finish." },
+};
 
 const STAFF = new Set(["admin", "manager", "sales", "tech"]);
 const digits = (s) => String(s || "").replace(/\D/g, "");
