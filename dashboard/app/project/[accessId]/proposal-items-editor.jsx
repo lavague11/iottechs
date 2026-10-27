@@ -62,7 +62,7 @@ const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("e
 
 // Dark / inverted equipment badge (gold glyph) that sits where the number badge would — the one visual cue that
 // a line is infrastructure, not a numbered endpoint. Same footprint as .prop-block-num.
-function InfraBadge({ kind = "generic" }) {
+function InfraBadge({ kind = "generic", color }) {
   const P = {
     nvr: <><rect x="3" y="4.5" width="18" height="6" rx="1.3"/><rect x="3" y="13.5" width="18" height="6" rx="1.3"/><circle cx="6.5" cy="7.5" r=".9" fill="currentColor" stroke="none"/><circle cx="6.5" cy="16.5" r=".9" fill="currentColor" stroke="none"/></>,
     display: <><rect x="3" y="4.5" width="18" height="11" rx="1.3"/><line x1="9" y1="19.5" x2="15" y2="19.5"/><line x1="12" y1="15.5" x2="12" y2="19.5"/></>,
@@ -72,7 +72,7 @@ function InfraBadge({ kind = "generic" }) {
     generic: <><rect x="4.5" y="4.5" width="15" height="15" rx="2"/></>,
   };
   return (
-    <span className="prop-infra-badge" title="Infrastructure">
+    <span className="prop-infra-badge" title="Infrastructure" style={color ? { background: color } : undefined}>
       <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{P[kind] || P.generic}</svg>
     </span>
   );
@@ -769,7 +769,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                   title={open[it.id] ? "Collapse" : "Expand"} onClick={() => toggle(it.id)}>{open[it.id] ? "▾" : "▸"}</button>
         ) : <span className="prop-disc-sp" />)}
         {!parent && (lineRole(it) === "infrastructure"
-          ? <InfraBadge kind={infraKindOf((it.baseName && it.baseName !== "__custom__") ? it.baseName : it.name)} />
+          ? <InfraBadge color={svcColor} kind={infraKindOf((it.baseName && it.baseName !== "__custom__") ? it.baseName : it.name)} />
           : blockNumOf[it.id] ? <span className="prop-block-num" style={{ background: svcColor }}>{blockNumOf[it.id]}</span> : null)}
         {hasSub ? (
           editingId === it.id ? (
@@ -1051,7 +1051,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               <button className="prop-chev" style={{ color: svcColor }} title={isOpen ? "Hide breakdown" : "Show breakdown"}
                       onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: o[lr.key] === false }))}>{isOpen ? "▾" : "▸"}</button>
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
-            <InfraBadge kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
+            <InfraBadge color={svcColor} kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>
             {/* CLOSED tells you what's inside — a muted scan-summary built from the children; hidden once
                 expanded (the exact rows below are the detail, now inline-editable). */}

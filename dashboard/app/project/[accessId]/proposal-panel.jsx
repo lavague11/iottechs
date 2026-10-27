@@ -170,7 +170,8 @@ const PROP_CSS = `
 /* Infrastructure badge — a dark/inverted equipment chip (gold glyph + thin gold border) where the number would
    sit. The one cue that a row is supporting hardware (NVR/amp/display/switch), not a numbered endpoint. */
 /* (quiet outlined glyph — distinct from a filled endpoint number, but not a loud chip) */
-.pvx .prop-infra-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;width:20px;height:20px;margin-right:7px;border-radius:6px;background:transparent;color:var(--dv-gold-text,#8A6A1F);border:1px solid var(--dv-line,#E4E4DF);flex-shrink:0}
+.pvx .prop-infra-badge{display:inline-flex;align-items:center;justify-content:center;min-width:20px;width:20px;height:20px;margin-right:7px;border-radius:6px;background:var(--dv-gold,#C9A96E);color:var(--dv-ink,#101418);flex-shrink:0}
+.pvx .prop-infra-badge svg{width:13px;height:13px;display:block}
 .pvx .prop-cflag-wrap{display:inline-flex;align-items:center;gap:5px;margin-left:8px;flex-shrink:0}
 .pvx .prop-cflag{padding:2px 9px;border-radius:100px;font-size:.64rem;font-weight:600;white-space:nowrap;max-width:200px;overflow:hidden;text-overflow:ellipsis}
 .pvx .prop-cflag.remove{background:#fbe9e6;color:var(--dv-red,#C4553D)}
