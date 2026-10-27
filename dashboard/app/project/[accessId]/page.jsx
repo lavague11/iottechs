@@ -9,13 +9,14 @@ import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
 
 // Deliberately generic social preview. A project link that gets texted/forwarded must preview as a
-// neutral, branded "secure access" card — never the customer's name, address, or stage. The matching
-// og:image is app/project/[accessId]/opengraph-image.js. Fetches nothing, so it can't leak.
+// neutral, branded "Project Portal" card — never the customer's name, address, or stage. The matching
+// og:image is app/project/[accessId]/opengraph-image.jpg (static, fetches nothing, so it can't leak).
+// The signing link (/sign/<id>) has its own distinct card — don't fold this one into it.
 export function generateMetadata() {
-  const title = "IOT TECHS";
-  const description = "Secure access link — authorized only.";
+  const title = "IOT TECHS · Project Portal";
+  const description = "Track your project — every step from start to finish.";
   return {
-    title: "IOT TECHS · Secure Access",
+    title,
     description,
     openGraph: { title, description, siteName: "IOT TECHS", type: "website" },
     twitter: { card: "summary_large_image", title, description },
