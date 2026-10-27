@@ -208,7 +208,7 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
           )}
           {!isSub && (onToggleWaive || onRemove) && <div className="prop-im-sep" />}
           {onToggleWaive && (
-            <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Restore" : "Waive"}</button>
+            <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Unwaive" : "Waive"}</button>
           )}
           {onRemove && (
             <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
@@ -329,7 +329,7 @@ function WaiveBatchModal({ svcLabel, items, onToggle, onWaiveAll, onClose }) {
               <button type="button" className="pwm-btn gold" onClick={() => { onWaiveAll(true); setConfirmAll(false); }}>Waive All</button>
             </span>
           ) : (<>
-            {waivedN > 0 && <button type="button" className="pwm-btn ghost" onClick={() => onWaiveAll(false)}>Restore All</button>}
+            {waivedN > 0 && <button type="button" className="pwm-btn ghost" onClick={() => onWaiveAll(false)}>Unwaive All</button>}
             {anyActive && <button type="button" className="pwm-btn ghost" onClick={() => setConfirmAll(true)}>Waive All</button>}
             <button type="button" className="pwm-btn gold" onClick={onClose}>Done</button>
           </>)}
