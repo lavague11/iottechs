@@ -206,11 +206,13 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], onDuplicate
               )}
             </>
           )}
-          {!isSub && <div className="prop-im-sep" />}
+          {!isSub && (onToggleWaive || onRemove) && <div className="prop-im-sep" />}
           {onToggleWaive && (
             <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Restore" : "Waive"}</button>
           )}
-          <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
+          {onRemove && (
+            <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove</button>
+          )}
         </>
       )}
     </div>
@@ -1214,7 +1216,6 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                     )}
                     <span className="prop-sub2-amt">{money(bi.total)}</span>
                     <span className="prop-sub2-bar">
-                      {bi.ref && canWaiveItem(bi.ref) && <button type="button" className={`prop-sub2-waivebtn${bi.ref.waived ? " on" : ""}`} title={bi.ref.waived ? "Restore to the invoice" : "Waive — comp off the invoice"} aria-label={bi.ref.waived ? "Restore" : "Waive"} onClick={() => setItemWaived(bi.ref.id, !bi.ref.waived)}>{bi.ref.waived ? "Restore" : "Waive"}</button>}
                       {bi.ref && <button type="button" className="prop-sub2-done" title="Done" aria-label="Done" onClick={() => setLeadEditId(null)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                       </button>}
@@ -1223,7 +1224,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                       </button>}
                     </span>
                   </div>
-                ) : (
+                ) : (<>
                   <button type="button" className={`prop-sub2 compact${bi.ref?.waived ? " waived" : ""}`} disabled={readOnly} title={readOnly ? undefined : "Edit"}
                           aria-label={`${letter}: ${bi.name}${bi.ref?.waived ? " (waived)" : ""}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
                     <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
@@ -1232,7 +1233,25 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                     {(+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
                     <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
                   </button>
-                )}
+                  {/* ••• — same control the endpoint rows use, so a grouped line (NVR / drive / display) can be
+                      waived/restored (and removed, when removable) without opening the editor. Sits in the
+                      36px the compact row already reserves on its right. */}
+                  {!readOnly && bi.ref && canWaiveItem(bi.ref) && (
+                    <div className="prop-im-wrap prop-sub2-cmenu">
+                      <button type="button" className="prop-item-menu" aria-label={`${bi.name} actions`} title="Actions"
+                              onClick={(e) => { e.stopPropagation(); setMenuOpen(menuOpen === `child-${bi.ref.id}` ? null : `child-${bi.ref.id}`); }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+                      </button>
+                      {menuOpen === `child-${bi.ref.id}` && (
+                        <ItemMenu isSub waived={!!bi.ref.waived}
+                          onToggleWaive={() => setItemWaived(bi.ref.id, !bi.ref.waived)}
+                          onRemove={removable ? removeChild : undefined}
+                          removeLabel={`${bi.name}${bi.total ? ` · ${money(bi.total)}` : ""}`}
+                          onClose={() => setMenuOpen(null)} />
+                      )}
+                    </div>
+                  )}
+                </>)}
               </div>
             );
           })}

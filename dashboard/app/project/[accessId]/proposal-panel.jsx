@@ -368,10 +368,10 @@ const PROP_CSS = `
 .pvx .prop-sub2-dup:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
 .pvx .prop-sub2-del{color:var(--dv-meta,#787D84)}
 .pvx .prop-sub2-del:hover{color:var(--dv-red,#C4553D);background:rgba(196,85,61,.1)}
-/* Waive / Restore a grouped infrastructure child (NVR / drive / display) from its inline editor. */
-.pvx .prop-sub2-waivebtn{display:inline-flex;align-items:center;height:28px;padding:0 9px;border:none;background:none;border-radius:7px;cursor:pointer;flex-shrink:0;font-family:inherit;font-size:.72rem;font-weight:700;letter-spacing:.02em;color:var(--dv-meta,#787D84)}
-.pvx .prop-sub2-waivebtn:hover{color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.14)}
-.pvx .prop-sub2-waivebtn.on{color:var(--dv-gold-text,#8A6A1F)}
+/* ••• menu for a grouped infrastructure child (NVR / drive / display) — Waive / Restore / Remove. Sits in
+   the 36px the compact row reserves on its right (the wrap is position:relative). The combined selector
+   outranks the later .prop-im-wrap{position:relative} rule so the absolute placement wins. */
+.pvx .prop-im-wrap.prop-sub2-cmenu{position:absolute;right:2px;top:0;bottom:0;display:flex;align-items:center;z-index:3}
 /* A waived grouped child reads muted (the amount shows struck via .prop-waived-strike + a Waived marker). */
 .pvx .prop-sub2.compact.waived .prop-sub2-name{color:var(--dv-meta,#787D84)}
 /* Inline grouped-item child editor: the selector (recorder/drive/display) + a custom-name field. One
