@@ -4,7 +4,7 @@
 // transfer and render in the signer and the download. A floor plan is an aerial photo with overlays, so
 // JPEG at a capped width is far smaller with no meaningful loss at print size. Browser-only (Image +
 // canvas); returns the original string unchanged on anything unexpected, so it can never break an export.
-export function compactDataUrl(src, { maxW = 2000, maxH = 2600, quality = 0.85 } = {}) {
+export function compactDataUrl(src, { maxW = 1600, maxH = 2000, quality = 0.82 } = {}) {
   return new Promise((resolve) => {
     try {
       if (typeof document === "undefined" || typeof src !== "string" || !src.startsWith("data:image")) return resolve(src);

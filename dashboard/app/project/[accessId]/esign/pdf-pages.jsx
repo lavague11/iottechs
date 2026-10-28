@@ -27,24 +27,53 @@ async function sha256Hex(buf) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Stream the body with a progress callback (so a big document shows motion, not a frozen "Loading…").
+// Falls back to a one-shot arrayBuffer whenever the body can't be streamed. Returns a Uint8Array.
+async function fetchBytes(res, onProgress) {
+  const total = Number(res.headers.get("content-length")) || 0;
+  if (!res.body || typeof res.body.getReader !== "function") {
+    const b = new Uint8Array(await res.arrayBuffer());
+    onProgress?.(1);
+    return b;
+  }
+  const reader = res.body.getReader();
+  const chunks = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (total) onProgress?.(Math.min(0.99, received / total));
+  }
+  const out = new Uint8Array(received);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  onProgress?.(1);
+  return out;
+}
+
 export default function PdfPages({ url, expectedSha, zoom = 1, renderOverlay, onLoaded, onError }) {
   const hostRef = useRef(null);
   const [pdf, setPdf] = useState(null);
   const [sizes, setSizes] = useState([]);       // [{ w, h }] at scale 1, per page
   const [width, setWidth] = useState(0);        // container px width — drives re-render on resize/zoom
   const [state, setState] = useState("loading"); // loading | ready | error
+  const [pct, setPct] = useState(0);            // download progress 0..1 (0 = unknown/just started)
 
   // Load + verify the document once per url.
   useEffect(() => {
     let dead = false, doc = null;
+    setPct(0);
     (async () => {
       try {
         const res = await fetch(url, { credentials: "same-origin", cache: "no-store" });
         if (!res.ok) throw new Error("Couldn't load the document.");
-        const buf = await res.arrayBuffer();
-        if (expectedSha && (await sha256Hex(buf)) !== expectedSha) throw new Error("This document failed its integrity check.");
+        const bytes = await fetchBytes(res, (p) => { if (!dead) setPct(p); });
+        if (dead) return;
+        if (expectedSha && (await sha256Hex(bytes.buffer)) !== expectedSha) throw new Error("This document failed its integrity check.");
         const lib = await loadPdfjs();
-        doc = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+        doc = await lib.getDocument({ data: bytes }).promise;
         const dims = [];
         for (let i = 1; i <= doc.numPages; i++) { const pg = await doc.getPage(i); const v = pg.getViewport({ scale: 1 }); dims.push({ w: v.width, h: v.height }); }
         if (dead) return;
@@ -67,7 +96,7 @@ export default function PdfPages({ url, expectedSha, zoom = 1, renderOverlay, on
 
   return (
     <div ref={hostRef} className="esg-pages" style={{ width: `${Math.round(zoom * 100)}%` }}>
-      {state === "loading" && <div className="esg-note">Loading…</div>}
+      {state === "loading" && <div className="esg-note">{pct > 0 && pct < 1 ? `Loading… ${Math.round(pct * 100)}%` : "Loading…"}</div>}
       {state === "error" && <div className="esg-note err">Document unavailable</div>}
       {state === "ready" && sizes.map((s, i) => (
         <Page key={i} pdf={pdf} num={i + 1} size={s} width={width}>{renderOverlay?.(i + 1)}</Page>
