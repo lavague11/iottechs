@@ -79,10 +79,12 @@ test("regression: a real (populated) proposal renders the full customer view, no
   await page.goto(`/project/${accessId}`, { waitUntil: "domcontentloaded" });
   await enterPin(page, PIN);
   await expect(page.getByText("Customer view")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText(/Total Investment/i)).toBeVisible();   // the full proposal summary rendered (no depositPct ReferenceError)
-  // Redesign acceptance: the line-item breakdown is visible WITHOUT a click, and there is exactly ONE
-  // canonical Review & Sign CTA (the acceptance box no longer carries a duplicate).
-  await expect(page.getByText(/Project Cost Breakdown/i)).toBeVisible();
+  // The redundant summary card (Your System / Total Investment / Project Cost Breakdown) was removed per
+  // owner — the service line items render straight away. Proving the proposal rendered (no depositPct
+  // ReferenceError) via the service name, and there is exactly ONE canonical Review & Sign CTA.
+  await expect(page.getByText(/Security Cameras/i).first()).toBeVisible();
+  await expect(page.getByText(/Total Investment/i)).toHaveCount(0);
+  await expect(page.getByText(/Project Cost Breakdown/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Review & Sign$/i })).toHaveCount(1);
   await NO_ERROR(page);
 });

@@ -47,7 +47,6 @@ import ProposalFinancialSummary from "./proposal-financial-summary";
 import ProposalPaymentPlan from "./proposal-payment-plan";
 import PayButtons from "./pay-buttons";
 import ZellePay from "./pay-zelle";
-import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -125,7 +124,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const costRef = useRef(null);
   const payRef = useRef(null);
   const signRef = useRef(null);
-  const [spotlightOn, setSpotlightOn] = useState(false);
   const [bannerDismissed, setBannerDismissed] = useState(false);   // big → compact for this version (per device)
   const [reqActions, setReqActions] = useState(null);   // canonical outstanding customer actions (server resolver)
   const [camRoster, setCamRoster] = useState([]);   // survey camera roster → camera line-item location names
@@ -480,18 +478,12 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     try { if (localStorage.getItem(verKey) === "seen") setBannerDismissed(true); } catch { /* private mode */ }
   }, [needsSig, verKey]);
   const markSeen = () => { setBannerDismissed(true); try { if (verKey) localStorage.setItem(verKey, "seen"); } catch { /* ignore */ } };
-  const startReview = () => { markSeen(); setSpotlightOn(true); };
-  // Guided review follows the customer's DECISION path (not the DOM order): what am I buying & what does it
-  // cost → when do I pay → ready to sign. The final step opens the real PDF signer (onFinish). Request a
-  // Change / Decline is never a step. Tapping the highlighted region also advances (the engine wires the ring).
-  const reviewSteps = () => [
-    { getEl: () => costRef.current, title: "Review your project", hint: "Confirm the equipment, locations, and total project cost. Tap the highlighted area to continue." },
-    { getEl: () => payRef.current, title: "Review your payment schedule", hint: "Confirm when each payment is due. Tap the highlighted area to continue." },
-    { getEl: () => signRef.current, title: "Ready to sign?", hint: "Open the proposal, review the final document, and sign when ready. Tap Review & Sign to continue.", cta: "Review & Sign" },
-  ];
+  // Review → straight to the PDF signer (no guided spotlight). The customer opens the actual document and
+  // signs; nothing to walk through.
+  const startReview = () => { markSeen(); if (opt) choose(opt.id); else showToast("Open a proposal option to review and sign."); };
   // Multi-document action center: when more than one customer action is outstanding on this surface
   // (proposal signature + PCP approval), list them in ONE center instead of competing banners. Each routes
-  // to its own review (proposal → spotlight, PCP → scroll to the agreement). Change orders resolve on their
+  // to its own action (proposal → the signer, PCP → scroll to the agreement). Change orders resolve on their
   // own surface (the resolver still returns them for the project-level center).
   const pageActions = (reqActions || []).filter((a) => a.documentType === "proposal" || a.documentType === "pcp");
   const showActionCenter = needsSig && !bannerDismissed && pageActions.length > 1;
@@ -500,7 +492,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
   const runAction = (a) => {
     markSeen();
     if (a.documentType === "pcp") { const el = rootRef.current?.querySelector(".pcv-pcp-box"); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }
-    else setSpotlightOn(true);
+    else if (opt) choose(opt.id);   // proposal → straight to the signer (no spotlight)
   };
   // When the customer may file per-line removal/relocation requests: any actionable proposal (direct
   // ✕ on each line), or a signed one they've put into "Request Modification" mode.
@@ -565,8 +557,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       <style>{PCV_CSS}</style>
 
       {/* Multi-document action center — more than one thing needs the customer (proposal + PCP). One
-          calm list, each routing to its own review, instead of competing banners. */}
-      {showActionCenter && !spotlightOn && (
+          calm list, each routing to its own action, instead of competing banners. */}
+      {showActionCenter && (
         <div className="pcv-actctr" role="region" aria-label="Documents that need your attention">
           <button type="button" className="pcv-sigbanner-x" aria-label="Dismiss" onClick={markSeen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -587,8 +579,8 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       )}
       {/* Signature-request attention — the customer never has to hunt for a new, actionable document.
           Big card on first sight of this version; collapses to a compact pill once seen/dismissed; gone
-          once signed. "Review document" starts the guided spotlight (it does NOT sign). */}
-      {needsSig && !spotlightOn && !bannerDismissed && !showActionCenter && (
+          once signed. "Review & sign" opens the actual PDF signer directly. */}
+      {needsSig && !bannerDismissed && !showActionCenter && (
         <div className="pcv-sigbanner" role="region" aria-label="Signature requested">
           <button type="button" className="pcv-sigbanner-x" aria-label="Dismiss" onClick={markSeen}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -597,24 +589,17 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /><path d="M8.5 16.5c1-1.3 2-1.3 3 0s2 1.3 3 0" /></svg>
           </span>
           <div className="pcv-sigbanner-k">Signature requested</div>
-          <div className="pcv-sigbanner-ttl">Your proposal is ready to review</div>
-          <div className="pcv-sigbanner-sub">We’ll walk you through your cost and payment terms, then you can sign.</div>
-          <button type="button" className="pcv-sigbanner-cta" onClick={startReview}>Review document</button>
+          <div className="pcv-sigbanner-ttl">Your proposal is ready to sign</div>
+          <div className="pcv-sigbanner-sub">Open the document and sign when you’re ready.</div>
+          <button type="button" className="pcv-sigbanner-cta" onClick={startReview}>Review</button>
         </div>
       )}
-      {needsSig && !spotlightOn && bannerDismissed && (
+      {needsSig && bannerDismissed && (
         <button type="button" className="pcv-sigpill" onClick={startReview} aria-label="Signature required — review your proposal">
           <span className="pcv-sigpill-dot" />
           <span className="pcv-sigpill-lbl">Signature required</span>
           <span className="pcv-sigpill-go">Review ›</span>
         </button>
-      )}
-      {spotlightOn && (
-        <DocReviewSpotlight
-          steps={reviewSteps()}
-          onClose={() => setSpotlightOn(false)}
-          onFinish={() => { setSpotlightOn(false); if (opt) choose(opt.id); }}
-        />
       )}
 
       {/* Fold header — same tool-card language as the rest of the page (icon + title + status chip
@@ -728,49 +713,19 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         </div>
       )}
 
-      {/* Summary-first — what you're getting, then the one number that matters, then the action.
-          The itemized table (the math) lives behind "View detailed breakdown" just below. */}
-      <div className="pcv-sum">
-        {/* Section header pattern: title (left) + optional right-side actions. Here the canonical Share
-            and Download actions ride the "Your System" line instead of a separate utility toolbar. */}
-        <div className="pcv-sum-hd">
-          <span className="pcv-sum-hd-t">Your System{p.payload.options.length > 1 ? ` · Option ${opt.id}` : ""}{p.payload.options.length > 1 ? <span className="pcv-sum-hd-nm">{displayOptionName(opt.name)}</span> : null}</span>
-          <span className="pcv-sec-acts">
-            <button type="button" className="pcv-sec-act" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label={copied ? "Link copied" : "Share"}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-            </button>
-            <button type="button" className="pcv-sec-act" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-            </button>
-          </span>
-        </div>
-        <div className="pcv-sum-cats">
-          {(opt.services || []).filter((s) => s.items?.length).map((s, i) => {
-            const camCount = s.key === "camera" ? s.items.filter((it) => (it.sub || []).length > 0).length : 0;
-            const count = camCount || s.items.reduce((a, it) => a + ((it.sub || []).length ? 1 : (+it.qty || 1)), 0);
-            const noun = s.key === "camera" ? `camera${count !== 1 ? "s" : ""}` : `item${count !== 1 ? "s" : ""}`;
-            return (
-              <div key={i} className="pcv-sum-cat">
-                <span className="pcv-sum-dot" style={{ background: serviceColor(s.key) }} />
-                <span className="pcv-sum-cat-nm">{s.label}</span>
-                <span className="pcv-sum-cat-ct">{count} {noun}</span>
-              </div>
-            );
-          })}
-        </div>
-        <div className="pcv-sum-total">
-          <span className="pcv-sum-total-lbl">Total Investment</span>
-          <span className="pcv-sum-total-amt">{money(t.grand)}</span>
-        </div>
-        {/* The deposit/balance line lived here before, but Payment Terms below spells out the full
-            schedule — so it's dropped to avoid saying the same thing twice. */}
-      </div>
-
-      {/* The breakdown is always shown — Payment Terms and Approve & Sign sit right below it, so there's
-          nothing to collapse for. */}
+      {/* The service + line items, straight away — the old scope/total summary card and the cost-breakdown
+          header above it were removed per owner (signature-required, then the service). Share + Download
+          stay as a quiet right-aligned action cluster. */}
       {(<>
       <div className="pcv-cost-region" ref={costRef}>
-      <div className="pcv-section-hd">Project Cost Breakdown{p.payload.options.length > 1 ? ` — Option ${opt.id} (${displayOptionName(opt.name)})` : ""}</div>
+      <div className="pcv-items-acts">
+        <button type="button" className="pcv-sec-act" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label={copied ? "Link copied" : "Share"}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+        </button>
+        <button type="button" className="pcv-sec-act" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+        </button>
+      </div>
       {/* Line items — the SAME renderer staff build with, in read-only customer mode (grouped NVR/Displays,
           A/B/C children, condition badges, alignment). Every row improvement now reaches both views. The
           per-line pen opens a change request; Placement jumps to the floor-plan map. */}
@@ -858,7 +813,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           </div>
         </>
       )}
-      </div>{/* /pcv-cost-region — Step 1 spotlight: Project Cost Breakdown → Camera Locations */}
+      </div>{/* /pcv-cost-region */}
       </>)}
 
       <div className="pcv-pay-region" ref={payRef}>
@@ -1167,34 +1122,12 @@ const PCV_CSS = `
 .pcv-opt-chk{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
 .pcv-opt-tot{font-size:.86rem;font-weight:600;color:var(--oc)}
 
-/* Summary-first card — scope (what you're getting) + the one number + the primary action, up top.
-   The itemized table (the math) is a click away behind "View detailed breakdown". */
-.pcv-sum{margin:24px 22px 4px;border:0;border-radius:0;background:transparent;padding:0;display:flex;flex-direction:column;gap:14px}
-/* Reusable section header: title (left) + optional right-side actions. */
-.pcv-sum-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
-.pcv-sum-hd-t{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84);display:inline-flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
-.pcv-sec-acts{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+/* Icon action button + the quiet Share/Download cluster that sits above the line items (the old
+   scope/total summary card was removed). */
 .pcv-sec-act{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);cursor:pointer;font-family:inherit;flex:0 0 auto}
 .pcv-sec-act:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-faint,#A1A6AC)}
 .pcv-sec-act:disabled{opacity:.5;cursor:default}
-.pcv-sum-hd-nm{font-size:.9rem;font-weight:700;letter-spacing:-.01em;text-transform:none;color:var(--dv-ink,#101418)}
-.pcv-sum-cats{display:flex;flex-direction:column;gap:0;border:0;border-radius:0}
-.pcv-sum-cat{display:flex;align-items:center;gap:10px;padding:9px 0;background:transparent;border-top:1px solid var(--dv-line-soft,#EDEDE9)}
-.pcv-sum-cat:first-child{border-top:0}
-.pcv-sum-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
-.pcv-sum-cat-nm{font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);text-transform:capitalize}
-.pcv-sum-cat-ct{margin-left:auto;font-size:.78rem;font-weight:600;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
-.pcv-sum-total{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 2px 0}
-.pcv-sum-total-lbl{font-size:.82rem;font-weight:700;letter-spacing:.02em;text-transform:uppercase;color:var(--dv-ink-soft,#3A4048)}
-.pcv-sum-total-amt{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums}
-.pcv-sum-dep{font-size:.78rem;color:var(--dv-meta,#787D84);line-height:1.4}
-.pcv-sum-dep b{color:var(--dv-ink-soft,#3A4048);font-weight:700}
-.pcv-sum-cta{height:48px;border:2px solid #3E6FB0;border-radius:10px;background:#F7DC6F;color:#1f1a05;
-  font-size:.92rem;font-weight:700;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;gap:9px}
-.pcv-sum-cta:hover:not(:disabled){background:#F2D45A}
-.pcv-sum-cta:disabled{opacity:.5;cursor:default}
-.pcv-sum-more{align-self:center;background:none;border:none;color:var(--dv-blue,#3E6C9E);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit;padding:2px 6px}
-.pcv-sum-more:hover{text-decoration:underline}
+.pcv-items-acts{display:flex;justify-content:flex-end;gap:6px;margin:22px 22px 6px}
 
 .pcv-section-hd{margin:30px 22px 8px;background:transparent;color:var(--dv-ink,#101418);font-size:.72rem;font-weight:700;
   letter-spacing:.08em;text-transform:uppercase;padding:0 0 7px;border-left:0;border-bottom:1px solid var(--dv-line,#E4E4DF)}
@@ -1231,15 +1164,13 @@ const PCV_CSS = `
   .pcv-fold-chip{height:30px;display:inline-flex;align-items:center;font-size:.7rem;padding:0 12px}
   .pcv-fold-chev-btn{padding:6px 6px}
   /* 16px mobile gutter across the one rail; metadata stacks; the total shrinks so nothing overflows the page. */
-  .pcv-header,.pcv-info-box,.pcv-sum,.pcv-section-hd,.pcv-table,.pcv-pay-list,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
+  .pcv-header,.pcv-info-box,.pcv-section-hd,.pcv-table,.pcv-pay-list,.pcv-accept-box,.pcv-subtotal-row,.pcv-grand,.pcv-pay-terms,.pcv-fineprint,.pcv-note-strip,.pcv-opt-cards,.pcv-layout,.pcv-loc-box,.pcv-pcp-box,.pcv-actions{margin-left:16px;margin-right:16px}
   button.pcv-signbar{width:auto;margin-left:16px;margin-right:16px}
   /* Cost breakdown reads as a clean 3-column list on a phone: drop the # and Unit columns, give the
      description the room, keep the amount right-aligned. (The detailed breakdown is opt-in anyway.) */
   .pcv-table-head,.pcv-row{grid-template-columns:1fr 84px !important}
   .pcv-table-head > :first-child,.pcv-row > :first-child{display:none}
   .pcv-info-row{grid-template-columns:1fr;gap:10px}
-  .pcv-sum-total{flex-wrap:wrap;gap:2px 12px}
-  .pcv-sum-total-amt{font-size:1.45rem}
   .pcv-info-link,.pcv-contact{word-break:break-word;overflow-wrap:anywhere}
   /* ----- compact customer proposal on mobile: less repeated branding, tighter rhythm, price is the moment ----- */
   /* The portal already shows company + project context above, so drop the PDF masthead's repeated tagline/contact. */

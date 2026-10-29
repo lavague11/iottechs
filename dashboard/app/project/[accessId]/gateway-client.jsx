@@ -1560,7 +1560,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // component renders BEFORE the router commits the new URL, so window.location still shows the old
   // page and the deep link would be missed. useSearchParams reflects the URL being rendered.
   const searchParams = useSearchParams();
-  const stageParamRef = useRef(searchParams?.get("stage") || null);
+  // A direct proposal/sign deep-link (?open=proposal, ?sign=…) must land the deck ON the proposal stage,
+  // not merely open the tool on top of wherever the customer's pointer sits — otherwise the customer
+  // re-center effect parks them on their current step (often Site Survey) and the signer opens behind it.
+  // Seeding the stage ref makes proposal the initial stage AND makes that re-center honor-skip fire once
+  // (it consumes stageParamRef), so a signing link goes straight to the proposal page with the signer open.
+  const _wantsProposalLanding = (searchParams?.get("open") || "").toLowerCase() === "proposal" || searchParams?.get("sign") != null;
+  const stageParamRef = useRef(searchParams?.get("stage") || (_wantsProposalLanding ? "proposal" : null));
   // ?open=<tool> (share links) → auto-open that tool on the deck once it's loaded (e.g. open the
   // actual proposal document, not just land on the proposal step). Mapped to the deck tool name.
   // Captured in a ref so it survives the URL strip below — otherwise re-reading window.location after
