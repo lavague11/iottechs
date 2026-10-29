@@ -2554,8 +2554,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} /></div> });
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
-        // connect the app to their cameras as soon as the system goes in.
-        if (sees(cView, "ph_install", "Set Up Your Phone")) {
+        // connect the app to their cameras as soon as the system goes in. Only when the job ACTUALLY has
+        // cameras (entered in the survey): a non-camera job (POS, networking, audio) has nothing to set up
+        // on a phone, so the guide doesn't render at all (#78 — "no cameras on this job").
+        if ((toolMeta?.survey?.cameras || 0) > 0 && sees(cView, "ph_install", "Set Up Your Phone")) {
           tools.push({ name: "Set Up Your Phone", label: "App setup",
             node: (
               <div style={pad}>
