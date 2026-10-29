@@ -10,7 +10,7 @@ import {
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -517,6 +517,19 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
   }
+  // Cancel Revision — discard the unsent working draft and revert to the version the customer last
+  // received. The footer/header gate this on hasUnsent (a published version exists), and the button
+  // carries its own two-step confirm, so this just performs it. adopt() swaps in the reverted payload
+  // and clears the dirty/autosave state so the restored version isn't immediately re-saved as a draft.
+  async function cancelRev() {
+    setBusy(true); setErr(null);
+    const r = await cancelRevisionAction(accessId);
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return; }
+    setDirty(false);
+    adopt(r.proposal);
+    showToast("Revision cancelled — reverted to the sent version");
+  }
   // Manually email the customer their proposal link (in addition to the auto-send on Submit) — lets
   // staff re-send it any time so the customer can view it easier.
   async function emailToCustomer() {
@@ -806,6 +819,13 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         const submitBtn = (isDraftNew || hasUnsent) && (
           <button type="button" className="prop-head-cta" disabled={busy} onClick={send} title={hasUnsent ? "Send the revised proposal to the customer" : "Submit this proposal to the customer"}>{hasUnsent ? "Send Revision" : "Submit"}</button>
         );
+        // Cancel Revision — to the LEFT of Send Revision; discards the unsent draft back to the sent version.
+        // Only when there are unsent changes over a published version (hasUnsent); a confirm() guards it.
+        const cancelRevBtn = hasUnsent && isStaff && (
+          <button type="button" className="prop-head-cta prop-head-edit" disabled={busy}
+                  onClick={() => { if (typeof window === "undefined" || window.confirm("Discard these unsent changes and restore the version the customer last received?")) cancelRev(); }}
+                  title="Discard these unsent changes and restore the version the customer last received">Cancel Revision</button>
+        );
         // Request Signature — gold, matching the customer's "Review & Sign". Shown on a sent proposal that's
         // still awaiting a signature (hidden once accepted/signed). Opens the share sheet (link or email).
         const requestSignBtn = isStaff && isSentUnsigned && (
@@ -841,6 +861,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             {gear}
             {requestSignBtn}
             {reviseBtn}
+            {cancelRevBtn}
             {submitBtn}
             <button type="button" className="pv-tool-chev-btn" onClick={() => setBodyOpen((o) => !o)} title={bodyOpen ? "Collapse" : "Expand"}>{bodyOpen ? "▲" : "▼"}</button>
           </div>
@@ -1276,7 +1297,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         isStaff={isStaffDock} busy={busy} statusChip={statusChip} saveStateEl={saveStateEl}
         changeState={changeState} hasUnsent={hasUnsent} isSentUnsigned={isSentUnsigned} isDraftNew={isDraftNew} isLocked={isLocked}
         emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
-        onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)}
+        onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)} onCancelRevision={cancelRev}
         dlBusy={dlBusy} onDownload={handleDownload}
         canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)} />
     )}

@@ -3,7 +3,7 @@
 import { headers } from "next/headers";
 import {
   getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, saveProposalDraft, markProposalSent,
-  reviseProposal, selectProposalOption, requestProposalChanges,
+  reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
   confirmProjectPayment, voidProposalSignature, voidTechSignature,
@@ -279,6 +279,18 @@ export async function reviseProposalAction(accessId) {
     // Signature invalidated by a proposal change — tell the customer (canonical notification store).
     try { const cu = getCustomerUserForProject(accessId); if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal changed", body: `Version ${res.fromVersion} was revised; you'll be asked to review the changes and sign again (${accessId}).`, link: `/project/${accessId}` }); } catch {}
   }
+  await revalidate(accessId);
+  return { ok: true, proposal: sanitizeProposal(res.proposal, tok.role) };
+}
+
+// Cancel an in-progress revision: discard the unsent working draft and roll back to the version the
+// customer last received. Staff-edit only. No-op (error) when there's no unsent revision to cancel.
+export async function cancelRevisionAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  const res = cancelRevision(accessId);
+  if (!res.ok) return { error: res.error || "Couldn't cancel the revision." };
+  logProjectEvent(accessId, { kind: "revise", label: "Unsent revision cancelled — reverted to the sent version", actor: actorName(tok) });
   await revalidate(accessId);
   return { ok: true, proposal: sanitizeProposal(res.proposal, tok.role) };
 }

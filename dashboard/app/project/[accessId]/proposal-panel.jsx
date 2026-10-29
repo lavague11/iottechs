@@ -95,7 +95,15 @@ const PROP_CSS = `
 .pvx .prop-foot-chg:hover b{text-decoration:underline}
 .pvx .prop-foot-delta{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
 .pvx .prop-foot-delta.neg{color:#C0392B}
-.pvx .prop-foot-acts{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+.pvx .prop-foot-acts{display:flex;align-items:center;gap:10px;flex:0 0 auto;flex-wrap:wrap}
+/* Unsent-revision indicator + Cancel Revision (discard back to the sent version). */
+.pvx .prop-foot-unsent{display:flex;align-items:center;flex-wrap:wrap;gap:6px 9px;min-width:0}
+.pvx .prop-foot-badge{flex:0 0 auto;display:inline-flex;align-items:center;height:20px;padding:0 9px;border-radius:100px;background:var(--dv-gold,#C9A96E);color:#201a0c;font-size:.64rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;white-space:nowrap}
+.pvx .prop-foot-cancelc{display:inline-flex;align-items:center;gap:8px}
+.pvx .prop-foot-cancelq{font-size:.82rem;font-weight:600;color:var(--dv-ink,#101418)}
+.pvx .prop-foot-discard{appearance:none;height:38px;padding:0 16px;border:1px solid #D9A79E;border-radius:10px;background:#FBEEEC;color:#B3382C;font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
+.pvx .prop-foot-discard:hover:not(:disabled){background:#F7E2DE;border-color:#B3382C}
+.pvx .prop-foot-discard:disabled{opacity:.5;cursor:default}
 .pvx .prop-foot-dlwrap{position:relative;display:inline-flex;flex:0 0 auto}
 .pvx .prop-foot-dl{display:inline-flex;align-items:center;justify-content:center;gap:7px;width:100%;height:38px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
 .pvx .prop-foot-dl:hover:not(:disabled){border-color:var(--dv-ink,#101418)}

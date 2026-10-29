@@ -20,10 +20,11 @@ const signed = (n) => `${n > 0 ? "+" : "−"}${money(Math.abs(n))}`;
 export default function ProposalFooter({
   status, version, authBlocked, isStaff, busy, statusChip, saveStateEl,
   changeState, hasUnsent, isSentUnsigned, isDraftNew, isLocked,
-  emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign,
+  emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign, onCancelRevision,
   dlBusy, onDownload, canRecordPayment, onRecordPayment,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const pubV = changeState?.publishedVersion ?? null;
   const delta = changeState?.financialDelta;
   const n = changeState?.changeCount || 0;
@@ -56,11 +57,14 @@ export default function ProposalFooter({
   let meta, primary;
   if (hasUnsent) {
     meta = (
-      <button type="button" className="prop-foot-chg" onClick={() => setChangesOpen(true)} title="See what changed">
-        <b>{n} unsent {n === 1 ? "change" : "changes"}</b>
-        {typeof delta === "number" && delta !== 0 && <span className={`prop-foot-delta${delta < 0 ? " neg" : ""}`}>· {signed(delta)}</span>}
-        {saveStateEl}
-      </button>
+      <span className="prop-foot-unsent">
+        <span className="prop-foot-badge" title="These changes are autosaved but NOT yet sent to the customer">Unsubmitted</span>
+        <button type="button" className="prop-foot-chg" onClick={() => setChangesOpen(true)} title="See what changed">
+          <b>{n} unsent {n === 1 ? "change" : "changes"}</b>
+          {typeof delta === "number" && delta !== 0 && <span className={`prop-foot-delta${delta < 0 ? " neg" : ""}`}>· {signed(delta)}</span>}
+          {saveStateEl}
+        </button>
+      </span>
     );
     primary = !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send Revision</button> : null;
   } else if (isSentUnsigned) {
@@ -83,10 +87,26 @@ export default function ProposalFooter({
     primary = null;
   }
 
+  // Cancel Revision — discard the unsent working draft and restore the version the customer last received.
+  // Two-step confirm; shown to the LEFT of Send Revision. Only with unsent changes over a published version
+  // (hasUnsent) — a brand-new, never-sent draft has nothing to revert to, so it never appears there.
+  const cancelEl = hasUnsent && !authBlocked && onCancelRevision ? (
+    confirmCancel ? (
+      <span className="prop-foot-cancelc">
+        <span className="prop-foot-cancelq">Discard changes?</span>
+        <button type="button" className="prop-dock-ghost" disabled={busy} onClick={() => setConfirmCancel(false)}>Keep</button>
+        <button type="button" className="prop-foot-discard" disabled={busy} onClick={() => { setConfirmCancel(false); onCancelRevision(); }}>Discard</button>
+      </span>
+    ) : (
+      <button type="button" className="prop-dock-ghost" disabled={busy} onClick={() => setConfirmCancel(true)}
+              title="Discard these unsent changes and restore the version the customer last received">Cancel Revision</button>
+    )
+  ) : null;
+
   return (
     <div className="prop-foot">
       <div className="prop-foot-metarow">{meta}</div>
-      <div className="prop-foot-acts">{primary}{recordPay}{download}</div>
+      <div className="prop-foot-acts">{cancelEl}{primary}{recordPay}{download}</div>
       {changesOpen && hasUnsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
     </div>
   );

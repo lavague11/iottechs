@@ -6184,6 +6184,30 @@ export function reviseProposal(accessId, byName, opts = {}) {
   // actually PUBLISHED (markProposalSent), which moves the published row. (Was: voided here at mint time.)
   return { proposal: getActiveProposal(accessId), fromVersion: cur.version, wasSigned: !!cur.signed_name };
 }
+// Cancel an in-progress revision: discard the unsent working DRAFT and restore the last published version
+// as the active proposal — i.e. roll back to exactly what the customer last received. Only valid when a
+// published version exists AND a separate unsent draft sits above it (reviseProposal minted v+1 and marked
+// the published row 'superseded'); a brand-new, never-sent draft has nothing to revert to. The published
+// row's acceptance/decline fields were preserved, so we restore its effective contractual status. Nothing
+// customer-facing changes (the draft was never visible), and no signing session is touched (the published
+// version the customer may be signing is untouched).
+export function cancelRevision(accessId) {
+  const published = getPublishedProposal(accessId);
+  if (!published) return { ok: false, error: "Nothing has been sent yet — there's no revision to cancel." };
+  const working = getActiveProposal(accessId);
+  if (!working || working.id === published.id || working.status !== "draft" || working.version <= published.version) {
+    return { ok: false, error: "No unsent revision to cancel." };
+  }
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    // Remove every unsent working draft above the published version (normally exactly one).
+    db.prepare("DELETE FROM proposals WHERE project_access_id=? AND status='draft' AND version > ?").run(String(accessId), published.version);
+    // Un-supersede the published row back to what the customer actually did (sent / accepted / declined).
+    db.prepare("UPDATE proposals SET status=?, updated_at=datetime('now','localtime') WHERE id=?").run(published.status || "sent", published.id);
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return { ok: true, proposal: getPublishedProposal(accessId) };
+}
 // Accepting and declining are tracked as two INDEPENDENT per-option sets so a customer can
 // accept Option A while declining Option B without one undoing the other:
 //   accepted_options  = ["A", ...]           (JSON array)
