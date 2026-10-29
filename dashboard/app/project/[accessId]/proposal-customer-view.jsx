@@ -1395,8 +1395,8 @@ button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-sign-box{margin:0 22px;background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);
   padding:16px 18px;display:flex;align-items:flex-end;justify-content:space-between;gap:20px;flex-wrap:wrap}
 .pcv-sign-mark{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
-.pcv-sign-img{max-height:70px;max-width:280px;object-fit:contain;align-self:flex-start}
-.pcv-sign-typed{font-size:1.7rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive;padding-left:4px}
+.pcv-sign-img{max-height:42px;max-width:190px;object-fit:contain;align-self:flex-start}
+.pcv-sign-typed{font-size:1.2rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive;padding-left:4px}
 .pcv-sign-rule{border-bottom:1px solid var(--dv-ink,#101418);height:1px;width:100%;margin-top:4px}
 .pcv-sign-cap{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-top:4px}
 .pcv-sign-meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px}

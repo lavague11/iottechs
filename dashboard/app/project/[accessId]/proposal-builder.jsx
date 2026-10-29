@@ -11,7 +11,7 @@ import {
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
 import MobileFieldNav from "./mobile-field-nav";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -540,15 +540,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (r?.error) { setErr(r.error); return; }
     showToast(r.sent ? "Proposal emailed to customer" : (r.note || "Email isn’t configured yet"));
   }
-  // Internal admin review of a signed contract — an acknowledgment, not a second customer approval.
-  async function markReviewed() {
-    setBusy(true);
-    const r = await markProposalReviewedAction(accessId, true);
-    setBusy(false);
-    if (r?.error) { showToast(r.error); return; }
-    if (r?.proposal) adopt(r.proposal);
-    showToast("Marked reviewed");
-  }
   // Download the same brand PDF the customer gets — built from the CURRENT edits (payload + tax +
   // deposit merged onto the server row), with the mockup photos and survey floor plans appended.
   async function handleDownload(mode = "standard") {
@@ -871,17 +862,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       })()}
 
       {bodyOpen && (<div className="prop-body">
-      {/* Internal review of a signed contract — admin/manager only; separate from the customer's acceptance. */}
-      {["admin", "manager"].includes(role) && status === "accepted" && meta?.signed_name && (
-        <div className={`prop-review-bar ${meta?.admin_reviewed_at ? "done" : "pending"}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">{meta?.admin_reviewed_at ? <path d="M20 6 9 17l-5-5" /> : <><circle cx="12" cy="12" r="9" /><path d="M12 8v4l3 2" /></>}</svg>
-          <span className="prr-tx">
-            <b>{meta?.admin_reviewed_at ? "Signed — Reviewed" : "Signed — Pending review"}</b>
-            <small>{meta?.admin_reviewed_at ? `Reviewed${meta.admin_reviewed_by ? ` by ${meta.admin_reviewed_by}` : ""}` : "Customer signed. Internal review only — not another customer approval."}</small>
-          </span>
-          {!meta?.admin_reviewed_at && <button type="button" className="prr-btn" disabled={busy} onClick={markReviewed}>Mark Reviewed</button>}
-        </div>
-      )}
       {status === "changes_requested" && meta?.change_note && (
         <div className="prop-note-strip">Customer: “{meta.change_note}”</div>
       )}
