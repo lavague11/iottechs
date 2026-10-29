@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { createBugReport, listBugReports, resolveBugReport, setBugMeta } from "../../../lib/db";
+import { createBugReport, listBugReports, resolveBugReport, setBugMeta, getBugQueueState, getBugRuns } from "../../../lib/db";
 
 // The site-wide "Report a bug" button POSTs here (description + optional screenshot URL). Anyone using
 // the app can file one; we capture who (if signed in) for context. Staff read/resolve them at /bugs.
@@ -41,7 +41,17 @@ export async function POST(req) {
 export async function GET() {
   const tok = await getSession();
   const staff = !!isStaff(tok);
-  return Response.json({ ok: true, staff, bugs: staff ? listBugReports() : [] });
+  if (!staff) return Response.json({ ok: true, staff: false, bugs: [] });
+  const bugs = listBugReports();
+  // Attach the latest run only to bugs Claude has finished (review/failed) so the Fix section can show
+  // the summary / files / branch without an extra round-trip. Cheap: there are rarely many.
+  for (const b of bugs) {
+    if (b.queue_status === "review" || b.queue_status === "failed") {
+      const r = getBugRuns(b.id, 1)[0];
+      if (r) b.last_run = r;
+    }
+  }
+  return Response.json({ ok: true, staff: true, bugs, queue: getBugQueueState() });
 }
 export async function PATCH(req) {
   const tok = await getSession();

@@ -14,6 +14,11 @@ config.json
 .next/
 dist/
 
+# Bug-runner automation (local only — lives in the dedicated clone, never the primary workspace)
+worktrees/
+.bug-runner-ok
+tools/bug-runner/.runner-state.json
+
 # Local databases (customer data stays local)
 *.db
 *.db-journal

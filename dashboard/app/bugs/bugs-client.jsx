@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Wordmark, BrandLink } from "../components/brand";
@@ -38,6 +38,8 @@ function pageLabel(path) {
 }
 // A report may carry several screenshots (image_urls JSON) or one legacy image_url.
 const SEVS = ["critical", "high", "medium", "low"];   // most-severe first (for filter order)
+// Queue (automation lane) status labels — distinct from the human open/resolved status.
+const QLABEL = { queued: "Queued", running: "Running", review: "Review", failed: "Failed" };
 const sevLabel = (s) => (s === "medium" ? "Med" : (s || "medium").charAt(0).toUpperCase() + (s || "medium").slice(1));
 const imgsOf = (b) => { try { const a = JSON.parse(b.image_urls || "null"); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ } return b.image_url ? [b.image_url] : []; };
 const ctxOf = (b) => { try { const c = JSON.parse(b.context || "null"); return c && typeof c === "object" ? c : null; } catch { return null; } };
@@ -77,23 +79,39 @@ export default function BugsClient({ initial = [] }) {
   const [toast, setToast] = useState(null);
   const seenRef = useRef(new Set(initial.map((b) => b.id)));
   const searchRef = useRef(null);
+  // Queue (Claude Code task queue) state — the /bugs portal doubles as the queue surface.
+  const [queue, setQueue] = useState(null);       // { mode, running, next[], counts, stuck } from the poll
+  const [selMode, setSelMode] = useState(false);  // bulk-select mode (checkboxes appear only then)
+  const [sel, setSel] = useState(() => new Set()); // selected bug ids for Queue Selected
+  const [qBusy, setQBusy] = useState(false);
 
-  // Auto-refresh — poll so the surface stays live without a manual reload.
-  useEffect(() => {
-    let live = true;
-    const poll = async () => {
-      const r = await fetch("/api/bug-report", { credentials: "same-origin" }).then((x) => x.json()).catch(() => null);
-      if (!live || !r?.ok || !Array.isArray(r.bugs)) return;
-      const hasNew = r.bugs.some((b) => b.status === "open" && !seenRef.current.has(b.id));
-      seenRef.current = new Set(r.bugs.map((b) => b.id));
-      setBugs(r.bugs);
-      setSuggest((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.fix_prompt && !next[b.id]) next[b.id] = b.fix_prompt; }); return next; });
-      setUiRev((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.ui_prompt && !next[b.id]) next[b.id] = b.ui_prompt; }); return next; });
-      if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
-    };
-    const t = setInterval(poll, 15000);
-    return () => { live = false; clearInterval(t); };
+  // Live refresh — one puller used by the 15s interval AND after any queue action.
+  const pull = useCallback(async () => {
+    const r = await fetch("/api/bug-report", { credentials: "same-origin" }).then((x) => x.json()).catch(() => null);
+    if (!r?.ok || !Array.isArray(r.bugs)) return;
+    const hasNew = r.bugs.some((b) => b.status === "open" && !seenRef.current.has(b.id));
+    seenRef.current = new Set(r.bugs.map((b) => b.id));
+    setBugs(r.bugs);
+    setQueue(r.queue || null);
+    setSuggest((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.fix_prompt && !next[b.id]) next[b.id] = b.fix_prompt; }); return next; });
+    setUiRev((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.ui_prompt && !next[b.id]) next[b.id] = b.ui_prompt; }); return next; });
+    if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
   }, []);
+  useEffect(() => { pull(); const t = setInterval(pull, 15000); return () => clearInterval(t); }, [pull]);
+
+  // One entry point for every queue mutation (enqueue / pause / resume / retry / dequeue), then refresh.
+  const queueAction = useCallback(async (op, extra = {}) => {
+    setQBusy(true);
+    const r = await fetch("/api/queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ op, ...extra }) })
+      .then((x) => x.json()).catch(() => null);
+    setQBusy(false);
+    await pull();
+    return r;
+  }, [pull]);
+  const queueFix = (id) => queueAction("enqueue", { ids: [id] });
+  const queueAllOpen = async () => { const r = await queueAction("enqueue", { allOpen: true }); flash(r?.queued?.length ? `Queued ${r.queued.length}` : "Nothing to queue"); };
+  const queueSelected = async () => { const ids = [...sel]; if (!ids.length) return; const r = await queueAction("enqueue", { ids }); setSel(new Set()); setSelMode(false); flash(r?.queued?.length ? `Queued ${r.queued.length}` : "Nothing to queue"); };
+  const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
   // Close menus on outside click; Escape closes menus / preview / search.
   useEffect(() => {
@@ -285,6 +303,45 @@ export default function BugsClient({ initial = [] }) {
         </div>
       </header>
 
+      {/* Compact queue bar — only when the queue has something going on. Running · Next · Stop/Resume. */}
+      {queue && (queue.running || (queue.next && queue.next.length) || queue.mode === "stop_after_current") && (
+        <div className="bgp-qbar">
+          <div className="bgp-qinfo">
+            {queue.running ? (
+              <span className="bgp-qseg"><span className={`bgp-qdot run${queue.stuck ? " stuck" : ""}`} />Running
+                <button className="bgp-qid" onClick={() => openBug(queue.running.id)}>#{queue.running.id}</button>
+                <span className="bgp-qtxt">{queue.running.description}</span>
+                {queue.stuck && <span className="bgp-qstuck">stuck</span>}
+              </span>
+            ) : <span className="bgp-qseg"><span className="bgp-qdot idle" />{queue.mode === "stop_after_current" ? "Stopped" : "Idle"}</span>}
+            {queue.next && queue.next.length > 0 && (
+              <span className="bgp-qseg next">Next {queue.next.slice(0, 6).map((b) => (
+                <button key={b.id} className="bgp-qid" onClick={() => openBug(b.id)}>#{b.id}</button>
+              ))}{queue.next.length > 6 ? <span className="bgp-qmore">+{queue.next.length - 6}</span> : null}</span>
+            )}
+          </div>
+          <button className="bgp-qstop" disabled={qBusy} onClick={() => queueAction(queue.mode === "stop_after_current" ? "resume" : "pause")}>
+            {queue.mode === "stop_after_current" ? "Resume" : "Stop After Current"}
+          </button>
+        </div>
+      )}
+
+      {/* Queue toolbar — Queue All Open + a Select mode for Queue Selected (no permanent row checkboxes). */}
+      <div className="bgp-qtools">
+        {selMode ? (
+          <>
+            <span className="bgp-qcount">{sel.size} selected</span>
+            <button className="bgp-mini" disabled={!sel.size || qBusy} onClick={queueSelected}>Queue Selected</button>
+            <button className="bgp-mini ghost" onClick={() => { setSelMode(false); setSel(new Set()); }}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <button className="bgp-mini" disabled={qBusy || openN === 0} onClick={queueAllOpen}>Queue All Open</button>
+            <button className="bgp-mini ghost" onClick={() => setSelMode(true)}>Select</button>
+          </>
+        )}
+      </div>
+
       {shown.length === 0 ? (
         <div className="bgp-empty">{emptyMsg}</div>
       ) : (
@@ -295,8 +352,9 @@ export default function BugsClient({ initial = [] }) {
             const resolved = b.status === "resolved";
             const pf = platform(ctxOf(b)?.ua || b.user_agent);
             return (
-              <div key={b.id} className={`bgp-card${resolved ? " done" : ""}${isOpen ? " open" : ""}`}>
-                <div className={`bgp-row${imgs.length ? "" : " nothumb"}`} onClick={() => toggleRow(b)} role="button" aria-expanded={isOpen}>
+              <div key={b.id} className={`bgp-card${resolved ? " done" : ""}${isOpen ? " open" : ""}${selMode ? " sel" : ""}${sel.has(b.id) ? " picked" : ""}`}>
+                {selMode && <input type="checkbox" className="bgp-selbox" checked={sel.has(b.id)} onChange={() => toggleSel(b.id)} onClick={stop} aria-label={`Select bug #${b.id}`} />}
+                <div className={`bgp-row${imgs.length ? "" : " nothumb"}`} onClick={() => (selMode ? toggleSel(b.id) : toggleRow(b))} role="button" aria-expanded={isOpen}>
                   {imgs.length > 0 && (
                     <button className={`bgp-thumb${imgs.length > 1 ? " stack" : ""}`} onClick={(e) => { stop(e); setGallery({ urls: imgs, i: 0 }); }} aria-label={`View ${imgs.length} screenshot${imgs.length > 1 ? "s" : ""}`} title="View">
                       <img src={imgs[0]} alt="screenshot" />
@@ -307,6 +365,7 @@ export default function BugsClient({ initial = [] }) {
                     <div className="bgp-desc" dir="auto">{b.description}</div>
                     <div className="bgp-meta">
                       <span className={`bgp-sev ${b.severity || "medium"}`} title={`${sevLabel(b.severity)} severity`}>{sevLabel(b.severity)}</span>
+                      {b.queue_status && <span className={`bgp-qchip ${b.queue_status}`} title={`Queue: ${QLABEL[b.queue_status]}`}>{QLABEL[b.queue_status]}</span>}
                       <button className="bgp-id" onClick={(e) => { stop(e); copyText(`BUG #${b.id}`); }} title="Copy ID">#{b.id}</button>
                       {b.path && <a className="bgp-path" href={b.url || b.path} target="_blank" rel="noreferrer" onClick={stop}>{b.path}</a>}
                       {pf.device && <span>{pf.device}</span>}
@@ -343,6 +402,8 @@ export default function BugsClient({ initial = [] }) {
                     fixBusy={sugBusy === b.id} reviewBusy={uiBusy === b.id}
                     onFix={() => getSuggestion(b)} onReview={() => getUiReview(b)}
                     onCopy={copyText} onGallery={(i) => setGallery({ urls: imgs, i })} stop={stop}
+                    qBusy={qBusy} onQueueFix={() => queueFix(b.id)}
+                    onRetry={() => queueAction("retry", { id: b.id })} onDequeue={() => queueAction("dequeue", { id: b.id })}
                   />
                 )}
               </div>
@@ -419,7 +480,7 @@ export default function BugsClient({ initial = [] }) {
 
 // The whole expanded bug — ONE continuous surface, no tabs. Reads top-to-bottom the way a developer
 // triages: Report → Evidence → Page → Fix (the Claude-ready handoff) → Environment → Technical (folded).
-function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, onReview, onCopy, onGallery, stop }) {
+function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, onReview, onCopy, onGallery, stop, qBusy, onQueueFix, onRetry, onDequeue }) {
   const [more, setMore] = useState(false);
   // Fix = the coding-agent handoff. Prefer the generated prompt; fold the screenshot analysis in beneath it.
   const fixText = [fix, review].filter(Boolean).join("\n\n———\n\n");
@@ -463,6 +524,23 @@ function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, 
           <h4 className="bgp-sech">Fix</h4>
           {fixText && !fixBusy && <button className="bgp-ib sm" aria-label="Copy fix" title="Copy" onClick={() => onCopy(fixText)}><CopyI /></button>}
         </div>
+
+        {/* Claude Code queue — reuse the Fix section. Queue Fix sends this bug to the local runner; the
+            generated prompt (if any) stays below as supplemental context. 'Ready for Review' ≠ Resolved. */}
+        <div className="bgp-qpanel" onClick={stop}>
+          {!b.queue_status ? (
+            b.status === "open" && <button className="bgp-qfix" disabled={qBusy} onClick={onQueueFix}>Queue Fix</button>
+          ) : (
+            <div className="bgp-qstate">
+              <span className={`bgp-qchip ${b.queue_status}`}>{b.queue_status === "review" ? "Ready for Review" : QLABEL[b.queue_status]}</span>
+              {b.queue_status === "queued" && <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>}
+              {(b.queue_status === "review" || b.queue_status === "failed") && <button className="bgp-mini" disabled={qBusy} onClick={onRetry}>Retry</button>}
+              {b.queue_status === "failed" && <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>}
+            </div>
+          )}
+          {b.last_run && <RunResult run={b.last_run} />}
+        </div>
+
         {fixBusy && !fixText ? (
           <div className="bgp-report muted">Writing the fix prompt…</div>
         ) : fixText ? (
@@ -524,6 +602,29 @@ function TechnicalBlock({ b, ctx, pf }) {
         </div>
       )}
     </details>
+  );
+}
+
+// The latest Claude run on a bug — what it concluded, the branch/commit, validation results and files
+// changed. Shown in the Fix section once a run reaches Ready for Review or Failed.
+function RunResult({ run }) {
+  let files = []; try { files = JSON.parse(run.files_changed || "[]"); } catch { files = []; }
+  let val = null;  try { val = JSON.parse(run.validation || "null"); } catch { val = null; }
+  return (
+    <div className="bgp-run">
+      {run.summary && <div className="bgp-run-sum" dir="auto">{run.summary}</div>}
+      <div className="bgp-run-meta">
+        {run.branch && <span className="bgp-run-tag">{run.branch}</span>}
+        {run.commit_sha && <span className="bgp-run-tag mono">{String(run.commit_sha).slice(0, 8)}</span>}
+        {val && typeof val === "object" && Object.entries(val).map(([k, v]) => (
+          <span key={k} className={`bgp-run-chk ${/pass|ok|true/i.test(String(v)) ? "ok" : "bad"}`}>{k}: {String(v)}</span>
+        ))}
+      </div>
+      {files.length > 0 && (
+        <div className="bgp-run-files">{files.slice(0, 12).map((f, i) => <code key={i}>{f}</code>)}{files.length > 12 ? <span className="bgp-qmore"> +{files.length - 12}</span> : null}</div>
+      )}
+      {run.error && <div className="bgp-run-err" dir="auto">{run.error}</div>}
+    </div>
   );
 }
 
@@ -810,4 +911,79 @@ const CSS = `
   .bgp-areain:focus{border-color:#5a6068}
 }
 @media (max-width:640px) and (prefers-color-scheme:dark){ .bgp-act{border-color:#242a31} }
+
+/* ---- Queue (Claude Code task queue) ---- */
+.bgp-qbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;padding:9px 13px;
+  border:1px solid #e4e4df;border-radius:10px;background:#faf9f6;font-size:.8rem;color:#2b3038;flex-wrap:wrap}
+.bgp-qinfo{display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-width:0}
+.bgp-qseg{display:inline-flex;align-items:center;gap:6px;font-weight:600}
+.bgp-qseg.next{color:#6b7079;font-weight:700;text-transform:uppercase;font-size:.7rem;letter-spacing:.04em}
+.bgp-qdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto}
+.bgp-qdot.run{background:#2e7d5b;animation:bgpPulse 1.6s ease-in-out infinite}
+.bgp-qdot.run.stuck{background:#8a6320;animation:none}
+.bgp-qdot.idle{background:#b8bcc3}
+@keyframes bgpPulse{0%,100%{opacity:1}50%{opacity:.35}}
+.bgp-qid{border:0;background:none;cursor:pointer;font:700 .8rem/1 inherit;color:#3a6ea5;padding:0 2px}
+.bgp-qid:hover{text-decoration:underline}
+.bgp-qtxt{color:#6b7079;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bgp-qstuck{color:#8a6320;font-weight:800;text-transform:uppercase;font-size:.64rem;letter-spacing:.04em}
+.bgp-qmore{color:#9297a0;font-weight:700}
+.bgp-qstop{flex:0 0 auto;height:32px;padding:0 14px;border:1px solid #e4e4df;border-radius:8px;background:#fff;color:#2b3038;font:700 .76rem/1 inherit;cursor:pointer}
+.bgp-qstop:hover:not(:disabled){border-color:#12151b}
+.bgp-qstop:disabled{opacity:.5;cursor:default}
+.bgp-qtools{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.bgp-qcount{font:700 .78rem/1 inherit;color:#6b7079;margin-right:2px}
+.bgp-mini.ghost{background:transparent;border-color:transparent;color:#6b7079}
+.bgp-mini.ghost:hover:not(:disabled){border-color:#e4e4df;color:#12151b}
+.bgp-selbox{position:absolute;top:50%;left:13px;transform:translateY(-50%);z-index:5;width:18px;height:18px;accent-color:#12151b;cursor:pointer;margin:0}
+.bgp-card.sel{position:relative}
+.bgp-card.sel .bgp-row{padding-left:46px}
+.bgp-card.picked{border-color:#2b5f9e;box-shadow:0 0 0 1px #2b5f9e inset}
+/* Queue status chip (row + Fix section) */
+.bgp-qchip{display:inline-flex;align-items:center;height:16px;padding:0 6px;border-radius:5px;font:800 .62rem/1 inherit;text-transform:uppercase;letter-spacing:.03em;flex:0 0 auto}
+.bgp-qchip.queued{background:#eaf1fb;color:#2b5f9e}
+.bgp-qchip.running{background:#e6f3ec;color:#2e7d5b}
+.bgp-qchip.review{background:#fdf3e2;color:#8a6320}
+.bgp-qchip.failed{background:#fbe8e4;color:#b24a3a}
+/* Fix-section queue panel */
+.bgp-qpanel{display:flex;flex-direction:column;gap:9px}
+.bgp-qstate{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bgp-qfix{align-self:flex-start;height:34px;padding:0 16px;border:0;border-radius:8px;background:#12151b;color:#fff;font:700 .78rem/1 inherit;cursor:pointer}
+.bgp-qfix:hover:not(:disabled){background:#000}
+.bgp-qfix:disabled{opacity:.5;cursor:default}
+.bgp-run{display:flex;flex-direction:column;gap:7px;background:#faf9f6;border:1px solid #eceae4;border-radius:10px;padding:11px 12px}
+.bgp-run-sum{font-size:.84rem;line-height:1.5;color:#2b3038;white-space:pre-wrap;word-break:break-word}
+.bgp-run-meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bgp-run-tag{font:700 .68rem/1 inherit;color:#5a6068;background:#eceef1;border-radius:5px;padding:3px 7px}
+.bgp-run-tag.mono{font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+.bgp-run-chk{font:700 .66rem/1 inherit;border-radius:5px;padding:3px 7px;text-transform:uppercase;letter-spacing:.02em}
+.bgp-run-chk.ok{background:#e6f3ec;color:#2e7d5b}
+.bgp-run-chk.bad{background:#fbe8e4;color:#b24a3a}
+.bgp-run-files{display:flex;flex-wrap:wrap;gap:5px;font-size:.74rem}
+.bgp-run-files code{background:#eceef1;border-radius:5px;padding:2px 6px;color:#3a3f47;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+.bgp-run-err{font-size:.78rem;line-height:1.45;color:#b24a3a;word-break:break-word;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+@media (prefers-color-scheme:dark){
+  .bgp-qbar{background:#12161c;border-color:#2a2f37;color:#cdd2d8}
+  .bgp-qtxt,.bgp-qmore{color:#9aa0a8}
+  .bgp-qid{color:#7fb0e8}
+  .bgp-qstop{background:#161a20;border-color:#2a2f37;color:#cdd2d8}
+  .bgp-qstop:hover:not(:disabled){border-color:#5a6068}
+  .bgp-qcount{color:#9aa0a8}
+  .bgp-mini.ghost{color:#9aa0a8}
+  .bgp-mini.ghost:hover:not(:disabled){border-color:#2a2f37;color:#fff}
+  .bgp-qchip.queued{background:#182636;color:#8fb6e6}
+  .bgp-qchip.running{background:#17271f;color:#86c7a3}
+  .bgp-qchip.review{background:#2c2617;color:#e0c88a}
+  .bgp-qchip.failed{background:#3a201c;color:#e5a89c}
+  .bgp-qfix{background:#e9edf2;color:#12151b}
+  .bgp-qfix:hover:not(:disabled){background:#fff}
+  .bgp-run{background:#12161c;border-color:#2a2f37}
+  .bgp-run-sum{color:#cdd2d8}
+  .bgp-run-tag{background:#232830;color:#c8ccd2}
+  .bgp-run-files code{background:#232830;color:#c8ccd2}
+  .bgp-run-chk.ok{background:#17271f;color:#86c7a3}
+  .bgp-run-chk.bad{background:#3a201c;color:#e5a89c}
+  .bgp-card.picked{border-color:#2f4d70;box-shadow:0 0 0 1px #2f4d70 inset}
+  .bgp-selbox{accent-color:#e9edf2}
+}
 `;

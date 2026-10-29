@@ -862,6 +862,32 @@ function init() {
     // Backfill area for existing reports from their route so the new filter works on current data.
     try { const up = db.prepare("UPDATE bug_reports SET area=? WHERE id=?"); for (const r of db.prepare("SELECT id, path FROM bug_reports").all()) up.run(areaFromPath(r.path), r.id); } catch { /* non-fatal */ }
   }
+  // ---- Bug QUEUE lane (Phase 1) — the /bugs portal doubles as a Claude Code task queue. -------------
+  // Additive and ORTHOGONAL to `status` (open/resolved): queue_status drives the sequential automation
+  // ("Claude finished coding" ≠ "the bug is resolved"), and the human still clicks Resolve. A local
+  // runner claims one bug at a time, fixes it in an isolated git worktree, and writes the result back.
+  // Per-attempt history lives in bug_runs so a retry never overwrites earlier debugging.
+  if (!bugCols.includes("queue_status"))   db.exec("ALTER TABLE bug_reports ADD COLUMN queue_status TEXT");                         // null | queued | running | review | failed
+  if (!bugCols.includes("queue_position")) db.exec("ALTER TABLE bug_reports ADD COLUMN queue_position INTEGER");                     // order within the queue (lower runs first)
+  if (!bugCols.includes("queue_lease"))    db.exec("ALTER TABLE bug_reports ADD COLUMN queue_lease TEXT");                           // ISO heartbeat while running; stale ⇒ stuck
+  if (!bugCols.includes("attempt_count"))  db.exec("ALTER TABLE bug_reports ADD COLUMN attempt_count INTEGER NOT NULL DEFAULT 0");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bug_runs (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      bug_id        INTEGER NOT NULL,
+      attempt       INTEGER NOT NULL,
+      state         TEXT NOT NULL,               -- running | review | failed
+      started_at    TEXT DEFAULT (datetime('now','localtime')),
+      finished_at   TEXT,
+      summary       TEXT,                         -- what Claude concluded
+      files_changed TEXT,                         -- JSON array of paths
+      branch        TEXT,
+      commit_sha    TEXT,
+      validation    TEXT,                         -- JSON { targeted, test, build }
+      error         TEXT
+    )
+  `);
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_bug_runs_bug ON bug_runs(bug_id)"); } catch { /* non-fatal */ }
   const dCount = db.prepare("SELECT COUNT(*) AS n FROM dev_tasks").get().n;
   if (!dCount) {
     // [category, title, detail, route, route_status, priority, done]
@@ -6647,6 +6673,151 @@ export function deleteBugDraft(owner) {
   if (!owner) return { ok: false };
   db.prepare("DELETE FROM bug_drafts WHERE owner_key=?").run(String(owner));
   return { ok: true };
+}
+
+// ===================================================================================================
+// Bug QUEUE (Phase 1): the /bugs portal doubles as a sequential Claude Code task queue.
+// One bug runs at a time. Order = queue_position ASC; severity only SEEDS the default order + breaks ties.
+// Global mode lives in app_secrets.BUG_QUEUE_MODE: "running" (claim freely) | "stop_after_current" (finish
+// the running bug, claim no more). A `failed` result FORCES stop_after_current so a shaky fix never stacks
+// under the next bug. Human clicks Resolve separately — queue_status never sets `status`.
+// ===================================================================================================
+const QUEUE_SEV_RANK = { critical: 4, high: 3, medium: 2, low: 1 };
+const QUEUE_STALE_MS = 20 * 60 * 1000;   // a Running bug with no heartbeat this long is surfaced as "stuck"
+
+export function getBugQueueMode() {
+  return getSecret("BUG_QUEUE_MODE") === "stop_after_current" ? "stop_after_current" : "running";
+}
+export function setBugQueueMode(mode) {
+  const m = mode === "stop_after_current" ? "stop_after_current" : "running";
+  db.prepare(`INSERT INTO app_secrets (key, value, updated_at) VALUES ('BUG_QUEUE_MODE', ?, datetime('now','localtime'))
+              ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`).run(m);
+  return { ok: true, mode: m };
+}
+
+// Enqueue bugs. Either `ids` (explicit selection, kept IN ORDER) or `allOpen` (every open, not-yet-queued
+// bug, ordered by severity then recency as the default). Idempotent: only open + not-already-queued rows
+// are touched; positions append after the current tail, so re-queueing never reorders what's ahead.
+export function enqueueBugs({ ids, allOpen } = {}) {
+  let rows;
+  if (allOpen) {
+    rows = db.prepare("SELECT id, severity FROM bug_reports WHERE status='open' AND queue_status IS NULL").all();
+    rows.sort((a, b) => (QUEUE_SEV_RANK[b.severity] || 2) - (QUEUE_SEV_RANK[a.severity] || 2) || b.id - a.id);
+  } else {
+    const seen = new Set(); rows = [];
+    for (const n of (Array.isArray(ids) ? ids : [])) {
+      const id = +n; if (!id || seen.has(id)) continue; seen.add(id);
+      const r = db.prepare("SELECT id FROM bug_reports WHERE id=? AND status='open' AND queue_status IS NULL").get(id);
+      if (r) rows.push(r);
+    }
+  }
+  if (!rows.length) return { ok: true, queued: [] };
+  const up = db.prepare("UPDATE bug_reports SET queue_status='queued', queue_position=? WHERE id=? AND status='open' AND queue_status IS NULL");
+  const queued = [];
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    let pos = db.prepare("SELECT COALESCE(MAX(queue_position),0) AS m FROM bug_reports WHERE queue_status IN ('queued','running')").get().m || 0;
+    for (const r of rows) { pos += 1; if (up.run(pos, r.id).changes) queued.push(r.id); }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return { ok: true, queued };
+}
+
+// Atomically claim the next queued bug for the runner. Returns the FULL bug row, or null when mode is
+// stop_after_current, a bug is already running, or the queue is empty. The guarded UPDATE + the IMMEDIATE
+// write lock make it impossible for two runners/workers to both win — the only lock authority (not the UI).
+export function claimNextBug() {
+  if (getBugQueueMode() === "stop_after_current") return null;
+  const now = new Date().toISOString();
+  let claimed = null;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const res = db.prepare(`
+      UPDATE bug_reports SET queue_status='running', queue_lease=?, attempt_count=attempt_count+1
+      WHERE id = (SELECT id FROM bug_reports WHERE queue_status='queued' ORDER BY queue_position ASC, id ASC LIMIT 1)
+        AND NOT EXISTS (SELECT 1 FROM bug_reports WHERE queue_status='running')
+    `).run(now);
+    if (res.changes === 1) {
+      claimed = db.prepare("SELECT * FROM bug_reports WHERE queue_status='running' LIMIT 1").get();
+      db.prepare("INSERT INTO bug_runs (bug_id, attempt, state) VALUES (?,?, 'running')").run(claimed.id, claimed.attempt_count);
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return claimed;
+}
+
+// Runner liveness — refresh the lease of the running bug so it isn't flagged stuck.
+export function heartbeatBug(id) {
+  const r = db.prepare("UPDATE bug_reports SET queue_lease=? WHERE id=? AND queue_status='running'").run(new Date().toISOString(), +id);
+  return { ok: r.changes > 0 };
+}
+
+// Record the outcome of a run. outcome 'review' (Ready for Review) or 'failed'. A failure also flips the
+// queue to stop_after_current. Closes the open bug_runs row (or inserts one if the claim's was lost).
+export function finishBugRun(id, { outcome, summary, filesChanged, branch, commitSha, validation, error } = {}) {
+  const out = outcome === "review" ? "review" : "failed";
+  const bug = db.prepare("SELECT id, attempt_count FROM bug_reports WHERE id=?").get(+id);
+  if (!bug) return { ok: false, error: "No such bug." };
+  const fc  = Array.isArray(filesChanged) ? JSON.stringify(filesChanged).slice(0, 20000) : null;
+  const val = validation ? JSON.stringify(validation).slice(0, 20000) : null;
+  const sum = summary ? String(summary).slice(0, 8000) : null;
+  const err = error ? String(error).slice(0, 4000) : null;
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const run = db.prepare("SELECT id FROM bug_runs WHERE bug_id=? AND state='running' ORDER BY id DESC LIMIT 1").get(+id);
+    if (run) {
+      db.prepare(`UPDATE bug_runs SET state=?, finished_at=datetime('now','localtime'), summary=?, files_changed=?, branch=?, commit_sha=?, validation=?, error=? WHERE id=?`)
+        .run(out, sum, fc, branch || null, commitSha || null, val, err, run.id);
+    } else {
+      db.prepare(`INSERT INTO bug_runs (bug_id, attempt, state, finished_at, summary, files_changed, branch, commit_sha, validation, error)
+                  VALUES (?,?,?,datetime('now','localtime'),?,?,?,?,?,?)`)
+        .run(+id, bug.attempt_count, out, sum, fc, branch || null, commitSha || null, val, err);
+    }
+    db.prepare("UPDATE bug_reports SET queue_status=?, queue_lease=NULL WHERE id=?").run(out, +id);
+    if (out === "failed") {
+      db.prepare(`INSERT INTO app_secrets (key, value, updated_at) VALUES ('BUG_QUEUE_MODE','stop_after_current',datetime('now','localtime'))
+                  ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`).run();
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return { ok: true, outcome: out };
+}
+
+// Re-queue a failed or in-review bug (manual, never automatic). Appends at the tail.
+export function retryBug(id) {
+  const b = db.prepare("SELECT queue_status FROM bug_reports WHERE id=?").get(+id);
+  if (!b || !["failed", "review"].includes(b.queue_status || "")) return { ok: false, error: "Only a failed or in-review bug can be re-queued." };
+  const pos = (db.prepare("SELECT COALESCE(MAX(queue_position),0) AS m FROM bug_reports WHERE queue_status IN ('queued','running')").get().m || 0) + 1;
+  db.prepare("UPDATE bug_reports SET queue_status='queued', queue_position=?, queue_lease=NULL WHERE id=?").run(pos, +id);
+  return { ok: true };
+}
+
+// Pull a bug out of the queue (not one that's running).
+export function dequeueBug(id) {
+  const r = db.prepare("UPDATE bug_reports SET queue_status=NULL, queue_position=NULL WHERE id=? AND queue_status IN ('queued','review','failed')").run(+id);
+  return { ok: r.changes > 0 };
+}
+
+// Compact queue snapshot for the /bugs bar: mode, the running bug, the next few, counts, stuck flag.
+export function getBugQueueState() {
+  const mode = getBugQueueMode();
+  const running = db.prepare("SELECT id, description, queue_lease FROM bug_reports WHERE queue_status='running' LIMIT 1").get() || null;
+  const next = db.prepare("SELECT id, description FROM bug_reports WHERE queue_status='queued' ORDER BY queue_position ASC, id ASC LIMIT 20").all();
+  const counts = {};
+  for (const r of db.prepare("SELECT queue_status qs, COUNT(*) n FROM bug_reports WHERE queue_status IS NOT NULL GROUP BY queue_status").all()) counts[r.qs] = r.n;
+  let stuck = false;
+  if (running?.queue_lease) { const t = Date.parse(running.queue_lease); if (t && Date.now() - t > QUEUE_STALE_MS) stuck = true; }
+  return {
+    mode,
+    running: running ? { id: running.id, description: running.description } : null,
+    next: next.map((b) => ({ id: b.id, description: b.description })),
+    counts, stuck,
+  };
+}
+
+// Recent runs for one bug (latest first) — the Fix section shows the newest.
+export function getBugRuns(id, limit = 5) {
+  return db.prepare("SELECT * FROM bug_runs WHERE bug_id=? ORDER BY id DESC LIMIT ?").all(+id, Math.max(1, Math.min(50, +limit || 5)));
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
