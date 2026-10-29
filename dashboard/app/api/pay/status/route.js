@@ -11,10 +11,20 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const has = (k) => !!(secretValue(k) || "").trim();
   return Response.json({
     ok: true,
     configured: squareConfigured(),   // SQUARE_ACCESS_TOKEN + SQUARE_LOCATION_ID both present
     env: squareEnv(),                 // "production" | "sandbox"
-    webhook: !!(secretValue("SQUARE_WEBHOOK_SIGNATURE_KEY") || "").trim(),
+    webhook: has("SQUARE_WEBHOOK_SIGNATURE_KEY"),
+    // Temporary diagnostic — BOOLEANS/COUNTS ONLY, never a secret value. Tells apart "SQUARE_* not saved /
+    // misnamed" from "this process reads a different/empty vault DB": if other known keys read present but
+    // the SQUARE_* ones don't, the DB is right and it's a save/naming issue.
+    diag: {
+      sqToken: has("SQUARE_ACCESS_TOKEN"),
+      sqLocation: has("SQUARE_LOCATION_ID"),
+      sqEnv: has("SQUARE_ENV"),
+      otherVaultKeys: ["RESEND_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_ADDRESS_KEY"].filter(has).length,
+    },
   });
 }
