@@ -891,7 +891,11 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Acceptance box — after the totals, where the customer accepts / requests / declines.
           Once signed it collapses to the acceptance record + next step. */}
       {diffInfo && !locked && <ProposalDiff diff={diffInfo.diff} fromVersion={diffInfo.fromVersion} toVersion={diffInfo.toVersion} signedAt={diffInfo.signedAt} />}
-      <div className="pcv-section-hd">{locked ? "Accepted" : "Request a Change or Decline"}</div>
+      {/* Once signed, the ACCEPTED summary box is gone (per owner) — the Authorized Signature block below
+          carries the record, and TAPPING the signature is how the customer requests a modification. While
+          unsigned, this is the Request-a-Change/Decline box; it also shows the revise send-bar when active. */}
+      {!locked && <div className="pcv-section-hd">Request a Change or Decline</div>}
+      {(!locked || reviseMode) && (
       <div className="pcv-accept-box">
         {reviseMode ? (
           <div className="pcv-send-bar">
@@ -900,34 +904,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
           </div>
         ) : (
           <>
-            {acceptedSet.size > 0 && (
-              <div className="pcv-accept-selected">
-                {[...acceptedSet].sort().map((id) => (
-                  <span key={id} className="pcv-accepted-line">✓ {optName(id)} accepted</span>
-                ))}
-                {locked && (
-                  <div className="pcv-locked-row">
-                    <span className="pcv-locked-note">Signed by {p.signed_name} — this agreement is locked.</span>
-                    {p.signed_doc_id && (
-                      <span className="pcv-doclinks">
-                        <a className="pcv-btn" href={`/api/proposal-doc/${p.signed_doc_id}`} target="_blank" rel="noreferrer" aria-label="Signed PDF" title="Signed PDF" data-testid="signed-pdf-link">
-                          <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /></svg>
-                          Signed
-                        </a>
-                        <a className="pcv-btn" href={`/api/proposal-doc/${p.signed_doc_id}?cert=1`} target="_blank" rel="noreferrer" aria-label="Certificate" title="Certificate" data-testid="cert-link">
-                          <svg className="pcv-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="9" r="6" /><path d="M8.5 14 7 22l5-3 5 3-1.5-8" /></svg>
-                          Certificate
-                        </a>
-                      </span>
-                    )}
-                    <button type="button" className={`pcv-btn revise${reviseMode ? " on" : ""}`}
-                            onClick={() => { setReviseMode((m) => !m); setMenuFor(null); setDeclineOpen(false); }}>
-                      ✎ Request Modification
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
             {canAct && (
               <>
                 <p>{diffInfo ? "Review the changes and use Review & Sign under Payment Terms — or request a change / decline here." : "Use Review & Sign under Payment Terms to accept. You can also request a change or decline here."}</p>
@@ -957,13 +933,20 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
             {!canAct && acceptedSet.size === 0 && <p>Not open for action.</p>}
           </>
         )}
-        {/* Share + Download live on the "Your System" row at the top now — not duplicated here. */}
       </div>
+      )}
 
-      {p.signed_name && (
+      {p.signed_name && (() => {
+        // Tapping the signature is how the customer requests a modification now (the old Request-Modification
+        // button lived in the removed ACCEPTED box). Staff/preview just see the record, not a click target.
+        const canReqMod = locked && isCustomerView;
+        const reqMod = () => { setReviseMode(true); setMenuFor(null); setDeclineOpen(false); };
+        return (
         <>
           <div className="pcv-section-hd">Authorized Signature</div>
-          <div className="pcv-sign-box">
+          <div className={`pcv-sign-box${canReqMod ? " pcv-sign-click" : ""}`}
+               {...(canReqMod ? { role: "button", tabIndex: 0, title: "Request a modification", "aria-label": "Request a modification",
+                 onClick: reqMod, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); reqMod(); } } } : {})}>
             <div className="pcv-sign-mark">
               {p.signature_data
                 ? <img src={p.signature_data} alt="Signature" className="pcv-sign-img" />
@@ -976,8 +959,10 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
               {p.signed_at && <span className="pcv-sign-date">Signed {fmtSignStamp(p.signed_at)}</span>}
             </div>
           </div>
+          {canReqMod && <div className="pcv-sign-hint">Tap the signature to request a change.</div>}
         </>
-      )}
+        );
+      })()}
 
       <div className="pcv-footer">
         IOT TECHS · (646) 396-0775 · support@iot-techs.com · www.iot-techs.com · Confidential Proposal
@@ -1340,6 +1325,10 @@ button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-sign-mark{display:flex;flex-direction:column;gap:2px;min-width:220px;flex:1}
 .pcv-sign-img{max-height:42px;max-width:190px;object-fit:contain;align-self:flex-start}
 .pcv-sign-typed{font-size:1.2rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive;padding-left:4px}
+.pcv-sign-click{cursor:pointer;transition:border-color .12s,background .12s}
+.pcv-sign-click:hover{border-color:var(--dv-faint,#A1A6AC);background:var(--dv-paper,#F4F4F2)}
+.pcv-sign-click:focus-visible{outline:2px solid var(--dv-gold-text,#8A6A1F);outline-offset:2px}
+.pcv-sign-hint{margin:6px 22px 0;font-size:.72rem;color:var(--dv-meta,#787D84)}
 .pcv-sign-rule{border-bottom:1px solid var(--dv-ink,#101418);height:1px;width:100%;margin-top:4px}
 .pcv-sign-cap{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-top:4px}
 .pcv-sign-meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px}

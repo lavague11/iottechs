@@ -179,11 +179,12 @@ for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone"
     await page.getByTestId("esign-ack-payment").check();
     await page.getByTestId("esign-confirm").click();
 
-    // The signer closes and the customer view shows the locked, signed state with the stored PDFs.
+    // The signer closes and the customer view shows the locked, signed state (Authorized Signature block).
+    // The ACCEPTED summary box (with the signed-PDF/certificate links) was removed per owner, so we verify
+    // the stored docs through the canonical doc URL instead of an on-page link.
     await expect(page.getByTestId("esign")).toHaveCount(0, { timeout: 30_000 });
-    await expect(page.getByText(/Signed by Jordan Rivera/)).toBeVisible({ timeout: 30_000 });
-    const link = page.getByTestId("signed-pdf-link");
-    await expect(link).toBeVisible();
+    await expect(page.getByText(/Authorized Signature/i).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Jordan Rivera").first()).toBeVisible();
 
     const db = openDb();
     const p = db.prepare("SELECT * FROM proposals WHERE project_access_id=? ORDER BY id DESC LIMIT 1").get(accessId);
@@ -198,7 +199,7 @@ for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone"
     expect(docs.every((d) => !d.voided && d.n > 1000)).toBeTruthy();
 
     // Both stored PDFs are real PDFs behind the read gate; an anonymous client gets nothing.
-    const href = await link.getAttribute("href");
+    const href = `/api/proposal-doc/${p.signed_doc_id}`;
     const signed = await page.request.get(href);
     expect(signed.status()).toBe(200);
     expect((await signed.body()).subarray(0, 5).toString()).toBe("%PDF-");
@@ -207,10 +208,9 @@ for (const [label, size] of [["desktop", { width: 1280, height: 900 }], ["phone"
     expect((await cert.body()).subarray(0, 5).toString()).toBe("%PDF-");
     expect((await request.get(href, { headers: { cookie: "" } })).status()).toBe(404);
 
-    // Reload: still signed and locked (no re-sign button), links still there.
+    // Reload: still signed and locked (no re-sign button), signature record still shown.
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByText(/Signed by Jordan Rivera/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Jordan Rivera").first()).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole("button", { name: /Approve & Sign|Review & Sign/ })).toHaveCount(0);
-    await expect(page.getByTestId("cert-link")).toBeVisible();
   });
 }
