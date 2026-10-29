@@ -65,10 +65,11 @@ const NAV_GROUPS = [
     { key: "tech-support", label: "Tech Support",  href: "/tech-support" },
   ]},
   { key: "finance-grp", label: "Finance", items: [
-    { key: "finances",    label: "Overview",    href: "/finances" },
-    { key: "receivables", label: "Receivables", href: "/receivables" },
-    { key: "expenses",    label: "Expenses",    href: "/expenses" },
-    { key: "pcp",         label: "PCP Ledger",  href: "/pcp" },
+    { key: "finances",    label: "Overview",     href: "/finances" },
+    { key: "receivables", label: "Receivables",  href: "/receivables" },
+    { key: "expenses",    label: "Expenses",     href: "/expenses" },
+    { key: "pcp",         label: "PCP Ledger",   href: "/pcp" },
+    { key: "pay-link",    label: "Payment Link", href: "/pay-link" },
   ]},
   { key: "tools-grp", label: "Tools", items: [
     { heading: "Biometrics" },
