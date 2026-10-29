@@ -45,6 +45,7 @@ import EsignSigner from "./esign/esign-signer";
 import ProposalItemsEditor from "./proposal-items-editor";
 import ProposalFinancialSummary from "./proposal-financial-summary";
 import ProposalPaymentPlan from "./proposal-payment-plan";
+import PayButtons from "./pay-buttons";
 import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -863,6 +864,9 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Payment plan — the SAME compact read-only plan staff see (PAYMENT PLAN · 50 / 50, a column per
           milestone), replacing the old stacked payment cards. Its own label is the section header. */}
       <div className="pcv-fin"><ProposalPaymentPlan sched={paySched} plan={payPlan} grand={t.grand} deposit={t.deposit} fullDate={fullDate} /></div>
+      {/* Online payment (Square) — appears only once the proposal is accepted/signed, Square is configured,
+          and there's something due. Card / Apple Pay / Google Pay with a 5% convenience fee. */}
+      {(p?.status === "accepted" || p?.signed_name) && <PayButtons accessId={accessId} />}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
       </div>{/* /pcv-pay-region */}
 
@@ -1399,6 +1403,12 @@ button.pcv-signbar .pcv-ico{color:#1f1a05 !important}
 .pcv-sign-typed{font-size:1.2rem;color:var(--dv-ink,#101418);font-family:"Segoe Script","Brush Script MT",cursive;padding-left:4px}
 .pcv-sign-rule{border-bottom:1px solid var(--dv-ink,#101418);height:1px;width:100%;margin-top:4px}
 .pcv-sign-cap{font-size:.62rem;font-weight:500;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin-top:4px}
+.pcv-pay{display:flex;flex-direction:column;align-items:center;gap:7px;margin:16px 22px 4px}
+.pcv-pay-btn{width:100%;max-width:420px;min-height:48px;padding:10px 18px;border:0;border-radius:12px;background:var(--dv-gold,#C9A96E);color:#1a1205;font-size:1rem;font-weight:800;cursor:pointer;box-shadow:0 6px 18px -8px rgba(201,169,110,.65)}
+.pcv-pay-btn:hover:not(:disabled){filter:brightness(1.04)}
+.pcv-pay-btn:disabled{opacity:.6;cursor:default}
+.pcv-pay-note{font-size:.72rem;color:var(--dv-meta,#787D84);text-align:center;max-width:420px}
+.pcv-pay-err{font-size:.78rem;color:#C0392B;font-weight:600}
 .pcv-sign-meta{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
 .pcv-sign-name{font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418)}
 .pcv-sign-date{font-size:.72rem;color:var(--dv-meta,#787D84)}

@@ -1237,6 +1237,11 @@ function init() {
   if (!payCols.includes("status")) db.exec("ALTER TABLE project_payments ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
   // The actual date the money changed hands (staff-set), separate from created_at (when it was logged).
   if (!payCols.includes("paid_at")) db.exec("ALTER TABLE project_payments ADD COLUMN paid_at TEXT");
+  // Online (Square) payments: the processor's order/payment id (idempotency — a re-delivered webhook never
+  // double-credits) and the 5% convenience fee charged ON TOP (stored here, never added to the balance).
+  if (!payCols.includes("external_id")) db.exec("ALTER TABLE project_payments ADD COLUMN external_id TEXT");
+  if (!payCols.includes("fee_amount"))  db.exec("ALTER TABLE project_payments ADD COLUMN fee_amount REAL NOT NULL DEFAULT 0");
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_external ON project_payments(external_id) WHERE external_id IS NOT NULL"); } catch { /* older sqlite without partial-index support */ }
 
   // ---- Inquiry-stage extras: appointment point-of-contact + a lightweight notes thread ----
   if (!cols.includes("poc_name"))  db.exec("ALTER TABLE projects ADD COLUMN poc_name TEXT");
@@ -6357,6 +6362,56 @@ export function addProjectPayment(accessId, { amount, method, kind, source, note
       src, String(note || "").slice(0, 500) || null, byName || null,
       src === "customer" ? "pending" : "confirmed", paid);
   return getProjectPayments(accessId);
+}
+
+// ---- Online payments (Square) ----------------------------------------------------------------------
+// A Square checkout is created, then confirmed out-of-band by Square's webhook / return verification. We
+// record a PENDING ledger row at checkout-creation time (keyed on the Square ORDER id) so it's reconcilable
+// and idempotent, then flip it to CONFIRMED when Square says the money landed. The BASE amount credits the
+// balance; the 5% convenience fee rides on fee_amount and never counts toward what's owed.
+export function recordSquarePending({ accessId, orderId, amount, feeAmount, kind, note }) {
+  if (!accessId || !orderId) return { ok: false, error: "Missing order." };
+  const existing = db.prepare("SELECT id FROM project_payments WHERE external_id=?").get(String(orderId));
+  if (existing) return { ok: true, id: existing.id, duplicate: true };
+  const k = ["deposit", "final", "partial", "other"].includes(kind) ? kind : "other";
+  const info = db.prepare(
+    `INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status, paid_at, external_id, fee_amount)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(String(accessId), Math.max(0, +amount || 0), "Square", k, "square",
+    String(note || "").slice(0, 500) || null, null, "pending", new Date().toISOString().slice(0, 10),
+    String(orderId), Math.max(0, +feeAmount || 0));
+  return { ok: true, id: info.lastInsertRowid };
+}
+// Confirm a Square payment by its order id (webhook or return verification). Idempotent — confirming an
+// already-confirmed order is a no-op. Returns the project it belongs to so the caller can revalidate.
+export function confirmSquarePaymentByOrder(orderId) {
+  if (!orderId) return { ok: false };
+  const row = db.prepare("SELECT id, project_access_id, status FROM project_payments WHERE external_id=?").get(String(orderId));
+  if (!row) return { ok: false, notFound: true };
+  if (row.status !== "confirmed") db.prepare("UPDATE project_payments SET status='confirmed' WHERE id=?").run(row.id);
+  return { ok: true, accessId: row.project_access_id, already: row.status === "confirmed" };
+}
+
+// Pending Square orders for a project (used by the return handler to verify + credit a just-finished
+// payment immediately, without waiting on the webhook).
+export function getPendingSquareOrders(accessId) {
+  return db.prepare("SELECT external_id FROM project_payments WHERE project_access_id=? AND source='square' AND status='pending' AND external_id IS NOT NULL")
+    .all(String(accessId)).map((r) => r.external_id);
+}
+// What a customer can pay right now for a project: the deposit still owed, and the full remaining balance.
+// Reads the canonical financial state (published proposal), so it can never bill a staff working draft.
+export function amountDueForPayment(accessId, kind) {
+  const fin = getProjectFinancialState(accessId);
+  if (!fin) return { ok: false, error: "No proposal to pay on yet." };
+  const pub = getPublishedProposal(accessId);
+  const total = +fin.total || 0;
+  const paid = +fin.paid || 0;
+  const pending = +fin.pendingPayments || 0;
+  const depositAmt = Math.round(total * ((+pub?.deposit_pct || 0) / 100) * 100) / 100;
+  // Count money already applied OR in flight (pending), so the customer can't double-pay the same bucket.
+  const applied = paid + pending;
+  const due = kind === "deposit" ? Math.max(0, depositAmt - applied) : Math.max(0, total - applied);
+  return { ok: true, due: Math.round(due * 100) / 100, total, paid, pending, depositAmt };
 }
 // Staff confirm a customer-submitted payment once the money is actually received.
 export function confirmProjectPayment(accessId, id) {
