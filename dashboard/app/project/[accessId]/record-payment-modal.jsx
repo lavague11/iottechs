@@ -130,6 +130,9 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
     if (r?.url) { setLink(r); setCopied(false); } else setErr(r?.error || "Couldn't create a payment link.");
   }
   async function copyLink() { try { await navigator.clipboard.writeText(link.url); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* clipboard blocked */ } }
+  // Take the payment now: open Square's hosted checkout (card / Apple Pay / Google Pay / Cash App) in a new
+  // tab. Hand the device to the customer or let them tap Apple Pay — payment credits this project on return.
+  function openCheckout() { if (link?.url) window.open(link.url, "_blank", "noopener,noreferrer"); }
 
   const payments = data?.payments || [];
   const dueNote = fin && !isFinal && fin.currentlyDue <= 0 && fin.depositTarget > 0
@@ -199,24 +202,26 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
             <button type="button" className="rpm-btn gold" onClick={submit} disabled={busy || !(+pay.amount > 0)}>Record Payment</button>
           </div>
 
-          {/* Online payment link — generate a Square checkout for the amount above and send it to the
-              customer (card / Apple Pay / Google Pay). 5% convenience fee added on top; credits the balance. */}
+          {/* Pay with Square — build a hosted checkout for the amount above, then either take the payment
+              now (Open checkout → card / Apple Pay / Google Pay / Cash App on Square's page) or copy the link
+              to send. 5% convenience fee added on top; credits this project when paid. */}
           {sqOn && (
             <div className="rpm-link">
               {!link ? (
                 <button type="button" className="rpm-linkbtn" disabled={linkBusy || !(+pay.amount > 0)} onClick={makeLink}>
-                  {linkBusy ? "Creating link…" : "Create payment link"}
+                  {linkBusy ? "Starting…" : "Pay with Square"}
                 </button>
               ) : (
                 <div className="rpm-linkres">
                   <div className="rpm-linkmeta">Total <b>{money(link.total)}</b> · includes 5% fee ({money(link.fee)})</div>
                   <div className="rpm-linkrow">
-                    <input className="rpm-linkurl" readOnly value={link.url} onFocus={(e) => e.target.select()} />
-                    <button type="button" className="rpm-linkcopy" onClick={copyLink}>{copied ? "Copied" : "Copy"}</button>
+                    <button type="button" className="rpm-linkopen" onClick={openCheckout}>Open checkout</button>
+                    <button type="button" className="rpm-linkcopy" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
                   </div>
+                  <input className="rpm-linkurl" readOnly value={link.url} onFocus={(e) => e.target.select()} />
                 </div>
               )}
-              <span className="rpm-linkhint">Card · Apple&nbsp;Pay · Google&nbsp;Pay — the 5% fee is added on top; credits this project when paid.</span>
+              <span className="rpm-linkhint">Open checkout to take the payment now (card · Apple&nbsp;Pay · Google&nbsp;Pay), or copy the link to send it. 5% fee added on top; credits this project when paid.</span>
             </div>
           )}
         </>)}
@@ -271,9 +276,11 @@ const RPM_CSS = `
 .rpm-linkmeta{font-size:.82rem;color:var(--dv-ink,#101418)}
 .rpm-linkmeta b{font-variant-numeric:tabular-nums}
 .rpm-linkrow{display:flex;gap:8px}
-.rpm-linkurl{flex:1;min-width:0;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;padding:0 10px;font-size:.78rem;color:var(--dv-ink,#101418);font-family:var(--font-mono),ui-monospace,Menlo,monospace;outline:none}
-.rpm-linkcopy{flex:0 0 auto;height:38px;padding:0 16px;border:0;border-radius:9px;background:#C9A96E;color:#101418;font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
-.rpm-linkcopy:hover{filter:brightness(1.06)}
+.rpm-linkopen{flex:1 1 auto;height:40px;padding:0 16px;border:0;border-radius:9px;background:#C9A96E;color:#101418;font-size:.86rem;font-weight:800;cursor:pointer;font-family:inherit}
+.rpm-linkopen:hover{filter:brightness(1.06)}
+.rpm-linkurl{width:100%;min-width:0;box-sizing:border-box;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;padding:0 10px;font-size:.76rem;color:var(--dv-meta,#787D84);font-family:var(--font-mono),ui-monospace,Menlo,monospace;outline:none}
+.rpm-linkcopy{flex:0 0 auto;height:40px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
+.rpm-linkcopy:hover{border-color:var(--dv-gold-text,#8A6A1F)}
 .rpm-linkhint{font-size:.7rem;color:var(--dv-meta,#787D84);line-height:1.4}
 @media(max-width:640px){
   .rpm-overlay{align-items:flex-end;padding:0}
