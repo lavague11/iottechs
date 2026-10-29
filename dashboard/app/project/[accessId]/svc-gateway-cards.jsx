@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { SVC_DIAG_ENTRIES, SVC_DIAG_NODES, SVC_ROUTE_LABEL } from "../../../lib/svc-diagnostic";
 import { saveCustomerDiagnosticAction, signSvcInvoiceAction } from "../../service-call/[svcId]/actions";
 import PayButtons from "./pay-buttons";
+import ZellePay from "./pay-zelle";
 import SvcCamMap from "../../components/svc-cam-map";
 
 function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : ""; }
@@ -226,6 +227,7 @@ export function SvcInvoicePanel({ svcCall, view, preview = false }) {
       )}
       {/* Online payment (Square) — self-gates on configured + a balance due; card / Apple Pay / Google Pay + 5% fee. */}
       {(isCust || ["admin", "manager"].includes(view)) && <PayButtons svcId={svcCall.svc_id} />}
+      {balance > 0 && <ZellePay />}
       {["admin", "manager"].includes(view) && <a className="svg-manage" href={`/service-calls/${svcCall.svc_id}`}>Manage billing →</a>}
       <style>{CSS}</style>
     </div>

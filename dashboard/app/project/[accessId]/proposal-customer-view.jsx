@@ -46,6 +46,7 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import ProposalFinancialSummary from "./proposal-financial-summary";
 import ProposalPaymentPlan from "./proposal-payment-plan";
 import PayButtons from "./pay-buttons";
+import ZellePay from "./pay-zelle";
 import DocReviewSpotlight from "./doc-review-spotlight";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
@@ -866,7 +867,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       <div className="pcv-fin"><ProposalPaymentPlan sched={paySched} plan={payPlan} grand={t.grand} deposit={t.deposit} fullDate={fullDate} /></div>
       {/* Online payment (Square) — appears only once the proposal is accepted/signed, Square is configured,
           and there's something due. Card / Apple Pay / Google Pay with a 5% convenience fee. */}
-      {(p?.status === "accepted" || p?.signed_name) && <PayButtons accessId={accessId} />}
+      {(p?.status === "accepted" || p?.signed_name) && <><PayButtons accessId={accessId} /><ZellePay /></>}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
       </div>{/* /pcv-pay-region */}
 
