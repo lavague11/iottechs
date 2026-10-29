@@ -1028,6 +1028,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         </span>
       ) : it.waived ? (
         <span className="prop-line-total"><s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s></span>
+      ) : readOnly ? (
+        // Read-only (customer view / preview): show the formatted amount like every other row — NOT a bare,
+        // disabled number input ("240") which reads as unformatted and visually breaks the line.
+        <span className="prop-line-total">{money(itemTotal(it))}</span>
       ) : (
         <input className="num prop-line-amt" type="number" step="0.01" value={(+it.qty || 0) * (+it.price || 0)} disabled={readOnly}
                title="Price" aria-label="Price"
