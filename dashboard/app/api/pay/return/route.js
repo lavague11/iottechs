@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { publicBase } from "../../../../lib/auth";
-import { getPendingSquareOrders, confirmSquarePaymentByOrder } from "../../../../lib/db";
+import { getPendingSquareOrders, getPendingSvcSquareOrders, confirmSquarePaymentByOrder } from "../../../../lib/db";
 import { orderIsPaid } from "../../../../lib/square";
 
 // Where Square sends the customer back after checkout. We verify each of this project's pending orders
@@ -10,15 +10,18 @@ import { orderIsPaid } from "../../../../lib/square";
 export const runtime = "nodejs";
 
 export async function GET(req) {
-  const accessId = new URL(req.url).searchParams.get("project") || "";
+  const sp = new URL(req.url).searchParams;
+  const accessId = sp.get("project") || "";
+  const svc = sp.get("svc") || "";
   let paid = false;
-  if (accessId) {
-    try {
-      for (const orderId of getPendingSquareOrders(accessId)) {
-        if (await orderIsPaid(orderId)) { confirmSquarePaymentByOrder(orderId); paid = true; }
-      }
-    } catch { /* fall through to the portal regardless */ }
-  }
+  try {
+    const orders = svc ? getPendingSvcSquareOrders(svc) : (accessId ? getPendingSquareOrders(accessId) : []);
+    for (const orderId of orders) {
+      if (await orderIsPaid(orderId)) { confirmSquarePaymentByOrder(orderId); paid = true; }
+    }
+  } catch { /* fall through to the portal regardless */ }
   const base = publicBase(req);
-  redirect(accessId ? `${base}/project/${encodeURIComponent(accessId)}?paid=${paid ? "1" : "0"}` : base);
+  const dest = svc ? `${base}/service-call/${encodeURIComponent(svc)}?paid=${paid ? "1" : "0"}`
+    : accessId ? `${base}/project/${encodeURIComponent(accessId)}?paid=${paid ? "1" : "0"}` : base;
+  redirect(dest);
 }

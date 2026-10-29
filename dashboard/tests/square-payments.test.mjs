@@ -62,6 +62,26 @@ test("5% convenience fee math (added on top, rounded to the cent)", () => {
   assert.equal((baseCents + feeCents) / 100, 525, "customer pays $525");
 });
 
+test("service-call invoice: due math + idempotent pending→confirmed via the unified confirm", () => {
+  const r = db.createServiceCall({ customer: "Svc Co", contact_name: "Svc Co", contact_email: "svc@x.com", contact_phone: "5550001111", address: "2503 Jay Pl", issue: "Camera down", category: "cctv", actor_role: "admin", actor_name: "Tester" });
+  const svcId = r.svc_id || r.svcId || r.id || r;
+  assert.ok(svcId, "service call created");
+  db.saveSvcInvoice(svcId, { items: [{ desc: "Diagnostic", qty: 1, price: 200 }, { desc: "Labor", qty: 2, price: 150 }] }, { actor_role: "admin", actor_name: "Tester" });
+  assert.equal(db.getSvcInvoice(svcId).total, 500);
+  assert.equal(db.svcAmountDue(svcId).due, 500);
+
+  assert.equal(db.recordSvcSquarePending({ svcId, orderId: "SVC_ORDER_1", amount: 300, feeAmount: 15 }).ok, true);
+  assert.equal(db.svcAmountDue(svcId).due, 200, "pending reduces what's payable");
+  assert.equal(db.recordSvcSquarePending({ svcId, orderId: "SVC_ORDER_1", amount: 300, feeAmount: 15 }).duplicate, true);
+
+  const c = db.confirmSquarePaymentByOrder("SVC_ORDER_1");   // unified confirm routes to svc_payments
+  assert.equal(c.ok, true); assert.equal(c.svcId, svcId);
+  const row = db.getSvcPayments(svcId).find((p) => p.external_id === "SVC_ORDER_1");
+  assert.equal(row.status, "confirmed"); assert.equal(row.amount, 300); assert.equal(row.fee_amount, 15); assert.equal(row.source, "square");
+  assert.equal(db.svcAmountDue(svcId).due, 200, "confirmed money keeps due at 200");
+  assert.equal(db.confirmSquarePaymentByOrder("SVC_ORDER_1").already, true, "re-confirm is a no-op");
+});
+
 test("webhook signature verification (HMAC-SHA256 over url+body)", () => {
   db.setSecret("SQUARE_WEBHOOK_SIGNATURE_KEY", "whsec_test", "t");
   const url = "https://iot-techs.com/api/pay/webhook";

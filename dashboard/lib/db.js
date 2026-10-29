@@ -570,6 +570,15 @@ function init() {
       created_at  TEXT DEFAULT (datetime('now','localtime'))
     )
   `);
+  // Online (Square) service-call payments — same shape as project_payments: a pending→confirmed status,
+  // the processor order id (idempotency) and the 5% convenience fee charged on top. Existing rows default
+  // to 'confirmed' (staff entries are money-in-hand).
+  const svcPayCols = db.prepare("PRAGMA table_info(svc_payments)").all().map((c) => c.name);
+  if (!svcPayCols.includes("status"))      db.exec("ALTER TABLE svc_payments ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
+  if (!svcPayCols.includes("source"))      db.exec("ALTER TABLE svc_payments ADD COLUMN source TEXT NOT NULL DEFAULT 'staff'");
+  if (!svcPayCols.includes("external_id")) db.exec("ALTER TABLE svc_payments ADD COLUMN external_id TEXT");
+  if (!svcPayCols.includes("fee_amount"))  db.exec("ALTER TABLE svc_payments ADD COLUMN fee_amount REAL NOT NULL DEFAULT 0");
+  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_svc_payments_external ON svc_payments(external_id) WHERE external_id IS NOT NULL"); } catch { /* older sqlite */ }
   // ---- Hiring / onboarding: a job application behaves like a project — own ID, own PIN gate,
   // a stage bar the applicant can watch, and an event log. Once hired, the onboarding checklist
   // (documents, equipment, training) lives on the same record.
@@ -6387,9 +6396,41 @@ export function recordSquarePending({ accessId, orderId, amount, feeAmount, kind
 export function confirmSquarePaymentByOrder(orderId) {
   if (!orderId) return { ok: false };
   const row = db.prepare("SELECT id, project_access_id, status FROM project_payments WHERE external_id=?").get(String(orderId));
-  if (!row) return { ok: false, notFound: true };
-  if (row.status !== "confirmed") db.prepare("UPDATE project_payments SET status='confirmed' WHERE id=?").run(row.id);
-  return { ok: true, accessId: row.project_access_id, already: row.status === "confirmed" };
+  if (row) {
+    if (row.status !== "confirmed") db.prepare("UPDATE project_payments SET status='confirmed' WHERE id=?").run(row.id);
+    return { ok: true, accessId: row.project_access_id, already: row.status === "confirmed" };
+  }
+  const svc = db.prepare("SELECT id, svc_id, status FROM svc_payments WHERE external_id=?").get(String(orderId));
+  if (svc) {
+    if (svc.status !== "confirmed") db.prepare("UPDATE svc_payments SET status='confirmed' WHERE id=?").run(svc.id);
+    return { ok: true, svcId: svc.svc_id, already: svc.status === "confirmed" };
+  }
+  return { ok: false, notFound: true };
+}
+// ---- Service-call invoice online payments (same Square flow; svc_payments ledger) --------------------
+export function recordSvcSquarePending({ svcId, orderId, amount, feeAmount }) {
+  if (!svcId || !orderId) return { ok: false, error: "Missing order." };
+  const existing = db.prepare("SELECT id FROM svc_payments WHERE external_id=?").get(String(orderId));
+  if (existing) return { ok: true, id: existing.id, duplicate: true };
+  const info = db.prepare(
+    `INSERT INTO svc_payments (svc_id, amount, method, note, recorded_by, paid_at, status, external_id, fee_amount, source)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`
+  ).run(String(svcId), Math.max(0, +amount || 0), "Square", null, null, new Date().toISOString().slice(0, 10),
+    "pending", String(orderId), Math.max(0, +feeAmount || 0), "square");
+  return { ok: true, id: info.lastInsertRowid };
+}
+export function getPendingSvcSquareOrders(svcId) {
+  return db.prepare("SELECT external_id FROM svc_payments WHERE svc_id=? AND source='square' AND status='pending' AND external_id IS NOT NULL")
+    .all(String(svcId)).map((r) => r.external_id);
+}
+// What's still owed on a service-call invoice right now (total − confirmed − in-flight).
+export function svcAmountDue(svcId) {
+  const inv = getSvcInvoice(svcId);
+  if (!inv || !(inv.total > 0)) return { ok: false, error: "No invoice to pay yet." };
+  const pays = getSvcPayments(svcId);
+  const paid = pays.filter((p) => p.status !== "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+  const pending = pays.filter((p) => p.status === "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+  return { ok: true, due: Math.round(Math.max(0, inv.total - paid - pending) * 100) / 100, total: inv.total, paid, pending };
 }
 
 // Pending Square orders for a project (used by the return handler to verify + credit a just-finished
