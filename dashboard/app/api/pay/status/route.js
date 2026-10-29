@@ -1,5 +1,5 @@
 import { squareConfigured, squareEnv } from "../../../../lib/square";
-import { secretValue } from "../../../../lib/db";
+import { secretValue, listSecretKeys } from "../../../../lib/db";
 
 // Public, no-secret status probe for the Square integration, so staff (and this tooling) can confirm at a
 // glance that online payments are switched on and in which mode — without logging in and without exposing
@@ -25,6 +25,9 @@ export async function GET() {
       sqLocation: has("SQUARE_LOCATION_ID"),
       sqEnv: has("SQUARE_ENV"),
       otherVaultKeys: ["RESEND_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_ADDRESS_KEY"].filter(has).length,
+      // NAMES only (never values) of any Square-related keys actually in the live vault — reveals a
+      // misnamed save vs. nothing saved to this host at all.
+      squareKeyNames: listSecretKeys().filter((k) => /square/i.test(k)),
     },
   });
 }

@@ -5312,6 +5312,11 @@ export function getSecret(key) {
 export function secretValue(key) {
   return getSecret(key) || process.env[String(key || "").trim()] || "";
 }
+// Just the stored key NAMES (never values) — for safe diagnostics ("is this key saved, and under what
+// exact name?") without exposing any secret.
+export function listSecretKeys() {
+  try { return db.prepare("SELECT key FROM app_secrets").all().map(r => String(r.key)); } catch { return []; }
+}
 export function setSecret(key, value, actorName) {
   const k = String(key || "").trim();
   const v = String(value ?? "");
