@@ -91,6 +91,10 @@
   .dot.on{background:var(--gold);width:22px;border-radius:99px}
   .caplabel{text-align:center;font-size:11.5px;font-weight:bold;letter-spacing:.05em;color:#8a8f99;margin-top:10px}
   .caplabel b{color:#3a3f48}
+  /* ••• camera photo actions, top-right of the phone (single-view) — mobile-friendly Add/Replace/Rename/Remove. */
+  .mkmore{position:absolute;top:6%;right:5%;z-index:9;width:32px;height:32px;border-radius:50%;border:0;background:rgba(16,20,24,.74);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+  .mkmore svg{width:18px;height:18px}
+  .mkmore:hover{background:rgba(16,20,24,.92)}
   #nameEdit{position:fixed;display:none;z-index:2000;background:#fff;border:2px solid var(--gold);
        color:var(--ink);font:600 15px -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;padding:5px 8px;outline:none;min-width:120px}
   .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);z-index:2200;
@@ -344,6 +348,15 @@ function rebuildCards(){
   screen.appendChild(track);phone.appendChild(screen);
   phone.insertAdjacentHTML('beforeend','<div class="home"></div><div class="glare"></div><div class="bpwr"></div><div class="bvol"></div><div class="bvol b2"></div>');
   stage.appendChild(phone);stack.appendChild(stage);
+  // ••• camera actions, top-right of the phone — the mobile-friendly way to Add/Replace/Rename/Remove the
+  // current camera's photo (no double-tap needed). Shown in single-camera view, where ONE camera is on screen.
+  if(!IOT_RO){
+    var mkMore=document.createElement('button');mkMore.type='button';mkMore.className='mkmore';mkMore.title='Photo actions';mkMore.setAttribute('aria-label','Camera photo actions');
+    mkMore.innerHTML='<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>';
+    mkMore.style.display=(S.view===1 && S.count>0)?'flex':'none';
+    mkMore.addEventListener('click',function(ev){ev.stopPropagation();var i=S.page*per();if(i>=S.count)return;var r=mkMore.getBoundingClientRect();openCellMenu({i:i,p:S.page},r.right,r.bottom+4);});
+    phone.appendChild(mkMore);
+  }
   screenEl=screen;trackEl=track;
   if(n>1){dotsEl=document.createElement('div');dotsEl.className='dots';
     for(let p=0;p<n;p++){const b=document.createElement('button');b.className='dot'+(p===S.page?' on':'');b.title='View '+(p+1);b.onclick=()=>goPage(p);dotsEl.appendChild(b);}
@@ -822,7 +835,13 @@ rebuildCards();
         var photos=d.photos||[];
         Promise.all(photos.map(function(u){return u?loadImageURL(u):Promise.resolve(undefined);}))
           .then(function(slots){
-            S.slots=slots;
+            // The PDF must NOT show mockups with no photo. Keep only cameras that actually have a photo
+            // (carrying each one's name across), so photoless cameras produce no mockup pages at all.
+            var keep=[]; for(var k=0;k<slots.length;k++){ if(slots[k]) keep.push(k); }
+            S.slots=keep.map(function(k){return slots[k];});
+            S.names=keep.map(function(k){return (S.names&&S.names[k])||'';});
+            S.count=keep.length;
+            if(!S.count){ return done([]); }   // nothing photographed → no mockup pages in the PDF
             var n=mockups(),imgs=[];
             for(var p=0;p<n;p++){ try{imgs.push(exCanvas(p).toDataURL('image/jpeg',0.85));}catch(_e){imgs.push('');} }
             done(imgs);
