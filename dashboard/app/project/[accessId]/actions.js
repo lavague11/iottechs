@@ -71,9 +71,10 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
     const view = LOGIN_VIEW[user.role] || "customer";
     // A real staff account gets a full (cross-project) session, same as the /login page — so they
     // aren't re-prompted per project and their writes are authorized everywhere.
-    const { makeToken } = await import("../../../lib/auth");
+    const { makeToken, sessionCookie } = await import("../../../lib/auth");
     const jar = await cookies();
-    jar.set("iot_session", await makeToken(user), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+    const tok = await makeToken(user);
+    jar.set("iot_session", tok, sessionCookie(tok));   // full staff session — 90-day persistent, same as /login
     // A fresh login is the newest explicit grant — drop any lingering project PIN cookie so
     // the page doesn't keep rendering a previously-PIN'd role ("view keeps flipping" bug).
     jar.delete("iot_access");
@@ -91,9 +92,10 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       if (admin) {
         recordEvent("pin_access", admin.id, ip, ua, p.id, `Master admin PIN → ${admin.name || "admin"} on ${p.access_id}`);
         recordLogin(admin.id, ip, ua);
-        const { makeToken } = await import("../../../lib/auth");
+        const { makeToken, sessionCookie } = await import("../../../lib/auth");
         const jar = await cookies();
-        jar.set("iot_session", await makeToken(admin), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+        const tok = await makeToken(admin);
+        jar.set("iot_session", tok, sessionCookie(tok));   // 90-day persistent login
         jar.delete("iot_access");
         return { ok: true, view: LOGIN_VIEW.admin || "admin", via: "pin", name: admin.name };
       }
@@ -123,9 +125,10 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       logProjectEvent(p.access_id, { kind: "login", label: "Customer signed in by PIN", actor: owner?.name || p.contact_name || p.customer || "Customer" });
       if (owner && !owner.disabled) {
         recordEvent("pin_access", owner.id, ip, ua, p.id, `Customer PIN → ${owner.name} on ${p.access_id}`);
-        const { makeToken } = await import("../../../lib/auth");
+        const { makeToken, sessionCookie } = await import("../../../lib/auth");
         const jar = await cookies();
-        jar.set("iot_session", await makeToken(owner), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+        const tok = await makeToken(owner);
+        jar.set("iot_session", tok, sessionCookie(tok));   // 90-day persistent login
         jar.delete("iot_access");
         return { ok: true, view: PIN_VIEW.customer, via: "pin", name: owner.name };
       }
@@ -147,9 +150,10 @@ export async function resolveAccess(accessId, { loginRole, pin, emailOrPhone, pa
       recordLogin(staffUser.id, ip, ua);
       recordEvent("pin_access", staffUser.id, ip, ua, p.id, `Staff PIN → ${staffUser.name} (${staffUser.role}) on ${p.access_id}`);
       const view = LOGIN_VIEW[staffUser.role] || staffUser.role;
-      const { makeToken } = await import("../../../lib/auth");
+      const { makeToken, sessionCookie } = await import("../../../lib/auth");
       const jar = await cookies();
-      jar.set("iot_session", await makeToken(staffUser), { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+      const tok = await makeToken(staffUser);
+      jar.set("iot_session", tok, sessionCookie(tok));   // 90-day persistent login
       jar.delete("iot_access");
       return { ok: true, view, via: "pin", name: staffUser.name };
     }

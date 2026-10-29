@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { secretValue, getUserByEmail, createCustomerUser, findApplicationByEmail } from "../../../../../lib/db";
-import { makeToken, makeSvcToken, SVC_ACCESS_TTL_MS, publicBase } from "../../../../../lib/auth";
+import { makeToken, makeSvcToken, SVC_ACCESS_TTL_MS, publicBase, sessionCookie } from "../../../../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
 
@@ -72,7 +72,7 @@ export async function GET(request) {
     }
 
     const token = await makeToken({ id: user.id, role: user.role, email: user.email });
-    jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8, secure: process.env.NODE_ENV === "production" });
+    jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
     // Return to where they started (e.g. the project page) when given a safe same-site path; else home.
     const dest = next || ROLE_HOME[user.role] || "/dashboard";
     return Response.redirect(`${base}${dest}`, 302);

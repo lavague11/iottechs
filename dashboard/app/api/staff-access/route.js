@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { resolveApplicationRef, secretValue, getStaffUsers, logApplicationEvent } from "../../../lib/db";
-import { makeToken } from "../../../lib/auth";
+import { makeToken, sessionCookie } from "../../../lib/auth";
 
 // Staff access from an application PIN gate: a long pass-phrase (vault key STAFF_ACCESS_PASSPHRASE,
 // Development ▸ API Keys) mints a real admin session and drops the holder into the admin view of
@@ -50,9 +50,8 @@ export async function POST(request) {
     if (!admin) return Response.json({ ok: false, error: "wrong" }, { status: 401 });
 
     const jar = await cookies();
-    jar.set("iot_session", await makeToken({ id: admin.id, role: admin.role, email: admin.email }), {
-      httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8, secure: process.env.NODE_ENV === "production",
-    });
+    const tok = await makeToken({ id: admin.id, role: admin.role, email: admin.email });
+    jar.set("iot_session", tok, sessionCookie(tok));   // 90-day persistent login
 
     // Land on the admin view of that application when one was in play; else the hiring board.
     const app = appId ? resolveApplicationRef(appId) : null;

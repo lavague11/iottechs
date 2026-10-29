@@ -52,6 +52,17 @@ export async function parseToken(token) {
   }
 }
 
+// A CREDENTIALED login (password / SMS 2FA / Google / Face) is a deliberate "this is my own device"
+// act, so its session cookie persists for 90 days — the owner shouldn't have to sign in every 8 hours.
+// The login token itself carries no expiry, so this maxAge IS the session lifetime; tune it HERE, in one
+// place, for every login portal. (A PIN project-unlock is different — that device may be shared, so those
+// grants stay short and are NOT routed through this.) Not bound to IP on purpose: a rotating ISP / mobile
+// address would otherwise sign you out constantly, and IP isn't a secret, so it buys little security.
+export const SESSION_MAX_AGE_S = 60 * 60 * 24 * 90;   // 90 days
+export function sessionCookie(token, { maxAge = SESSION_MAX_AGE_S } = {}) {
+  return { httpOnly: true, sameSite: "lax", path: "/", maxAge, secure: process.env.NODE_ENV === "production" };
+}
+
 // PIN-scoped access token — a customer/tech who unlocks a project with its PIN gets no login
 // session, so this signed cookie (accessId:role:issuedAt) authorizes their writes on THAT
 // project only, for a limited window. Different roles get different leashes: a customer's

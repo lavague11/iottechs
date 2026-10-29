@@ -4,7 +4,7 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { verifyUserByCredential, recordLogin, recordLogout, getUserByEmail, getUserByPhone, userHasPassword, createCustomerUser, updateUser, loginTwoFactorEnabled, setLoginTwoFactor, customerSignLandingPath } from "../../lib/db";
 import { smsVerifyConfigured, toE164, startVerification, checkVerification } from "../../lib/sms-verify";
-import { makeToken, parseToken } from "../../lib/auth";
+import { makeToken, parseToken, sessionCookie } from "../../lib/auth";
 
 const ROLE_HOME = { admin: "/dashboard", manager: "/manager", sales: "/sales", tech: "/tech", customer: "/my-projects" };
 const maskPhone = (e164) => { const d = String(e164 || "").replace(/\D/g, "").slice(-10); return d.length === 10 ? `(•••) •••-${d.slice(6)}` : "your number"; };
@@ -34,12 +34,7 @@ export async function loginAction(formData) {
 
   const token = await makeToken(user);
   const jar = await cookies();
-  jar.set("iot_session", token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 8,
-  });
+  jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
 
   const dest = next && next !== "/" ? next : customerHome(user);
   // Return the destination and let the CLIENT navigate (window.location.assign) instead of a
@@ -81,7 +76,7 @@ export async function signupAction(formData) {
   recordLogin(user.id, ip, ua);
   const token = await makeToken(user);
   const jar = await cookies();
-  jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+  jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
   const dest = next && next !== "/" ? next : (customerSignLandingPath(user) || "/my-projects");
   return { ok: true, dest };   // client navigates (see loginAction note) — dodges the CDN redirect drop
 }
@@ -138,7 +133,7 @@ export async function verify2faAction(phoneRaw, code, next) {
   recordLogin(user.id, ip, ua);
   const token = await makeToken(user);
   const jar = await cookies();
-  jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+  jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
   const dest = next && next !== "/" ? next : customerHome(user);
   return { ok: true, dest };   // client navigates (see loginAction note)
 }

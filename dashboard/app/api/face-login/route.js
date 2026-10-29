@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { makeToken } from "../../../lib/auth";
+import { makeToken, sessionCookie } from "../../../lib/auth";
 import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace, customerSignLandingPath } from "../../../lib/db";
 
 // Face-first login (1:N). The client sends a live face embedding; we cosine-match
@@ -98,7 +98,7 @@ export async function POST(request) {
   const u = best.r;
   const token = await makeToken({ id: u.user_id, role: u.role, email: u.email });
   const jar = await cookies();
-  jar.set("iot_session", token, { httpOnly: true, sameSite: "lax", path: "/", maxAge: 60 * 60 * 8 });
+  jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
   jar.delete("iot_access");
 
   recordLogin(u.user_id, ip, hdrs.get("user-agent") || null);
