@@ -1587,5 +1587,23 @@
     try{ parent.postMessage({type:"iotPlanReady", project:PID, fid:FID}, "*"); }catch(e){ var lp1=localPlan(); initWithPlan(lp1, false, _lpKey); }
   }
 </script>
+<script>
+/* iPhone keyboard ergonomics: keep a focused text field (room name / revise box) above the on-screen
+   keyboard. Mobile only; scroll-into-view only — the widget keeps its own Enter (commit / revise) handling. */
+(function(){
+  var coarse=(window.matchMedia&&window.matchMedia("(pointer:coarse)").matches)||window.innerWidth<=820; if(!coarse) return;
+  var SEL="input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=hidden]):not([type=range]):not([type=file]), textarea, [contenteditable='true']";
+  var t;
+  document.addEventListener("focusin", function(e){
+    var el=e.target; if(!el || !el.matches || !el.matches(SEL)) return;
+    clearTimeout(t);
+    t=setTimeout(function(){
+      try{ var vv=window.visualViewport, vh=vv?vv.height:window.innerHeight, r=el.getBoundingClientRect();
+        if(r.top<64 || r.bottom>vh*0.5) el.scrollIntoView({block:"center", behavior:"smooth"});
+      }catch(_){ try{ el.scrollIntoView({block:"center"}); }catch(__){} }
+    }, 300);
+  });
+})();
+</script>
 </body>
 </html>
