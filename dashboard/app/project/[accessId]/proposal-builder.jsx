@@ -10,6 +10,7 @@ import {
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
+import MobileFieldNav from "./mobile-field-nav";
 import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, markProposalReviewedAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
@@ -769,6 +770,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   return (
     <>
     <div className="prop-card" style={{ "--prop-accent": status === "accepted" ? "#2f7d5a" : status === "sent" ? "#C9A96E" : "#D64545" }}>
+      <MobileFieldNav />
       {/* Card header — matches the one project-page tool-card format: icon · title · status chip
           on the left, actions + collapse chevron on the right (same as FlowStep / the other cards).
           Left accent follows the red/gold/green rule: red = draft/changes (staff action needed),
