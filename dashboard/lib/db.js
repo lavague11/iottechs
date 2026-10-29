@@ -6754,10 +6754,16 @@ export function heartbeatBug(id) {
 
 // Record the outcome of a run. outcome 'review' (Ready for Review) or 'failed'. A failure also flips the
 // queue to stop_after_current. Closes the open bug_runs row (or inserts one if the claim's was lost).
-export function finishBugRun(id, { outcome, summary, filesChanged, branch, commitSha, validation, error } = {}) {
+export function finishBugRun(id, { outcome, summary, filesChanged, branch, commitSha, validation, error, repoUrl } = {}) {
   const out = outcome === "review" ? "review" : "failed";
   const bug = db.prepare("SELECT id, attempt_count FROM bug_reports WHERE id=?").get(+id);
   if (!bug) return { ok: false, error: "No such bug." };
+  // Self-configure the repo web URL (for View Branch / View Commit) from the runner's own remote — the
+  // project's remote, never hardcoded. Stored once in the vault; accepts only an https github-style URL.
+  if (typeof repoUrl === "string" && /^https:\/\/[\w.-]+\/[\w.-]+\/[\w.-]+$/.test(repoUrl.replace(/\.git$/, ""))) {
+    try { db.prepare(`INSERT INTO app_secrets (key, value, updated_at) VALUES ('GITHUB_REPO_URL', ?, datetime('now','localtime'))
+                      ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at`).run(repoUrl.replace(/\.git$/, "")); } catch { /* non-fatal */ }
+  }
   const fc  = Array.isArray(filesChanged) ? JSON.stringify(filesChanged).slice(0, 20000) : null;
   const val = validation ? JSON.stringify(validation).slice(0, 20000) : null;
   const sum = summary ? String(summary).slice(0, 8000) : null;

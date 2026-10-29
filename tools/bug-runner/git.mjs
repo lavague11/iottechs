@@ -58,6 +58,19 @@ export function hasChanges(wt) {
   return ((runSync("git", ["-C", wt, "status", "--porcelain"]).stdout || "").trim().length > 0);
 }
 
+// The repo's web URL (for View Branch / View Commit) derived from the clone's own `origin` remote — never
+// hardcoded. Converts git@host:owner/repo(.git) or https://host/owner/repo(.git) → https://host/owner/repo.
+export function repoWebUrl(base) {
+  try {
+    let u = (runSync("git", ["-C", base, "remote", "get-url", "origin"]).stdout || "").trim();
+    if (!u) return null;
+    u = u.replace(/\.git$/, "");
+    const ssh = /^git@([^:]+):(.+)$/.exec(u);
+    if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
+    return /^https?:\/\//.test(u) ? u.replace(/^http:/, "https:") : null;
+  } catch { return null; }
+}
+
 // Remove a worktree (branch stays on origin for review). Only call on SUCCESS; keep it on failure.
 export function removeWorktree(base, wt) {
   runSync("git", ["-C", base, "worktree", "remove", "--force", wt]);

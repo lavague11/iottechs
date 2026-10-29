@@ -86,6 +86,7 @@ export default function BugsClient({ initial = [] }) {
   const [qBusy, setQBusy] = useState(false);
   const [nextOrder, setNextOrder] = useState([]); // draggable order of QUEUED ids (the "Next" list)
   const [drag, setDrag] = useState(null);          // id being dragged (null = not dragging)
+  const [repoUrl, setRepoUrl] = useState(null);    // repo web URL for View Branch/Commit (from the server)
 
   // Live refresh — one puller used by the 15s interval AND after any queue action.
   const pull = useCallback(async () => {
@@ -95,6 +96,7 @@ export default function BugsClient({ initial = [] }) {
     seenRef.current = new Set(r.bugs.map((b) => b.id));
     setBugs(r.bugs);
     setQueue(r.queue || null);
+    setRepoUrl(r.repoUrl || null);
     setSuggest((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.fix_prompt && !next[b.id]) next[b.id] = b.fix_prompt; }); return next; });
     setUiRev((s) => { const next = { ...s }; r.bugs.forEach((b) => { if (b.ui_prompt && !next[b.id]) next[b.id] = b.ui_prompt; }); return next; });
     if (hasNew) { setFresh(true); setTimeout(() => setFresh(false), 2500); }
@@ -429,6 +431,7 @@ export default function BugsClient({ initial = [] }) {
                     onCopy={copyText} onGallery={(i) => setGallery({ urls: imgs, i })} stop={stop}
                     qBusy={qBusy} onQueueFix={() => queueFix(b.id)}
                     onRetry={() => queueAction("retry", { id: b.id })} onDequeue={() => queueAction("dequeue", { id: b.id })}
+                    repoUrl={repoUrl} queueRank={(() => { const i = (queue?.next || []).findIndex((n) => n.id === b.id); return i >= 0 ? i + 1 : null; })()}
                   />
                 )}
               </div>
@@ -505,7 +508,7 @@ export default function BugsClient({ initial = [] }) {
 
 // The whole expanded bug — ONE continuous surface, no tabs. Reads top-to-bottom the way a developer
 // triages: Report → Evidence → Page → Fix (the Claude-ready handoff) → Environment → Technical (folded).
-function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, onReview, onCopy, onGallery, stop, qBusy, onQueueFix, onRetry, onDequeue }) {
+function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, onReview, onCopy, onGallery, stop, qBusy, onQueueFix, onRetry, onDequeue, repoUrl, queueRank }) {
   const [more, setMore] = useState(false);
   // Fix = the coding-agent handoff. Prefer the generated prompt; fold the screenshot analysis in beneath it.
   const fixText = [fix, review].filter(Boolean).join("\n\n———\n\n");
@@ -550,22 +553,13 @@ function BugDetail({ b, imgs, ctx, pf, fix, review, fixBusy, reviewBusy, onFix, 
           {fixText && !fixBusy && <button className="bgp-ib sm" aria-label="Copy fix" title="Copy" onClick={() => onCopy(fixText)}><CopyI /></button>}
         </div>
 
-        {/* Claude Code queue — reuse the Fix section. Queue Fix sends this bug to the local runner; the
-            generated prompt (if any) stays below as supplemental context. 'Ready for Review' ≠ Resolved. */}
-        <div className="bgp-qpanel" onClick={stop}>
-          {!b.queue_status ? (
-            b.status === "open" && <button className="bgp-qfix" disabled={qBusy} onClick={onQueueFix}>Queue Fix</button>
-          ) : (
-            <div className="bgp-qstate">
-              <span className={`bgp-qchip ${b.queue_status}`}>{b.queue_status === "review" ? "Ready for Review" : QLABEL[b.queue_status]}</span>
-              {b.queue_status === "queued" && <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>}
-              {(b.queue_status === "review" || b.queue_status === "failed") && <button className="bgp-mini" disabled={qBusy} onClick={onRetry}>Retry</button>}
-              {b.queue_status === "failed" && <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>}
-            </div>
-          )}
-          {b.last_run && <RunResult run={b.last_run} />}
-        </div>
+        {/* AUTOMATION — the Claude Code run/review center (current state + attempt history). 'Ready for
+            Review' ≠ Resolved; Resolve stays the separate manual action on the row. */}
+        <QueuePanel b={b} runs={b.runs || (b.last_run ? [b.last_run] : [])} repoUrl={repoUrl} queueRank={queueRank}
+          qBusy={qBusy} onQueueFix={onQueueFix} onRetry={onRetry} onDequeue={onDequeue} onCopy={onCopy} />
 
+        {/* PREPARATION — the generated fix prompt / UI analysis (supplemental; separate from the run result). */}
+        {(fixText || fixBusy) && <div className="bgp-prep-label">Preparation · generated prompt</div>}
         {fixBusy && !fixText ? (
           <div className="bgp-report muted">Writing the fix prompt…</div>
         ) : fixText ? (
@@ -630,25 +624,168 @@ function TechnicalBlock({ b, ctx, pf }) {
   );
 }
 
-// The latest Claude run on a bug — what it concluded, the branch/commit, validation results and files
-// changed. Shown in the Fix section once a run reaches Ready for Review or Failed.
-function RunResult({ run }) {
-  let files = []; try { files = JSON.parse(run.files_changed || "[]"); } catch { files = []; }
-  let val = null;  try { val = JSON.parse(run.validation || "null"); } catch { val = null; }
+// ---- Claude Code run / review (Phase 3) ----
+const parseJSON = (s, fb) => { try { const v = JSON.parse(s); return v == null ? fb : v; } catch { return fb; } };
+// Duration between two stored Eastern timestamps (or now, for a still-running attempt). Duration is tz-safe
+// (end−start); absolute clock labels show the stored wall-clock time.
+function durStr(a, b) {
+  const s = asDate(a), e = b ? asDate(b) : new Date();
+  if (!s || !e) return null;
+  let sec = Math.round(Math.max(0, e - s) / 1000);
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60); if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+// Short human failure headline from the recorded validation/error — the authority is what the runner stored.
+function failReason(run) {
+  const v = parseJSON(run?.validation, {}) || {};
+  if (v.build === "fail") return "Production build failed";
+  if (v.test === "fail") return "Test suite failed";
+  if (v.targeted === "fail") return "Targeted tests failed";
+  if (v.claude === "fail") return "Claude process failed";
+  if (v.changes === "none") return "Claude made no changes";
+  const e = String(run?.error || "");
+  if (/restart/i.test(e)) return "Runner restarted mid-task";
+  if (/timed out/i.test(e)) return "Claude timed out";
+  return "Attempt failed";
+}
+
+// The Claude automation state + attempt history for one bug. Reuses bug_runs (newest first). Never sets
+// Resolved; never fabricates validation — renders exactly what the runner recorded.
+function QueuePanel({ b, runs, repoUrl, queueRank, qBusy, onQueueFix, onRetry, onDequeue, onCopy }) {
+  const [prevOpen, setPrevOpen] = useState(false);
+  const qs = b.queue_status;
+  const latest = runs[0] || null;
+  const prev = runs.slice(1);
   return (
-    <div className="bgp-run">
-      {run.summary && <div className="bgp-run-sum" dir="auto">{run.summary}</div>}
-      <div className="bgp-run-meta">
-        {run.branch && <span className="bgp-run-tag">{run.branch}</span>}
-        {run.commit_sha && <span className="bgp-run-tag mono">{String(run.commit_sha).slice(0, 8)}</span>}
-        {val && typeof val === "object" && Object.entries(val).map(([k, v]) => (
-          <span key={k} className={`bgp-run-chk ${/pass|ok|true/i.test(String(v)) ? "ok" : "bad"}`}>{k}: {String(v)}</span>
-        ))}
-      </div>
-      {files.length > 0 && (
-        <div className="bgp-run-files">{files.slice(0, 12).map((f, i) => <code key={i}>{f}</code>)}{files.length > 12 ? <span className="bgp-qmore"> +{files.length - 12}</span> : null}</div>
+    <div className="bgp-qpanel" onClick={(e) => e.stopPropagation()}>
+      {!qs && b.status === "open" && <button className="bgp-qfix" disabled={qBusy} onClick={onQueueFix}>Queue Fix</button>}
+
+      {qs === "queued" && (
+        <div className="bgp-qhead">
+          <span className="bgp-qchip queued">Queued{queueRank ? ` · #${queueRank}` : ""}</span>
+          <span className="bgp-muted">Waiting for Claude</span>
+          <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>
+        </div>
       )}
-      {run.error && <div className="bgp-run-err" dir="auto">{run.error}</div>}
+
+      {qs === "running" && (
+        <div className="bgp-qrun">
+          <div className="bgp-qhead">
+            <span className="bgp-qchip running">Running</span>
+            {latest?.started_at && <span className="bgp-muted">Started {fmtTime(latest.started_at)}{durStr(latest.started_at, null) ? ` · ${durStr(latest.started_at, null)}` : ""}</span>}
+          </div>
+          <div className="bgp-report muted">Claude is debugging this bug.</div>
+        </div>
+      )}
+
+      {(qs === "review" || qs === "failed") && (
+        <>
+          <div className="bgp-qhead">
+            <span className={`bgp-qchip ${qs}`}>{qs === "review" ? "Ready for Review" : "Failed"}</span>
+            <button className="bgp-mini" disabled={qBusy} onClick={onRetry}>Retry</button>
+            {qs === "failed" && <button className="bgp-mini ghost" disabled={qBusy} onClick={onDequeue}>Remove</button>}
+          </div>
+          {qs === "failed" && latest && <div className="bgp-failreason">{failReason(latest)}</div>}
+          {latest ? (
+            <>
+              {prev.length > 0 && <div className="bgp-att-label">Latest attempt</div>}
+              <Attempt run={latest} repoUrl={repoUrl} onCopy={onCopy} />
+              {prev.length > 0 && (
+                <div className="bgp-prev">
+                  <button className="bgp-disc" onClick={() => setPrevOpen((o) => !o)}>Previous attempts · {prev.length} <span className="bgp-caret">{prevOpen ? "▾" : "›"}</span></button>
+                  {prevOpen && prev.map((r) => <Attempt key={r.id} run={r} repoUrl={repoUrl} onCopy={onCopy} />)}
+                </div>
+              )}
+            </>
+          ) : <div className="bgp-report muted">No run was recorded for this attempt.</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+// One execution attempt — status, timing, validation, branch/commit, files, summary, technical details.
+function Attempt({ run, repoUrl, onCopy }) {
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [techOpen, setTechOpen] = useState(false);
+  const files = parseJSON(run.files_changed, []) || [];
+  const val = parseJSON(run.validation, null);
+  const label = run.state === "review" ? "Ready for Review" : run.state === "failed" ? "Failed" : "Running";
+  const dur = durStr(run.started_at, run.finished_at);
+  const branchUrl = repoUrl && run.branch ? `${repoUrl}/tree/${run.branch}` : null;
+  const commitUrl = repoUrl && run.commit_sha ? `${repoUrl}/commit/${run.commit_sha}` : null;
+  return (
+    <div className="bgp-att">
+      <div className="bgp-att-top">
+        <span className="bgp-att-n">Attempt {run.attempt}</span>
+        <span className={`bgp-qchip ${run.state}`}>{label}</span>
+      </div>
+      <div className="bgp-att-grid">
+        <span className="bgp-att-k">Started</span><span className="bgp-att-v">{fmt(run.started_at)}</span>
+        {run.finished_at && <><span className="bgp-att-k">Finished</span><span className="bgp-att-v">{fmt(run.finished_at)}</span></>}
+        {dur && <><span className="bgp-att-k">Duration</span><span className="bgp-att-v">{dur}</span></>}
+      </div>
+      {val && <ValidationRows val={val} />}
+      {(run.branch || run.commit_sha) && (
+        <div className="bgp-refs">
+          {run.branch && <RefRow label="Branch" value={run.branch} url={branchUrl} onCopy={onCopy} />}
+          {run.commit_sha && <RefRow label="Commit" value={String(run.commit_sha).slice(0, 8)} full={run.commit_sha} url={commitUrl} onCopy={onCopy} />}
+        </div>
+      )}
+      {files.length > 0 && (
+        <div className="bgp-filesblk">
+          <button className="bgp-disc" onClick={() => setFilesOpen((o) => !o)}>Files changed · {files.length} <span className="bgp-caret">{filesOpen ? "▾" : "›"}</span></button>
+          {filesOpen && <div className="bgp-filelist">{files.map((f, i) => <code key={i}>{f}</code>)}</div>}
+        </div>
+      )}
+      <div className="bgp-sumblk">
+        <span className="bgp-att-sumh">Summary</span>
+        {run.summary ? <div className="bgp-run-sum" dir="auto">{run.summary}</div> : <div className="bgp-muted">No summary was recorded for this attempt.</div>}
+      </div>
+      {run.error && (
+        <div className="bgp-techblk">
+          <button className="bgp-disc" onClick={() => setTechOpen((o) => !o)}>Technical details <span className="bgp-caret">{techOpen ? "▾" : "›"}</span></button>
+          {techOpen && <pre className="bgp-techbody">{run.error}</pre>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Semantic validation rows — green pass, red fail, gray not-run. Reads exactly what the runner recorded;
+// never green merely because the run reached review.
+function ValidationRows({ val }) {
+  const sc = (s) => (s === "pass" ? "ok" : s === "fail" ? "bad" : "na");
+  const ico = (k) => (k === "ok" ? "✓" : k === "bad" ? "✕" : "—");
+  const rows = [];
+  if ("targeted" in val) rows.push(["Targeted tests", val.targeted]);
+  if ("test" in val) rows.push(["Full test suite", val.test]);
+  if ("build" in val) rows.push(["Production build", val.build]);
+  if (val.claude === "fail") rows.push(["Claude process", "fail"]);
+  if (val.changes === "none") rows.push(["No changes made", "fail"]);
+  return (
+    <div className="bgp-val">
+      <span className="bgp-att-sumh">Validation</span>
+      {rows.length === 0 && !val.dependencyChange && <div className="bgp-valrow na"><span className="bgp-valico">—</span>No validation recorded</div>}
+      {rows.map(([label, status], i) => {
+        const k = sc(status);
+        return <div key={i} className={`bgp-valrow ${k}`}><span className="bgp-valico">{ico(k)}</span>{label}{k === "na" && status ? <span className="bgp-muted"> · {status}</span> : null}</div>;
+      })}
+      {val.dependencyChange && <div className="bgp-valrow warn"><span className="bgp-valico">!</span>Dependencies changed — review before trusting</div>}
+    </div>
+  );
+}
+
+// A branch/commit reference: a link when a safe repo web URL is known, otherwise a copyable value.
+function RefRow({ label, value, full, url, onCopy }) {
+  return (
+    <div className="bgp-ref">
+      <span className="bgp-att-k">{label}</span>
+      <code className="bgp-refv" title="Copy" onClick={() => onCopy(full || value)}>{value}</code>
+      {url
+        ? <a className="bgp-refview" href={url} target="_blank" rel="noreferrer">View →</a>
+        : <button className="bgp-refview link" onClick={() => onCopy(full || value)}>Copy</button>}
     </div>
   );
 }
@@ -994,6 +1131,43 @@ const CSS = `
 .bgp-run-files{display:flex;flex-wrap:wrap;gap:5px;font-size:.74rem}
 .bgp-run-files code{background:#eceef1;border-radius:5px;padding:2px 6px;color:#3a3f47;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
 .bgp-run-err{font-size:.78rem;line-height:1.45;color:#b24a3a;word-break:break-word;font-family:var(--font-mono),ui-monospace,Menlo,monospace}
+/* Run history / review (Phase 3) */
+.bgp-qhead{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.bgp-qrun{display:flex;flex-direction:column;gap:6px}
+.bgp-muted{color:#9297a0}
+.bgp-prep-label,.bgp-att-label{font:800 .64rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0}
+.bgp-failreason{font:700 .84rem/1.4 inherit;color:#b24a3a}
+.bgp-att{display:flex;flex-direction:column;gap:9px;background:#faf9f6;border:1px solid #eceae4;border-radius:10px;padding:12px 13px}
+.bgp-att-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bgp-att-n{font:800 .78rem/1 inherit;color:#2b3038}
+.bgp-att-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:.8rem}
+.bgp-att-k{color:#9297a0;font-weight:700}
+.bgp-att-v{color:#3a3f47;font-variant-numeric:tabular-nums}
+.bgp-att-sumh{font:800 .62rem/1 inherit;letter-spacing:.06em;text-transform:uppercase;color:#9297a0}
+.bgp-val{display:flex;flex-direction:column;gap:4px}
+.bgp-valrow{display:flex;align-items:center;gap:7px;font:600 .82rem/1.3 inherit;color:#3a3f47}
+.bgp-valico{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:4px;font-size:.7rem;font-weight:800;flex:0 0 auto}
+.bgp-valrow.ok .bgp-valico{background:#e6f3ec;color:#2e7d5b}
+.bgp-valrow.bad{color:#b24a3a}
+.bgp-valrow.bad .bgp-valico{background:#fbe8e4;color:#b24a3a}
+.bgp-valrow.na{color:#9297a0}
+.bgp-valrow.na .bgp-valico{background:#eceef1;color:#9297a0}
+.bgp-valrow.warn{color:#8a6320}
+.bgp-valrow.warn .bgp-valico{background:#fdf3e2;color:#8a6320}
+.bgp-refs{display:flex;flex-direction:column;gap:5px}
+.bgp-ref{display:flex;align-items:center;gap:10px}
+.bgp-ref .bgp-att-k{flex:0 0 54px}
+.bgp-refv{font:700 .76rem/1 var(--font-mono),ui-monospace,Menlo,monospace;background:#eceef1;border-radius:5px;padding:3px 7px;color:#3a3f47;cursor:pointer;word-break:break-all}
+.bgp-refv:hover{color:#12151b}
+.bgp-refview{font:700 .74rem/1 inherit;color:#3a6ea5;text-decoration:none;border:0;background:none;cursor:pointer;padding:0;flex:0 0 auto}
+.bgp-refview:hover{text-decoration:underline}
+.bgp-disc{border:0;background:none;cursor:pointer;font:700 .74rem/1 inherit;color:#5a6068;padding:2px 0;display:inline-flex;align-items:center;gap:6px;align-self:flex-start}
+.bgp-disc:hover{color:#12151b}
+.bgp-caret{color:#b8bcc3}
+.bgp-filelist{display:flex;flex-direction:column;gap:3px;margin-top:6px}
+.bgp-filelist code{font:600 .76rem/1.3 var(--font-mono),ui-monospace,Menlo,monospace;color:#3a3f47;background:#eceef1;border-radius:5px;padding:3px 7px;word-break:break-all}
+.bgp-sumblk,.bgp-filesblk,.bgp-techblk,.bgp-prev{display:flex;flex-direction:column;gap:6px}
+.bgp-techbody{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;font:600 .74rem/1.45 var(--font-mono),ui-monospace,Menlo,monospace;color:#8a3a2e;background:#fbf0ee;border:1px solid #f0dcd7;border-radius:8px;padding:9px 10px;max-height:260px;overflow:auto}
 @media (prefers-color-scheme:dark){
   .bgp-qbar{background:#12161c;border-color:#2a2f37;color:#cdd2d8}
   .bgp-qtxt,.bgp-qmore{color:#9aa0a8}
@@ -1021,5 +1195,22 @@ const CSS = `
   .bgp-run-chk.bad{background:#3a201c;color:#e5a89c}
   .bgp-card.picked{border-color:#2f4d70;box-shadow:0 0 0 1px #2f4d70 inset}
   .bgp-selbox{accent-color:#e9edf2}
+  .bgp-att{background:#12161c;border-color:#2a2f37}
+  .bgp-att-n,.bgp-att-v{color:#cdd2d8}
+  .bgp-muted{color:#7d838c}
+  .bgp-valrow{color:#c8ccd2}
+  .bgp-valrow.ok .bgp-valico{background:#17271f;color:#86c7a3}
+  .bgp-valrow.bad{color:#e5a89c}
+  .bgp-valrow.bad .bgp-valico{background:#3a201c;color:#e5a89c}
+  .bgp-valrow.na{color:#8b9097}
+  .bgp-valrow.na .bgp-valico{background:#232830;color:#8b9097}
+  .bgp-valrow.warn{color:#e0c88a}
+  .bgp-valrow.warn .bgp-valico{background:#2c2617;color:#e0c88a}
+  .bgp-refv,.bgp-filelist code{background:#232830;color:#c8ccd2}
+  .bgp-refview{color:#7fb0e8}
+  .bgp-disc{color:#9aa0a8}
+  .bgp-disc:hover{color:#fff}
+  .bgp-failreason{color:#e5a89c}
+  .bgp-techbody{color:#e5a89c;background:#1c1512;border-color:#3a201c}
 }
 `;

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { createBugReport, listBugReports, resolveBugReport, setBugMeta, getBugQueueState, getBugRuns } from "../../../lib/db";
+import { createBugReport, listBugReports, resolveBugReport, setBugMeta, getBugQueueState, getBugRuns, secretValue } from "../../../lib/db";
 
 // The site-wide "Report a bug" button POSTs here (description + optional screenshot URL). Anyone using
 // the app can file one; we capture who (if signed in) for context. Staff read/resolve them at /bugs.
@@ -43,15 +43,15 @@ export async function GET() {
   const staff = !!isStaff(tok);
   if (!staff) return Response.json({ ok: true, staff: false, bugs: [] });
   const bugs = listBugReports();
-  // Attach the latest run only to bugs Claude has finished (review/failed) so the Fix section can show
-  // the summary / files / branch without an extra round-trip. Cheap: there are rarely many.
+  // Attach the full attempt history (newest first) to any bug that Claude has worked — so the Fix section
+  // can show the review/failed detail AND prior attempts without an extra round-trip. Bounded + few.
   for (const b of bugs) {
-    if (b.queue_status === "review" || b.queue_status === "failed") {
-      const r = getBugRuns(b.id, 1)[0];
-      if (r) b.last_run = r;
+    if (b.attempt_count > 0 || b.queue_status === "running") {
+      b.runs = getBugRuns(b.id, 8);          // full attempt history, newest first (Phase 3 UI)
+      if (b.runs[0]) b.last_run = b.runs[0];  // back-compat: current Fix-section RunResult still reads last_run
     }
   }
-  return Response.json({ ok: true, staff: true, bugs, queue: getBugQueueState() });
+  return Response.json({ ok: true, staff: true, bugs, queue: getBugQueueState(), repoUrl: secretValue("GITHUB_REPO_URL") || null });
 }
 export async function PATCH(req) {
   const tok = await getSession();

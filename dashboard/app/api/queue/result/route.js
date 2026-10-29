@@ -18,5 +18,6 @@ export async function POST(req) {
     commitSha: body.commitSha,
     validation: body.validation,
     error: body.error,
+    repoUrl: body.repoUrl,
   }));
 }

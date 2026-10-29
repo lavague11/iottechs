@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeApi } from "./api.mjs";
-import { setupWorktree, depChanged, changedFiles, commitAndPush, removeWorktree, hasChanges, branchFor } from "./git.mjs";
+import { setupWorktree, depChanged, changedFiles, commitAndPush, removeWorktree, hasChanges, branchFor, repoWebUrl } from "./git.mjs";
 import { downloadEvidence, buildPrompt } from "./envelope.mjs";
 import { runClaude } from "./claude.mjs";
 import { runSync } from "./proc.mjs";
@@ -162,10 +162,15 @@ async function processBug(api, bug) {
 const firstLine = (s) => String(s || "").split(/\r?\n/).map((x) => x.trim()).find(Boolean) || "";
 
 // ---- main loop ------------------------------------------------------------------------------------
+let REPO_URL = null;   // repo web URL (for View Branch/Commit), derived from the clone's origin remote
+
 async function main() {
   assertSafe();
-  const api = makeApi({ baseUrl: CFG.baseUrl, token: CFG.token });
-  log(`Bug runner up. base=${CFG.automationBase}  server=${api.base}`);
+  REPO_URL = repoWebUrl(CFG.automationBase);
+  const api0 = makeApi({ baseUrl: CFG.baseUrl, token: CFG.token });
+  // Always attach repoUrl to results so the portal can link the branch/commit (auto-configures server-side).
+  const api = { ...api0, result: (id, payload) => api0.result(id, { repoUrl: REPO_URL, ...payload }) };
+  log(`Bug runner up. base=${CFG.automationBase}  server=${api.base}  repo=${REPO_URL || "(unknown)"}`);
 
   // Crash recovery: a leftover in-flight bug means we died mid-run. Do NOT re-run (avoids double work);
   // mark it failed (queue auto-stops) and keep its worktree for inspection.
