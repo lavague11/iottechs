@@ -833,6 +833,13 @@ const PROP_CSS = `
   .pvx .prop-item input.num{flex:0 0 60px;width:60px}
   .pvx .prop-item .prop-line-total{margin-left:auto;font-size:.84rem;white-space:nowrap}
   .pvx .prop-item .prop-item-x{flex:0 0 auto}
+  /* Flat (custom) top-level rows have no children, so on mobile their empty qty/price filler cells + the
+     single amount input + ••• were clumping on the LEFT of the wrapped second line — which also threw the
+     right-anchored ••• ("bark") menu off the left edge of the screen. Hide the empty fillers and push the
+     amount (and the ••• after it) to the right, so the row reads like the grouped rows and the menu opens
+     on-screen. (Parent/sub rows have their own rules below/above.) */
+  .pvx .prop-item:not(.prop-parent):not(.sub)>span:not(:first-child):empty{display:none}
+  .pvx .prop-item:not(.prop-parent):not(.sub) .prop-line-amt{margin-left:auto}
   /* Camera / block header rows: the name is the priority column (flex:1, basis 0 so it takes all the
      leftover width); the empty qty/price/cost placeholder spans are hidden so they don't waste flex
      gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
