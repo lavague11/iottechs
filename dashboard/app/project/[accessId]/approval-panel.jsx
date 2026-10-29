@@ -77,6 +77,9 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
   const [signOpen, setSignOpen] = useState(false);
   const today = new Date().toISOString().slice(0, 10);
   const [pay, setPay] = useState({ amount: "", method: "Zelle", kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
+  // Pay-by-check proof photos (optional): front/back → /api/media URLs, attached to the payment.
+  const [checkPhotos, setCheckPhotos] = useState({ front: null, back: null });
+  const [upBusy, setUpBusy] = useState(null);   // "front" | "back" while that photo uploads
   const [payFormOpen, setPayFormOpen] = useState(true);   // collapsible "Record a payment" entry form
   const [payOpen, setPayOpen] = useState(true);           // collapsible staff "Record a Payment" card (billing-open view)
   const [gateOpen, setGateOpen] = useState(true);         // collapsible customer "accept to continue" prompt
@@ -307,13 +310,27 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
     showToast("Agreement signed");
     followStage(r.stage);
   }
+  // Upload a check photo (front/back) to this project; stores the returned /api/media URL in local state.
+  async function uploadCheckPhoto(side, file) {
+    if (!file || upBusy) return;
+    setUpBusy(side); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file); fd.append("project", accessId); fd.append("kind", "check-photo");
+      const r = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" }).then((x) => x.json()).catch(() => null);
+      if (r?.ok && r.url) setCheckPhotos((p) => ({ ...p, [side]: r.url }));
+      else setErr(r?.error ? `Photo upload failed: ${r.error}` : "Photo upload failed.");
+    } finally { setUpBusy(null); }
+  }
   async function addPayment() {
     if (busy || !(+pay.amount > 0)) return;
     setBusy(true); setErr(null);
-    const r = await recordPaymentAction(accessId, pay);
+    const photos = [checkPhotos.front, checkPhotos.back].filter(Boolean);
+    const r = await recordPaymentAction(accessId, { ...pay, photos });
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     setData((d) => ({ ...d, payments: r.payments }));
+    setCheckPhotos({ front: null, back: null });
     setPay({ amount: "", method: pay.method, kind: isFinal ? "final" : "deposit", note: "", paidAt: today });
     showToast(isCustomer ? "Payment submitted — here's what happens next" : "Payment recorded");
     followStage(r.stage);
@@ -542,6 +559,15 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
                   ))}
                 </div>
                 {x.note ? <span className="apv-hrow-note">“{x.note}”</span> : null}
+                {x.photos?.length > 0 && (
+                  <div className="apv-hrow-photos">
+                    {x.photos.map((u, i) => (
+                      <a key={i} href={u} target="_blank" rel="noreferrer" className="apv-hrow-photo" title="View check photo">
+                        <img src={u} alt={`Check photo ${i + 1}`} loading="lazy" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -573,7 +599,7 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
             <label className="apv-fld">
               <span>Method</span>
               <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-                <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
+                <option>Zelle</option><option>Check</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
               </select>
             </label>
             {isStaff && (
@@ -587,6 +613,26 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
               <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
             </label>
           </div>
+          {/* Pay-by-check: optional front/back photos of the check. The customer taps to add from their
+              camera/library; staff see the images when confirming the pending payment. */}
+          {isCustomer && /check/i.test(pay.method) && (
+            <div className="apv-checkphotos">
+              <div className="apv-checkphotos-lbl">Photo of the check <em>(optional — front &amp; back)</em></div>
+              <div className="apv-checkphotos-row">
+                {["front", "back"].map((side) => (
+                  <label key={side} className={`apv-checkphoto${checkPhotos[side] ? " has" : ""}`}>
+                    {checkPhotos[side]
+                      ? <img src={checkPhotos[side]} alt={`Check ${side}`} />
+                      : <span className="apv-checkphoto-ph">{upBusy === side ? "Uploading…" : `+ ${side}`}</span>}
+                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={!!upBusy}
+                           onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCheckPhoto(side, f); e.target.value = ""; }} />
+                    {checkPhotos[side] && <button type="button" className="apv-checkphoto-x" aria-label={`Remove ${side}`}
+                                                  onClick={(e) => { e.preventDefault(); setCheckPhotos((p) => ({ ...p, [side]: null })); }}>×</button>}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           {/* One action row: the quick-fill preset(s) and the submit button share a line, same height
               and shape, so they line up (and stack cleanly, full-width, on a phone). */}
           <div className="apv-payact">
@@ -802,6 +848,19 @@ select.apv-input{cursor:pointer}
 .apv-hrow-when{color:var(--dv-faint,#A1A6AC)}
 .apv-hrow-by{color:var(--dv-meta,#787D84);font-weight:600}
 .apv-hrow-acts{grid-column:2;grid-row:2;justify-self:end;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.apv-hrow-photos{grid-column:1 / -1;display:flex;gap:6px;margin-top:4px;flex-wrap:wrap}
+.apv-hrow-photo{display:block;width:54px;height:40px;border-radius:6px;overflow:hidden;border:1px solid var(--dv-line,#E4E4DF);background:#fff}
+.apv-hrow-photo img{width:100%;height:100%;object-fit:cover;display:block}
+/* Pay-by-check proof photos (customer payment form) */
+.apv-checkphotos{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+.apv-checkphotos-lbl{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--dv-meta,#787D84)}
+.apv-checkphotos-lbl em{font-style:normal;font-weight:500;text-transform:none;letter-spacing:0;color:var(--dv-faint,#A1A6AC)}
+.apv-checkphotos-row{display:flex;gap:10px}
+.apv-checkphoto{position:relative;flex:1 1 0;min-width:0;height:88px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:10px;background:var(--dv-raise,#FBFBFA);display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden}
+.apv-checkphoto.has{border-style:solid}
+.apv-checkphoto img{width:100%;height:100%;object-fit:cover}
+.apv-checkphoto-ph{font-size:.8rem;font-weight:600;color:var(--dv-meta,#787D84);text-transform:capitalize}
+.apv-checkphoto-x{position:absolute;top:4px;right:4px;width:22px;height:22px;border:0;border-radius:50%;background:rgba(16,20,24,.62);color:#fff;font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
 .apv-hrow-acts:empty{display:none}
 .apv-hrow-ok{font-size:.68rem;font-weight:700;color:var(--dv-green,#2E7D5B);white-space:nowrap}
 

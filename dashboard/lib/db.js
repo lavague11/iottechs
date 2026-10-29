@@ -1250,6 +1250,9 @@ function init() {
   // double-credits) and the 5% convenience fee charged ON TOP (stored here, never added to the balance).
   if (!payCols.includes("external_id")) db.exec("ALTER TABLE project_payments ADD COLUMN external_id TEXT");
   if (!payCols.includes("fee_amount"))  db.exec("ALTER TABLE project_payments ADD COLUMN fee_amount REAL NOT NULL DEFAULT 0");
+  // Optional proof images attached to a payment (JSON array of /api/media/<id> URLs) — e.g. a customer
+  // paying by check snaps the front + back. Staff see them when verifying the pending payment.
+  if (!payCols.includes("photos")) db.exec("ALTER TABLE project_payments ADD COLUMN photos TEXT");
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_payments_external ON project_payments(external_id) WHERE external_id IS NOT NULL"); } catch { /* older sqlite without partial-index support */ }
 
   // ---- Inquiry-stage extras: appointment point-of-contact + a lightweight notes thread ----
@@ -6363,18 +6366,22 @@ export function acceptWorkOrder(accessId, name, signatureData) {
   return getWorkOrderProposal(accessId);
 }
 export function getProjectPayments(accessId) {
-  return db.prepare("SELECT * FROM project_payments WHERE project_access_id=? ORDER BY id DESC").all(String(accessId)).map((r) => ({ ...r }));
+  return db.prepare("SELECT * FROM project_payments WHERE project_access_id=? ORDER BY id DESC").all(String(accessId))
+    .map((r) => ({ ...r, photos: (() => { try { return r.photos ? JSON.parse(r.photos) : []; } catch { return []; } })() }));
 }
-export function addProjectPayment(accessId, { amount, method, kind, source, note, paidAt }, byName) {
+export function addProjectPayment(accessId, { amount, method, kind, source, note, paidAt, photos }, byName) {
   // Customer submissions await staff confirmation of receipt; staff entries are money-in-hand.
   const src = source === "customer" ? "customer" : "staff";
   // paid_at = the date the money changed hands (staff-set, YYYY-MM-DD). Defaults to today.
   const paid = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || "")) ? String(paidAt) : new Date().toISOString().slice(0, 10);
-  db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status, paid_at) VALUES (?,?,?,?,?,?,?,?,?)")
+  // Optional proof images — only well-formed /api/media URLs, at most 4 (front/back of a check, etc.).
+  const imgs = (Array.isArray(photos) ? photos : []).filter((u) => typeof u === "string" && /^\/api\/media\/[a-f0-9]{8,}$/.test(u)).slice(0, 4);
+  const photosJson = imgs.length ? JSON.stringify(imgs) : null;
+  db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status, paid_at, photos) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .run(String(accessId), Math.max(0, +amount || 0), String(method || "").slice(0, 60) || null,
       ["deposit", "final", "partial", "other"].includes(kind) ? kind : "deposit",
       src, String(note || "").slice(0, 500) || null, byName || null,
-      src === "customer" ? "pending" : "confirmed", paid);
+      src === "customer" ? "pending" : "confirmed", paid, photosJson);
   return getProjectPayments(accessId);
 }
 

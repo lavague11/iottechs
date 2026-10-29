@@ -646,6 +646,7 @@ export async function recordPaymentAction(accessId, payment) {
     amount: payment.amount, method: payment.method, kind: payment.kind,
     source: isCustomer ? "customer" : "staff", note: payment.note,
     paidAt: payment.paidAt,   // staff-set date the money changed hands
+    photos: Array.isArray(payment.photos) ? payment.photos : [],   // optional proof images (e.g. check front/back); db validates
   }, actorName(tok));
   // A STAFF entry is money in hand (confirmed) → email the customer a "payment recorded" confirmation.
   // A customer submission is still pending until staff confirm it (that email fires in confirmPaymentAction).

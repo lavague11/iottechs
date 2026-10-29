@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { parseAccessToken, parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
-import { insertMedia } from "../../../lib/db";
+import { insertMedia, customerOwnsProjectAccount } from "../../../lib/db";
 import { processImage } from "../../../lib/media-process";
 
 // HEIC-safe photo upload. iPhones shoot HEIC (HEVC), which most browsers can't decode, so we optimize
@@ -19,11 +19,12 @@ const MAX_BYTES = 30 * 1024 * 1024;   // 30MB raw upload cap (a HEIC is ~2–3MB
 // scoped to that project); role "applicant" is a hiring candidate (never a project upload).
 async function principal() {
   const user = await getSessionUser();
-  if (user?.id) return { name: user.name || user.role || "staff", role: user.role, accessId: null };
+  if (user?.id) return { name: user.name || user.role || "staff", role: user.role, accessId: null, userId: user.id, email: user.email };
   const jar = await cookies();
   const acc = jar.get("iot_access")?.value;
   const at = acc ? await parseAccessToken(acc) : null;
   if (at?.role && at.role !== "customer") return { name: at.role, role: at.role, accessId: at.accessId };   // tech/staff via PIN
+  if (at?.accessId) return { name: "customer", role: "customer", accessId: at.accessId };                   // customer via project PIN — restricted uploads only (check photos)
   const appTok = jar.get("iot_app")?.value;                 // a hiring candidate uploading their own compliance docs
   const ap = appTok ? await parseSvcToken(appTok) : null;
   if (ap?.svcId) return { name: `applicant:${ap.svcId}`, role: "applicant", accessId: null, appId: ap.svcId };
@@ -46,9 +47,17 @@ export async function POST(req) {
   const file = form.get("file");
   const projectAccessId = form.get("project") || null;
   const kind = form.get("kind") || null;
-  // Project scoping: an applicant never uploads to a project; a PIN grant only to ITS project; a
-  // declared kind only (kind "install" feeds a lifecycle fact). Readonly/vendor never upload.
-  if (projectAccessId) {
+  // A customer may upload ONE thing only: a payment check photo, scoped to THEIR OWN project (kind
+  // "check-photo"). Everything else from a customer is refused — /api/media is not a general image host.
+  if (p.role === "customer") {
+    if (!projectAccessId || String(kind) !== "check-photo") return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
+    const owns = p.accessId
+      ? String(p.accessId).toUpperCase() === String(projectAccessId).toUpperCase()
+      : customerOwnsProjectAccount(projectAccessId, { userId: p.userId, email: p.email });
+    if (!owns) return Response.json({ ok: false, error: "not your project" }, { status: 403 });
+  } else if (projectAccessId) {
+    // Project scoping: an applicant never uploads to a project; a PIN grant only to ITS project; a
+    // declared kind only (kind "install" feeds a lifecycle fact). Readonly/vendor never upload.
     if (p.role === "applicant") {
       // A candidate's compliance docs are keyed by THEIR application id and a compliance:* kind only.
       if (String(projectAccessId) !== String(p.appId) || !/^compliance:/.test(String(kind || ""))) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
