@@ -421,7 +421,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // per-line affordances: a pen that opens a change request (onRequestChange) and a Placement link
   // (onViewPlacement) when the camera is on a floor plan (hasLayout). `requestFlags` shows which lines
   // already have a pending request.
-  customer = false, onRequestChange, onViewPlacement, requestFlags, hasLayout = false }) {
+  customer = false, onRequestChange, onViewPlacement, requestFlags, hasLayout = false,
+  // Optional node rendered on the RIGHT of the service header line (e.g. the customer view's Share/Download
+  // cluster). No-op for staff/other services when undefined.
+  headerRight = null }) {
   const flags = customerFlags || {};
   const reqFlags = requestFlags || {};
   // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
@@ -1230,6 +1233,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             )}
           </div>
         )}
+        {headerRight}
       </div>
 
 
@@ -1257,7 +1261,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
       {/* Collapsed recording-system lines (NVR, Displays) — numbered, expandable via Edit */}
       {leadRows.map((lr) => {
-        const isOpen = leadOpen[lr.key] !== false;
+        // Customer view opens with every group COLLAPSED for a clean first look (open only what they tap);
+        // staff keep the breakdown open by default for editing. `leadOpen` stores an explicit true/false.
+        const isOpen = customer ? leadOpen[lr.key] === true : leadOpen[lr.key] !== false;
         // Parent menu holds ONLY true parent actions: Edit (amp still uses its form) or Remove the group.
         const removeGroup = lr.key === "nvr" ? (nvrItem ? () => applyNvr("") : null)
           : lr.key === "disp" ? () => patchItems(svc.items.filter((it) => it.displaySlot == null))
@@ -1269,7 +1275,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <div className="prop-sysline">
             {lr.items?.length > 0 ? (
               <button className="prop-chev" style={{ color: svcColor }} title={isOpen ? "Hide breakdown" : "Show breakdown"}
-                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: o[lr.key] === false }))}>{isOpen ? "▾" : "▸"}</button>
+                      onClick={() => setLeadOpen((o) => ({ ...o, [lr.key]: !isOpen }))}>{isOpen ? "▾" : "▸"}</button>
             ) : <span style={{ width: 16, flexShrink: 0 }} />}
             <InfraBadge color={svcColor} kind={infraKindOf(lr.key === "disp" ? "display" : lr.key)} />
             <span className="prop-sysline-name">{lr.title}</span>

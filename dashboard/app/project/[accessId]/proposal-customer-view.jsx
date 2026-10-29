@@ -716,19 +716,25 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* The service + line items, straight away — the old scope/total summary card and the cost-breakdown
           header above it were removed per owner (signature-required, then the service). Share + Download
           stay as a quiet right-aligned action cluster. */}
-      {(<>
+      {(() => {
+      // Share/Download ride the FIRST service header line (headerRight) — same line as "Security Cameras ·
+      // N cameras" — instead of a separate row above the items.
+      const firstSvcIdx = (opt.services || []).findIndex((s) => s.items?.length);
+      const headerActions = (
+        <span className="pcv-sec-acts">
+          <button type="button" className="pcv-sec-act" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label={copied ? "Link copied" : "Share"}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
+          </button>
+          <button type="button" className="pcv-sec-act" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+          </button>
+        </span>
+      );
+      return (<>
       <div className="pcv-cost-region" ref={costRef}>
-      <div className="pcv-items-acts">
-        <button type="button" className="pcv-sec-act" onClick={shareProposal} title="Copy a link that opens straight to this proposal" aria-label={copied ? "Link copied" : "Share"}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><line x1="8.6" y1="13.5" x2="15.4" y2="17.5" /><line x1="15.4" y1="6.5" x2="8.6" y2="10.5" /></svg>
-        </button>
-        <button type="button" className="pcv-sec-act" onClick={() => handleDownload("detailed")} disabled={dlBusy} title="Download the full proposal (PDF)" aria-label="Download PDF">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-        </button>
-      </div>
       {/* Line items — the SAME renderer staff build with, in read-only customer mode (grouped NVR/Displays,
-          A/B/C children, condition badges, alignment). Every row improvement now reaches both views. The
-          per-line pen opens a change request; Placement jumps to the floor-plan map. */}
+          A/B/C children, condition badges, alignment). The per-line pen opens a change request; Placement
+          jumps to the floor-plan map. Share + Download ride the first service header line (headerRight). */}
       <div className="pcv-items">
         {(opt.services || []).map((s, i) => (
           s.items?.length ? (
@@ -747,6 +753,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
               onViewPlacement={viewPlacement}
               requestFlags={flags}
               onRequestChange={canReq ? openMenu : undefined}
+              headerRight={i === firstSvcIdx ? headerActions : undefined}
             />
           ) : null
         ))}
@@ -814,7 +821,7 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         </>
       )}
       </div>{/* /pcv-cost-region */}
-      </>)}
+      </>); })()}
 
       <div className="pcv-pay-region" ref={payRef}>
       {/* Payment plan — the SAME compact read-only plan staff see (PAYMENT PLAN · 50 / 50, a column per
@@ -1122,12 +1129,12 @@ const PCV_CSS = `
 .pcv-opt-chk{display:inline-flex;align-items:center;gap:3px;font-size:.6rem;font-weight:500;color:var(--dv-green,#2E7D5B);background:rgba(46,125,91,.08);border-radius:100px;padding:1px 6px}
 .pcv-opt-tot{font-size:.86rem;font-weight:600;color:var(--oc)}
 
-/* Icon action button + the quiet Share/Download cluster that sits above the line items (the old
-   scope/total summary card was removed). */
-.pcv-sec-act{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);cursor:pointer;font-family:inherit;flex:0 0 auto}
+/* Quiet Share/Download cluster that rides the first service header line (passed to ProposalItemsEditor
+   as headerRight; the old scope/total summary card was removed). */
+.pcv-sec-acts{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto}
+.pcv-sec-act{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);cursor:pointer;font-family:inherit;flex:0 0 auto}
 .pcv-sec-act:hover{background:var(--dv-paper,#F4F4F2);border-color:var(--dv-faint,#A1A6AC)}
 .pcv-sec-act:disabled{opacity:.5;cursor:default}
-.pcv-items-acts{display:flex;justify-content:flex-end;gap:6px;margin:22px 22px 6px}
 
 .pcv-section-hd{margin:30px 22px 8px;background:transparent;color:var(--dv-ink,#101418);font-size:.72rem;font-weight:700;
   letter-spacing:.08em;text-transform:uppercase;padding:0 0 7px;border-left:0;border-bottom:1px solid var(--dv-line,#E4E4DF)}
