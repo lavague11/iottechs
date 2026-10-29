@@ -848,6 +848,10 @@ const PROP_CSS = `
      on-screen. (Parent/sub rows have their own rules below/above.) */
   .pvx .prop-item:not(.prop-parent):not(.sub)>span:not(:first-child):empty{display:none}
   .pvx .prop-item:not(.prop-parent):not(.sub) .prop-line-amt{margin-left:auto}
+  /* …and let the name SHARE the row (grow from a 0 basis, like the parent rows) instead of being forced
+     to 100% width — which was pushing the amount + ••• onto a cramped second line. Now a flat custom item
+     reads on ONE tidy line: name · amount · •••. */
+  .pvx .prop-item:not(.prop-parent):not(.sub)>span:first-child{flex:1 1 0;min-width:96px}
   /* Camera / block header rows: the name is the priority column (flex:1, basis 0 so it takes all the
      leftover width); the empty qty/price/cost placeholder spans are hidden so they don't waste flex
      gaps and squeeze the title into a word-by-word wrap. Price + ✕ stay inline on the right. */
