@@ -6798,6 +6798,24 @@ export function dequeueBug(id) {
   return { ok: r.changes > 0 };
 }
 
+// Reorder the QUEUED bugs (drag-and-drop). `orderedIds` is the desired front-to-back order; only ids that
+// are currently queued count, and any queued id the caller omitted keeps its slot at the end (so nothing is
+// lost). The RUNNING bug is never touched — reordering future work can't disturb what Claude is doing now.
+export function reorderQueue(orderedIds) {
+  const queued = db.prepare("SELECT id FROM bug_reports WHERE queue_status='queued' ORDER BY queue_position ASC, id ASC").all().map((r) => r.id);
+  const want = (Array.isArray(orderedIds) ? orderedIds : []).map((n) => +n).filter((id) => queued.includes(id));
+  const seen = new Set(want);
+  const final = [...want, ...queued.filter((id) => !seen.has(id))];   // omitted queued ids keep their order at the tail
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const up = db.prepare("UPDATE bug_reports SET queue_position=? WHERE id=? AND queue_status='queued'");
+    let pos = 0;
+    for (const id of final) { pos += 1; up.run(pos, id); }   // dense 1..N; claim reads MIN among queued, so only order matters
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return { ok: true, order: final };
+}
+
 // Compact queue snapshot for the /bugs bar: mode, the running bug, the next few, counts, stuck flag.
 export function getBugQueueState() {
   const mode = getBugQueueMode();

@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { parseToken } from "../../../lib/auth";
-import { enqueueBugs, setBugQueueMode, retryBug, dequeueBug, getBugQueueState } from "../../../lib/db";
+import { enqueueBugs, setBugQueueMode, retryBug, dequeueBug, reorderQueue, getBugQueueState } from "../../../lib/db";
 
 // Staff-facing queue control (admin/manager, same gate as /bugs). One POST with `op`:
-//   enqueue {ids:[...]}|{allOpen:true}  ·  pause  ·  resume  ·  retry {id}  ·  dequeue {id}
+//   enqueue {ids:[...]}|{allOpen:true}  ·  pause  ·  resume  ·  retry {id}  ·  dequeue {id}  ·  reorder {ids:[...]}
 // GET returns the compact queue state. Runner-only endpoints (claim/heartbeat/result) live in subroutes
 // and use a Bearer token, NOT this cookie gate.
 export const runtime = "nodejs";
@@ -29,6 +29,7 @@ export async function POST(req) {
     case "resume":   return Response.json(setBugQueueMode("running"));
     case "retry":    return body.id ? Response.json(retryBug(body.id))   : Response.json({ error: "Missing id." }, { status: 400 });
     case "dequeue":  return body.id ? Response.json(dequeueBug(body.id)) : Response.json({ error: "Missing id." }, { status: 400 });
+    case "reorder":  return Response.json(reorderQueue(body.ids));
     default:         return Response.json({ error: "Unknown op." }, { status: 400 });
   }
 }

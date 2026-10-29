@@ -84,6 +84,8 @@ export default function BugsClient({ initial = [] }) {
   const [selMode, setSelMode] = useState(false);  // bulk-select mode (checkboxes appear only then)
   const [sel, setSel] = useState(() => new Set()); // selected bug ids for Queue Selected
   const [qBusy, setQBusy] = useState(false);
+  const [nextOrder, setNextOrder] = useState([]); // draggable order of QUEUED ids (the "Next" list)
+  const [drag, setDrag] = useState(null);          // id being dragged (null = not dragging)
 
   // Live refresh — one puller used by the 15s interval AND after any queue action.
   const pull = useCallback(async () => {
@@ -112,6 +114,16 @@ export default function BugsClient({ initial = [] }) {
   const queueAllOpen = async () => { const r = await queueAction("enqueue", { allOpen: true }); flash(r?.queued?.length ? `Queued ${r.queued.length}` : "Nothing to queue"); };
   const queueSelected = async () => { const ids = [...sel]; if (!ids.length) return; const r = await queueAction("enqueue", { ids }); setSel(new Set()); setSelMode(false); flash(r?.queued?.length ? `Queued ${r.queued.length}` : "Nothing to queue"); };
   const toggleSel = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // Keep the local draggable order in sync with the server's queue — but never yank it out from under an
+  // in-progress drag (a 15s poll mustn't reset what the user is dragging).
+  useEffect(() => { if (drag == null) setNextOrder((queue?.next || []).map((b) => b.id)); }, [queue, drag]);
+  // Live reorder as the pointer passes over another chip; commit (persist) on drop/end.
+  const dragEnter = (overId) => {
+    if (drag == null || drag === overId) return;
+    setNextOrder((o) => { const c = [...o]; const f = c.indexOf(drag), t = c.indexOf(overId); if (f < 0 || t < 0) return o; c.splice(f, 1); c.splice(t, 0, drag); return c; });
+  };
+  const dragEnd = () => { if (drag != null) queueAction("reorder", { ids: nextOrder }); setDrag(null); };
 
   // Close menus on outside click; Escape closes menus / preview / search.
   useEffect(() => {
@@ -314,11 +326,24 @@ export default function BugsClient({ initial = [] }) {
                 {queue.stuck && <span className="bgp-qstuck">stuck</span>}
               </span>
             ) : <span className="bgp-qseg"><span className="bgp-qdot idle" />{queue.mode === "stop_after_current" ? "Stopped" : "Idle"}</span>}
-            {queue.next && queue.next.length > 0 && (
-              <span className="bgp-qseg next">Next {queue.next.slice(0, 6).map((b) => (
-                <button key={b.id} className="bgp-qid" onClick={() => openBug(b.id)}>#{b.id}</button>
-              ))}{queue.next.length > 6 ? <span className="bgp-qmore">+{queue.next.length - 6}</span> : null}</span>
-            )}
+            {nextOrder.length > 0 && (() => {
+              const descById = Object.fromEntries((queue.next || []).map((b) => [b.id, b.description]));
+              return (
+                <span className="bgp-qseg next">
+                  <span className="bgp-qnlabel">Next</span>
+                  <span className="bgp-qnlist" onDragOver={(e) => e.preventDefault()}>
+                    {nextOrder.map((id) => (
+                      <span key={id} className={`bgp-qchipn${drag === id ? " dragging" : ""}`} title={descById[id] || `#${id}`}
+                        draggable onDragStart={(e) => { setDrag(id); try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(id)); } catch {} }}
+                        onDragEnter={() => dragEnter(id)} onDragOver={(e) => e.preventDefault()} onDrop={dragEnd} onDragEnd={dragEnd}>
+                        <svg className="bgp-qgrip" viewBox="0 0 24 24" width="11" height="12" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                        <button className="bgp-qid" onClick={() => openBug(id)}>#{id}</button>
+                      </span>
+                    ))}
+                  </span>
+                </span>
+              );
+            })()}
           </div>
           <button className="bgp-qstop" disabled={qBusy} onClick={() => queueAction(queue.mode === "stop_after_current" ? "resume" : "pause")}>
             {queue.mode === "stop_after_current" ? "Resume" : "Stop After Current"}
@@ -931,6 +956,13 @@ const CSS = `
 .bgp-qstop{flex:0 0 auto;height:32px;padding:0 14px;border:1px solid #e4e4df;border-radius:8px;background:#fff;color:#2b3038;font:700 .76rem/1 inherit;cursor:pointer}
 .bgp-qstop:hover:not(:disabled){border-color:#12151b}
 .bgp-qstop:disabled{opacity:.5;cursor:default}
+.bgp-qnlabel{color:#6b7079;font-weight:700;text-transform:uppercase;font-size:.7rem;letter-spacing:.04em;margin-right:4px}
+.bgp-qnlist{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center}
+.bgp-qchipn{display:inline-flex;align-items:center;gap:1px;padding:2px 8px 2px 4px;border:1px solid #e4e4df;border-radius:100px;background:#fff;cursor:grab;user-select:none}
+.bgp-qchipn:hover{border-color:#b8bcc3}
+.bgp-qchipn.dragging{opacity:.45;cursor:grabbing;border-color:#2b5f9e}
+.bgp-qgrip{color:#c4c8ce;flex:0 0 auto}
+.bgp-qchipn .bgp-qid{padding:0}
 .bgp-qtools{display:flex;align-items:center;gap:8px;margin-bottom:12px}
 .bgp-qcount{font:700 .78rem/1 inherit;color:#6b7079;margin-right:2px}
 .bgp-mini.ghost{background:transparent;border-color:transparent;color:#6b7079}
@@ -968,6 +1000,10 @@ const CSS = `
   .bgp-qid{color:#7fb0e8}
   .bgp-qstop{background:#161a20;border-color:#2a2f37;color:#cdd2d8}
   .bgp-qstop:hover:not(:disabled){border-color:#5a6068}
+  .bgp-qnlabel{color:#9aa0a8}
+  .bgp-qchipn{background:#161a20;border-color:#2a2f37}
+  .bgp-qchipn:hover{border-color:#5a6068}
+  .bgp-qgrip{color:#5a6068}
   .bgp-qcount{color:#9aa0a8}
   .bgp-mini.ghost{color:#9aa0a8}
   .bgp-mini.ghost:hover:not(:disabled){border-color:#2a2f37;color:#fff}
