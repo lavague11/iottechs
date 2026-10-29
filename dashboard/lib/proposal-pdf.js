@@ -846,7 +846,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
 
     if (accepted && p.signature_data) {
       // Drawn signature imported from the customer's on-screen acceptance.
-      try { doc.addImage(p.signature_data, "PNG", sc[0], y + 50, 132, 22); } catch { /* bad data url — fall back to name */ }
+      try { doc.addImage(p.signature_data, "PNG", sc[0], y + 56, 90, 16); } catch { /* bad data url — fall back to name */ }
       // Green ACCEPTED stamp sits in the MIDDLE column — the right column holds PREPARED BY / the
       // preparer's name, so a right-aligned stamp there collided with it. Middle is clear of both
       // the signature (left) and the preparer (right).
@@ -996,7 +996,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFontSize(9.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...INK);
       doc.text(p.signed_name, asc[0], y + 26);
       const sd = fmtSignStamp(p.signed_at); if (sd) doc.text(sd, asc[1], y + 26);
-      if (p.signature_data) { try { doc.addImage(p.signature_data, "PNG", asc[0], y + 50, 132, 20); } catch { /* bad data url — name above stands in */ } }
+      if (p.signature_data) { try { doc.addImage(p.signature_data, "PNG", asc[0], y + 55, 90, 15); } catch { /* bad data url — name above stands in */ } }
     } else {
       const ackName = [asc[0] - 3, y + 15, (asc[1] - asc[0]) - 12, 15];
       const ackDate = [asc[1] - 3, y + 15, (asc[2] - asc[1]) - 12, 15];
