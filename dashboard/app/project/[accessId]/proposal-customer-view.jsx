@@ -45,8 +45,7 @@ import EsignSigner from "./esign/esign-signer";
 import ProposalItemsEditor from "./proposal-items-editor";
 import ProposalFinancialSummary from "./proposal-financial-summary";
 import ProposalPaymentPlan from "./proposal-payment-plan";
-import PayButtons from "./pay-buttons";
-import ZellePay from "./pay-zelle";
+import PaymentOptions from "./payment-options";
 import SystemWalkthrough from "./system-walkthrough";
 import { useAccordionItem, useAccordion } from "./flow-accordion";
 
@@ -827,9 +826,14 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Payment plan — the SAME compact read-only plan staff see (PAYMENT PLAN · 50 / 50, a column per
           milestone), replacing the old stacked payment cards. Its own label is the section header. */}
       <div className="pcv-fin"><ProposalPaymentPlan sched={paySched} plan={payPlan} grand={t.grand} deposit={t.deposit} fullDate={fullDate} /></div>
-      {/* Online payment (Square) — appears only once the proposal is accepted/signed, Square is configured,
-          and there's something due. Card / Apple Pay / Google Pay with a 5% convenience fee. */}
-      {(p?.status === "accepted" || p?.signed_name) && <><PayButtons accessId={accessId} /><ZellePay /></>}
+      {/* Unified PAY flow (per owner) — one "Pay Deposit · $X" button → Zelle (no fee) / Card·Apple·Google
+          Pay (+5%) / "I already paid". NOT gated by signature: a customer may pay before signing; it shows
+          whenever there's an amount due on a live (non-declined) proposal. */}
+      {t.grand > 0 && p?.status !== "declined" && (
+        <PaymentOptions accessId={accessId} preview={preview} showToast={showToast}
+          amountDue={t.deposit > 0 && t.deposit < t.grand ? t.deposit : t.grand}
+          label={t.deposit > 0 && t.deposit < t.grand ? "Deposit" : "Balance"} />
+      )}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
       </div>{/* /pcv-pay-region */}
 
