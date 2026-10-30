@@ -1,10 +1,10 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup, WAIVER_CAUSES, waiverCausesOf, hasWaiverCause, withWaiverCause, isWaived } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
-import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith } from "../../../lib/proposal-terms";
+import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith, conditionWaiveCause } from "../../../lib/proposal-terms";
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
@@ -786,31 +786,34 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const nextConds = (cur, key, on) => (on
     ? [...cur.filter((k) => k !== key && !exclusiveWith(key).includes(k)), key]
     : cur.filter((k) => k !== key));
-  const waivesKey = (k) => !!(condMap[k] || LINE_CONDITION[k])?.waivePrice;
-  // Build the patch for a condition toggle. A condition configured to WAIVE PRICE comps the row via the
-  // canonical `waived` flag (reuses the waiver — reversible, counts as a change). We only touch `waived`
-  // when the toggled condition is a waive-price one, so a manual ••• Waive is never clobbered; the row
-  // stays waived while ANY waive-price condition remains on it.
-  const condPatch = (cur, key, on) => {
-    const conditions = nextConds(cur, key, on);
-    const p = { conditions };
-    if (waivesKey(key)) p.waived = conditions.some(waivesKey);
+  // The waiver cause a condition contributes (CPE ⇒ the canonical CPE cause; an admin waive-price condition
+  // ⇒ its own isolated per-key cause). Reads the admin display-override merge first, then the built-in def.
+  const condCause = (key) => conditionWaiveCause(condMap[key] || LINE_CONDITION[key]);
+  // Build the patch for a condition toggle on a specific line/sub. A condition that carries a waiver cause
+  // (CPE) adds/removes ONLY that cause via withWaiverCause — so a manual ••• Waive, or a different
+  // condition's waive, is never clobbered, and removing CPE reveals the line's own preserved price again
+  // (the snapshot is never touched, never re-read from the catalog). CPE ⇒ waived is one-way.
+  const condPatch = (it, cur, key, on) => {
+    const p = { conditions: nextConds(cur, key, on) };
+    const cause = condCause(key);
+    if (cause) Object.assign(p, withWaiverCause(it, cause, on));
     return p;
   };
   function setCondition(id, key, on) {
     const it = svc.items.find((x) => x.id === id); if (!it || !LINE_CONDITION[key]) return;
     const cur = lineConditions(it);
     if (on === cur.includes(key)) return;
-    patchItem(id, condPatch(cur, key, on));
+    patchItem(id, condPatch(it, cur, key, on));
   }
-  // Same, for a sub-item (bundle component) — conditions now attach to sub-items too, not just top-level
-  // lines, so a single component (e.g. a reused "Existing cable" drop) can carry its own flag + ack.
+  // Same, for a sub-item (bundle component) — conditions attach to sub-items too, so marking the CAMERA
+  // component CPE comps only that component and leaves its sibling labor (drop, termination, mounting…)
+  // billable. Each sub carries its own conditions + waiver causes.
   function setSubCondition(pid, sid, key, on) {
     const parent = svc.items.find((x) => x.id === pid); const x = parent?.sub?.find((s) => s.id === sid);
     if (!x || !LINE_CONDITION[key]) return;
     const cur = lineConditions(x);
     if (on === cur.includes(key)) return;
-    patchSub(pid, sid, condPatch(cur, key, on));
+    patchSub(pid, sid, condPatch(x, cur, key, on));
   }
   // Bulk-apply: copy THIS line's conditions onto every peer endpoint line in one pass (additive — a peer's
   // own conditions are kept). Infrastructure rows (NVR/Displays/amp) are skipped.
@@ -850,14 +853,16 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // drive / HDD, displays), which are grouped under the system bar but are still real priced lines you may
   // comp. Management lives in contextual actions: item ••• (Waive/Restore) and the service gear's "Waive
   // Items…" batch manager. The accounting is unchanged (it.waived drives itemTotal).
-  const canWaiveItem = (it) => it.waived || itemTotal({ ...it, waived: false }) > 0;
+  const canWaiveItem = (it) => isWaived(it) || itemTotal({ ...it, waived: false }) > 0;
   const svcWaivable = (svc.items || []).filter(canWaiveItem);
-  const svcWaivedCount = svcWaivable.filter((it) => it.waived).length;
-  const setItemWaived = (id, waived) => patchItems((svc.items || []).map((it) => (it.id === id ? { ...it, waived } : it)));
-  // Waive a single component (sub-item) off its block — itemTotal(x) drops to $0 while the value stays
-  // visible (struck). Same it.waived model as a top-level waive; the block total recomputes.
-  const setSubWaived = (pid, sid, waived) => patchSub(pid, sid, { waived });
-  const waiveAllInSvc = (v) => patchItems((svc.items || []).map((it) => (canWaiveItem(it) ? { ...it, waived: v } : it)));
+  const svcWaivedCount = svcWaivable.filter((it) => isWaived(it)).length;
+  // The ••• Waive / Restore control and the "Waive Items…" batch manager operate ONLY on the MANUAL cause,
+  // via withWaiverCause — so they never silently clear a CPE waive (that is removed by unchecking CPE in
+  // Conditions) and a manual waive survives adding/removing CPE. Price is never mutated.
+  const manualOn = (it) => hasWaiverCause(it, WAIVER_CAUSES.MANUAL);
+  const setItemWaived = (id, on) => { const it = (svc.items || []).find((x) => x.id === id); if (it) patchItem(id, withWaiverCause(it, WAIVER_CAUSES.MANUAL, on)); };
+  const setSubWaived = (pid, sid, on) => { const x = (svc.items || []).find((i) => i.id === pid)?.sub?.find((s) => s.id === sid); if (x) patchSub(pid, sid, withWaiverCause(x, WAIVER_CAUSES.MANUAL, on)); };
+  const waiveAllInSvc = (v) => patchItems((svc.items || []).map((it) => (canWaiveItem(it) ? { ...it, ...withWaiverCause(it, WAIVER_CAUSES.MANUAL, v) } : it)));
   function addPresetBlock(preset, count = 1) {
     const book = loadPriceBook();
     const blocks = Array.from({ length: Math.max(1, +count || 1) }, () => makePresetBlock(preset, book));
@@ -1093,8 +1098,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onToggleCondition={parent ? null : (key, on) => setCondition(it.id, key, on)}
               onApplyPeers={parent ? null : () => applyLineConditionsToPeers(it.id)}
               peerLabel={`Apply to all ${svc.key === "camera" ? "cameras" : "lines"}`}
-              waived={!parent && canWaiveItem(it) ? !!it.waived : undefined}
-              onToggleWaive={!parent && canWaiveItem(it) ? () => setItemWaived(it.id, !it.waived) : null}
+              waived={!parent && canWaiveItem(it) ? manualOn(it) : undefined}
+              onToggleWaive={!parent && canWaiveItem(it) ? () => setItemWaived(it.id, !manualOn(it)) : null}
               onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
               removeLabel={`${camName || it.name || "Item"}${!parent ? ` · ${money(itemTotal(it))}` : ""}`}
               /* Equipment/Labor type — offered on ATOMIC top-level lines (custom/manual items); a container
@@ -1176,8 +1181,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           <ItemMenu isSub conditions={conds} conditionDefs={condDefs}
             onDuplicate={() => duplicateSub(parent.id, x.id)}
             onToggleCondition={(key, on) => setSubCondition(parent.id, x.id, key, on)}
-            waived={canWaive ? !!x.waived : undefined}
-            onToggleWaive={canWaive ? () => setSubWaived(parent.id, x.id, !x.waived) : null}
+            waived={canWaive ? manualOn(x) : undefined}
+            onToggleWaive={canWaive ? () => setSubWaived(parent.id, x.id, !manualOn(x)) : null}
             onRemove={() => removeSub(parent.id, x.id)}
             removeLabel={`${x.name || "Component"} · ${money(amount)}`}
             onClose={() => setMenuOpen(null)} />
@@ -1361,8 +1366,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 </button>
                 {menuOpen === `child-${bi.ref.id}` && (
                   <ItemMenu isSub
-                    waived={canW ? !!bi.ref.waived : undefined}
-                    onToggleWaive={canW ? () => setItemWaived(bi.ref.id, !bi.ref.waived) : null}
+                    conditions={lineConditions(bi.ref)}
+                    conditionDefs={condDefs}
+                    onToggleCondition={(key, on) => setCondition(bi.ref.id, key, on)}
+                    waived={canW ? manualOn(bi.ref) : undefined}
+                    onToggleWaive={canW ? () => setItemWaived(bi.ref.id, !manualOn(bi.ref)) : null}
                     onRemove={removable ? removeChild : undefined}
                     removeLabel={`${bi.name}${bi.total ? ` · ${money(bi.total)}` : ""}`}
                     onClose={() => setMenuOpen(null)} />
@@ -1398,6 +1406,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                             aria-label={`${letter}: ${bi.name}${bi.ref?.waived ? " (waived)" : ""}`} onClick={() => { if (!readOnly && bi.ref) setLeadEditId(bi.ref.id); }}>
                       <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
                       <span className="prop-sub2-name">{bi.name}</span>
+                      {bi.ref && <CondBadges keys={lineConditions(bi.ref)} condMap={condMap} />}
                       {bi.ref?.waived && <span className="prop-wvd">Waived</span>}
                       {(+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
                       <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>

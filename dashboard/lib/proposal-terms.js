@@ -455,7 +455,7 @@ The signature covers the entire Agreement. The customer initials each required a
 // a grayscale printout still reads correctly. `tone` is the shared colour token each renderer maps to its
 // own space (CSS vars on the web, RGB in the PDF).
 export const LINE_CONDITIONS = [
-  { key: "cxEquip", badge: "CPE", label: "Customer-Provided Equipment", tone: "gold", note: "Customer is supplying this equipment.",
+  { key: "cxEquip", badge: "CPE", label: "Customer-Provided Equipment", tone: "gold", note: "Customer is supplying this equipment.", waiveCause: "customer_provided_equipment",
     ack: "Customer-provided equipment: I'm supplying one or more devices for this project. IOT TECHS isn't responsible for the condition, compatibility, firmware, or warranty of equipment I provide, and added charges may apply if it's defective or incompatible." },
   { key: "existingCable", badge: "EC", label: "Existing Cable", tone: "orange", note: "Existing cabling is being reused.",
     ack: "Existing cabling: this project reuses existing cable runs. IOT TECHS will test and map reused cabling but isn't responsible for faults in cable it didn't install, and replacing failed existing cable may be billable." },
@@ -474,6 +474,19 @@ export function exclusiveWith(key) {
 }
 export const LINE_CONDITION = Object.fromEntries(LINE_CONDITIONS.map((c) => [c.key, c]));
 export const LINE_CONDITION_KEYS = LINE_CONDITIONS.map((c) => c.key);
+
+// The waiver CAUSE a condition contributes when turned ON — so toggling the condition OFF removes ONLY that
+// cause and never a manual waive or another condition's cause (the P3 non-brittleness rule). Built-in:
+// Customer-Provided Equipment ⇒ the canonical "customer_provided_equipment" cause. An admin-configured
+// `waivePrice` condition contributes an isolated per-key cause ("cond:<key>") so it behaves the same way.
+// Everything else (Existing Cable, Tested / Not Tested) contributes NO cause — informational only, never
+// auto-waived. Pure; takes a condition definition (built-in or an admin display-override merge).
+export function conditionWaiveCause(def) {
+  if (!def) return null;
+  if (def.waiveCause) return def.waiveCause;
+  if (def.waivePrice) return "cond:" + def.key;
+  return null;
+}
 
 // DISPLAY overrides for the built-in conditions, edited in the Configuration Center ▸ Conditions and
 // stored on the price book (`book.conditions`, like presets). Admins may re-word the admin `badge`, the

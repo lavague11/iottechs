@@ -823,6 +823,32 @@ export function infraKindOf(src) {
 // comped the same way (itemTotal(x) is 0 when x.waived), so a single component can be waived off a block.
 export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + itemTotal(x), 0);
 export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + itemTotal(it), 0);
+
+// ---- Waiver causes (P3) -----------------------------------------------------
+// A line can be comped for more than one INDEPENDENT reason, and removing one reason must never disturb
+// another. Two causes exist today: "manual" (a staff ••• Waive) and "customer_provided_equipment" (the CPE
+// condition — the customer is supplying this device). The AUTHORITATIVE effective flag stays `it.waived`
+// (so itemTotal / PDF / fingerprint / diff are all unchanged); `it.waiverCauses` is the bookkeeping that
+// records WHY, so a toggle recomputes `waived` without clobbering an unrelated cause. Hard invariants:
+//   • a waive NEVER mutates the line's snapshot price (the value stays on the line, struck);
+//   • un-waiving NEVER restores a price from the catalog — the original price was always preserved;
+//   • CPE ⇒ waived is ONE-WAY: a manual waive, a $0 price, or any other condition NEVER implies CPE.
+export const WAIVER_CAUSES = { MANUAL: "manual", CPE: "customer_provided_equipment" };
+// The causes currently on a line. A legacy line carrying only the bare `waived:true` (no recorded causes)
+// reads as a single "manual" cause, so old proposals behave identically and are never reinterpreted as CPE.
+export function waiverCausesOf(it) {
+  if (Array.isArray(it?.waiverCauses)) return it.waiverCauses.filter((c) => typeof c === "string");
+  return it?.waived ? [WAIVER_CAUSES.MANUAL] : [];
+}
+export const isWaived = (it) => waiverCausesOf(it).length > 0;
+export const hasWaiverCause = (it, cause) => waiverCausesOf(it).includes(cause);
+// Pure patch that adds/removes ONE cause and re-syncs the effective `waived` flag — never touches price.
+// Applying it to a line is the ONLY sanctioned way to change waiver state, so manual and CPE stay isolated.
+export function withWaiverCause(it, cause, on) {
+  const cur = waiverCausesOf(it);
+  const next = on ? (cur.includes(cause) ? cur : [...cur, cause]) : cur.filter((c) => c !== cause);
+  return { waiverCauses: next, waived: next.length > 0 };
+}
 export function optionTotals(opt, taxRate = 0, discount = { type: "flat", value: 0 }, depositPct = 50, pcpCredit = 0) {
   const sub = (opt.services || []).reduce((s, svc) => s + svcSubtotal(svc), 0);
   const disc = discount?.type === "pct" ? sub * (+discount.value || 0) / 100 : (+discount?.value || 0);
@@ -1264,6 +1290,7 @@ export function validatePayload(payload) {
           if (!(+x.price >= -1000000 && +x.price <= 1000000)) return "Bad price.";   // negative price allowed → a line item can be a customer CREDIT (e.g. "Wiring Credit" −$150)
           if (x.cost != null && !(+x.cost >= 0 && +x.cost <= 1000000)) return "Bad cost.";
           if (x.techPrice != null && !(+x.techPrice >= 0 && +x.techPrice <= 1000000)) return "Bad tech price.";
+          if (x.waiverCauses != null && (!Array.isArray(x.waiverCauses) || x.waiverCauses.length > 4 || x.waiverCauses.some((c) => typeof c !== "string" || c.length > 40))) return "Bad waiver causes.";
         }
       }
     }

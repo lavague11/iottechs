@@ -119,17 +119,38 @@ Equipment), `existingCable` (Existing Cable), plus Tested/Not-Tested, via `LINE_
 
 ---
 
-## Waive preserves the original price
+## Waiver causes (P3 — SHIPPED)
 
-Already true in code: `it.waived = true` keeps `it.price` and `itemTotal()` returns 0
-(`lib/proposal.js:697`). Model it explicitly as:
+A line can be comped for more than one INDEPENDENT reason, and removing one reason must never disturb
+another. The authoritative effective flag stays `it.waived` (so `itemTotal` / PDF / fingerprint / diff are
+unchanged); `it.waiverCauses` is the bookkeeping that records WHY, so a toggle recomputes `waived` without
+clobbering an unrelated cause. All in `lib/proposal.js`:
 
 ```
-snapshotPrice: 150   // retained
-waived: true
-effectivePrice: 0
-waiverReason: "cpe" | "promo" | "existing" | …   // NEW
+WAIVER_CAUSES = { MANUAL: "manual", CPE: "customer_provided_equipment" }
+waiverCausesOf(it)      // legacy bare `waived:true` (no causes) reads as ["manual"] — never CPE
+isWaived(it)            // causes.length > 0
+withWaiverCause(it, cause, on)  // pure patch { waiverCauses, waived }; NEVER touches price
 ```
+
+Hard invariants (each defended by a test in `tests/waiver-cpe.test.mjs`):
+
+- **Snapshot price is sacred.** A waive never mutates `it.price`; un-waiving never restores a price from the
+  catalog — the original value was always preserved on the line (struck in the UI, $0 in `itemTotal`).
+- **CPE ⇒ waived is ONE-WAY.** The `cxEquip` condition carries `waiveCause: "customer_provided_equipment"`
+  (`conditionWaiveCause` in `proposal-terms.js`); toggling CPE adds/removes ONLY that cause. A manual waive,
+  a $0 price, or any other condition NEVER implies CPE.
+- **Manual + CPE coexist.** The ••• Waive / Restore control and the batch manager operate only on the
+  `manual` cause; marking/removing CPE touches only the CPE cause. Manually waive → mark CPE → remove CPE =
+  still waived (manual survives). The exact subtle money bug this phase eliminated.
+- **CPE comps the component it's on, not its siblings.** Conditions attach per line/sub, so CPE on the
+  Camera (or NVR) hardware leaves the Cat6 Drop / Termination / Mounting / Programming — and the separate
+  **NVR Setup** labor line — fully billable.
+- **Existing Cable stays informational** (no waiver cause) until explicitly decided.
+
+UI: the ••• menu's Conditions submenu + Waive/Restore are wired on top-level lines, sub-items, AND the
+system-bar lead rows (NVR / drives / displays) in `proposal-items-editor.jsx` — so a customer-provided NVR
+or display can be marked CPE and shows the CPE badge + struck price.
 
 Removing a condition restores the price **from that line's snapshot** (e.g. back to $150) — **never** from
 today's catalog (which may now be $175). Add `waiverReason` so we can report Original / Waived / Final.
@@ -240,7 +261,7 @@ these rules — it never guesses business logic from words.
 | Tight inline edit | **DONE** | commit 2ea588e |
 | `itemType` (equipment/labor) on catalog + line | **GAP** | catalog is `{name,price,cost}` only |
 | Stable `catalogItemId` provenance on lines | **GAP** | lines keyed by instance `id` only |
-| `waiverReason` + explicit CPE⇒waive linkage | **PARTIAL** | waive works; reason + one-way link missing |
+| Multi-cause waiver (`waiverCauses`) + explicit CPE⇒waive linkage | **✅ DONE (P3)** | `WAIVER_CAUSES`/`withWaiverCause` `lib/proposal.js`; one-way CPE via `conditionWaiveCause` |
 | `NVR Setup` auto labor line (once per NVR) + task mapping | **GAP** | new |
 | WO "Technician Production" (3rd number) | **GAP** | WO shows Customer + Pay only |
 | Profitability report (margin) | **PARTIAL** | cost exists; no margin surface |
@@ -254,8 +275,7 @@ these rules — it never guesses business logic from words.
 - **P1 — Classification + provenance (data model, additive). ✅ COMPLETE (commit pending).** See
   "Phase 1 — implemented" below.
 - **P2 — NVR Setup. ✅ COMPLETE.** See the "NVR Setup" section above.
-- **P3 — Condition semantics hardened.** `waiverReason`, CPE⇒waive (one-way), restore-from-snapshot on
-  condition removal; PDF wording per condition. RED (money) — confirm before shipping.
+- **P3 — Waiver semantics + CPE. ✅ COMPLETE.** See the "Waiver causes" section below.
 - **P4 — WO Production number.** Add Technician Production to the WO (default = customer install value of
   the tech's tasks); keep pay separate. RED — confirm.
 - **P5 — Action menu parity.** Desktop right-click + iPhone long-press → the shared menu; suppress native
