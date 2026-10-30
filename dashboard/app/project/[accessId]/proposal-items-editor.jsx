@@ -1151,7 +1151,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                onBlur={(e) => { const box = e.currentTarget; setTimeout(() => { if (box && !box.contains(document.activeElement) && menuOpen !== x.id && subEditId === x.id) setSubEditId(null); }, 0); }}>
             <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
             <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog}
-              autoFocus={!String(x.name || "").trim()}
+              autoFocus
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
               onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
             {condBadges}
@@ -1162,7 +1162,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {x.waived ? (
               <span className="prop-sub2-amt prop-sub2-amt-edit">{amtDisplay}</span>
             ) : (
-              <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price" autoFocus={!!String(x.name || "").trim()}
+              <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price"
                 onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
                 onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />

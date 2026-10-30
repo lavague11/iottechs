@@ -367,8 +367,10 @@ const PROP_CSS = `
 .pvx .prop-sub2-amt{font-size:.8rem;font-weight:450;color:var(--dv-ink,#101418);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;flex-shrink:0;min-width:62px}
 .pvx .prop-sub2-tag{margin-left:7px;font-size:.58rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:#B45B22;background:rgba(197,107,44,.12);border-radius:100px;padding:1px 7px;vertical-align:middle}
 /* Inline edit mode */
-.pvx .prop-sub2.editing{flex-wrap:wrap}
-.pvx .prop-sub2 .prop-name-ac{flex:1 1 140px;min-width:120px}
+/* Edit mode stays the SAME single row as the read row (per owner) — name + price keep their columns,
+   no wrapping/ballooning. The name input flexes and shrinks; the price stays fixed-width on the right. */
+.pvx .prop-sub2.editing{flex-wrap:nowrap}
+.pvx .prop-sub2 .prop-name-ac{flex:1 1 0;min-width:0}
 .pvx .prop-sub2 input{height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:500;padding:0 8px;font-family:inherit;outline:none;box-sizing:border-box;width:100%}
 .pvx .prop-sub2 input.num{text-align:right;width:auto}
 .pvx .prop-sub2 input:focus{border-color:var(--dv-gold-text,#8A6A1F)}
@@ -899,7 +901,7 @@ const PROP_CSS = `
   .pvx .prop-lead .prop-sub2-wrap{margin-left:18px}
   .pvx .prop-sub2{gap:6px 8px}
   .pvx button.prop-sub2.compact,.pvx .prop-sub2.static{min-height:44px;padding-right:28px}
-  .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 100%}
+  .pvx .prop-sub2.editing .prop-name-ac{flex:1 1 0;min-width:0}   /* share the row with the price — don't push it to a 2nd line */
   /* Inline edit: qty × price · amount · ✓ · remove fit ONE line at 360px (name keeps its own line above). */
   .pvx .prop-sub2.editing{gap:6px 4px}
   .pvx .prop-sub2-qty{width:40px!important}
