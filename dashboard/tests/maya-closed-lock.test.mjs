@@ -21,8 +21,25 @@ test("deal-mutating actions enforce the closed-project edit-lock", () => {
     assert.ok(/projectEditLock\(accessId\)/.test(fnBody(ac, fn)), `${fn} checks projectEditLock`);
 });
 
-test("Maya's apply dispatch refuses edits on a closed project (except close itself)", () => {
+test("Maya's apply dispatch refuses edits on a closed project (except close + pause_nudges)", () => {
   const ai = read("../app/project/[accessId]/ai-actions.js");
-  assert.match(ai, /name !== "close_project"\) \{ const lk = projectEditLock\(accessId\)/, "apply dispatch guards all but close_project");
+  assert.match(ai, /name !== "close_project" && name !== "pause_nudges"\) \{ const lk = projectEditLock\(accessId\)/, "apply dispatch guards all but close_project + pause_nudges");
   assert.ok(/function proposalPreview[\s\S]{0,120}projectEditLock\(accessId\)/.test(ai), "proposal edits preview the lock");
+});
+
+test("nudge pause is one flag: the UI action and Maya both write setNudgePause; UI action is NOT edit-locked", () => {
+  const ac = read("../app/project/[accessId]/actions.js");
+  const body = fnBody(ac, "setNudgePauseAction");
+  assert.ok(/setNudgePause\(accessId/.test(body), "UI action writes the shared nudge_paused flag");
+  assert.ok(!/projectEditLock\(accessId\)/.test(body), "pause/resume is allowed even on a closed project");
+  assert.ok(/\["admin", "manager", "sales"\]/.test(body), "office-staff only");
+  const ai = read("../app/project/[accessId]/ai-actions.js");
+  assert.ok(/name === "pause_nudges"\)[\s\S]{0,120}setNudgePause\(accessId/.test(ai), "Maya's pause_nudges writes the SAME flag");
+});
+
+test("large-waiver alert fires on the INCREASE only — re-saving the same waiver won't re-alert", () => {
+  const pa = read("../app/project/[accessId]/proposal-actions.js");
+  const body = fnBody(pa, "saveProposalDraftAction");
+  assert.ok(/priorWaived = waivedValueOf/.test(body), "captures the prior waived value before saving");
+  assert.ok(/now >= threshold && now > priorWaived/.test(body), "alerts only when waived value crosses the threshold AND increases");
 });

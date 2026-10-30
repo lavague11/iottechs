@@ -155,3 +155,10 @@ without asking, and anything blocked on the owner.
    projects is a separate guard across the mutating actions — confirm you want it and I'll add it.
 5. **Per-customer nudge pause.** The proactive nudges reuse existing sweeps; a per-customer "pause reminders"
    toggle is a small add if you want it.
+
+- **Visible Customer Nudges toggle** (maya-build): a restrained "Customer Nudges  On/Paused" toggle in the
+  project Team & Access panel (office staff only), using the SAME `projects.nudge_paused` flag as Maya's
+  `pause_nudges` command (perfectly in sync). Persists immediately via `setNudgePauseAction`, shows a subtle
+  "Customer nudges paused/on" confirmation, logs a Job Log event. **Allowed even on a closed project**
+  (communication control, not a scope edit) — both the UI action and Maya exempt it from the edit-lock.
+  Appointment reminders stay on the same flag. Drift tests confirm single-flag sync + closed-exempt.

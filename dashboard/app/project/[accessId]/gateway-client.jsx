@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setNudgePauseAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -1768,6 +1768,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [mockupHasLocal, setMockupHasLocal] = useState(false); // mockup widget reports a photo landed → enable Submit instantly
   const [leadConfirmed, setLeadConfirmed]   = useState(!!project.info_confirmed_at); // customer confirmed their lead info (welcome modal / Survey step ①)
   const [restricted, setRestricted]     = useState(!!project.restricted);
+  const [nudgePaused, setNudgePausedUI] = useState(!!project.nudge_paused);
+  const [nudgeMsg, setNudgeMsg]         = useState("");
   const [pendingMove, setPendingMove]   = useState(null);
   const [taOpen, setTaOpen]             = useState(false);
   const [addingRole, setAddingRole]     = useState(null);
@@ -3395,6 +3397,24 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             </div>
             <div className="pv-ta-modal-body">
+              {["admin", "manager", "sales"].includes(view) && (
+                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 2px 12px", marginBottom: 12, borderBottom: "1px solid rgba(255,255,255,.07)" }}>
+                  <span style={{ fontSize: ".82rem", fontWeight: 600, color: "#c7cdd8", flex: 1 }}>Customer Nudges</span>
+                  {nudgeMsg && <span style={{ fontSize: ".74rem", color: "#7dd39a" }}>{nudgeMsg}</span>}
+                  <button type="button" className={`pv-vis-toggle${nudgePaused ? " restricted" : ""}`} role="switch" aria-checked={!nudgePaused}
+                    title={nudgePaused ? "Automated customer reminders are paused for this project" : "Automated customer reminders are on"}
+                    onClick={async () => {
+                      const next = !nudgePaused;
+                      setNudgePausedUI(next);
+                      const r = await setNudgePauseAction(lp.access_id, next).catch(() => ({ error: true }));
+                      if (r?.error) { setNudgePausedUI(!next); setNudgeMsg("Couldn't update"); }
+                      else { setLocalProj((p) => ({ ...p, nudge_paused: next ? 1 : 0 })); setNudgeMsg(next ? "Customer nudges paused" : "Customer nudges on"); }
+                      setTimeout(() => setNudgeMsg(""), 2200);
+                    }}>
+                    {nudgePaused ? <><span className="pv-vis-dot locked" />Paused</> : <><span className="pv-vis-dot open" />On</>}
+                  </button>
+                </div>
+              )}
               <div className="pv-ap-list">
                 {alwaysMembers.map(u => (
                   <div key={`always-${u.id}`} className="pv-ap-row pv-ap-row-link" onClick={() => window.open(`/users/${u.id}`, "_blank")} title="View profile">

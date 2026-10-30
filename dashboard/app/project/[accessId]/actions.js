@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount, projectEditLock } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount, projectEditLock, setNudgePause } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -865,6 +865,20 @@ export async function rejectRequestAction(accessId, requestId, reason) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };
+}
+
+// Pause / resume all automated CUSTOMER nudges for this project (the same projects.nudge_paused flag Maya's
+// pause_nudges command uses, so UI and voice stay in sync). A communication control, NOT a scope edit — so
+// it is NOT blocked on a closed project (you can still mute a closed deal's reminders). Office staff only.
+export async function setNudgePauseAction(accessId, paused) {
+  const tok = await getSessionTok();
+  if (!["admin", "manager", "sales"].includes(tok?.role)) return { error: "Unauthorized." };
+  const r = setNudgePause(accessId, !!paused);
+  if (r?.error) return r;
+  try { logProjectEvent(accessId, { kind: "nudge", label: `Customer nudges ${paused ? "paused" : "resumed"}`, actor: tok.name || tok.email || "Staff" }); } catch {}
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, paused: !!paused };
 }
 
 export async function setRestrictedAction(accessId, restricted) {

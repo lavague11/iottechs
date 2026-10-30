@@ -408,8 +408,9 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
   if (!spec) return { error: "Unknown action." };
   if (!actionAllowed(name, { editor: aiCanEdit(g.tok.role), can: (c) => can(g.tok.role, c) }))
     return { error: "Your role can't do that action." };
-  // A closed project is read-only — refuse edits early (reopen it first). Doesn't apply to close_project.
-  if (name !== "close_project") { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
+  // A closed project is read-only — refuse edits early (reopen it first). close_project and pause_nudges are
+  // exempt: closing is the close itself, and pausing reminders is a communication control, not a scope edit.
+  if (name !== "close_project" && name !== "pause_nudges") { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   const job = getJobByAccessId(accessId);
   if (!accessId || !job) return { error: "Couldn't find that project." };
   const facts = buildStageFacts(accessId);
