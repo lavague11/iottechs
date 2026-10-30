@@ -37,4 +37,13 @@ export async function register() {
   };
   setTimeout(sweepReceivables, 120_000);              // first sweep ~2 min after boot
   setInterval(sweepReceivables, 6 * 60 * 60 * 1000);  // then every 6 hours (cheap + idempotent)
+
+  // Maya proactive jobs (morning briefing + weekly report) — an hourly tick; the orchestrator itself is
+  // DARK unless MAYA_PROACTIVE=on and only fires at the configured hour, deduped to once/day + once/Monday.
+  const mayaTick = async () => {
+    try { const { runMayaProactive } = await import("./lib/maya-proactive.js"); await runMayaProactive(); }
+    catch (e) { console.error("[maya] proactive tick failed:", e?.message || e); }
+  };
+  setTimeout(mayaTick, 150_000);               // first check ~2.5 min after boot
+  setInterval(mayaTick, 60 * 60 * 1000);       // then hourly
 }

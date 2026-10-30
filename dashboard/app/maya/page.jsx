@@ -11,7 +11,8 @@ export default async function MayaAdminPage() {
     usage: aiUsageSummary(),
     activity: recentAiActivity(40),
     unanswered: listMayaUnanswered({ limit: 60 }),
-    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
+    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", proactive: secretValue("MAYA_PROACTIVE") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
+    briefingHour: +secretValue("MAYA_BRIEFING_HOUR") || 7,
   };
   return <MayaAdminClient initial={initial} />;
 }

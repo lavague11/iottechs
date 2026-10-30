@@ -19,6 +19,7 @@ without asking, and anything blocked on the owner.
 | Core prompt / persona | Maya identity + principal-agent rules | **✅ done** (maya-build) |
 | Admin ▸ Maya page | Health · Settings · Activity · Training · Conversations | **✅ done** (maya-build) |
 | Knowledge / training loop | unanswered-question queue + existing KB (support articles) | **✅ done** (maya-build) |
+| Proactive runner | morning briefing + weekly report (flag-gated, deduped) | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -109,3 +110,14 @@ without asking, and anything blocked on the owner.
   - **Conversations** — scaffold (honest placeholder; per-chat ratings need conversation logging, not yet on).
   **Decision:** the "approved knowledge base" = the existing `support_articles` (already admin-editable and
   consulted by `knowledgeAnswer`); the training loop feeds it rather than a parallel store.
+- **Proactive runner shipped** (maya-build). `lib/maya-proactive.js`: `runMayaProactive()` on an hourly tick
+  from the boot scheduler (`instrumentation.js`), **dark unless `MAYA_PROACTIVE=on`**, firing only at the
+  configured Eastern hour and deduped to **once/day (briefing)** + **once/Monday (weekly)** via vault markers.
+  - **Morning briefing** (admin/manager, portal + office email): proposals awaiting signature (+ overdue),
+    payments due now + outstanding $.
+  - **Weekly report** (admin): quotes sent / signed / collected (7-day) + open counts.
+  - Data from the canonical receivables/payments/proposals (`mayaProactiveData`); composers are pure +
+    tested (`tests/maya-proactive.test.mjs`). Admin ▸ Maya ▸ Settings toggles it + sets the briefing hour.
+  - **Customers are never messaged by these jobs.** Nudges (unsigned/unpaid/unconfirmed) are partly covered
+    by the existing appointment-reminder + receivables sweeps; a per-customer nudge pause + smart alerts
+    (large waiver / repeat service call / angry customer) are **deferred** (see open questions).

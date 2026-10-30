@@ -14,8 +14,15 @@ export async function mayaDashboardAction() {
     usage: aiUsageSummary(),
     activity: recentAiActivity(40),
     unanswered: listMayaUnanswered({ limit: 60 }),
-    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
+    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", proactive: secretValue("MAYA_PROACTIVE") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
+    briefingHour: +secretValue("MAYA_BRIEFING_HOUR") || 7,
   };
+}
+
+export async function mayaSetBriefingHourAction(hour) {
+  const u = await admin(); if (!u) return { error: "Admin only." };
+  setSecret("MAYA_BRIEFING_HOUR", String(Math.max(0, Math.min(23, Math.round(+hour || 7)))), u.name);
+  return { ok: true };
 }
 
 export async function mayaSetCapAction(capDollars, alertPct) {
@@ -29,7 +36,7 @@ export async function mayaSetCapAction(capDollars, alertPct) {
 
 export async function mayaSetFlagAction(flag, on) {
   const u = await admin(); if (!u) return { error: "Admin only." };
-  const key = flag === "customer" ? "AI_CUSTOMER" : "AI_COMMANDS";
+  const key = flag === "customer" ? "AI_CUSTOMER" : flag === "proactive" ? "MAYA_PROACTIVE" : "AI_COMMANDS";
   setSecret(key, on ? "on" : "off", u.name);
   return { ok: true };
 }

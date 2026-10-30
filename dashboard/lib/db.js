@@ -5394,6 +5394,24 @@ export function listMayaUnanswered({ limit = 50, includeResolved = false } = {})
 export function resolveMayaUnanswered(id) {
   try { db.prepare("UPDATE maya_unanswered SET resolved_at = datetime('now','localtime') WHERE id=?").run(+id); return { ok: true }; } catch { return { error: "Couldn't resolve." }; }
 }
+// Counts for Maya's proactive jobs (morning briefing + weekly report). All derived from the canonical
+// receivables + payments + proposals so the numbers match the dashboard. Defensive — any failure yields 0s.
+export function mayaProactiveData() {
+  try {
+    const recv = getReceivables();
+    const dueRows = recv.filter((r) => r.isReceivable && +r.amountDueNow > 0);
+    const q = (sql) => { try { return +db.prepare(sql).get().n || 0; } catch { return 0; } };
+    return {
+      awaitingSig: recv.filter((r) => r.financialState === "awaiting_signature").length,
+      sigOverdue: recv.filter((r) => r.signatureOverdue).length,
+      dueNow: dueRows.length,
+      dueAmt: dueRows.reduce((s, r) => s + (+r.amountDueNow || 0), 0),
+      collected7: q("SELECT COALESCE(SUM(amount),0) n FROM project_payments WHERE status!='pending' AND date(COALESCE(paid_at,created_at)) >= date('now','localtime','-6 days')"),
+      sent7: q("SELECT COUNT(*) n FROM proposals WHERE sent_at IS NOT NULL AND date(sent_at) >= date('now','localtime','-6 days')"),
+      signed7: q("SELECT COUNT(*) n FROM proposals WHERE signed_at IS NOT NULL AND date(signed_at) >= date('now','localtime','-6 days')"),
+    };
+  } catch { return { awaitingSig: 0, sigOverdue: 0, dueNow: 0, dueAmt: 0, collected7: 0, sent7: 0, signed7: 0 }; }
+}
 // Aggregate usage for the Health page: today + last 7/30 days (cents + call counts).
 export function aiUsageSummary() {
   try {

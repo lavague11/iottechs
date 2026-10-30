@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction } from "./actions";
+import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction, mayaSetBriefingHourAction } from "./actions";
 
 const money = (cents) => "$" + (Math.round((+cents || 0)) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TABS = ["Health", "Settings", "Activity", "Training", "Conversations"];
@@ -105,7 +105,23 @@ function Settings({ data, busy, setBusy, refresh }) {
         <label className="mya-toggle"><input type="checkbox" checked={!!data.flags?.customer} disabled={busy} onChange={(e) => toggle("customer", e.target.checked)} /> Customer assistant (AI_CUSTOMER)</label>
         <p className="mya-note">The model fallback needs <code>ANTHROPIC_API_KEY</code> in Dev ▸ API Keys{data.flags?.hasKey ? " (set ✓)" : " (not set)"}. The zero-token router works without it.</p>
       </div>
+      <Proactive data={data} busy={busy} setBusy={setBusy} refresh={refresh} />
     </section>
+  );
+}
+
+function Proactive({ data, busy, setBusy, refresh }) {
+  const [hour, setHour] = useState((data.briefingHour ?? 7).toString());
+  const [saved, setSaved] = useState("");
+  const toggle = async (on) => { setBusy(true); await mayaSetFlagAction("proactive", on).catch(() => {}); await refresh(); setBusy(false); };
+  const saveHour = async () => { setBusy(true); await mayaSetBriefingHourAction(hour).catch(() => {}); await refresh(); setBusy(false); setSaved("Saved"); setTimeout(() => setSaved(""), 2000); };
+  return (
+    <div className="mya-card">
+      <div className="mya-k">Proactive jobs</div>
+      <label className="mya-toggle"><input type="checkbox" checked={!!data.flags?.proactive} disabled={busy} onChange={(e) => toggle(e.target.checked)} /> Morning briefing + weekly report</label>
+      <div className="mya-row"><span className="mya-pre">Briefing at</span><input className="mya-in sm" type="number" min="0" max="23" value={hour} onChange={(e) => setHour(e.target.value)} /><span className="mya-post">:00 (Eastern)</span><button className="mya-save" disabled={busy} onClick={saveHour}>Save</button> {saved && <span className="mya-saved">{saved}</span>}</div>
+      <p className="mya-note">A daily briefing (awaiting-signature + payments due) and a Monday weekly report go to admins by portal + office email. Customers are never messaged by these jobs.</p>
+    </div>
   );
 }
 
