@@ -47,46 +47,51 @@ export const serviceColor = (key) => SERVICE_COLORS[key] || SERVICE_COLORS.camer
 // withCatalogIds(); the `name` is the fixed identity ANCHOR in code (the price book only overrides the
 // DISPLAY name/price — never this const), so the id survives display renames/price edits. Containers/
 // bundles (Camera Install Complete, NVR·N-Channel) are NOT catalog rows — their children carry the type.
+// Every canonical catalog item declares an EXPLICIT, permanent `id` (P1 hardening). The id is authored,
+// never generated — a rename/refactor of `name`/`baseName`, a price/cost change, or a reorder must NEVER
+// change identity. (These literal values match the ids P1 first shipped, so existing proposal provenance
+// stays valid — zero migration.) `type` is the Equipment vs Labor CLASSIFICATION of the actual component
+// (NOT a payout rule). Containers/bundles (Camera Install Complete, NVR·N-Channel) are NOT catalog rows.
 const RAW_PROPOSAL_CATALOG = {
   camera: [
-    { name: "Camera",               price: 70,   cost: 0, type: "equipment" },
-    { name: "4K Bullet Camera",     price: 185,  cost: 0, type: "equipment" },
-    { name: "4K Dome Camera",       price: 175,  cost: 0, type: "equipment" },
-    { name: "4K Turret Camera",     price: 175,  cost: 0, type: "equipment" },
-    { name: "Cat6 Drop",            price: 150,  cost: 0, type: "labor" },
-    { name: "Cat6 Termination",     price: 20,   cost: 0, type: "labor" },
-    { name: "Camera Mounting",      price: 20,   cost: 0, type: "labor" },
-    { name: "Camera Programming",   price: 20,   cost: 0, type: "labor" },
-    { name: "Camera Waterproofing", price: 20,   cost: 0, type: "labor" },
+    { id: "camera:camera",               name: "Camera",               price: 70,   cost: 0, type: "equipment" },
+    { id: "camera:4k_bullet_camera",     name: "4K Bullet Camera",     price: 185,  cost: 0, type: "equipment" },
+    { id: "camera:4k_dome_camera",       name: "4K Dome Camera",       price: 175,  cost: 0, type: "equipment" },
+    { id: "camera:4k_turret_camera",     name: "4K Turret Camera",     price: 175,  cost: 0, type: "equipment" },
+    { id: "camera:cat6_drop",            name: "Cat6 Drop",            price: 150,  cost: 0, type: "labor" },
+    { id: "camera:cat6_termination",     name: "Cat6 Termination",     price: 20,   cost: 0, type: "labor" },
+    { id: "camera:camera_mounting",      name: "Camera Mounting",      price: 20,   cost: 0, type: "labor" },
+    { id: "camera:camera_programming",   name: "Camera Programming",   price: 20,   cost: 0, type: "labor" },
+    { id: "camera:camera_waterproofing", name: "Camera Waterproofing", price: 20,   cost: 0, type: "labor" },
     // Monitor add-ons for viewing the NVR feed directly — optional, not auto-bundled.
     // Customer Provided / Monitor + Mount / Monitor + Mount + Custom are the 3 picks in
     // each Display Slot (system bar) — the latter two are bundled, one line, one price.
-    { name: "Customer Provided",         price: 0,   cost: 0, type: "equipment" },   // a (customer's) display
-    { name: "Monitor + Mount",           price: 200, cost: 0, type: "equipment" },   // display product (mount bundled)
-    { name: "Monitor + Mount + Custom",  price: 0,   cost: 0, type: "equipment" },
-    { name: "HDMI",                      price: 0,   cost: 0, type: "equipment" },
-    { name: "Second Display",            price: 0,   cost: 0, type: "equipment" },
-    { name: "NVR (8-Channel)",                price: 150, cost: 0, type: "equipment" },
-    { name: "NVR (16-Channel)",               price: 300, cost: 0, type: "equipment" },
-    { name: "NVR (32-Channel)",               price: 500, cost: 0, type: "equipment" },
-    { name: "NVR (32-Channel + 16-Port PoE)", price: 600, cost: 0, type: "equipment" },
-    { name: "2TB Storage Drive",              price: 90,  cost: 0, type: "equipment" },
-    { name: "4TB Storage Drive",              price: 180, cost: 0, type: "equipment" },
-    { name: "6TB Storage Drive",              price: 270, cost: 0, type: "equipment" },
-    { name: "8TB Storage Drive",              price: 360, cost: 0, type: "equipment" },
+    { id: "camera:customer_provided",        name: "Customer Provided",        price: 0,   cost: 0, type: "equipment" },   // a (customer's) display
+    { id: "camera:monitor_mount",            name: "Monitor + Mount",          price: 200, cost: 0, type: "equipment" },   // display product (mount bundled)
+    { id: "camera:monitor_mount_custom",     name: "Monitor + Mount + Custom", price: 0,   cost: 0, type: "equipment" },
+    { id: "camera:hdmi",                     name: "HDMI",                     price: 0,   cost: 0, type: "equipment" },
+    { id: "camera:second_display",           name: "Second Display",           price: 0,   cost: 0, type: "equipment" },
+    { id: "camera:nvr_8_channel",                name: "NVR (8-Channel)",                price: 150, cost: 0, type: "equipment" },
+    { id: "camera:nvr_16_channel",               name: "NVR (16-Channel)",               price: 300, cost: 0, type: "equipment" },
+    { id: "camera:nvr_32_channel",               name: "NVR (32-Channel)",               price: 500, cost: 0, type: "equipment" },
+    { id: "camera:nvr_32_channel_16_port_poe",   name: "NVR (32-Channel + 16-Port PoE)", price: 600, cost: 0, type: "equipment" },
+    { id: "camera:2tb_storage_drive",            name: "2TB Storage Drive",              price: 90,  cost: 0, type: "equipment" },
+    { id: "camera:4tb_storage_drive",            name: "4TB Storage Drive",              price: 180, cost: 0, type: "equipment" },
+    { id: "camera:6tb_storage_drive",            name: "6TB Storage Drive",              price: 270, cost: 0, type: "equipment" },
+    { id: "camera:8tb_storage_drive",            name: "8TB Storage Drive",              price: 360, cost: 0, type: "equipment" },
   ],
   // Commercial Audio (owner's rate sheet 2026-09-27). A ceiling speaker install is the "Ceiling Speaker"
   // preset block: speaker $75 + wire run $150 + drill/mount/tune $75 = $300 per speaker. The amplifier
   // is the system's head end (the sound service's NVR) with Rack & Mount as its add-on (its Display).
   sound: [
-    { name: "Ceiling Speaker",    price: 75,  cost: 0, type: "equipment" },
-    { name: "Surface Speaker",    price: 135, cost: 0, type: "equipment" },
-    { name: "Speaker Wire Run",   price: 150, cost: 0, type: "labor" },
-    { name: "Drill Mount Tune",   price: 75,  cost: 0, type: "labor" },
-    { name: "Amplifier (4-Zone)", price: 350, cost: 0, type: "equipment" },
-    { name: "Rack & Mount",       price: 150, cost: 0, type: "labor" },   // AMBIGUOUS: mounting labor + rack hardware → classed labor (install)
-    { name: "Volume Control",     price: 75,  cost: 0, type: "equipment" },
-    { name: "Tuning & Setup",     price: 120, cost: 0, type: "labor" },
+    { id: "sound:ceiling_speaker",    name: "Ceiling Speaker",    price: 75,  cost: 0, type: "equipment" },
+    { id: "sound:surface_speaker",    name: "Surface Speaker",    price: 135, cost: 0, type: "equipment" },
+    { id: "sound:speaker_wire_run",   name: "Speaker Wire Run",   price: 150, cost: 0, type: "labor" },
+    { id: "sound:drill_mount_tune",   name: "Drill Mount Tune",   price: 75,  cost: 0, type: "labor" },
+    { id: "sound:amplifier_4_zone",   name: "Amplifier (4-Zone)", price: 350, cost: 0, type: "equipment" },
+    { id: "sound:rack_mount",         name: "Rack & Mount",       price: 150, cost: 0, type: "labor" },   // AMBIGUOUS: mounting labor + rack hardware → classed labor (install)
+    { id: "sound:volume_control",     name: "Volume Control",     price: 75,  cost: 0, type: "equipment" },
+    { id: "sound:tuning_setup",       name: "Tuning & Setup",     price: 120, cost: 0, type: "labor" },
   ],
   // Toast POS — aligned to the Toast Equipment Cable Guide (docs/toast). Network core auto-seeds
   // (ISP + Pronto/Meraki + PoE switch); each WIRED device carries a Line Drop labor line (a new
@@ -95,63 +100,68 @@ const RAW_PROPOSAL_CATALOG = {
   toast: [
     // Network core (baseline) — hardware is Toast/customer-provided, so every device is $0; we bill
     // the labor (Line Drop + Mounting) below, never the equipment.
-    { name: "ISP Router",            price: 0,   cost: 0, type: "equipment" },
-    { name: "Pronto / Meraki",       price: 0,   cost: 0, type: "equipment" },
-    { name: "24-Port Switch",    price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:isp_router",            name: "ISP Router",            price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:pronto_meraki",         name: "Pronto / Meraki",       price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:24_port_switch",        name: "24-Port Switch",        price: 0,   cost: 0, type: "equipment" },
     // Wired devices — each needs a Line Drop (equipment itself is provided → $0)
-    { name: "Access Point",          price: 0,   cost: 0, type: "equipment" },
-    { name: "POS Terminal",          price: 0,   cost: 0, type: "equipment" },
-    { name: "Kitchen Printer",       price: 0,   cost: 0, type: "equipment" },
-    { name: "Kitchen Display (KDS)", price: 0,   cost: 0, type: "equipment" },
-    { name: "Self-Service Kiosk",    price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:access_point",          name: "Access Point",          price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:pos_terminal",          name: "POS Terminal",          price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:kitchen_printer",       name: "Kitchen Printer",       price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:kitchen_display_kds",   name: "Kitchen Display (KDS)", price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:self_service_kiosk",    name: "Self-Service Kiosk",    price: 0,   cost: 0, type: "equipment" },
     // Peripherals — connect THROUGH the POS terminal (no drop of their own)
-    { name: "Handheld POS",          price: 0,   cost: 0, type: "equipment" },
-    { name: "Cash Drawer",           price: 0,   cost: 0, type: "equipment" },
-    { name: "Customer Display",      price: 0,   cost: 0, type: "equipment" },
-    { name: "Receipt Printer",       price: 0,   cost: 0, type: "equipment" },
-    { name: "Barcode Scanner",       price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:handheld_pos",          name: "Handheld POS",          price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:cash_drawer",           name: "Cash Drawer",           price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:customer_display",      name: "Customer Display",      price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:receipt_printer",       name: "Receipt Printer",       price: 0,   cost: 0, type: "equipment" },
+    { id: "toast:barcode_scanner",       name: "Barcode Scanner",       price: 0,   cost: 0, type: "equipment" },
     // Labor — Line Drop toggles between a new run ($150) and an existing cable ($50, test & map);
     // Device Mounting is the $50 premium mount (displays / APs); Keystone is a $50 jack termination.
-    { name: "Line Drop",             price: 150, cost: 0, type: "labor" },
-    { name: "Line Drop — Existing",  price: 50,  cost: 0, type: "labor" },
-    { name: "Device Mounting",       price: 50,  cost: 0, type: "labor" },
-    { name: "Keystone",              price: 50,  cost: 0, type: "labor" },
+    { id: "toast:line_drop",             name: "Line Drop",             price: 150, cost: 0, type: "labor" },
+    { id: "toast:line_drop_existing",    name: "Line Drop — Existing",  price: 50,  cost: 0, type: "labor" },
+    { id: "toast:device_mounting",       name: "Device Mounting",       price: 50,  cost: 0, type: "labor" },
+    { id: "toast:keystone",              name: "Keystone",              price: 50,  cost: 0, type: "labor" },
   ],
   alarm: [
-    { name: "Control Panel",       price: 320, cost: 0, type: "equipment" },
-    { name: "Door/Window Sensor",  price: 45,  cost: 0, type: "equipment" },
-    { name: "Motion Sensor",       price: 65,  cost: 0, type: "equipment" },
-    { name: "Glass-Break Sensor",  price: 70,  cost: 0, type: "equipment" },
-    { name: "Keypad",              price: 110, cost: 0, type: "equipment" },
-    { name: "Smoke / CO Detector", price: 85,  cost: 0, type: "equipment" },
+    { id: "alarm:control_panel",       name: "Control Panel",       price: 320, cost: 0, type: "equipment" },
+    { id: "alarm:door_window_sensor",  name: "Door/Window Sensor",  price: 45,  cost: 0, type: "equipment" },
+    { id: "alarm:motion_sensor",       name: "Motion Sensor",       price: 65,  cost: 0, type: "equipment" },
+    { id: "alarm:glass_break_sensor",  name: "Glass-Break Sensor",  price: 70,  cost: 0, type: "equipment" },
+    { id: "alarm:keypad",              name: "Keypad",              price: 110, cost: 0, type: "equipment" },
+    { id: "alarm:smoke_co_detector",   name: "Smoke / CO Detector", price: 85,  cost: 0, type: "equipment" },
   ],
   access: [
-    { name: "Card Reader",      price: 260, cost: 0, type: "equipment" },
-    { name: "Electric Strike",  price: 180, cost: 0, type: "equipment" },
-    { name: "Door Controller",  price: 340, cost: 0, type: "equipment" },
-    { name: "REX / Exit Button",price: 60,  cost: 0, type: "equipment" },
-    { name: "Maglock",          price: 210, cost: 0, type: "equipment" },
+    { id: "access:card_reader",      name: "Card Reader",       price: 260, cost: 0, type: "equipment" },
+    { id: "access:electric_strike",  name: "Electric Strike",   price: 180, cost: 0, type: "equipment" },
+    { id: "access:door_controller",  name: "Door Controller",   price: 340, cost: 0, type: "equipment" },
+    { id: "access:rex_exit_button",  name: "REX / Exit Button", price: 60,  cost: 0, type: "equipment" },
+    { id: "access:maglock",          name: "Maglock",           price: 210, cost: 0, type: "equipment" },
   ],
   wiring: [
-    { name: "Cat6 Drop",           price: 150, cost: 0, type: "labor" },
-    { name: "Conduit Run (per ft)",price: 8,   cost: 0, type: "labor" },
-    { name: "Patch Panel",         price: 160, cost: 0, type: "equipment" },
-    { name: "Rack & Dress",        price: 240, cost: 0, type: "labor" },
+    { id: "wiring:cat6_drop",           name: "Cat6 Drop",            price: 150, cost: 0, type: "labor" },
+    { id: "wiring:conduit_run_per_ft",  name: "Conduit Run (per ft)", price: 8,   cost: 0, type: "labor" },
+    { id: "wiring:patch_panel",         name: "Patch Panel",          price: 160, cost: 0, type: "equipment" },
+    { id: "wiring:rack_dress",          name: "Rack & Dress",         price: 240, cost: 0, type: "labor" },
   ],
   custom: [],
 };
 
-// Deterministic, stable canonical id for a catalog item: "<service>:<slug-of-the-anchor-name>". Assigned
-// ONCE here from the fixed const name (the identity anchor). The price book never edits this const, so the
-// id is durable across display renames + price edits. INVARIANT E: type is stored, never inferred from the
-// live display name.
+// A slug helper for incidental UI use only (keys, anchors). NEVER used to mint canonical catalog identity —
+// catalog ids are authored literals above. (Kept exported for tests/UI; not part of the identity path.)
 export function catalogSlug(name) {
   return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
-function withCatalogIds(raw) {
-  const out = {};
+// Pass-through that ENFORCES the explicit-id + unique-id invariants. No id is generated here; a catalog
+// item without an authored `id` is a build-time error. `type` defaults to equipment only as a safety net.
+export function withCatalogIds(raw) {
+  const out = {}; const seen = new Set();
   for (const [svc, list] of Object.entries(raw)) {
-    out[svc] = (list || []).map((c) => ({ id: c.id || `${svc}:${catalogSlug(c.name)}`, type: c.type || "equipment", ...c }));
+    out[svc] = (list || []).map((c) => {
+      if (!c.id) throw new Error(`catalog item ${svc}/${c.name} is missing an explicit id`);
+      if (seen.has(c.id)) throw new Error(`duplicate catalog id: ${c.id}`);
+      seen.add(c.id);
+      return { type: "equipment", ...c };
+    });
   }
   return out;
 }

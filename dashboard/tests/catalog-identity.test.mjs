@@ -6,7 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   PROPOSAL_CATALOG, catalogSlug, catalogItemById, catalogItemByName, catalogIdForName,
-  itemTypeOf, catalogStampFor, normalizeProposalProvenance, makeCameraBundle, itemTotal,
+  itemTypeOf, catalogStampFor, normalizeProposalProvenance, makeCameraBundle, itemTotal, withCatalogIds,
 } from "../lib/proposal.js";
 
 const allItems = Object.entries(PROPOSAL_CATALOG).flatMap(([svc, list]) => (list || []).map((c) => ({ ...c, svc })));
@@ -79,6 +79,40 @@ test("itemTypeOf: stored wins → id → name → null for a custom line", () =>
   assert.equal(itemTypeOf({ name: "Camera Waterproofing" }, "camera"), "labor");             // by name
   assert.equal(itemTypeOf({ name: "Totally Custom Thing", price: 99 }), null);               // custom → null
   assert.deepEqual(catalogStampFor("Totally Custom Thing", "camera"), {});                    // no stamp
+});
+
+test("P1 hardening: catalog ids are EXPLICIT authored literals, not generated from any name", () => {
+  // F: every item declares an explicit id (the loader throws otherwise — proven below).
+  for (const c of allItems) assert.ok(typeof c.id === "string" && c.id.length > 0, `${c.svc}/${c.name} has no id`);
+  // Preservation: the exact ids P1 first shipped are retained (no migration churn).
+  assert.equal(catalogItemByName("Cat6 Drop", "camera").id, "camera:cat6_drop");
+  assert.equal(catalogItemByName("NVR (16-Channel)", "camera").id, "camera:nvr_16_channel");
+  assert.equal(catalogItemByName("Rack & Mount", "sound").id, "sound:rack_mount");
+  assert.equal(catalogItemByName("Line Drop", "toast").id, "toast:line_drop");
+  assert.equal(catalogItemByName("Maglock", "access").id, "access:maglock");
+  // Same display name under two services → DISTINCT explicit ids (identity is authored per item, not a
+  // global slug of the name).
+  assert.notEqual(catalogItemByName("Cat6 Drop", "camera").id, catalogItemByName("Cat6 Drop", "wiring").id);
+  assert.equal(catalogItemByName("Cat6 Drop", "wiring").id, "wiring:cat6_drop");
+});
+
+test("P1 hardening: id is independent of name/price/cost/order (A–E) and resolves by id alone", () => {
+  // The id is a separate field; a (hypothetical) rename or reprice of a line can't change it. itemTypeOf /
+  // catalogItemById key off the id, never the live text.
+  const base = catalogItemById("camera:cat6_drop");
+  const renamed = { ...base, name: "Structured Cabling Run", price: 999, cost: 50 };
+  assert.equal(renamed.id, "camera:cat6_drop");                 // A/C/D: id unchanged after rename/price/cost
+  assert.equal(catalogItemById(renamed.id).name, "Cat6 Drop");  // id still points at the canonical item
+  // E: reorder the raw definitions → same id set, same count.
+  const shuffled = withCatalogIds({ camera: [...PROPOSAL_CATALOG.camera].reverse() });
+  const a = PROPOSAL_CATALOG.camera.map((c) => c.id).sort();
+  const b = shuffled.camera.map((c) => c.id).sort();
+  assert.deepEqual(b, a);
+});
+
+test("P1 hardening: the loader REQUIRES an explicit id and rejects duplicates (H)", () => {
+  assert.throws(() => withCatalogIds({ camera: [{ name: "No Id Item", price: 1, cost: 0, type: "labor" }] }), /missing an explicit id/);
+  assert.throws(() => withCatalogIds({ camera: [{ id: "x:y", name: "A", price: 1, cost: 0 }, { id: "x:y", name: "B", price: 1, cost: 0 }] }), /duplicate catalog id/);
 });
 
 test("normalizeProposalProvenance is idempotent, additive, and never changes totals", () => {
