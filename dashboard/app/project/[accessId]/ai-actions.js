@@ -565,6 +565,11 @@ export async function aiResolvePickAction(accessId, intent, pickedId) {
 export async function aiAuditAction(accessId, summary) {
   const g = await authorize();
   if (!g.ok) return { error: g.error };
+  // Writing an audit line is a WRITE — editors only (a tech in the assistant is read-only), and a tech is
+  // additionally scoped to their own jobs. Without this, a tech could pollute any project's Job Log with
+  // attacker-controlled free text. (aiCanEdit already excludes tech; the scope check is defense-in-depth.)
+  if (!aiCanEdit(g.tok.role)) return { error: "Your role can't do that." };
+  if (g.tok.role === "tech" && !tokScopedToProject(accessId, g.tok)) return { error: "That isn't a project you're assigned to." };
   logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
   return { ok: true };
 }
@@ -626,6 +631,11 @@ export async function aiGlobalInterpretAction(text, context = {}) {
 export async function aiApplyNoteAction(accessId, body) {
   const g = await authorize();
   if (!g.ok) return { error: g.error };
+  // add_note is a WRITE_INTENTS member — editors only, and a tech is scoped to their own jobs. This exported
+  // RPC is directly callable, so it must re-enforce the same gate the interpret path applies (ai-actions.js
+  // WRITE_INTENTS check), not rely on the client having gone through it.
+  if (!aiCanEdit(g.tok.role)) return { error: "Editing is limited to sales and managers." };
+  if (g.tok.role === "tech" && !tokScopedToProject(accessId, g.tok)) return { error: "That isn't a project you're assigned to." };
   const text = String(body || "").trim();
   if (text.length < 2) return { error: "The note is empty." };
   addProjectNote(accessId, { role: g.tok.role, name: actorName(g.tok), body: text, scope: "general", isPublic: false });

@@ -71,3 +71,17 @@ test("drift: every exported AI server action authorizes before doing anything", 
     assert.ok(gated, `${name} authorizes before acting`);
   }
 });
+
+test("drift: directly-callable WRITE-apply actions re-enforce the editor gate (a tech can't write via a raw RPC)", () => {
+  // S1/S2: aiApplyNoteAction and aiAuditAction are separately-exported "use server" RPCs that write (a note /
+  // a Job Log line). authorize() only proves staff+flag; being staff ≠ being an editor. Each must ALSO gate on
+  // aiCanEdit (which excludes tech) so a technician can't forge a cross-project write by calling the RPC directly.
+  const src = readFileSync(new URL("../app/project/[accessId]/ai-actions.js", import.meta.url), "utf8");
+  for (const name of ["aiApplyNoteAction", "aiAuditAction"]) {
+    const start = src.indexOf(`export async function ${name}`);
+    const after = src.indexOf("export async function ", start + 1);
+    const body = src.slice(start, after === -1 ? src.length : after);
+    assert.ok(/if \(!aiCanEdit\(g\.tok\.role\)\) return/.test(body), `${name} gates on aiCanEdit`);
+    assert.ok(/tok\.role === "tech" && !tokScopedToProject\(/.test(body), `${name} scopes a tech to their own project`);
+  }
+});
