@@ -824,6 +824,18 @@ export function infraKindOf(src) {
 export const itemTotal = (it) => it.waived ? 0 : lineTotal(it) + (it.sub || []).reduce((s, x) => s + itemTotal(x), 0);
 export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + itemTotal(it), 0);
 
+// Total value WAIVED (comped) on a proposal's primary option — the sum of every waived line's full value
+// (a waived block counts its whole value; otherwise a waived component inside it counts). Pure; drives the
+// "large waiver" smart alert. Uses the first option (how the headline total is shown).
+export function waivedValueOf(payload) {
+  try {
+    const opt = (payload?.options || [])[0]; if (!opt) return 0;
+    const fullOf = (it) => (+it.qty || 0) * (+it.price || 0) + (it.sub || []).reduce((s, x) => s + fullOf(x), 0);
+    const scan = (it) => isWaived(it) ? fullOf(it) : (it.sub || []).reduce((s, x) => s + scan(x), 0);
+    return r2((opt.services || []).reduce((s, svc) => s + (svc.items || []).reduce((a, it) => a + scan(it), 0), 0));
+  } catch { return 0; }
+}
+
 // ---- Waiver causes (P3) -----------------------------------------------------
 // A line can be comped for more than one INDEPENDENT reason, and removing one reason must never disturb
 // another. Three causes exist today: "manual" (a staff ••• Waive), "customer_provided_equipment" (the CPE

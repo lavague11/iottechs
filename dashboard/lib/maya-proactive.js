@@ -3,7 +3,7 @@
 // DARK until the owner enables it (MAYA_PROACTIVE=on) — so nothing fires unexpectedly. Dedup markers in the
 // vault keep it to once per day / once per Monday even across restarts. Briefing + weekly go to staff only
 // (admin/manager portal + office email) — never to customers.
-import { getSecret, setSecret, secretValue, notifyRoles, mayaProactiveData } from "./db.js";
+import { getSecret, setSecret, secretValue, notifyRoles, mayaProactiveData, mayaNudgeCandidates, nudgedWithin, recordNudge, logProjectEvent } from "./db.js";
 
 const moneyD = (d) => "$" + (Math.round((+d || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -50,5 +50,31 @@ export async function runMayaProactive(now = new Date()) {
     await sendEmail("Maya — weekly report", "This week", lines);
     out.weekly = true;
   }
+  // Customer nudges — once per briefing hour, cooldown-deduped + per-project pause-respecting.
+  const nudged = await runMayaNudges();
+  if (nudged?.sent) out.nudges = nudged.sent;
   return { ok: true, ...out };
+}
+
+// Send polite customer reminders for unsigned proposals, unpaid deposits and final balances — only for
+// projects NOT paused (projects.nudge_paused) and NOT nudged for that type within the cooldown (default 3
+// days). Reuses the existing customer email senders (env-gated no-ops without RESEND_API_KEY). Unconfirmed
+// APPOINTMENT reminders stay on the appointment-reminder sweep, which also skips paused projects.
+export async function runMayaNudges() {
+  if (secretValue("MAYA_PROACTIVE") !== "on") return { skipped: "off" };
+  const cooldown = Math.max(1, +secretValue("MAYA_NUDGE_COOLDOWN_DAYS") || 3);
+  const email = await import("./email.js").catch(() => null);
+  let sent = 0;
+  for (const c of mayaNudgeCandidates()) {
+    if (nudgedWithin(c.accessId, c.type, cooldown)) continue;
+    try {
+      if (c.type === "unsigned") await email?.emailSignatureRequest?.(c.accessId);
+      else if (c.type === "deposit") await email?.emailPaymentReminder?.(c.accessId, { kind: "deposit", amount: c.amount });
+      else if (c.type === "balance") await email?.emailPaymentReminder?.(c.accessId, { kind: "final", amount: c.amount });
+      recordNudge(c.accessId, c.type);
+      try { logProjectEvent(c.accessId, { kind: "nudge", label: `Maya sent a ${c.type} reminder`, actor: "Maya" }); } catch {}
+      sent++;
+    } catch {}
+  }
+  return { ok: true, sent };
 }

@@ -198,6 +198,7 @@ function init() {
   `);
 
   const cols = db.prepare("PRAGMA table_info(projects)").all().map((c) => c.name);
+  if (!cols.includes("nudge_paused"))    db.exec("ALTER TABLE projects ADD COLUMN nudge_paused INTEGER DEFAULT 0");   // per-project pause for Maya's automatic customer reminders
   if (!cols.includes("customer_pin"))    db.exec("ALTER TABLE projects ADD COLUMN customer_pin TEXT");
   // pin_custom = 1 means an admin hand-set the PIN; the last-4-phone normalizer leaves those alone.
   if (!cols.includes("pin_custom"))      db.exec("ALTER TABLE projects ADD COLUMN pin_custom INTEGER DEFAULT 0");
@@ -1006,6 +1007,18 @@ function init() {
       reason      TEXT,
       hits        INTEGER DEFAULT 1,
       resolved_at TEXT
+    )
+  `);
+
+  // Maya customer nudges — one row per (project, type) recording when a reminder last went out, so the
+  // proactive sweep honours a cooldown and never spams. Types: unsigned | deposit | balance | appointment.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maya_nudges (
+      access_id  TEXT,
+      type       TEXT,
+      last_sent  TEXT,
+      sends      INTEGER DEFAULT 0,
+      PRIMARY KEY (access_id, type)
     )
   `);
 
@@ -3630,6 +3643,13 @@ export function setProjectAttention(accessId, needsAttention, note) {
 // ── Canonical project closure (ONE closed state — manual, auto-unsigned, or declined) ──────────────
 // Closing never deletes anything: it stamps lost_at (= closedAt) + the audit fields and logs an event.
 // The project stays searchable and reopenable; the finance resolver reads lost_at as "closed".
+// Edit-lock for a CLOSED project. A closed (lost_at) project is read-only history — the mutating server
+// actions refuse edits with this, while reads keep working. Reopening (reopenProject) clears lost_at, which
+// lifts the lock. Pure read; never throws.
+export function projectEditLock(accessId) {
+  try { const j = getJobByAccessId(accessId); if (j && j.lost_at) return { locked: true, reason: "This project is closed. Reopen it to make changes." }; } catch {}
+  return { locked: false };
+}
 export function closeProject(accessId, { reason = "", kind = "manual", byName = "System" } = {}) {
   const j = getJobByAccessId(accessId);
   const prevStage = j?.stage || null;
@@ -4052,6 +4072,13 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
   const who = String(customer || contact_name || "A customer").trim();
   try { notifyRoles(["admin", "manager"], { type: "service_call", title: `New service call — ${issue || category || "issue"}`, body: `${who} · ${priority || "medium"} priority`, link: `/service-calls/${svcId}` }); } catch {}
   try { import("./email.js").then((m) => m.sendOfficeEmail?.({ subject: `New service call ${svcId}`, heading: "New service call", lines: [`Customer: ${who}`, `Issue: ${issue || category || "—"}`, `Priority: ${priority || "medium"}`, project_access_id ? `Project: ${project_access_id}` : null].filter(Boolean), accessId: svcId })).catch(() => {}); } catch {}
+  // Smart alert (gated on MAYA_PROACTIVE): a REPEAT service call at the same site within 90 days → flag it.
+  if (secretValue("MAYA_PROACTIVE") === "on") {
+    try {
+      const prior = db.prepare("SELECT COUNT(*) n FROM service_calls WHERE id != ? AND created_at >= datetime('now','localtime','-90 days') AND ((address IS NOT NULL AND address != '' AND address = ?) OR (customer_id IS NOT NULL AND customer_id = ?))").get(id, address || "", custId).n;
+      if (prior > 0) notifyRoles(["admin", "manager"], { type: "maya_alert", title: "Repeat service call at the same site", body: `${who}: ${prior + 1} service calls at this site in 90 days (latest ${svcId}).`, link: `/service-calls/${svcId}` });
+    } catch {}
+  }
 
   logServiceCallEvent(svcId, { kind: "submitted", detail: issue || category || "Service call opened", actor_role: actor_role || "customer", actor_name: actor_name || contact_name });
   // Companion type-C project — the call's full gateway page. Never let a hiccup here kill the
@@ -5393,6 +5420,35 @@ export function listMayaUnanswered({ limit = 50, includeResolved = false } = {})
 }
 export function resolveMayaUnanswered(id) {
   try { db.prepare("UPDATE maya_unanswered SET resolved_at = datetime('now','localtime') WHERE id=?").run(+id); return { ok: true }; } catch { return { error: "Couldn't resolve." }; }
+}
+// ---- Maya customer nudges (per-project pause + cooldown dedup) ----------------------------------------
+export function setNudgePause(accessId, on) {
+  try { db.prepare("UPDATE projects SET nudge_paused = ? WHERE access_id = ? COLLATE NOCASE").run(on ? 1 : 0, String(accessId)); return { ok: true }; } catch { return { error: "Couldn't update." }; }
+}
+export function nudgePaused(accessId) {
+  try { return !!db.prepare("SELECT nudge_paused FROM projects WHERE access_id = ? COLLATE NOCASE").get(String(accessId))?.nudge_paused; } catch { return false; }
+}
+export function nudgedWithin(accessId, type, days = 3) {
+  try { const r = db.prepare("SELECT 1 n FROM maya_nudges WHERE access_id=? AND type=? AND last_sent >= datetime('now','localtime', ?)").get(String(accessId), String(type), `-${Math.max(0, +days || 0)} days`); return !!r; } catch { return false; }
+}
+export function recordNudge(accessId, type) {
+  try { db.prepare("INSERT INTO maya_nudges (access_id, type, last_sent, sends) VALUES (?,?,datetime('now','localtime'),1) ON CONFLICT(access_id,type) DO UPDATE SET last_sent=datetime('now','localtime'), sends=sends+1").run(String(accessId), String(type)); } catch {}
+}
+// Candidate projects for a nudge, by type, from the canonical receivables. Excludes paused projects and
+// rows with no contact email. type: unsigned (sent, not signed) | deposit (deposit due) | balance (balance due).
+export function mayaNudgeCandidates() {
+  try {
+    const out = [];
+    for (const r of getReceivables()) {
+      if (r.closed || nudgePaused(r.access_id)) continue;
+      let type = null, amount = 0;
+      if (r.financialState === "awaiting_signature") type = "unsigned";
+      else if (r.financialState === "awaiting_deposit" && +r.amountDueNow > 0) { type = "deposit"; amount = +r.amountDueNow; }
+      else if (r.isReceivable && +r.amountDueNow > 0) { type = "balance"; amount = +r.amountDueNow; }
+      if (type) out.push({ accessId: r.access_id, type, amount });
+    }
+    return out;
+  } catch { return []; }
 }
 // Counts for Maya's proactive jobs (morning briefing + weekly report). All derived from the canonical
 // receivables + payments + proposals so the numbers match the dashboard. Defensive — any failure yields 0s.

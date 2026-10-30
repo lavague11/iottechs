@@ -15,9 +15,9 @@ import {
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
-  customerOwnsProjectAccount, resolveCustomerRequiredActions,
+  customerOwnsProjectAccount, resolveCustomerRequiredActions, projectEditLock, secretValue,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint } from "../../../lib/proposal";
+import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, waivedValueOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
@@ -107,6 +107,7 @@ export async function saveTechPricingAction(accessId, techMap) {
 export async function saveProposalDraftAction(accessId, { payload, taxRate, depositPct, expectedUpdatedAt }) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   const err = validatePayload(payload);
   if (err) return { error: err };
   if (!(+taxRate >= 0 && +taxRate <= 30)) return { error: "Bad tax rate." };
@@ -125,8 +126,21 @@ export async function saveProposalDraftAction(accessId, { payload, taxRate, depo
     walk(payload, (it) => { it.cost = storedCost.get(it.id) ?? 0; });
   }
 
+  // Smart alert (gated on MAYA_PROACTIVE): flag a LARGE waiver to admins when the comped total crosses the
+  // threshold on this save (only on the increase, so it alerts once). Internal notification only.
+  let priorWaived = 0;
+  if (secretValue("MAYA_PROACTIVE") === "on") { try { priorWaived = waivedValueOf(JSON.parse(getActiveProposal(accessId)?.payload || "{}")); } catch {} }
+
   const row = saveProposalDraft(accessId, { payload, taxRate, depositPct, expectedUpdatedAt }, actorName(tok));
   if (!row) return { error: "Proposal was already sent — revise it to make changes." };
+  if (secretValue("MAYA_PROACTIVE") === "on" && !row.conflict) {
+    try {
+      const now = waivedValueOf(payload);
+      const threshold = (+secretValue("MAYA_LARGE_WAIVER_CENTS") || 50000) / 100;
+      if (now >= threshold && now > priorWaived)
+        notifyRoles(["admin", "manager"], { type: "maya_alert", title: "Large waiver on a proposal", body: `${actorName(tok)} waived $${now.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} on ${accessId}.`, link: `/project/${accessId}` });
+    } catch {}
+  }
   // Optimistic-concurrency conflict (Phase 5): another edit landed since the caller loaded. Tell the
   // client to reload the latest before saving, rather than clobbering the other write.
   if (row.conflict) return { conflict: true, updated_at: row.updated_at, error: "This proposal was changed elsewhere — reload to get the latest, then re-apply your edit." };
@@ -641,6 +655,7 @@ export async function recordPaymentAction(accessId, payment) {
   const isCustomer = tok.role === "customer";
   if (isCustomer && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (!isCustomer && !STAFF.has(tok.role)) return { error: "Unauthorized." };
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   if (!(+payment?.amount > 0)) return { error: "Enter an amount." };
   const payments = addProjectPayment(accessId, {
     amount: payment.amount, method: payment.method, kind: payment.kind,
@@ -870,6 +885,7 @@ export async function saveToolDataAction(accessId, tool, data) {
     : tool === "qc" ? ["admin", "manager", "tech"]                     // office + installing tech run QC
     : ["admin", "manager", "sales"];
   if (!editors.includes(tok.role)) return { error: "Read-only for your role." };
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   // A customer's addendum write is a signature, nothing more: their copy came over the wire

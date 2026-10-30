@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  WAIVER_CAUSES, waiverCausesOf, isWaived, hasWaiverCause, withWaiverCause, itemTotal,
+  WAIVER_CAUSES, waiverCausesOf, isWaived, hasWaiverCause, withWaiverCause, itemTotal, waivedValueOf,
 } from "../lib/proposal.js";
 import { LINE_CONDITION, conditionWaiveCause } from "../lib/proposal-terms.js";
 
@@ -205,4 +205,17 @@ test("itemTotal keys off the synced flag, so the pre-waiver value is still compu
   const line = { id: "l", qty: 1, price: 150, ...withWaiverCause({}, CPE, true) };
   assert.equal(itemTotal(line), 0);
   assert.equal(itemTotal({ ...line, waived: false }), 150, "struck value shown to staff/PDF");
+});
+
+test("waivedValueOf sums every waived line's full value (drives the large-waiver alert)", () => {
+  const p = { options: [{ id: "A", services: [{ key: "camera", items: [
+    { id: "b", qty: 1, price: 0, sub: [
+      { id: "cam", qty: 1, price: 150, ...withWaiverCause({}, WAIVER_CAUSES.CPE, true) },  // CPE camera waived
+      { id: "drop", qty: 1, price: 150 },                                                   // billable
+    ] },
+    { id: "ln", qty: 1, price: 300, ...withWaiverCause({}, WAIVER_CAUSES.MANUAL, true) },    // whole line manually waived
+    { id: "ok", qty: 2, price: 100 },                                                        // billable
+  ] }] }] };
+  assert.equal(waivedValueOf(p), 450, "150 (CPE camera) + 300 (manual line)");
+  assert.equal(waivedValueOf({ options: [{ id: "A", services: [{ items: [{ id: "x", qty: 1, price: 500 }] }] }] }), 0, "nothing waived → 0");
 });

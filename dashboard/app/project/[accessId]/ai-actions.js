@@ -14,7 +14,7 @@ import {
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
-  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered, getGuideBySlug,
+  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered, getGuideBySlug, projectEditLock, setNudgePause,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent, customerGuideIntent, customerHandoffIntent } from "../../../lib/ai-customer";
@@ -23,7 +23,8 @@ import { describeCoverage } from "../../../lib/device-coverage";
 import { FEEDBACK_KINDS } from "../../../lib/feedback-model";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
-import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult, pickModel } from "../../../lib/ai-command";
+import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult, pickModel, AI_MODEL_FAST } from "../../../lib/ai-command";
+import { looksNonEnglish } from "../../../lib/ai-translate";
 import { costCents, crossesAlert, dollars } from "../../../lib/ai-usage";
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
@@ -166,6 +167,42 @@ async function fileBug(text, tok, ctx = {}, kind = "maya") {
     });
     return r?.id || null;
   } catch { return null; }
+}
+
+// Scoped translate-only model call for the customer path — NO tools, NO actions, just text in / text out.
+// Costed + recorded + cap-respecting like interpret(). Returns the translated text, or null (→ caller keeps
+// the original). Uses the fast model.
+async function translateCall(system, user, meta = {}) {
+  const key = secretValue("ANTHROPIC_API_KEY"); if (!key) return null;
+  const cap = aiSpendCapCents(); if (cap > 0 && aiSpendTodayCents() >= cap) return null;
+  try {
+    const res = await fetch(ANTHROPIC_URL, {
+      method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: AI_MODEL_FAST, max_tokens: 500, system, messages: [{ role: "user", content: String(user || "").slice(0, 1500) }] }),
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    const inTok = +json?.usage?.input_tokens || 0, outTok = +json?.usage?.output_tokens || 0;
+    recordAiUsage({ model: AI_MODEL_FAST, inTok, outTok, costCents: costCents(AI_MODEL_FAST, inTok, outTok), role: meta.role || "customer", accessId: meta.accessId || null, kind: "translate" });
+    const txt = (json?.content || []).filter((b) => b.type === "text").map((b) => b.text).join("").trim();
+    return txt || null;
+  } catch { return null; }
+}
+// Detect + translate to English. Returns { lang, text } (lang="en" when already English / on failure).
+async function toEnglish(text, meta) {
+  const out = await translateCall("Detect the language of the user's message and translate it to English. Reply with the ISO 639-1 language code on the FIRST line, then the English translation on the following lines. No preamble, no quotes, no explanation.", text, meta);
+  if (!out) return { lang: "en", text };
+  const nl = out.indexOf("\n");
+  const lang = (nl > 0 ? out.slice(0, nl) : "").trim().toLowerCase().slice(0, 5);
+  const eng = (nl > 0 ? out.slice(nl + 1) : out).trim();
+  if (/^[a-z]{2,3}$/.test(lang) && lang !== "en" && eng) return { lang, text: eng };
+  return { lang: "en", text };
+}
+// Translate English → the target language (ISO code). Returns the translation, or the original on failure.
+async function fromEnglish(text, lang, meta) {
+  if (!lang || lang === "en" || !String(text || "").trim()) return text;
+  const out = await translateCall(`Translate the user's message into the language with ISO 639-1 code "${lang}". Reply with ONLY the translation — no quotes, no preamble, no notes.`, text, meta);
+  return out || text;
 }
 
 // Run a read-only "answer" intent: retrieve real data (authorized, via existing db functions) and return
@@ -371,6 +408,8 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
   if (!spec) return { error: "Unknown action." };
   if (!actionAllowed(name, { editor: aiCanEdit(g.tok.role), can: (c) => can(g.tok.role, c) }))
     return { error: "Your role can't do that action." };
+  // A closed project is read-only — refuse edits early (reopen it first). Doesn't apply to close_project.
+  if (name !== "close_project") { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   const job = getJobByAccessId(accessId);
   if (!accessId || !job) return { error: "Couldn't find that project." };
   const facts = buildStageFacts(accessId);
@@ -483,6 +522,10 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
     out = await closeProjectAction(accessId, String(args?.reason || "").trim() || "Closed via Maya");
     message = out?.error ? null : "Project closed — kept as searchable history.";
   }
+  else if (name === "pause_nudges") {
+    out = setNudgePause(accessId, !!args?.on);
+    message = out?.error ? null : (args?.on ? "Automatic reminders paused for this project." : "Automatic reminders resumed.");
+  }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
 
@@ -583,6 +626,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
 // Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
 // than one line item comes back as a disambiguation (candidates to pick) rather than a guess.
 function proposalPreview(accessId, intent) {
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   const row = getActiveProposal(accessId);
   if (!row) return { error: "There's no proposal on this project yet." };
   if (row.signed_name || row.status === "accepted") return { error: "This proposal is signed — revise it before editing." };
@@ -728,67 +772,68 @@ export async function aiCustomerInterpretAction(accessId, text) {
   const t = String(text || "").trim().slice(0, 600);
   if (!t) return { ok: true, kind: "answer", speak: "Ask me about your project — its status, your quote, your balance, or what your cameras cover." };
 
-  // 1) An ALLOWLISTED read, FORCED to the customer's own project, run as the customer (sanitize/caps apply).
-  //    ownedAccessId lets resolveProject return their own project even if it's restricted (ownership proven above).
-  const read = customerReadIntent(t);
-  if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId, { ownedAccessId: accessId });
+  // Multilingual (scoped translate-only): if the message isn't English, translate it to English, run the
+  // normal DETERMINISTIC path on the ENGLISH text, then translate the reply back. The translate call carries
+  // no tools/actions — injection in any language still hits the deterministic allowlist. Notes/tickets to the
+  // office stay English (we act on `work`, the English version; preview.body — what gets stored — stays English).
+  const meta = { role: tok.role, accessId };
+  let lang = "en", work = t;
+  if (looksNonEnglish(t)) { const tr = await toEnglish(t, meta); lang = tr.lang; work = tr.text; }
 
-  // 1a) Setup help → open the right SUPPORT GUIDE on their own project. Only a READY guide (never a DRAFT)
-  //     is offered; the guide page itself scopes the system/QR to this customer's project.
-  const guide = customerGuideIntent(t);
-  if (guide) {
-    const g = getGuideBySlug(guide.slug);
-    if (g && g.ready) return { ok: true, kind: "navigate", href: `/guide/${guide.slug}?project=${accessId}`, label: g.title || "the setup guide", speak: `I'll open the ${g.title || "setup"} guide and stay with you while you follow it.` };
-  }
-  // 1b) "I want a person" / upset / urgent → hand off: flag the team (never promise a time) and reassure.
-  const handoff = customerHandoffIntent(t);
-  if (handoff) {
-    try { notifyRoles(["admin", "manager"], { type: "customer_handoff", title: `Customer wants a person${handoff.urgent ? " — URGENT" : handoff.upset ? " — upset" : ""}`, body: `${accessId}: "${t.slice(0, 160)}"`, link: `/project/${accessId}` }); } catch {}
-    try { logProjectEvent(accessId, { kind: "handoff", label: `Customer requested a person via Maya${handoff.urgent ? " (urgent)" : ""}`, actor: actorName(tok) }); } catch {}
-    return { ok: true, kind: "answer", speak: handoff.urgent
-      ? "I've flagged this as urgent for the team and they'll reach out as soon as possible. If it's an emergency involving safety, please call 911."
-      : "I've let the team know you'd like to speak with someone — they'll reach out. Is there anything I can help you with in the meantime?" };
-  }
-
-  // 2) A customer WRITE/ACTION (slice 3): a comment to relay (confirmed write), or a deliberate act
-  //    (sign/accept/pay) → GUIDED NAVIGATION to their proposal section (the AI never signs/pays).
-  const act = customerActionIntent(t);
-  if (act?.kind === "comment") {
-    return { ok: true, kind: "write", write: "comment", body: act.body,
-      preview: { title: "Send this to your project team?", body: act.body } };
-  }
-  // #7 headline — an objection/change-request. If they named a device, EXPLAIN its coverage from the survey
-  // first (so they get the "here's what it's for" answer), then offer to record the concern against that exact
-  // device. The write is confirmed (Send/Cancel) and goes through aiCustomerFeedbackAction (re-gated there).
-  if (act?.kind === "objection") {
-    let deviceId = null, deviceLabel = null, coverage = "";
-    const devices = getProjectDevices(accessId) || [];
-    if (devices.length) {
-      const hit = resolveDevice(act.ref || "", devices);
-      if (hit.device) {
-        deviceId = hit.device.id; deviceLabel = candidateView(hit.device).display;
-        coverage = describeCoverage(hit.device);
-      }
+  const resolve = async (q) => {
+    // 1) An ALLOWLISTED read, FORCED to the customer's own project, run as the customer (sanitize/caps apply).
+    const read = customerReadIntent(q);
+    if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId, { ownedAccessId: accessId });
+    // 1a) Setup help → open the right READY support guide on their own project.
+    const guide = customerGuideIntent(q);
+    if (guide) {
+      const g = getGuideBySlug(guide.slug);
+      if (g && g.ready) return { ok: true, kind: "navigate", href: `/guide/${guide.slug}?project=${accessId}`, label: g.title || "the setup guide", speak: `I'll open the ${g.title || "setup"} guide and stay with you while you follow it.` };
     }
-    const lead = coverage ? `${coverage} ` : "";
-    // Only deviceId travels to the apply action — the label is recomputed server-side from the re-resolved
-    // device (the client value is never trusted). deviceLabel here is for the confirm wording only.
-    return { ok: true, kind: "write", write: "objection", body: act.body, feedbackKind: act.feedbackKind, deviceId, deviceLabel,
-      speak: `${lead}Want me to share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your project team?`,
-      preview: { title: `Share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your team?`, body: act.body } };
-  }
-  if (act?.kind === "nav") {
-    return { ok: true, kind: "navigate", href: `/project/${accessId}?stage=proposal`, label: act.label,
-      speak: `I'll take you to ${act.label}.` };
-  }
+    // 1b) "I want a person" / upset / urgent → hand off (flag the team in ENGLISH; reassure).
+    const handoff = customerHandoffIntent(q);
+    if (handoff) {
+      try { notifyRoles(["admin", "manager"], { type: "customer_handoff", title: `Customer wants a person${handoff.urgent ? " — URGENT" : handoff.upset ? " — upset" : ""}`, body: `${accessId}: "${q.slice(0, 160)}"`, link: `/project/${accessId}` }); } catch {}
+      try { logProjectEvent(accessId, { kind: "handoff", label: `Customer requested a person via Maya${handoff.urgent ? " (urgent)" : ""}`, actor: actorName(tok) }); } catch {}
+      return { ok: true, kind: "answer", speak: handoff.urgent
+        ? "I've flagged this as urgent for the team and they'll reach out as soon as possible. If it's an emergency involving safety, please call 911."
+        : "I've let the team know you'd like to speak with someone — they'll reach out. Is there anything I can help you with in the meantime?" };
+    }
+    // 2) A customer WRITE/ACTION: a comment to relay (confirmed), or a deliberate act (sign/pay) → guided nav.
+    const act = customerActionIntent(q);
+    if (act?.kind === "comment") {
+      return { ok: true, kind: "write", write: "comment", body: act.body, preview: { title: "Send this to your project team?", body: act.body } };
+    }
+    if (act?.kind === "objection") {
+      let deviceId = null, deviceLabel = null, coverage = "";
+      const devices = getProjectDevices(accessId) || [];
+      if (devices.length) {
+        const hit = resolveDevice(act.ref || "", devices);
+        if (hit.device) { deviceId = hit.device.id; deviceLabel = candidateView(hit.device).display; coverage = describeCoverage(hit.device); }
+      }
+      const lead = coverage ? `${coverage} ` : "";
+      return { ok: true, kind: "write", write: "objection", body: act.body, feedbackKind: act.feedbackKind, deviceId, deviceLabel,
+        speak: `${lead}Want me to share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your project team?`,
+        preview: { title: `Share this concern${deviceLabel ? ` about ${deviceLabel}` : ""} with your team?`, body: act.body } };
+    }
+    if (act?.kind === "nav") {
+      return { ok: true, kind: "navigate", href: `/project/${accessId}?stage=proposal`, label: act.label, speak: `I'll take you to ${act.label}.` };
+    }
+    // 3) Approved customer FAQ (admin-authored; never invented), scoped to the "customer" library.
+    const k = knowledgeAnswer(q, tok);
+    if (k) return k;
+    // 4) Safe fallback — no staff capabilities, no writes, nothing invented.
+    return { ok: true, kind: "answer", speak: "I can tell you your project's status, your quote total and balance, and what your cameras cover — and answer common questions. What would you like to know?" };
+  };
 
-  // 3) Approved customer FAQ (admin-authored; never invented). knowledgeAnswer scopes a customer to the
-  //    "customer" library only.
-  const k = knowledgeAnswer(t, tok);
-  if (k) return k;
-
-  // 4) Safe fallback — no staff capabilities, no writes, nothing invented.
-  return { ok: true, kind: "answer", speak: "I can tell you your project's status, your quote total and balance, and what your cameras cover — and answer common questions. What would you like to know?" };
+  const result = await resolve(work);
+  // Translate the conversational reply back to the customer's language (speak + the confirm TITLE only;
+  // preview.body — the message that gets stored for staff — stays English).
+  if (lang !== "en" && result) {
+    if (result.speak) result.speak = await fromEnglish(result.speak, lang, meta);
+    if (result.preview?.title) result.preview.title = await fromEnglish(result.preview.title, lang, meta);
+  }
+  return result;
 }
 
 // Apply a customer's COMMENT (the one customer-facing write). The Send/Cancel confirm in the UI is UX only —

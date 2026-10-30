@@ -3,7 +3,7 @@
 // authz drift test; here we prove the state-availability gate and the phrase matching.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, parseProposeChange, parseRemoveLine, detectAction } from "../lib/ai-project-actions.js";
+import { PROJECT_ACTIONS, ACTION_NAMES, actionFromText, actionAllowed, parsePayment, parseAssign, parseAdjudicate, parseRaiseIssue, reasonFromText, parseProposeChange, parseRemoveLine, detectAction, parsePauseNudges } from "../lib/ai-project-actions.js";
 import { routeCommand, applyIntentToPayload } from "../lib/ai-command.js";
 import { MASTER_ORDER } from "../lib/stage-flow.js";
 
@@ -317,4 +317,15 @@ test("report_bug routes from bug phrasings (project-agnostic) and carries the de
   assert.equal(routeCommand("something is broken on this page")?.type, "report_bug");
   assert.equal(routeCommand("there's a bug in the camera editor")?.type, "report_bug");
   assert.equal(routeCommand("add 4 cameras")?.type, "add_items", "a normal command is NOT a bug report");
+});
+
+test("pause_nudges: parse pause/resume reminder commands; registry entry present", () => {
+  assert.deepEqual(parsePauseNudges("pause reminders for this customer"), { on: 1 });
+  assert.deepEqual(parsePauseNudges("stop the nudges"), { on: 1 });
+  assert.deepEqual(parsePauseNudges("resume reminders"), { on: 0 });
+  assert.equal(parsePauseNudges("did we send a reminder?"), null, "a question is not a command");
+  assert.equal(parsePauseNudges("add 4 cameras"), null);
+  assert.equal(detectAction("mute reminders for this project").name, "pause_nudges");
+  assert.ok(PROJECT_ACTIONS.pause_nudges, "registry has pause_nudges");
+  assert.match(PROJECT_ACTIONS.pause_nudges.confirm({ name: "Jones" }, { on: 1 }).title, /Pause automatic reminders for Jones/);
 });

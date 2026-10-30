@@ -3,7 +3,7 @@
 // here we prove the composed copy is correct (and singular/plural + $ are grounded in the real counts).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { briefingLines, weeklyLines } from "../lib/maya-proactive.js";
+import { briefingLines, weeklyLines, runMayaNudges } from "../lib/maya-proactive.js";
 
 test("briefing: nothing outstanding reads calmly", () => {
   const L = briefingLines({ awaitingSig: 0, sigOverdue: 0, dueNow: 0, dueAmt: 0 });
@@ -29,4 +29,8 @@ test("weekly: sent / signed / collected / open, from the counts", () => {
     "Collected (7 days): $18,250.50",
     "Open now: 6 awaiting signature, 2 payments due.",
   ]);
+});
+
+test("runMayaNudges is wired (customer nudge sweep)", () => {
+  assert.equal(typeof runMayaNudges, "function");
 });

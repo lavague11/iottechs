@@ -49,3 +49,8 @@ test("pickModel: escalates heavy asks to Sonnet, keeps everyday chat on Haiku", 
     assert.equal(pickModel(s), AI_MODEL_FAST, `"${s}" → Haiku`);
   }
 });
+
+test("escalation model is claude-sonnet-5-5 and is costed at the sonnet rate", () => {
+  assert.equal(AI_MODEL_SMART, "claude-sonnet-5-5");
+  assert.deepEqual(rateFor("claude-sonnet-5-5"), { in: 3.0, out: 15.0 });
+});

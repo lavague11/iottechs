@@ -209,6 +209,19 @@ export const PROJECT_ACTIONS = {
     }),
   },
 
+  // Pause / resume this project's automatic customer reminders (signature / payment / appointment nudges).
+  // Low-stakes toggle; cap:null → editor. The sweep (lib/maya-proactive) + appointment reminders both skip
+  // paused projects.
+  pause_nudges: {
+    verb: "update",
+    cap: null,
+    available: () => ({ ok: true }),
+    confirm: ({ name }, args) => ({
+      title: `${args?.on ? "Pause" : "Resume"} automatic reminders for ${name}`,
+      detail: args?.on ? "Maya stops this project's automatic signature / payment / appointment reminders until resumed." : "Maya resumes this project's automatic reminders.",
+    }),
+  },
+
   // Close (lose) a project on command. cap:null → editor (admin/manager/sales), matching closeProjectAction.
   // Kept as searchable history and reopenable — never hard-deleted. Always confirms (an `action` write), and
   // the dispatch refuses if a reason can't be derived. Edit-locking of closed projects is a separate change.
@@ -393,9 +406,21 @@ export function parseRemoveLine(text) {
 // Unified action detector for the router: a param-less action name, OR a parameterized action with args.
 // Returns { name, args? } | null. Order: adjudicate (resolve/dismiss) is tried before raise (flag) so a
 // "resolve the issue" never reads as a new flag; raise_issue is last so it doesn't shadow the others.
+// Parse a pause/resume-reminders command → { on: 1|0 } or null. Requires a reminder/nudge noun + a verb.
+export function parsePauseNudges(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\?\s*$/.test(t)) return null;
+  if (!/\b(reminder|reminders|nudge|nudges|follow[-\s]?ups?|notifications?)\b/.test(t)) return null;
+  if (/\b(pause|stop|mute|snooze|hold|turn\s+off|disable|silence)\b/.test(t)) return { on: 1 };
+  if (/\b(resume|unpause|un-?mute|re-?enable|turn\s+(?:back\s+)?on|start\s+sending)\b/.test(t)) return { on: 0 };
+  return null;
+}
+
 export function detectAction(text) {
   const name = actionFromText(text);
   if (name) return { name };
+  const pn = parsePauseNudges(text);
+  if (pn) return { name: "pause_nudges", args: pn };
   const close = parseClose(text);
   if (close) return { name: "close_project", args: close };
   const pay = parsePayment(text);

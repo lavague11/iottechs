@@ -105,3 +105,12 @@ test("customer handoff fires on 'talk to a person' / upset / urgent, not on norm
   assert.equal(customerHandoffIntent("I'm so frustrated with this")?.upset, true);
   assert.equal(customerHandoffIntent("what does my camera cover"), null);
 });
+
+// ---- 9. Multilingual detector (pure; the translate call itself is model-side, no tools/actions) ---------
+import { looksNonEnglish } from "../lib/ai-translate.js";
+test("looksNonEnglish flags non-English so we only spend a translate call when needed", () => {
+  for (const s of ["¿cuánto cuesta mi cámara?", "mi sistema no funciona", "необходима помощь", "كم تكلفة الكاميرا", "カメラの設定", "combien ça coûte"])
+    assert.equal(looksNonEnglish(s), true, `"${s}" → non-English`);
+  for (const s of ["how much is my camera", "what's my balance", "the app won't connect", ""])
+    assert.equal(looksNonEnglish(s), false, `"${s}" → English/skip`);
+});

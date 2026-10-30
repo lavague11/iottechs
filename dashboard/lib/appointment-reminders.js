@@ -5,7 +5,7 @@
 // Times are floating local (server TZ = America/New_York), so `new Date("YYYY-MM-DDTHH:MM")` parses
 // in the office's timezone, matching how the appointment was booked.
 
-import { allScheduleBlobs, claimAppointmentReminder, logProjectEvent } from "./db.js";
+import { allScheduleBlobs, claimAppointmentReminder, logProjectEvent, nudgePaused } from "./db.js";
 import { sendAppointmentEmails } from "./email.js";
 
 const H24 = 24 * 60 * 60 * 1000;
@@ -18,6 +18,7 @@ export async function sendDueAppointmentReminders() {
   let sent = 0, scanned = 0;
 
   for (const row of rows) {
+    if (nudgePaused(row.project_access_id)) continue;   // per-project pause on automatic reminders
     let data; try { data = JSON.parse(row.data || "{}"); } catch { continue; }
     const events = Array.isArray(data?.events) ? data.events : [];
     for (const ev of events) {

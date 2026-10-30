@@ -1,7 +1,7 @@
 "use server";
 
 import { headers, cookies } from "next/headers";
-import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount, projectEditLock } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { makePreviewToken } from "../../../lib/auth";
@@ -524,6 +524,7 @@ export async function setStage(accessId, viewRole, stageKey) {
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) {
     return { ok: false, error: "Not your project." };
   }
+  { const lk = projectEditLock(accessId); if (lk.locked) return { ok: false, error: lk.reason }; }
   const p = getJobByAccessId(accessId);
   if (!p) return { ok: false, error: "Project not found." };
 
@@ -658,6 +659,7 @@ export async function addAssignmentAction(accessId, { userId, userName, userEmai
   const { parseToken } = await import("../../../lib/auth");
   const tok = await parseToken(raw.trim());
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }
   const db = await import("../../../lib/db");
   // Qualification gate — a CERTIFIED tech must hold the badge this project's service needs. Legacy/
   // uncertified techs pass through; an admin can override with confirmation.

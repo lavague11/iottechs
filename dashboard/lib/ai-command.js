@@ -393,7 +393,7 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
 // handles the heavy asks — invoicing, large quotes, complex diagnostics, and multi-step requests. The
 // router's 0-token path still runs first, so neither model is touched for the common commands.
 export const AI_MODEL_FAST = "claude-haiku-4-5";
-export const AI_MODEL_SMART = "claude-sonnet-4-6";   // matches the Sonnet the rest of the app uses (read-licence, verify-document)
+export const AI_MODEL_SMART = "claude-sonnet-5-5";   // owner-chosen escalation model for the heavy asks
 export const AI_MODEL = AI_MODEL_FAST;               // back-compat default
 // Pick the model for a free-form command. Pure + tested. Escalates on cues for the four heavy classes; a
 // long / clearly multi-step utterance (several chained actions) also escalates. Everything else stays fast.
