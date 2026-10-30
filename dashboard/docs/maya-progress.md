@@ -9,7 +9,9 @@ without asking, and anything blocked on the owner.
 | Phase | Scope | State |
 |---|---|---|
 | Audit | Current impl vs spec, security risks, gap plan | **✅ done** → [maya-audit.md](maya-audit.md) |
-| P0 security hardening | S1 + S2 authz gaps | **✅ done** (this build) |
+| P0 security hardening | S1 + S2 authz gaps | **✅ done** (on `main`) |
+| Naming | "Maya" in UI + playbook retitle | **✅ done** (maya-build) |
+| Label: existing wire waives install | waiver cause parallel to CPE, struck | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -49,7 +51,12 @@ without asking, and anything blocked on the owner.
   infra/cron/model-routing, security) underway. Name "Maya" recorded.
 - **Audit complete** → `docs/maya-audit.md` (Done/Partial/Missing per spec item, ranked security risks,
   gap plan by phase). Four parallel recon agents mapped actions, guides/QR/customer-access, infra, security.
-- **P0 security hardening (S1 + S2) shipped.** `aiApplyNoteAction` and `aiAuditAction` were separately-
-  exported write RPCs that only proved staff+flag — a technician could forge a cross-project note / Job Log
-  write. Both now re-enforce `aiCanEdit` (excludes tech) + a tech project-scope check, matching the
-  interpret-path WRITE_INTENTS gate and `previewAction`'s scoping. New drift test in `tests/ai-authz.test.mjs`.
+- **P0 security hardening (S1 + S2) shipped** (to `main`). `aiApplyNoteAction` and `aiAuditAction` were
+  separately-exported write RPCs that only proved staff+flag — a technician could forge a cross-project note
+  / Job Log write. Both now re-enforce `aiCanEdit` (excludes tech) + a tech project-scope check. Drift test
+  in `tests/ai-authz.test.mjs`.
+- **Naming shipped** (maya-build). "Maya" across the orb / bars / voice menu / greeting + playbook retitle.
+- **Label "existing wire waives install" shipped** (maya-build). `WAIVER_CAUSES.EXISTING_WIRE`; the
+  `existingCable` condition now carries `waiveCause:"existing_wire"`, so toggling it comps that line's new
+  drop/install charge (value struck, snapshot preserved) — parallel to CPE, isolated multi-cause. Applies
+  going forward only; existing stored lines are NOT retroactively re-priced (snapshot rule). Tests updated.

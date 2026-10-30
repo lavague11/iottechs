@@ -826,14 +826,17 @@ export const svcSubtotal = (svc) => (svc.items || []).reduce((s, it) => s + item
 
 // ---- Waiver causes (P3) -----------------------------------------------------
 // A line can be comped for more than one INDEPENDENT reason, and removing one reason must never disturb
-// another. Two causes exist today: "manual" (a staff ••• Waive) and "customer_provided_equipment" (the CPE
-// condition — the customer is supplying this device). The AUTHORITATIVE effective flag stays `it.waived`
-// (so itemTotal / PDF / fingerprint / diff are all unchanged); `it.waiverCauses` is the bookkeeping that
-// records WHY, so a toggle recomputes `waived` without clobbering an unrelated cause. Hard invariants:
+// another. Three causes exist today: "manual" (a staff ••• Waive), "customer_provided_equipment" (the CPE
+// condition — the customer is supplying this device), and "existing_wire" (the Existing Cable condition —
+// the run reuses existing cable, so the new drop/install charge on this line is waived). The AUTHORITATIVE
+// effective flag stays `it.waived` (so itemTotal / PDF / fingerprint / diff are all unchanged);
+// `it.waiverCauses` is the bookkeeping that records WHY, so a toggle recomputes `waived` without clobbering
+// an unrelated cause. Hard invariants:
 //   • a waive NEVER mutates the line's snapshot price (the value stays on the line, struck);
 //   • un-waiving NEVER restores a price from the catalog — the original price was always preserved;
-//   • CPE ⇒ waived is ONE-WAY: a manual waive, a $0 price, or any other condition NEVER implies CPE.
-export const WAIVER_CAUSES = { MANUAL: "manual", CPE: "customer_provided_equipment" };
+//   • a condition-driven waive (CPE, existing wire) is ONE-WAY: a manual waive, a $0 price, or a DIFFERENT
+//     condition NEVER implies another condition's cause. Each condition owns exactly its own cause.
+export const WAIVER_CAUSES = { MANUAL: "manual", CPE: "customer_provided_equipment", EXISTING_WIRE: "existing_wire" };
 // The causes currently on a line. A legacy line carrying only the bare `waived:true` (no recorded causes)
 // reads as a single "manual" cause, so old proposals behave identically and are never reinterpreted as CPE.
 export function waiverCausesOf(it) {

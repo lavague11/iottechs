@@ -31,9 +31,10 @@ const toggleSub = (block, sid, fn) => ({ ...block, sub: block.sub.map((s) => (s.
 // =======================================================================================================
 // Condition → cause mapping
 // =======================================================================================================
-test("conditionWaiveCause: only CPE waives; Existing Cable / Tested / Not Tested never do", () => {
+test("conditionWaiveCause: CPE and Existing Cable waive (own causes); Tested / Not Tested never do", () => {
   assert.equal(conditionWaiveCause(LINE_CONDITION.cxEquip), CPE);
-  assert.equal(conditionWaiveCause(LINE_CONDITION.existingCable), null);
+  assert.equal(conditionWaiveCause(LINE_CONDITION.existingCable), WAIVER_CAUSES.EXISTING_WIRE);
+  assert.notEqual(WAIVER_CAUSES.EXISTING_WIRE, CPE, "existing-wire is a DISTINCT cause from CPE");
   assert.equal(conditionWaiveCause(LINE_CONDITION.tested), null);
   assert.equal(conditionWaiveCause(LINE_CONDITION.notTested), null);
   assert.equal(conditionWaiveCause(null), null);
@@ -93,13 +94,31 @@ test("a $0-priced line is NOT inferred to be CPE (or waived) by itself", () => {
   assert.equal(hasWaiverCause(free, CPE), false);
 });
 
-test("Existing Cable toggles its condition but never waives the line or touches price", () => {
-  let line = { id: "l", qty: 1, price: 150 };
+test("Existing Cable waives its line (new drop/install fee comped), struck at the preserved price", () => {
+  let line = { id: "l", qty: 1, price: 150, name: "Cat6 Drop" };
   line = toggleCond(line, "existingCable", true);
   assert.deepEqual(line.conditions, ["existingCable"]);
+  assert.equal(isWaived(line), true, "existing cable comps the install line");
+  assert.equal(hasWaiverCause(line, WAIVER_CAUSES.EXISTING_WIRE), true);
+  assert.equal(line.price, 150, "snapshot price preserved (shown struck)");
+  assert.equal(itemTotal(line), 0);
+  // Removing the condition restores the line to billable at its own price.
+  line = toggleCond(line, "existingCable", false);
   assert.equal(isWaived(line), false);
-  assert.equal(line.price, 150);
   assert.equal(itemTotal(line), 150);
+});
+
+test("existing-wire, CPE and manual are independent causes: removing one keeps the others", () => {
+  let line = { id: "l", qty: 1, price: 150 };
+  line = toggleCond(line, "existingCable", true);   // existing wire
+  line = toggleManual(line, true);                  // + a manual waive
+  line = toggleCond(line, "cxEquip", true);         // + CPE
+  assert.deepEqual(waiverCausesOf(line).sort(), [CPE, WAIVER_CAUSES.EXISTING_WIRE, MANUAL].sort());
+  line = toggleCond(line, "existingCable", false);  // remove existing wire
+  assert.equal(isWaived(line), true, "still waived (CPE + manual remain)");
+  assert.equal(hasWaiverCause(line, WAIVER_CAUSES.EXISTING_WIRE), false);
+  assert.equal(hasWaiverCause(line, CPE), true);
+  assert.equal(hasWaiverCause(line, MANUAL), true);
 });
 
 // =======================================================================================================
