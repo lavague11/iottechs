@@ -314,8 +314,13 @@ function SysRowMenu({ onEdit, onRemove, removeLabel = "Remove", onClose }) {
 }
 // Service-header gear menu (replaces the old remove-service ✕): this service's pricing & presets, plus the
 // (destructive) remove-service at the bottom.
-function SvcHeadMenu({ onPricing, onWaiveItems, waivedCount = 0, onRemove, onClose }) {
+// surveyImport (camera service only): { floors:[{index,name,count}], onImport(indices), onSync() } — the
+// "Import from floor plan" (multi-floor checklist) and "Sync from survey" actions live here in the gear
+// menu, not as separate buttons above the service.
+function SvcHeadMenu({ onPricing, onWaiveItems, waivedCount = 0, onRemove, onClose, surveyImport }) {
   const [confirming, setConfirming] = useState(false);
+  const [syncConfirm, setSyncConfirm] = useState(false);
+  const [checked, setChecked] = useState(() => new Set());
   const ref = useRef(null);
   const up = useMenuFlip(ref);
   useEffect(() => {
@@ -325,6 +330,11 @@ function SvcHeadMenu({ onPricing, onWaiveItems, waivedCount = 0, onRemove, onClo
     document.addEventListener("keydown", onKey);
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
+  const floors = surveyImport?.floors || [];
+  const canImport = !!surveyImport?.onImport && floors.length > 0;
+  const toggle = (idx) => setChecked((s) => { const n = new Set(s); n.has(idx) ? n.delete(idx) : n.add(idx); return n; });
+  const doImport = () => { if (!checked.size) return; surveyImport.onImport([...checked]); onClose(); };
+  const ck = <svg className="prop-im-ck" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>;
   return (
     <div className={`prop-im${up ? " up" : ""}`} ref={ref} role="menu">
       {confirming ? (
@@ -339,10 +349,47 @@ function SvcHeadMenu({ onPricing, onWaiveItems, waivedCount = 0, onRemove, onClo
       ) : (
         <>
           <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onPricing(); onClose(); }}>Pricing &amp; presets</button>
+          {canImport && (
+            <>
+              <div className="prop-im-sep" />
+              <div className="prop-im-grouplbl">Survey</div>
+              {floors.length === 1 ? (
+                <button type="button" className="prop-im-item" role="menuitem" onClick={() => { surveyImport.onImport([floors[0].index]); onClose(); }}>Import from floor plan</button>
+              ) : (
+                <>
+                  {floors.map((f) => {
+                    const on = checked.has(f.index);
+                    return (
+                      <button key={f.index} type="button" className={`prop-im-item prop-im-cond${on ? " on" : ""}`} role="menuitemcheckbox" aria-checked={on} onClick={() => toggle(f.index)}>
+                        <span className="prop-im-cname">{f.name}</span>
+                        <span className="prop-im-count">{f.count}</span>
+                        {on && ck}
+                      </button>
+                    );
+                  })}
+                  <button type="button" className="prop-im-item prop-im-apply" role="menuitem" disabled={!checked.size} onClick={doImport}>Import from floor plan{checked.size ? ` (${checked.size})` : ""}</button>
+                </>
+              )}
+              {surveyImport?.onSync && (syncConfirm ? (
+                <div className="prop-im-confirm">
+                  <div className="prop-im-ctitle">Replace cameras with the survey&apos;s?</div>
+                  <div className="prop-im-cacts">
+                    <button type="button" className="prop-im-cancel" onClick={() => setSyncConfirm(false)}>Cancel</button>
+                    <button type="button" className="prop-im-go" onClick={() => { surveyImport.onSync(); onClose(); }}>Rebuild</button>
+                  </div>
+                </div>
+              ) : (
+                <button type="button" className="prop-im-item" role="menuitem" onClick={() => setSyncConfirm(true)}>Sync from survey</button>
+              ))}
+            </>
+          )}
           {onWaiveItems && (
-            <button type="button" className="prop-im-item prop-im-waive" role="menuitem" onClick={() => { onWaiveItems(); onClose(); }}>
-              Waive Items…{waivedCount > 0 && <span className="prop-im-count">{waivedCount}</span>}
-            </button>
+            <>
+              <div className="prop-im-sep" />
+              <button type="button" className="prop-im-item prop-im-waive" role="menuitem" onClick={() => { onWaiveItems(); onClose(); }}>
+                Waive Items…{waivedCount > 0 && <span className="prop-im-count">{waivedCount}</span>}
+              </button>
+            </>
           )}
           <div className="prop-im-sep" />
           <button type="button" className="prop-im-item danger" role="menuitem" onClick={() => setConfirming(true)}>Remove service</button>
@@ -452,7 +499,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   customer = false, onRequestChange, onViewPlacement, requestFlags, hasLayout = false,
   // Optional node rendered on the RIGHT of the service header line (e.g. the customer view's Share/Download
   // cluster). No-op for staff/other services when undefined.
-  headerRight = null }) {
+  headerRight = null,
+  // Camera service only: { floors, onImport, onSync } — surfaces "Import from floor plan" + "Sync from
+  // survey" inside the gear menu (SvcHeadMenu) instead of as separate buttons above the service.
+  surveyImport }) {
   const flags = customerFlags || {};
   const reqFlags = requestFlags || {};
   // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
@@ -1274,6 +1324,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                 onPricing={() => onOpenPricing && onOpenPricing(svc.key)}
                 onWaiveItems={svcWaivable.length ? () => setWaiveBatchOpen(true) : null}
                 waivedCount={svcWaivedCount}
+                surveyImport={surveyImport}
                 onRemove={onRemove}
                 onClose={() => setSvcMenuOpen(false)}
               />

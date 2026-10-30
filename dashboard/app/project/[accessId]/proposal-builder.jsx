@@ -149,7 +149,6 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [priceBookVersion, setPriceBookVersion] = useState(0);
   const [surveyFloors, setSurveyFloors] = useState([]); // [{index, name, count}] for the import picker
   const [camRoster, setCamRoster] = useState([]);        // survey camera roster → live location names on camera lines
-  const [syncConfirm, setSyncConfirm] = useState(false); // two-tap confirm for the destructive "Sync from survey" rebuild
   const [bodyOpenState, setBodyOpen] = useState(true);   // whole-card collapse (matches the other proposal-phase cards)
   // Reuse a previous proposal: the start strip on an empty draft, the post-copy pricing review,
   // and the "use for another project" destination picker (see proposal-start.jsx).
@@ -925,26 +924,15 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
       </div>
       )}
 
-      {!readOnly && !servicesEmpty && surveyFloors.length > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-          <FloorImportPicker floors={surveyFloors} onImport={(indices) => importSurvey(false, indices)} />
-          {syncConfirm ? (
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: ".76rem", color: "var(--muted)" }}>Replace the cameras with the survey&apos;s?</span>
-              <button className="prop-tab" onClick={() => { setSyncConfirm(false); syncCamerasFromSurvey(); }}>Rebuild</button>
-              <button className="prop-tab" onClick={() => setSyncConfirm(false)}>Cancel</button>
-            </span>
-          ) : (
-            <button className="prop-tab" title="Replace this option's cameras with the survey's — named + linked to each surveyed camera" onClick={() => setSyncConfirm(true)}>Sync from survey</button>
-          )}
-        </div>
-      )}
-
-      {/* Services */}
+      {/* Services. "Import from floor plan" + "Sync from survey" now live in the camera service's gear
+          menu (SvcHeadMenu) via surveyImport, not as separate buttons above the services. */}
       {opt.services.map((s, i) => (
         <ProposalItemsEditor
           key={s.key + i}
           svc={s}
+          surveyImport={!readOnly && surveyFloors.length > 0 && s.key === "camera"
+            ? { floors: surveyFloors, onImport: (indices) => importSurvey(false, indices), onSync: syncCamerasFromSurvey }
+            : undefined}
           showCost={showCost}
           readOnly={readOnly}
           customerFlags={meta?.customerFlags}
