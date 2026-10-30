@@ -1,12 +1,13 @@
-# AI Assistant — Staff Playbook
+# Maya — Staff Playbook
 
-The in-app AI assistant ("AI Core") turns plain English — typed or spoken — into actions on the system you
+Maya is the in-app AI assistant. She turns plain English — typed or spoken — into actions on the system you
 already use. It is **not** a second app: it drives the real proposal builder, project lifecycle, notes and
 reads, through the same role checks and server actions a human click would. This page is the operator's
 guide: what to say, what it will do, and who is allowed to do it.
 
-**Where it is:** the small waveform orb, bottom-left of every staff screen. Tap it (or the mic) and talk, or
-type. It stays with you as you move between pages, and remembers the project and customer you're discussing.
+**Where she is:** the small waveform orb (the "Maya Core"), bottom-left of every staff screen. Tap it (or the
+mic) and talk, or type. She stays with you as you move between pages, and remembers the project and customer
+you're discussing.
 
 ---
 

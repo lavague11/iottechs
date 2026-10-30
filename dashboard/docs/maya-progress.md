@@ -17,11 +17,27 @@ without asking, and anything blocked on the owner.
 | 4 — Admin actions | invoices, addendums, labels, VAULT SIGN, confirm policy | not started |
 | 5 — Proactive | briefing, nudges, weekly report, alerts | not started |
 
-## Decisions made (chosen without asking, per the autonomous-build instruction)
+## Build branch & deploy policy
 
-- **Stack translation:** the spec is written for Supabase + RLS; this codebase is Next.js + `node:sqlite`
-  with server-side access control (`roles.js can(role, cap)`, `aiGate`, `sanitize*`, `getVisibleJobs`).
-  Every "RLS / Supabase auth" spec item is implemented with the existing server-side pattern, not Supabase.
+- All Maya work lands on branch **`maya-build`** (not `main`). Owner reviews and merges to prod. No prod
+  pushes from this session. The S1/S2 security fixes already shipped to `main` stay.
+
+## Decisions made (owner-answered 2026-10-30, + chosen-without-asking)
+
+- **Stack:** Next.js + `node:sqlite` + server-side `can(role, cap)` + ownership scoping — NOT Supabase.
+  Every "RLS / Supabase auth" spec item = that pattern. (Owner confirmed.)
+- **Invoices (project):** reuse the payment ledger + wire the existing **service-call** invoice actions;
+  no separate project-invoice document. (Owner.)
+- **Spend cap:** **$10/day**, alert at **$7 (70%)**, editable in Admin ▸ Maya. (Owner.)
+- **Model routing:** escalate to **Sonnet** for invoicing, large quotes, complex diagnostics, multi-step;
+  **Haiku** for everything else. (Owner.)
+- **"Existing wire" label:** a waiver cause **parallel to CPE**, line value shown **struck through** so the
+  customer sees the savings. (Owner.)
+
+## Gating requirements
+
+- **S3 (hard gate):** add a customer + owns-project gate to `/api/tts` and `/api/transcribe` BEFORE any
+  customer-facing voice ships. Do NOT widen `aiGate`. (Owner-required.)
 
 ## Blocked — needs Ahmed
 

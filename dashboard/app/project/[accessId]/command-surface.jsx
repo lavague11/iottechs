@@ -46,7 +46,7 @@ function diagDetail(d) {
   return p.join(" ");
 }
 
-export default function CommandSurface({ enabled = true, placeholder = "Ask anything…", dock = "panel", projectName = "", interpret, onNavigate, onApply, onPick }) {
+export default function CommandSurface({ enabled = true, placeholder = "Ask Maya…", dock = "panel", projectName = "", interpret, onNavigate, onApply, onPick }) {
   const corebar = dock === "corebar";
   const [expanded, setExpanded] = useState(false);   // corebar: slim bar open vs collapsed to the core
   const [typing, setTyping] = useState(false);        // corebar: text input vs voice status
@@ -479,22 +479,22 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
         )}
         <div className="aicore-shell">
           <button type="button" className="aicore-btn" onClick={coreTap}
-            aria-label={expanded ? (convoOn ? "Stop listening" : "Start conversation") : "Open the assistant"} title="Assistant (⌘K)">
+            aria-label={expanded ? (convoOn ? "Stop listening" : "Start conversation") : "Open Maya"} title="Maya (⌘K)">
             <AICore state={coreState} levels={levels} active={expanded || coreState !== "idle"} size={36} />
             {convoOn && !expanded && <span className="aicore-dot" aria-hidden="true" />}
           </button>
 
           {expanded && (
-            <div className="aicore-bar" role="region" aria-label="Assistant">
+            <div className="aicore-bar" role="region" aria-label="Maya">
               {typing ? (
                 <form className="aicore-type" onSubmit={submit}>
-                  <input ref={barInRef} className="aicore-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} aria-label="Ask the assistant" disabled={busy} />
+                  <input ref={barInRef} className="aicore-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={placeholder} aria-label="Ask Maya" disabled={busy} />
                   <button type="submit" className="aicore-ic" disabled={busy || !text.trim()} aria-label="Send"><Arrow /></button>
                 </form>
               ) : (
                 <div className="aicore-live">
                   {projectName && coreState === "idle" && !statusLine ? <span className="aicore-ctx">{projectName}</span> : null}
-                  <span className={`aicore-status s-${coreState}`}>{statusLine || (convoOn ? "Listening…" : "Tap the core to talk")}</span>
+                  <span className={`aicore-status s-${coreState}`}>{statusLine || (convoOn ? "Listening…" : "Hi, I'm Maya — tap to talk")}</span>
                 </div>
               )}
               <div className="aicore-ctrls">
@@ -602,13 +602,13 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
           </button>
           {/* Neural voice picker — audition + choose the spoken voice. */}
           <div className="aicb-voicewrap">
-            <button type="button" className="aicb-voicebtn" aria-haspopup="menu" aria-expanded={voiceOpen} title="Assistant voice" onClick={() => setVoiceOpen((o) => !o)}>
+            <button type="button" className="aicb-voicebtn" aria-haspopup="menu" aria-expanded={voiceOpen} title="Maya's voice" onClick={() => setVoiceOpen((o) => !o)}>
               <Speaker /><span className="aicb-voicename">{voiceLabel(voice)}</span>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
             </button>
             {voiceOpen && (
               <div className="aicb-voicemenu" role="menu">
-                <div className="aicb-voicehead">Assistant voice</div>
+                <div className="aicb-voicehead">Maya's voice</div>
                 {VOICES.map((v) => (
                   <div key={v.id} className={`aicb-voiceopt${voice === v.id ? " on" : ""}`} role="menuitemradio" aria-checked={voice === v.id} onClick={() => chooseVoice(v.id)}>
                     <span className="aicb-voicedot">{voice === v.id ? <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg> : null}</span>
@@ -630,7 +630,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask anyt
       {!convoOn && (
         <form className="aicb-row" onSubmit={submit}>
           <span className="aicb-spark" aria-hidden="true"><Spark /></span>
-          <input className="aicb-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : placeholder} aria-label="Ask the assistant" disabled={busy} />
+          <input className="aicb-in" value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? "Listening…" : placeholder} aria-label="Ask Maya" disabled={busy} />
           {voiceOk && (
             <button type="button" className={`aicb-mic${listening ? " live" : ""}`} aria-label={dictLabel} title={dictLabel} onClick={dictate} disabled={busy && !listening}><MicIcon /></button>
           )}

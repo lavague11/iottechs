@@ -44,7 +44,7 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
   };
 
   return (
-    <CommandSurface enabled dock="corebar" placeholder="Ask or say a command…"
+    <CommandSurface enabled dock="corebar" placeholder="Ask Maya…"
       interpret={interpret} onNavigate={onNavigate} onApply={onApply} onPick={onApply} />
   );
 }
