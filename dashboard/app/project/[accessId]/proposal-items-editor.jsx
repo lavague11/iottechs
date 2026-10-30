@@ -8,6 +8,21 @@ import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, condit
 
 const capFirst = (s) => (s.length ? s[0].toUpperCase() + s.slice(1) : s);
 
+// Touch long-press → open the row's action menu (the mobile pair of desktop right-click). Timer-based so
+// it never blocks normal scrolling; cancels the moment the finger moves (scroll) or lifts early. Each call
+// closes over its own timer/start-point, so every row is independent. Returns {} when disabled.
+function longPress(onFire, ms = 500) {
+  if (!onFire) return {};
+  let timer = null, sx = 0, sy = 0;
+  const clear = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  return {
+    onTouchStart: (e) => { if (e.target.closest("input,textarea,select")) return; const t = e.touches?.[0]; sx = t?.clientX || 0; sy = t?.clientY || 0; clear(); timer = setTimeout(() => { timer = null; onFire(); }, ms); },
+    onTouchMove: (e) => { const t = e.touches?.[0]; if (t && (Math.abs(t.clientX - sx) > 8 || Math.abs(t.clientY - sy) > 8)) clear(); },
+    onTouchEnd: clear,
+    onTouchCancel: clear,
+  };
+}
+
 // Name field for a line item or sub-item: auto-capitalizes the first letter as you type,
 // and shows a type-ahead of matching catalog entries across every service — entries from
 // the service currently being edited sort first, so "cat" while adding to Toast surfaces
@@ -949,7 +964,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const writeCamName = () => { if (svc.key === "camera" && it.camera_id && onCameraRename) onCameraRename(it.camera_id, it.name); };  // survey write-back on rename
     return (
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
-         style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}>
+         style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}
+         /* Right-click (desktop) / long-press (mobile) a line → the SAME ••• action menu; suppress the
+            browser's native context menu on a non-editing line. */
+         onContextMenu={!readOnly ? (e) => { if (e.target.closest("input,textarea,select")) return; e.preventDefault(); setMenuOpen((m) => (m === it.id ? m : it.id)); } : undefined}
+         {...longPress(!readOnly ? () => setMenuOpen(it.id) : null)}>
       <span style={{ display: "flex", alignItems: "center", gap: 4, ...(hasSub ? { cursor: "pointer" } : null) }}
             onClick={(e) => { if (e.target !== e.currentTarget) return; if (hasSub) toggle(it.id); else if (!readOnly) focusName(e); }}>
         {/* LEFT = hierarchy. A subtle disclosure chevron (same language as the NVR/Displays rows), shown only
@@ -1193,7 +1212,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {subMenu}
           </div>
         ) : (
-          <div className={`prop-sub2 compact${x.waived ? " waived" : ""}`}>
+          <div className={`prop-sub2 compact${x.waived ? " waived" : ""}`}
+               onContextMenu={!readOnly ? (e) => { e.preventDefault(); setMenuOpen((m) => (m === x.id ? m : x.id)); } : undefined}
+               {...longPress(!readOnly ? () => setMenuOpen(x.id) : null)}>
             <button type="button" className="prop-sub2-hit" onClick={() => { if (!readOnly) setSubEditId(x.id); }} title={readOnly ? undefined : "Edit"} aria-label={`Component ${letter}: ${x.name || "Component"}`}>
               <span className="prop-sub2-badge" aria-hidden="true">{letter}</span>
               <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>

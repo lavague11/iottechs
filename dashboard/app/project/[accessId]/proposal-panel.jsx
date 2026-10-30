@@ -336,6 +336,10 @@ const PROP_CSS = `
    The child is indented as a unit (wrapper margin) so its hairline starts at the indent, not the page edge. */
 .pvx .prop-sub2-wrap{position:relative;margin-left:18px}/* child badge lines up with the parent badge (not indented past it) */
 .pvx .prop-sub2{display:flex;align-items:center;gap:8px;width:100%;padding:8px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:transparent;font-family:inherit;box-sizing:border-box}
+/* Long-press opens the action menu — suppress iOS's native text-selection callout on the row itself, but
+   keep real inputs fully selectable/editable. (Desktop right-click is handled in JS via onContextMenu.) */
+.pvx .prop-item,.pvx .prop-sub2{-webkit-touch-callout:none}
+.pvx .prop-item input,.pvx .prop-item textarea,.pvx .prop-sub2 input,.pvx .prop-sub2 textarea{-webkit-touch-callout:default}
 /* Right padding = the parent's ••• column, so child amounts right-align with the parent price above them. */
 .pvx button.prop-sub2.compact{border:none;border-top:1px solid var(--dv-line-soft,#EDEDE9);text-align:left;cursor:pointer;min-height:38px;padding-right:36px}
 .pvx button.prop-sub2.compact:hover{background:rgba(17,20,24,.055)}
