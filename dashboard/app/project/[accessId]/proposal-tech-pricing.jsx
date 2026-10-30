@@ -37,6 +37,7 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
   const [ratesOpen, setRatesOpen] = useState(false);
   const [expanded, setExpanded] = useState({});  // mobile: which item cards are open (collapsed by default)
   const [rates, setRates] = useState(null);      // effective standard rates (for reset + placeholders)
+  const [applyAsk, setApplyAsk] = useState(null); // {val,name,count} → offer to copy a rate to all same-named lines
 
   useEffect(() => { setTech(initial); }, [initial]);
   const loadRates = () => getRatesAction(accessId).then((r) => {
@@ -84,6 +85,18 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
     blocks.forEach((b) => b.rows.forEach((r) => { if (!r.header) next[r.id] = String(defaultTechPayout(r.name, r.svc, rates)); }));
     setTech(next);
   }
+  // Price one line → offer to copy that payout to every OTHER line of the same item name (e.g. 4 identical
+  // "Full Camera Install" lines). Confirmed, not automatic — the owner wanted it to ASK first.
+  function offerApplyAll(val, name) {
+    const n = +val;
+    const same = blocks.flatMap((b) => b.rows).filter((r) => !r.header && r.name === name);
+    if (n > 0 && same.length > 1) setApplyAsk({ val: String(val), name, count: same.length });
+  }
+  function applyAllNow() {
+    if (!applyAsk) return;
+    setTech((m) => { const next = { ...m }; blocks.forEach((b) => b.rows.forEach((r) => { if (!r.header && r.name === applyAsk.name) next[r.id] = applyAsk.val; })); return next; });
+    setApplyAsk(null);
+  }
 
   return (
     <div className="tpx-card">
@@ -107,6 +120,13 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
             </button>
           </div>
           {err && <div className="tpx-err">{err}</div>}
+          {applyAsk && (
+            <div className="tpx-apply">
+              <span>Apply <b>{money(applyAsk.val)}</b> to all {applyAsk.count} “{applyAsk.name}” lines?</span>
+              <button type="button" className="tpx-apply-yes" onClick={applyAllNow}>Apply to all</button>
+              <button type="button" className="tpx-apply-no" onClick={() => setApplyAsk(null)}>No</button>
+            </div>
+          )}
 
           <div className="tpx-blocks">
             {blocks.map((b) => (
@@ -117,24 +137,27 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
                   <span className="tpx-block-tot">{money(blockTotal(b))}<span className="tpx-block-tot-lbl"> payout</span></span>
                 </div>
 
-                {/* Desktop / tablet: the multi-column table. */}
+                {/* Desktop / tablet: ONE editable payout column (per owner — "only one pricing thing"). The
+                    field is the per-line tech payout; for qty>1 the line total shows beside it. */}
                 <div className="tpx-table">
-                  <div className="tpx-thead"><span>Item</span><span className="r">Qty</span><span className="r">Customer</span><span className="r">Tech Rate</span><span className="r">Tech Total</span></div>
+                  <div className="tpx-thead"><span>Item</span><span className="r">Customer</span><span className="r">Tech payout</span></div>
                   {b.rows.map((r) => (
                     <div key={r.id} className={`tpx-row${r.sub ? " sub" : ""}${r.header ? " header" : ""}`}>
-                      <span className="tpx-name">{r.sub ? "· " : ""}{r.name}</span>
-                      <span className="r tpx-muted">{r.header ? "" : r.qty}</span>
+                      <span className="tpx-name">{r.sub ? "· " : ""}{r.name}{!r.header && +r.qty > 1 ? ` ×${r.qty}` : ""}</span>
                       <span className="r tpx-muted">{r.header ? "" : money(r.custPrice)}</span>
                       <span className="r">
                         {r.header ? <span className="tpx-muted">—</span> : (
-                          <span className="tpx-inp"><span>$</span>
-                            <input type="number" min="0" step="0.01" value={tech[r.id] ?? ""}
-                                   placeholder={rates ? String(stdRate(r)) : "0"}
-                                   onChange={(e) => setTech((m) => ({ ...m, [r.id]: e.target.value }))} />
+                          <span className="tpx-payedit">
+                            <span className="tpx-inp"><span>$</span>
+                              <input type="number" min="0" step="0.01" value={tech[r.id] ?? ""}
+                                     placeholder={rates ? String(stdRate(r)) : "0"}
+                                     onChange={(e) => setTech((m) => ({ ...m, [r.id]: e.target.value }))}
+                                     onBlur={(e) => offerApplyAll(e.target.value, r.name)} />
+                            </span>
+                            {+r.qty > 1 && <span className="tpx-xq">= {money(lineTotal(r.id, r.qty))}</span>}
                           </span>
                         )}
                       </span>
-                      <span className="r tpx-tot">{r.header ? "" : money(lineTotal(r.id, r.qty))}</span>
                     </div>
                   ))}
                 </div>
@@ -147,7 +170,8 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
                       <span className="tpx-inp"><span>$</span>
                         <input type="number" min="0" step="0.01" value={tech[id] ?? ""}
                                placeholder={rates ? String(stdRate({ name: it.name, svc: it.svc })) : "0"}
-                               onChange={(e) => setTech((m) => ({ ...m, [id]: e.target.value }))} /></span>
+                               onChange={(e) => setTech((m) => ({ ...m, [id]: e.target.value }))}
+                               onBlur={(e) => offerApplyAll(e.target.value, it.name)} /></span>
                     );
                     if (!it.sub.length) return (
                       <div key={it.id} className="tpx-cam solo">
@@ -183,7 +207,8 @@ export default function TechPricingEditor({ accessId, proposal, onSaved }) {
                                     <span className="tpx-inp"><span>$</span>
                                       <input type="number" min="0" step="0.01" value={tech[st.id] ?? ""}
                                              placeholder={rates ? String(stdRate(st)) : "0"}
-                                             onChange={(e) => setTech((m) => ({ ...m, [st.id]: e.target.value }))} /></span>
+                                             onChange={(e) => setTech((m) => ({ ...m, [st.id]: e.target.value }))}
+                                             onBlur={(e) => offerApplyAll(e.target.value, st.name)} /></span>
                                   </span>
                                 </div>
                               </div>
@@ -243,9 +268,15 @@ const TPX_CSS = `
 .tpx-block-dot{width:9px;height:9px;border-radius:3px;background:var(--tc,var(--dv-gold,#C9A96E));flex-shrink:0}
 .tpx-block-name{font-size:.82rem;font-weight:700;color:var(--dv-ink,#101418)}
 .tpx-block-tot{margin-left:auto;font-size:.8rem;font-weight:700;color:var(--dv-green,#2E7D5B)}
-.tpx-thead{display:grid;grid-template-columns:1fr 46px 84px 104px 92px;gap:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.64rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:7px 12px;border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
+.tpx-thead{display:grid;grid-template-columns:1fr 92px 150px;gap:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);font-size:.64rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:7px 12px;border-bottom:1px solid var(--dv-line-soft,#EDEDE9)}
 .tpx-thead .r{text-align:right}
-.tpx-row{display:grid;grid-template-columns:1fr 46px 84px 104px 92px;gap:8px;align-items:center;padding:6px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.8rem;color:var(--dv-ink,#101418)}
+.tpx-row{display:grid;grid-template-columns:1fr 92px 150px;gap:8px;align-items:center;padding:6px 12px;border-top:1px solid var(--dv-line-soft,#EDEDE9);font-size:.8rem;color:var(--dv-ink,#101418)}
+.tpx-payedit{display:inline-flex;align-items:center;gap:8px;justify-content:flex-end}
+.tpx-xq{font-size:.72rem;color:var(--dv-meta,#787D84);font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tpx-apply{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px;padding:9px 12px;background:#fbf4e3;border:1px solid #ecd9a8;border-radius:9px;font-size:.82rem;color:#6b5412}
+.tpx-apply b{font-variant-numeric:tabular-nums}
+.tpx-apply-yes{margin-left:auto;height:30px;padding:0 14px;border:0;border-radius:8px;background:#C9A96E;color:#1a1205;font-size:.8rem;font-weight:800;cursor:pointer;font-family:inherit}
+.tpx-apply-no{height:30px;padding:0 12px;border:1px solid #ecd9a8;border-radius:8px;background:#fff;color:#6b5412;font-size:.8rem;font-weight:700;cursor:pointer;font-family:inherit}
 .tpx-row.header{background:var(--dv-paper,#F4F4F2);font-weight:600}
 .tpx-row.sub{color:var(--dv-meta,#787D84);font-size:.76rem;padding-left:22px}
 .tpx-name{display:flex;align-items:center;gap:7px;min-width:0}

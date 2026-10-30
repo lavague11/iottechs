@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { getApprovalDataAction, createWorkOrderAction, finalizeWorkOrderAction } from "./proposal-actions";
 import { addAssignmentAction, removeAssignmentAction, setInternalJobAction } from "./actions";
 import TechPricingEditor from "./proposal-tech-pricing";
@@ -11,8 +12,10 @@ import TechPricingEditor from "./proposal-tech-pricing";
 export default function WorkOrderCard({ accessId, proposal, onProposalChange, assignments = [], staffUsers = [], onAssignmentsChange, onStageChange, internalJob = false, embedded = false }) {
   // `embedded` = mounted in the deck (the row already names it) → drop our own title/collapse
   // header and stay open. Standing convention for deck-embedded tools.
-  const [openState, setOpen] = useState(false);   // collapsed by default — part of the compact flow
-  const open = embedded ? true : openState;
+  // The whole card is now a single "Create Work Order" button that opens a pop-up modal (per owner).
+  const [modalOpen, setModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const [data, setData] = useState(null);
   const [intern, setIntern] = useState(!!internalJob);   // internal / legacy job — skips the sign+deposit gate
   const [busy, setBusy] = useState(false);
@@ -99,24 +102,31 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
         ? "Deposit on file — assign a tech, then create."
         : "Needs a deposit first — or mark internal below.";
 
+  const woIcon = created
+    ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+    : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>;
   return (
     <div className="woc-card">
       <style>{WOC_CSS}</style>
-      {!embedded && (
-        <button type="button" className="woc-head" onClick={() => setOpen((o) => !o)}>
-          <span className={`woc-ic${created ? " done" : ""}`}>
-            {created
-              ? <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-              : <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6a1 1 0 0 1 1 1v2H8V3a1 1 0 0 1 1-1Z"/><path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/></svg>}
-          </span>
-          <span className="woc-title">Create Work Order</span>
-          <span className={`woc-status ${created ? "done" : "pending"}`}>{statusTxt}</span>
-          <span className="woc-chev">{open ? "▲" : "▼"}</span>
-        </button>
-      )}
+      {/* The whole section is one button; it opens a pop-up modal with everything inside (per owner). */}
+      <button type="button" className="woc-trigger" onClick={() => setModalOpen(true)}>
+        <span className={`woc-ic${created ? " done" : ""}`}>{woIcon}</span>
+        <span className="woc-title">Create Work Order</span>
+        <span className={`woc-status ${created ? "done" : "pending"}`}>{statusTxt}</span>
+        <span className="woc-chev">›</span>
+      </button>
 
-      {open && (
-        <div className="woc-body">
+      {modalOpen && mounted && createPortal(
+        <div className="woc-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}>
+          <style>{WOC_CSS}</style>
+          <div className="woc-modal" role="dialog" aria-modal="true" aria-label="Create work order">
+            <div className="woc-mhd">
+              <span className={`woc-ic${created ? " done" : ""}`}>{woIcon}</span>
+              <span className="woc-mhd-t">Create Work Order</span>
+              <span className={`woc-status ${created ? "done" : "pending"}`}>{statusTxt}</span>
+              <button type="button" className="woc-mhd-x" aria-label="Close" onClick={() => setModalOpen(false)}>×</button>
+            </div>
+            <div className="woc-body">
           {err && <div className="woc-err">{err}</div>}
 
           {/* ① Assign the technician(s) who will run this job */}
@@ -187,8 +197,9 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
               )}
             </div>
           </div>
-        </div>
-      )}
+            </div>{/* /woc-body */}
+          </div>{/* /woc-modal */}
+        </div>, document.body)}
     </div>
   );
 }
@@ -197,6 +208,18 @@ const WOC_CSS = `
 /* Deck-themed — neutral surfaces, thin lines, ink primary button, no gold rail / Bricolage.
    Tokens fall back to hex so the card also works on the legacy page. */
 .woc-card{background:var(--dv-raise,#FBFBFA);border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;overflow:hidden;margin:12px 0;font-family:inherit}
+/* Single trigger button + pop-up modal (the whole flow lives in the modal). */
+.woc-trigger{width:100%;display:flex;align-items:center;gap:10px;padding:14px 16px;background:var(--dv-raise,#FBFBFA);border:0;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
+.woc-trigger:hover{background:rgba(16,20,24,.028)}
+.woc-trigger .woc-chev{margin-left:4px;font-size:1.25rem;line-height:1;color:var(--dv-faint,#A1A6AC)}
+.woc-overlay{position:fixed;inset:0;z-index:3500;display:flex;align-items:center;justify-content:center;background:rgba(16,20,24,.46);padding:20px;font-family:var(--font-sans),system-ui,sans-serif}
+.woc-modal{width:100%;max-width:560px;max-height:92vh;overflow:auto;background:var(--dv-paper,#fff);border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 24px 60px rgba(16,20,24,.3)}
+.woc-mhd{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--dv-line,#E4E4DF);position:sticky;top:0;background:inherit;z-index:2}
+.woc-mhd-t{font-weight:700;font-size:1rem;color:var(--dv-ink,#101418);margin-right:auto}
+.woc-mhd .woc-status{margin-left:0}
+.woc-mhd-x{margin-left:8px;width:30px;height:30px;border:0;background:none;color:var(--dv-meta,#787D84);font-size:1.5rem;line-height:1;cursor:pointer;border-radius:8px}
+.woc-mhd-x:hover{background:rgba(16,20,24,.06);color:var(--dv-ink,#101418)}
+@media(max-width:600px){.woc-overlay{padding:0;align-items:flex-end}.woc-modal{max-width:100%;border-radius:16px 16px 0 0;max-height:94vh}}
 .woc-head{width:100%;display:flex;align-items:center;gap:10px;padding:13px 16px;background:var(--dv-raise,#FBFBFA);border:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .12s}
 .woc-head:hover{background:rgba(16,20,24,.028)}
 .woc-ic{width:30px;height:30px;flex-shrink:0;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--dv-meta,#787D84);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF)}
