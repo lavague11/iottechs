@@ -14,6 +14,7 @@ without asking, and anything blocked on the owner.
 | Label: existing wire waives install | waiver cause parallel to CPE, struck | **✅ done** (maya-build) |
 | Foundation: model routing + cost cap | Sonnet escalation, usage ledger, $10/day cap | **✅ done** (maya-build) |
 | Confirmation policy | routine edits instant + Undo; confirm only sensitive | **✅ done** (maya-build) |
+| New actions (batch 1) | bug filing, close project, ticket notify-on-create | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -76,3 +77,16 @@ without asking, and anything blocked on the owner.
   discount (≥20%)**, and all `action` writes (send, record payment, payment reminder, advance stage, assign,
   remove line, adjudicate). Notes apply instantly (additive, no undo). Undo surfaces in both the Core orb bar
   and the proposal bar. **Decision:** "large discount" threshold = **≥20%** (adjustable).
+- **New actions (batch 1) shipped** (maya-build):
+  - **Bug filing** — a project-agnostic `report_bug` intent ("report a bug…", "something's broken") files to
+    the bug portal (`createBugReport`) with role/page/browser auto-captured; low-stakes so it files instantly.
+    `fileBug()` also auto-files Maya's own tool failures (kind `maya_error`). *(In-chat screenshot capture is
+    a client follow-up — the portal already supports image URLs.)*
+  - **Close project** — `close_project` action → `closeProjectAction` (editor-gated, confirm, reason parsed
+    from the command; kept searchable + reopenable, never deleted). **Edit-locking of closed projects is NOT
+    yet enforced** (separate change; deferred).
+  - **Service-ticket notify-on-create** — `createServiceCall` now fires `notifyRoles(admin/manager)` + an
+    office email on every new call (staff action *and* public intake); previously only a companion ticket
+    was made. **Decision:** project "invoices" = the existing payment ledger (`record_payment` /
+    `request_payment`, already wired); service-call invoice actions stay on the service-calls surface.
+  - Tests: close/report_bug router + registry in `tests/ai-project-actions.test.mjs`.

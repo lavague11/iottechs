@@ -4032,6 +4032,12 @@ export function createServiceCall({ customer, contact_name, contact_email, conta
   });
   db.prepare("UPDATE service_calls SET ticket_id = ? WHERE id = ?").run(ticketId, id);
 
+  // Notify the office on every new call — portal notification (admin/manager) + an office email. Previously
+  // only the companion ticket was created; the spec requires an explicit alert so a call never sits unseen.
+  const who = String(customer || contact_name || "A customer").trim();
+  try { notifyRoles(["admin", "manager"], { type: "service_call", title: `New service call — ${issue || category || "issue"}`, body: `${who} · ${priority || "medium"} priority`, link: `/service-calls/${svcId}` }); } catch {}
+  try { import("./email.js").then((m) => m.sendOfficeEmail?.({ subject: `New service call ${svcId}`, heading: "New service call", lines: [`Customer: ${who}`, `Issue: ${issue || category || "—"}`, `Priority: ${priority || "medium"}`, project_access_id ? `Project: ${project_access_id}` : null].filter(Boolean), accessId: svcId })).catch(() => {}); } catch {}
+
   logServiceCallEvent(svcId, { kind: "submitted", detail: issue || category || "Service call opened", actor_role: actor_role || "customer", actor_name: actor_name || contact_name });
   // Companion type-C project — the call's full gateway page. Never let a hiccup here kill the
   // intake (the call row already exists); the detail/tracker pages lazily repair a missing link.

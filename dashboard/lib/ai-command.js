@@ -164,6 +164,11 @@ export function routeCommand(text) {
   if (/\b(how long (?:has|in|at)|days in (?:this )?stage|how long (?:have we|has this) been)\b/i.test(t))
     return { type: "answer", query: "project_timeline", target: "this" };
 
+  // Bug report → Maya files it in the bug portal (page/role/browser auto-captured server-side). Project-
+  // agnostic: works from any screen, with or without a project open. The FULL utterance is the description.
+  if (/^(?:report|file|log|submit|raise)\s+(?:a\s+)?bug\b/i.test(t) || /\b(there'?s\s+a\s+bug|found\s+a\s+bug|this\s+(?:is|isn'?t)\s+(?:broken|working)|something(?:'s| is)\s+(?:broken|not\s+working|wrong|glitch\w*)|it'?s\s+broken)\b/i.test(t))
+    return { type: "report_bug", text: t };
+
   // Phase-2 project ACTIONS (mutations) — a confirmed, guarded intent. "send the proposal" → send_proposal;
   // "record a $1,530 deposit" → record_payment with args. The server re-validates args + state on apply.
   { const a = detectAction(t); if (a) return { type: "action", name: a.name, ...(a.args ? { args: a.args } : {}), target: "this" }; }

@@ -208,7 +208,32 @@ export const PROJECT_ACTIONS = {
       detail: args?.body ? `"${String(args.body).slice(0, 140)}" — recorded for review (open).` : "Records this for review (open).",
     }),
   },
+
+  // Close (lose) a project on command. cap:null → editor (admin/manager/sales), matching closeProjectAction.
+  // Kept as searchable history and reopenable — never hard-deleted. Always confirms (an `action` write), and
+  // the dispatch refuses if a reason can't be derived. Edit-locking of closed projects is a separate change.
+  close_project: {
+    verb: "close",
+    cap: null,
+    available: (facts) => facts?.closed || facts?.lost_at ? { ok: false, why: "the project is already closed" } : { ok: true },
+    confirm: ({ name }, args) => ({
+      title: `Close ${name}`,
+      detail: `Marks the project closed${args?.reason ? ` — "${String(args.reason).slice(0, 120)}"` : ""}. It stays searchable and can be reopened; nothing is deleted.`,
+    }),
+  },
 };
+
+// Parse a "close this project" command → { reason } (reason optional, taken after because/—/:/ "as ..."). Null
+// when it isn't a close command. Kept distinct from COMPLETE (finishing a job) and from "close out" wrap-up.
+export function parseClose(text) {
+  const t = String(text || "").trim();
+  if (/\?\s*$/.test(t) || /^(is|was|did|has|have|should|can|why|what|how|when)\b/i.test(t)) return null;
+  const isClose = /\bclose\b[^?]{0,30}\b(?:project|job|deal)\b/i.test(t)
+    || /\bmark\s+(?:this|that|it|the)\b[^?]{0,30}\b(?:lost|closed|dead)\b/i.test(t);
+  if (!isClose) return null;
+  const m = t.match(/\b(?:because|since|reason|as|[:\-—])\s*(.{2,160})$/i);
+  return { reason: m ? m[1].trim().replace(/^["']|["'.]+$/g, "").trim() : "" };
+}
 
 // Issue-reason keywords → the canonical ISSUE_REASONS taxonomy (install-checklist-model). Order matters:
 // the most specific phrase wins. Unmatched → "Other" (never invented).
@@ -371,6 +396,8 @@ export function parseRemoveLine(text) {
 export function detectAction(text) {
   const name = actionFromText(text);
   if (name) return { name };
+  const close = parseClose(text);
+  if (close) return { name: "close_project", args: close };
   const pay = parsePayment(text);
   if (pay) return { name: "record_payment", args: pay };
   const asn = parseAssign(text);

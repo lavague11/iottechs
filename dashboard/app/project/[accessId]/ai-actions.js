@@ -14,7 +14,7 @@ import {
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
-  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles,
+  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
@@ -29,7 +29,7 @@ import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
 import { sendProposalAction, requestSignatureEmailAction, recordPaymentAction, captureFeedbackAction, saveProposalDraftAction, addNoteAction, requestPaymentReminderAction } from "./proposal-actions";
-import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction } from "./actions";
+import { setStage, addAssignmentAction, installIssueAction, reportInstallIssueAction, closeProjectAction } from "./actions";
 import { stagesForType } from "../../../lib/spec";
 
 // Open install-issue flags (NEEDS_REVIEW | NEEDS_REWORK) — the only ones adjudicate_issue can close.
@@ -151,6 +151,21 @@ async function interpret(text, context, meta = {}) {
     }
     return { intent: parseClaudeResult(json), model };
   } catch { return { intent: { type: "unknown" }, model }; }
+}
+
+// File a bug to the portal from Maya — the user describes it, Maya captures page/role/browser automatically.
+// Low-stakes + additive, so it files immediately (no confirm). Also used to auto-file Maya's OWN tool
+// failures (kind "maya_error"). Never throws. `ctx` carries { url, path, accessId }.
+async function fileBug(text, tok, ctx = {}, kind = "maya") {
+  try {
+    const ua = (await headers()).get("user-agent") || null;
+    const path = ctx.path || (ctx.accessId ? `/project/${ctx.accessId}` : null);
+    const r = createBugReport({
+      description: String(text || "").slice(0, 4000), url: ctx.url || null, path,
+      context: { via: "maya", kind, accessId: ctx.accessId || null }, reporter: actorName(tok), role: tok?.role || null, userAgent: ua,
+    });
+    return r?.id || null;
+  } catch { return null; }
 }
 
 // Run a read-only "answer" intent: retrieve real data (authorized, via existing db functions) and return
@@ -464,6 +479,10 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
       ? `Revised to v${newVer} — ${verb}. ${wasSigned ? "The customer must re-sign." : "Re-send when ready."}`
       : (name === "remove_line" ? `Removed ${args?.lineLabel || "the line"} from the proposal.` : `Updated the proposal${args?.lineLabel ? ` (${args.lineLabel})` : ""}.`));
   }
+  else if (name === "close_project") {
+    out = await closeProjectAction(accessId, String(args?.reason || "").trim() || "Closed via Maya");
+    message = out?.error ? null : "Project closed — kept as searchable history.";
+  }
   else return { error: "That action isn't wired yet." };
   if (out?.error) return { error: out.error };
 
@@ -541,6 +560,10 @@ export async function aiInterpretAction(accessId, text, context = {}) {
     return proposalPreview(accessId, intent);
   }
 
+  if (intent.type === "report_bug") {
+    const id = await fileBug(intent.text, g.tok, { accessId, url: context.url, path: context.path });
+    return id ? { ok: true, kind: "answer", speak: `Filed bug #${id} — thanks, I've flagged it for the team.` } : { ok: true, kind: "unsupported", speak: "I couldn't file that just now." };
+  }
   if (intent.type === "action") return previewAction(intent.name, accessId, g.tok, intent.args);
 
   if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
@@ -621,6 +644,10 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   const { intent, noKey, capped } = await interpret(t, context, { role: g.tok.role, accessId: context.currentAccessId || null, kind: "global" });
   // A question → retrieve + answer directly (don't navigate). This is what makes it an assistant, not a bar.
   // With no page project, the last project the assistant resolved (memory) is the referent for "it"/"that".
+  if (intent.type === "report_bug") {
+    const id = await fileBug(intent.text, g.tok, { accessId: context.currentAccessId, url: context.url, path: context.path });
+    return id ? { ok: true, kind: "answer", speak: `Filed bug #${id} — thanks, I've flagged it for the team.` } : { ok: true, kind: "unsupported", speak: "I couldn't file that just now." };
+  }
   if (intent.type === "answer") return answerFor(intent, g.tok, context.currentAccessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "action") {

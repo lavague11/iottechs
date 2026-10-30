@@ -300,3 +300,21 @@ test("3.2 capture_feedback: cap-less → editor gate (admin/manager/sales), a te
   assert.equal(actionAllowed("capture_feedback", { editor: false, can: () => true }), false);  // tech (non-editor) refused
   assert.match(PROJECT_ACTIONS.capture_feedback.confirm({ name: "Crazy Cars" }, { kind: "objection:need", deviceLabel: "C2 Camera (Front Entrance)", body: "not sure we need it" }).title, /Log Need objection on C2 Camera \(Front Entrance\) for Crazy Cars/);
 });
+
+test("close_project: detectAction parses a close command + reason; not a completion/question", () => {
+  assert.deepEqual(detectAction("close this project"), { name: "close_project", args: { reason: "" } });
+  assert.equal(detectAction("mark this project as lost").name, "close_project");
+  assert.equal(detectAction("close out the Jones project because they went with another company").args.reason,
+    "they went with another company");
+  assert.equal(detectAction("is this project closed?"), null, "a question is not a close command");
+  assert.ok(PROJECT_ACTIONS.close_project, "close_project is in the registry");
+  assert.equal(PROJECT_ACTIONS.close_project.available({ closed: true }).ok, false, "already-closed → not available");
+  assert.equal(PROJECT_ACTIONS.close_project.available({}).ok, true);
+});
+
+test("report_bug routes from bug phrasings (project-agnostic) and carries the description", () => {
+  assert.equal(routeCommand("report a bug: the proposal PDF is blank")?.type, "report_bug");
+  assert.equal(routeCommand("something is broken on this page")?.type, "report_bug");
+  assert.equal(routeCommand("there's a bug in the camera editor")?.type, "report_bug");
+  assert.equal(routeCommand("add 4 cameras")?.type, "add_items", "a normal command is NOT a bug report");
+});
