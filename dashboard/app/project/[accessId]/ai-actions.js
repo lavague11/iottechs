@@ -14,10 +14,10 @@ import {
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
-  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered,
+  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered, getGuideBySlug,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
-import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
+import { customerReadIntent, customerActionIntent, customerGuideIntent, customerHandoffIntent } from "../../../lib/ai-customer";
 import { resolveDevice, candidateView } from "../../../lib/device-resolver";
 import { describeCoverage } from "../../../lib/device-coverage";
 import { FEEDBACK_KINDS } from "../../../lib/feedback-model";
@@ -732,6 +732,23 @@ export async function aiCustomerInterpretAction(accessId, text) {
   //    ownedAccessId lets resolveProject return their own project even if it's restricted (ownership proven above).
   const read = customerReadIntent(t);
   if (read) return answerFor({ type: "answer", query: read.query, target: "this", ...(read.ref ? { ref: read.ref } : {}) }, tok, accessId, { ownedAccessId: accessId });
+
+  // 1a) Setup help → open the right SUPPORT GUIDE on their own project. Only a READY guide (never a DRAFT)
+  //     is offered; the guide page itself scopes the system/QR to this customer's project.
+  const guide = customerGuideIntent(t);
+  if (guide) {
+    const g = getGuideBySlug(guide.slug);
+    if (g && g.ready) return { ok: true, kind: "navigate", href: `/guide/${guide.slug}?project=${accessId}`, label: g.title || "the setup guide", speak: `I'll open the ${g.title || "setup"} guide and stay with you while you follow it.` };
+  }
+  // 1b) "I want a person" / upset / urgent → hand off: flag the team (never promise a time) and reassure.
+  const handoff = customerHandoffIntent(t);
+  if (handoff) {
+    try { notifyRoles(["admin", "manager"], { type: "customer_handoff", title: `Customer wants a person${handoff.urgent ? " — URGENT" : handoff.upset ? " — upset" : ""}`, body: `${accessId}: "${t.slice(0, 160)}"`, link: `/project/${accessId}` }); } catch {}
+    try { logProjectEvent(accessId, { kind: "handoff", label: `Customer requested a person via Maya${handoff.urgent ? " (urgent)" : ""}`, actor: actorName(tok) }); } catch {}
+    return { ok: true, kind: "answer", speak: handoff.urgent
+      ? "I've flagged this as urgent for the team and they'll reach out as soon as possible. If it's an emergency involving safety, please call 911."
+      : "I've let the team know you'd like to speak with someone — they'll reach out. Is there anything I can help you with in the meantime?" };
+  }
 
   // 2) A customer WRITE/ACTION (slice 3): a comment to relay (confirmed write), or a deliberate act
   //    (sign/accept/pay) → GUIDED NAVIGATION to their proposal section (the AI never signs/pays).

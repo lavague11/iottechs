@@ -5,7 +5,7 @@
 // test + the security review; here we prove the untrusted-input surfaces can't be talked past.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CUSTOMER_READS, customerReadIntent, customerActionIntent, customerReadAllowed } from "../lib/ai-customer.js";
+import { CUSTOMER_READS, customerReadIntent, customerActionIntent, customerReadAllowed, customerGuideIntent, customerHandoffIntent } from "../lib/ai-customer.js";
 import { routeCommand, applyIntentToPayload, pickModel, AI_MODEL_FAST } from "../lib/ai-command.js";
 import { PROJECT_ACTIONS } from "../lib/ai-project-actions.js";
 import { WAIVER_CAUSES, isWaived, itemTotal, withWaiverCause } from "../lib/proposal.js";
@@ -88,4 +88,20 @@ test("label math: CPE camera + existing-wire drop both comp to $0; billable labo
 test("cost: everyday reads stay on the fast model", () => {
   for (const s of ["what's the balance", "which projects need QC", "open Crazy Cars", "any open issues"])
     assert.equal(pickModel(s), AI_MODEL_FAST, `"${s}" stays fast`);
+});
+
+// ---- 8. Customer rollout: guide control + human handoff (deterministic, safe) --------------------------
+test("customer guide control maps setup help to the right guide slug (caller still checks it's not DRAFT)", () => {
+  assert.equal(customerGuideIntent("how do I set up the app on my phone")?.slug, "mobile-setup");
+  assert.equal(customerGuideIntent("get the annke vision app")?.slug, "mobile-setup");
+  assert.equal(customerGuideIntent("how do I share the system with my wife")?.slug, "share-system");
+  assert.equal(customerGuideIntent("what's my balance"), null, "a normal question is not a guide");
+});
+
+test("customer handoff fires on 'talk to a person' / upset / urgent, not on normal questions", () => {
+  assert.ok(customerHandoffIntent("can I talk to a real person"));
+  assert.ok(customerHandoffIntent("I need to speak to someone"));
+  assert.equal(customerHandoffIntent("this is an emergency")?.urgent, true);
+  assert.equal(customerHandoffIntent("I'm so frustrated with this")?.upset, true);
+  assert.equal(customerHandoffIntent("what does my camera cover"), null);
 });

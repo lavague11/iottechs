@@ -50,6 +50,30 @@ const CUSTOMER_OBJECTION = /\b(not sure (?:we|i) (?:need|want|should)|don'?t (?:
 //                                                 never changes the proposal; it records the concern.
 //   { kind:"nav", label }                      — a DELIBERATE act (sign / accept / pay) → guided navigation.
 // Returns null otherwise. Pure (device resolution + the actual write happen server-side).
+// A customer asking for setup help → the right SUPPORT GUIDE (by slug). Only guides that are ready (never
+// DRAFT) and customer-appropriate are mapped here; the caller verifies `ready` against the live guide before
+// opening it. Pure. Returns { slug } | null.
+const GUIDE_CUES = [
+  [/\b(mobile|phone|app)\b.*\b(set\s?up|setup|install|add|connect|view|watch|see)\b|\bset\s?up\b.*\b(app|phone|mobile)\b|\bannke\s*vision\b|\bget the app\b|\bview (?:my )?cameras? on (?:my )?phone\b/i, "mobile-setup"],
+  [/\b(share|add)\b.*\b(family|spouse|wife|husband|partner|someone|access|another (?:phone|person|user))\b|\bshare (?:the|my)? ?system\b|\bgive (?:access|someone access)\b/i, "share-system"],
+  [/\b(admin|unlock)\s*pattern\b|\bforgot (?:my )?pattern\b|\bunlock (?:the )?(?:nvr|recorder|box)\b/i, "admin-pattern"],
+];
+export function customerGuideIntent(text) {
+  const t = String(text || "");
+  for (const [re, slug] of GUIDE_CUES) if (re.test(t)) return { slug };
+  return null;
+}
+
+// A customer wanting a HUMAN (or who's upset / urgent) → handoff. Pure. Returns { urgent } | null.
+export function customerHandoffIntent(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\b(talk|speak|chat)\s+to\s+(?:a\s+)?(?:person|human|someone|rep|representative|agent|the\s+owner|ahmed|staff|a\s+tech)\b|\b(real\s+person|customer\s+service|call\s+me|have\s+someone\s+call|get\s+me\s+a\s+(?:person|human))\b|\b(this\s+is\s+)?(?:an?\s+)?(emergency|urgent)\b/.test(t))
+    return { urgent: /\b(emergency|urgent|asap|right now)\b/.test(t) };
+  if (/\b(i'?m\s+(?:so\s+)?(?:angry|furious|upset|frustrated|pissed|livid|fed up)|this is (?:ridiculous|unacceptable|terrible|a joke)|worst\b)\b/.test(t))
+    return { urgent: false, upset: true };
+  return null;
+}
+
 export function customerActionIntent(text) {
   const raw = String(text || "").trim();
   const t = raw.toLowerCase();

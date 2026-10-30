@@ -6,9 +6,8 @@
 //
 // whisper-1 is used specifically because it reports the detected `language`; the gpt-4o-transcribe models are
 // cheaper but only emit plain text (no language field), which would defeat auto-detection. ~$0.006/min.
-import { headers } from "next/headers";
 import { secretValue } from "../../../lib/db";
-import { aiGate } from "../../../lib/ai-authz";
+import { voiceAllowed } from "../../../lib/voice-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,26 +16,18 @@ const MODEL = "whisper-1";
 const MAX_BYTES = 8 * 1024 * 1024;   // ~8MB — a short conversational clip; caps cost + latency
 const TIMEOUT_MS = 20000;
 
-// Same staff-only + feature-flag gate the other AI routes use.
-async function staffOk() {
-  const cookie = (await headers()).get("cookie") || "";
-  const raw = cookie.split(";").find((c) => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = raw ? await parseToken(raw.trim()) : null;
-  return aiGate(tok, secretValue("AI_COMMANDS") === "on").ok;
-}
-
 // Whisper returns ISO-639-1 names ("english") or codes; fold to the app's short codes. Unknown → en.
 const LANG_CODE = { english: "en", spanish: "es", arabic: "ar", en: "en", es: "es", ar: "ar" };
 const toLang = (l) => LANG_CODE[String(l || "").toLowerCase()] || "en";
 
 export async function POST(req) {
-  if (!(await staffOk())) return Response.json({ error: "unauthorized" }, { status: 403 });
   const key = secretValue("OPENAI_API_KEY");
   if (!key) return Response.json({ error: "no-key" }, { status: 503 });
 
-  let audio;
-  try { const form = await req.formData(); audio = form.get("file") || form.get("audio"); } catch { audio = null; }
+  let audio, project = null;
+  try { const form = await req.formData(); audio = form.get("file") || form.get("audio"); project = form.get("project") || null; } catch { audio = null; }
+  // Staff, OR a customer who owns the named project when the customer assistant is on (S3 — never widens aiGate).
+  if (!(await voiceAllowed(project))) return Response.json({ error: "unauthorized" }, { status: 403 });
   if (!audio || typeof audio.arrayBuffer !== "function") return Response.json({ error: "no-audio" }, { status: 400 });
   if (audio.size > MAX_BYTES) return Response.json({ error: "too-large" }, { status: 413 });
   if (audio.size < 1200) return Response.json({ text: "", language: "en", empty: true });   // basically silence

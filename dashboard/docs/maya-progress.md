@@ -20,6 +20,9 @@ without asking, and anything blocked on the owner.
 | Admin ▸ Maya page | Health · Settings · Activity · Training · Conversations | **✅ done** (maya-build) |
 | Knowledge / training loop | unanswered-question queue + existing KB (support articles) | **✅ done** (maya-build) |
 | Proactive runner | morning briefing + weekly report (flag-gated, deduped) | **✅ done** (maya-build) |
+| S3 voice gate | customer+owns-project gate on /api/tts + /api/transcribe | **✅ done** (maya-build) |
+| Customer rollout (core) | guide control + human handoff | **✅ done** (maya-build) |
+| Customer rollout (rest) | receptionist, multilingual, translation, photo, history | **deferred** (see questions) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -49,9 +52,22 @@ without asking, and anything blocked on the owner.
 - **S3 (hard gate):** add a customer + owns-project gate to `/api/tts` and `/api/transcribe` BEFORE any
   customer-facing voice ships. Do NOT widen `aiGate`. (Owner-required.)
 
+- **S3 voice gate + customer rollout (core) shipped** (maya-build).
+  - **S3** — `lib/voice-auth.js` `voiceAllowed(project)`: `/api/tts` + `/api/transcribe` now allow staff
+    (unchanged `aiGate`) **or** a customer who owns the named `project` when `AI_CUSTOMER` is on — **without
+    widening `aiGate`** (the staff STT/TTS surface is never handed to customers). Keys stay server-side.
+    Customer voice is now *safe to enable* when the owner is ready.
+  - **Guide control** — the customer assistant maps setup help ("set up the app", "share the system") to the
+    right support guide and opens `/guide/<slug>?project=<accessId>` — **only a READY guide (never DRAFT)**;
+    the guide page already scopes the system/QR to the customer's own project.
+  - **Human handoff** — "talk to a person" / upset / urgent flags the team (`notifyRoles` + a `handoff` Job
+    Log event) and reassures the customer without promising a time (urgent → mentions 911 for emergencies).
+  - Tests: guide/handoff intents in `tests/maya-guardrails.test.mjs`. QR security was already correctly
+    scoped (audit); Maya just drives the existing picker.
+
 ## Blocked — needs Ahmed
 
-- _(none yet)_
+- _(none — nothing blocked; deferred items below are scoped, not blocked)_
 
 ## Change log
 
@@ -121,3 +137,21 @@ without asking, and anything blocked on the owner.
   - **Customers are never messaged by these jobs.** Nudges (unsigned/unpaid/unconfirmed) are partly covered
     by the existing appointment-reminder + receivables sweeps; a per-customer nudge pause + smart alerts
     (large waiver / repeat service call / angry customer) are **deferred** (see open questions).
+
+## Open questions / deferred (for Ahmed — none blocking the branch)
+
+1. **Multilingual customer replies + live two-way translation.** Direct conflict with the safety spine: the
+   customer path is deterministic-router-only (no model on untrusted text). Localized free-form replies +
+   live translation need a model call on customer input. Options: (a) a tightly-scoped translate-only model
+   call (translate Maya's own English answer → the detected language; never free-generate), or (b) keep
+   customer replies English-only. Needs your call on the cost/safety trade. (Staff voice already detects
+   language via Whisper.)
+2. **Customer receptionist (public visitor) + conversation history + in-chat photo upload.** Scaffolded paths
+   exist (customer assistant, `/api/media`, bug screenshots), but a public receptionist surface + persisted
+   per-account chat history are net-new builds — want them before or after you review the admin side?
+3. **Smart alerts** (large waiver / repeat service call at a site / angry customer). Angry-customer handoff is
+   done; large-waiver + repeat-service are best as event hooks — OK to add on the next pass?
+4. **Edit-locking closed projects.** `close_project` works; enforcing a no-edit lock on closed/completed
+   projects is a separate guard across the mutating actions — confirm you want it and I'll add it.
+5. **Per-customer nudge pause.** The proactive nudges reuse existing sweeps; a per-customer "pause reminders"
+   toggle is a small add if you want it.

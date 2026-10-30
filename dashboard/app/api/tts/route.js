@@ -6,9 +6,8 @@
 //
 // Replaces the deprecated /v1/audio/speech TTS models (tts-1 / gpt-4o-mini-tts, shutdown 2027-01-06).
 import WebSocket from "ws";
-import { headers } from "next/headers";
 import { secretValue } from "../../../lib/db";
-import { aiGate } from "../../../lib/ai-authz";
+import { voiceAllowed } from "../../../lib/voice-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,15 +20,6 @@ const TIMEOUT_MS = 20000;
 // OpenAI Realtime voices (marin/cedar are OpenAI's "best quality" picks; the warm female-leaning ones first).
 const VOICES = new Set(["marin", "shimmer", "coral", "sage", "cedar", "alloy", "echo", "ash", "ballad", "verse"]);
 const DEFAULT_VOICE = "marin";
-
-// Staff-only, and only while the Assistant feature is on — the same gate the AI command actions use.
-async function staffOk() {
-  const cookie = (await headers()).get("cookie") || "";
-  const raw = cookie.split(";").find((c) => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = raw ? await parseToken(raw.trim()) : null;
-  return aiGate(tok, secretValue("AI_COMMANDS") === "on").ok;
-}
 
 // Wrap raw PCM16 (mono, little-endian) in a minimal WAV container so the browser can play it directly.
 function wavFromPcm16(pcm, rate = SAMPLE_RATE, channels = 1) {
@@ -77,10 +67,11 @@ function synthesize(text, voice, key) {
 }
 
 export async function POST(req) {
-  if (!(await staffOk())) return Response.json({ error: "unauthorized" }, { status: 403 });
+  let body; try { body = await req.json(); } catch { body = {}; }
+  // Staff, OR a customer who owns body.project when the customer assistant is on (S3 — never widens aiGate).
+  if (!(await voiceAllowed(body?.project))) return Response.json({ error: "unauthorized" }, { status: 403 });
   const key = secretValue("OPENAI_API_KEY");
   if (!key) return Response.json({ error: "no-key" }, { status: 503 });   // → client uses the browser voice
-  let body; try { body = await req.json(); } catch { body = {}; }
   const text = String(body?.text || "").trim().slice(0, MAX_CHARS);
   if (!text) return Response.json({ error: "no-text" }, { status: 400 });
   const voice = VOICES.has(body?.voice) ? body.voice : DEFAULT_VOICE;
