@@ -533,7 +533,8 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   }
 
   if (intent.type === "add_note") {
-    return { ok: true, kind: "write", write: "note", intent, preview: { title: "Add project note", body: intent.body } };
+    // A note is routine + additive → apply instantly (no Undo needed; it's low-stakes and audited).
+    return { ok: true, kind: "write", write: "note", intent, preview: { title: "Add project note", body: intent.body }, instant: true, noUndo: true };
   }
 
   if (["add_items", "set_discount", "edit_item", "set_desc", "reorder_section"].includes(intent.type)) {
@@ -566,7 +567,12 @@ function proposalPreview(accessId, intent) {
   const preview = { title: applied.summary };
   if (applied.desc) preview.body = applied.desc;
   if (before !== after) { preview.before = before; preview.after = after; }
-  return { ok: true, kind: "write", write: "proposal", intent, preview };
+  // Confirmation policy (owner): routine edits apply INSTANTLY with an Undo; only the unusual/irreversible
+  // confirm. A LARGE discount (≥20%) is the one proposal edit that still asks first; everything else is
+  // instant (reversible via Undo — the builder's prior payload is restored). Sends / payments / stage
+  // moves / removals are `action` writes and always confirm (previewAction, never instant).
+  const bigDiscount = intent.type === "set_discount" && (+intent.pct >= 20);
+  return { ok: true, kind: "write", write: "proposal", intent, preview, instant: !bigDiscount };
 }
 
 // The signer picked a specific candidate for an ambiguous rename/move — force the match to that id and

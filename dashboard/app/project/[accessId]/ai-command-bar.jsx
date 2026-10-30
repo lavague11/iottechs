@@ -37,11 +37,12 @@ export default function AiCommandBar({ accessId, projectName, payload, patchPayl
     }
     // proposal edit (add_items / set_discount / edit_item) — apply to the builder's live payload with the
     // SAME pure function the preview used; the builder's autosave validates + persists it server-side.
+    const before = payload;   // snapshot for a one-tap Undo of a routine edit
     const applied = applyIntentToPayload(payload, res.intent);
     if (applied.error) return { error: applied.error };
     patchPayload(applied.payload);
     await aiAuditAction(accessId, res.preview.title).catch(() => {});
-    return { ok: true, message: `Applied — ${res.preview.title}` };
+    return { ok: true, message: `Applied — ${res.preview.title}`, undo: () => patchPayload(before) };
   }
 
   return <CommandSurface enabled={enabled} placeholder={PLACEHOLDER} interpret={interpret} onNavigate={onNavigate} onApply={onApply} onPick={onPick} />;

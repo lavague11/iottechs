@@ -13,6 +13,7 @@ without asking, and anything blocked on the owner.
 | Naming | "Maya" in UI + playbook retitle | **✅ done** (maya-build) |
 | Label: existing wire waives install | waiver cause parallel to CPE, struck | **✅ done** (maya-build) |
 | Foundation: model routing + cost cap | Sonnet escalation, usage ledger, $10/day cap | **✅ done** (maya-build) |
+| Confirmation policy | routine edits instant + Undo; confirm only sensitive | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -69,3 +70,9 @@ without asking, and anything blocked on the owner.
   are settings (`AI_SPEND_CAP_CENTS`=1000, `AI_SPEND_ALERT_PCT`=70) editable later in Admin ▸ Maya. Tests:
   `tests/ai-usage.test.mjs` (cost math, cap/alert decisions, model routing). **Decision:** Sonnet id
   `claude-sonnet-4-6` to match the rest of the app (read-licence/verify-document).
+- **Confirmation policy shipped** (maya-build). Routine proposal edits now apply INSTANTLY with a one-tap
+  **Undo** (12s window; restores the builder's prior payload) — no more "are you sure" on every edit. The
+  server marks routine previews `instant:true`; only the unusual/irreversible still confirm: a **large
+  discount (≥20%)**, and all `action` writes (send, record payment, payment reminder, advance stage, assign,
+  remove line, adjudicate). Notes apply instantly (additive, no undo). Undo surfaces in both the Core orb bar
+  and the proposal bar. **Decision:** "large discount" threshold = **≥20%** (adjustable).

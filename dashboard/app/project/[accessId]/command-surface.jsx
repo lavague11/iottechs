@@ -55,6 +55,8 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
   const [thinking, setThinking] = useState(false);   // interpret in flight → "Thinking…"
   const [turns, setTurns] = useState([]);             // transcript: { id, role, text?, res? }
   const [pending, setPending] = useState(null);       // { id, res } — the single actionable awaiting a decision
+  const [undoItem, setUndoItem] = useState(null);      // { fn, label } — a just-applied ROUTINE edit, reversible for ~12s
+  const undoTimer = useRef(null);
   const [support, setSupport] = useState({ recognition: false, synthesis: false });
   const [voiceOk, setVoiceOk] = useState(false);     // mic capture available (getUserMedia + MediaRecorder)
   const [convoOn, setConvoOn] = useState(false);      // hands-free Conversation Mode on/off (drives the UI)
@@ -198,6 +200,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
       pushTurn("assistant", `(open ${r.label})`);
       return r;
     }
+    // Confirmation policy: a ROUTINE edit (r.instant) applies right away with an Undo — no "are you sure".
+    // Only the unusual/irreversible (sends, payments, stage moves, removals, a large discount) still confirm.
+    if (r.kind === "write" && r.instant) { applyInstant(r); return r; }
     if (r.kind === "write" || r.kind === "disambiguate") {
       const id = nid();
       setTurns((ts) => [...ts, { id, role: "assistant", res: r }]);
@@ -223,6 +228,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
   async function runInterpret(t) {
     const q = String(t || "").trim();
     if (!q || busy) return null;
+    clearUndo();   // a new command supersedes the previous edit's Undo window
     addTurn({ role: "user", text: q });
     pushTurn("user", q);
     setText(""); setInterim("");
@@ -251,6 +257,30 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
   }
 
   function dismiss() { setPending(null); memRef.current.pending = null; setText(""); setInterim(""); sysMsg("muted", "Cancelled."); }
+
+  // Instant-apply a routine edit, then offer a one-tap Undo for ~12s. The host's onApply returns an `undo`
+  // fn for reversible edits (the proposal bar restores the prior payload); additive notes carry no undo.
+  const clearUndo = () => { if (undoTimer.current) { clearTimeout(undoTimer.current); undoTimer.current = null; } setUndoItem(null); };
+  async function applyInstant(r) {
+    setBusy(true);
+    try {
+      const out = await onApply(r).catch(() => ({ error: "Couldn’t apply that." }));
+      memRef.current.pending = null;
+      if (out?.error) { sysMsg("err", out.error); pushTurn("assistant", out.error); return; }
+      sysMsg("ok", out?.message || "Applied."); pushTurn("assistant", out?.message || "Applied.");
+      clearUndo();
+      if (!r.noUndo && typeof out?.undo === "function") {
+        setUndoItem({ fn: out.undo, label: out.message || "change" });
+        undoTimer.current = setTimeout(() => setUndoItem(null), 12000);
+      }
+    } finally { setBusy(false); }
+  }
+  function doUndo() {
+    const u = undoItem; if (!u) return;
+    try { u.fn?.(); } catch {}
+    clearUndo(); sysMsg("muted", "Undone."); pushTurn("assistant", "Undone.");
+  }
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
 
   async function pick(id) {
     if (busy) return;
@@ -498,6 +528,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
                 </div>
               )}
               <div className="aicore-ctrls">
+                {undoItem && <button type="button" className="aicore-undo" onClick={doUndo} title="Undo the last change">Undo</button>}
                 {typing
                   ? <button type="button" className="aicore-ic" onClick={toVoice} aria-label="Voice" title="Voice"><MicIcon /></button>
                   : <button type="button" className="aicore-ic" onClick={toType} aria-label="Type" title="Type"><Keyboard /></button>}
@@ -627,6 +658,9 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
         </div>
       )}
 
+      {undoItem && (
+        <div className="aicb-undo"><span>Change applied.</span><button type="button" onClick={doUndo}>Undo</button></div>
+      )}
       {!convoOn && (
         <form className="aicb-row" onSubmit={submit}>
           <span className="aicb-spark" aria-hidden="true"><Spark /></span>
@@ -669,6 +703,8 @@ const COREBAR_CSS = `
 .aicore-in{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:13px;color:#FAF8F4;font-family:inherit}
 .aicore-in::placeholder{color:#7b8296}
 .aicore-ctrls{flex:none;display:flex;align-items:center;gap:1px}
+.aicore-undo{flex:none;border:1px solid rgba(201,169,110,.5);background:rgba(201,169,110,.14);color:#EDE4D3;border-radius:7px;font-size:11.5px;font-weight:600;padding:3px 8px;margin-right:4px;cursor:pointer;font-family:inherit}
+.aicore-undo:hover{background:rgba(201,169,110,.26)}
 .aicore-ic{flex:none;width:28px;height:28px;border:0;background:transparent;color:#9aa6bd;border-radius:7px;display:grid;place-items:center;cursor:pointer;font-size:17px;line-height:1}
 .aicore-ic:hover:not(:disabled){background:rgba(201,169,110,.16);color:#EDE4D3}
 .aicore-ic:disabled{opacity:.4;cursor:default}
@@ -767,6 +803,9 @@ const CSS = `
 .aicb-spark{color:#C9A96E;display:flex}
 .aicb-in{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:14px;color:var(--dv-ink,#1b1f2a)}
 .aicb-in::placeholder{color:#9aa0ab}
+.aicb-undo{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 6px;padding:7px 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);font-size:12.5px;color:var(--dv-meta,#787D84)}
+.aicb-undo button{border:1px solid rgba(201,169,110,.55);background:rgba(201,169,110,.14);color:#8a6d33;border-radius:7px;font-size:12px;font-weight:700;padding:3px 10px;cursor:pointer;font-family:inherit}
+.aicb-undo button:hover{background:rgba(201,169,110,.26)}
 .aicb-mic{flex:none;width:32px;height:30px;border:0;border-radius:9px;background:transparent;color:#6a7085;display:flex;align-items:center;justify-content:center;cursor:pointer}
 .aicb-mic:hover{background:var(--dv-paper,#F1F1EE)}
 .aicb-mic.live{background:#D64545;color:#fff;animation:aicb-pulse 1.2s ease-in-out infinite}
