@@ -41,46 +41,52 @@ export const SERVICE_COLORS = {
 export const serviceColor = (key) => SERVICE_COLORS[key] || SERVICE_COLORS.camera;
 
 // Catalog defaults — always editable in the builder. cost is staff-only (0 = not entered).
-export const PROPOSAL_CATALOG = {
+// P1 (pricing-fulfillment-architecture): every canonical catalog item now carries `type` — the
+// Equipment vs Labor CLASSIFICATION of the actual component (NOT a payout rule; equipment still gets
+// installed by a tech). A stable `id` ("<service>:<slug>") is assigned deterministically below via
+// withCatalogIds(); the `name` is the fixed identity ANCHOR in code (the price book only overrides the
+// DISPLAY name/price — never this const), so the id survives display renames/price edits. Containers/
+// bundles (Camera Install Complete, NVR·N-Channel) are NOT catalog rows — their children carry the type.
+const RAW_PROPOSAL_CATALOG = {
   camera: [
-    { name: "Camera",               price: 70,   cost: 0 },
-    { name: "4K Bullet Camera",     price: 185,  cost: 0 },
-    { name: "4K Dome Camera",       price: 175,  cost: 0 },
-    { name: "4K Turret Camera",     price: 175,  cost: 0 },
-    { name: "Cat6 Drop",            price: 150,  cost: 0 },
-    { name: "Cat6 Termination",     price: 20,   cost: 0 },
-    { name: "Camera Mounting",      price: 20,   cost: 0 },
-    { name: "Camera Programming",   price: 20,   cost: 0 },
-    { name: "Camera Waterproofing", price: 20,   cost: 0 },
+    { name: "Camera",               price: 70,   cost: 0, type: "equipment" },
+    { name: "4K Bullet Camera",     price: 185,  cost: 0, type: "equipment" },
+    { name: "4K Dome Camera",       price: 175,  cost: 0, type: "equipment" },
+    { name: "4K Turret Camera",     price: 175,  cost: 0, type: "equipment" },
+    { name: "Cat6 Drop",            price: 150,  cost: 0, type: "labor" },
+    { name: "Cat6 Termination",     price: 20,   cost: 0, type: "labor" },
+    { name: "Camera Mounting",      price: 20,   cost: 0, type: "labor" },
+    { name: "Camera Programming",   price: 20,   cost: 0, type: "labor" },
+    { name: "Camera Waterproofing", price: 20,   cost: 0, type: "labor" },
     // Monitor add-ons for viewing the NVR feed directly — optional, not auto-bundled.
     // Customer Provided / Monitor + Mount / Monitor + Mount + Custom are the 3 picks in
     // each Display Slot (system bar) — the latter two are bundled, one line, one price.
-    { name: "Customer Provided",         price: 0,   cost: 0 },
-    { name: "Monitor + Mount",           price: 200, cost: 0 },
-    { name: "Monitor + Mount + Custom",  price: 0,   cost: 0 },
-    { name: "HDMI",                      price: 0,   cost: 0 },
-    { name: "Second Display",            price: 0,   cost: 0 },
-    { name: "NVR (8-Channel)",                price: 150, cost: 0 },
-    { name: "NVR (16-Channel)",               price: 300, cost: 0 },
-    { name: "NVR (32-Channel)",               price: 500, cost: 0 },
-    { name: "NVR (32-Channel + 16-Port PoE)", price: 600, cost: 0 },
-    { name: "2TB Storage Drive",              price: 90,  cost: 0 },
-    { name: "4TB Storage Drive",              price: 180, cost: 0 },
-    { name: "6TB Storage Drive",              price: 270, cost: 0 },
-    { name: "8TB Storage Drive",              price: 360, cost: 0 },
+    { name: "Customer Provided",         price: 0,   cost: 0, type: "equipment" },   // a (customer's) display
+    { name: "Monitor + Mount",           price: 200, cost: 0, type: "equipment" },   // display product (mount bundled)
+    { name: "Monitor + Mount + Custom",  price: 0,   cost: 0, type: "equipment" },
+    { name: "HDMI",                      price: 0,   cost: 0, type: "equipment" },
+    { name: "Second Display",            price: 0,   cost: 0, type: "equipment" },
+    { name: "NVR (8-Channel)",                price: 150, cost: 0, type: "equipment" },
+    { name: "NVR (16-Channel)",               price: 300, cost: 0, type: "equipment" },
+    { name: "NVR (32-Channel)",               price: 500, cost: 0, type: "equipment" },
+    { name: "NVR (32-Channel + 16-Port PoE)", price: 600, cost: 0, type: "equipment" },
+    { name: "2TB Storage Drive",              price: 90,  cost: 0, type: "equipment" },
+    { name: "4TB Storage Drive",              price: 180, cost: 0, type: "equipment" },
+    { name: "6TB Storage Drive",              price: 270, cost: 0, type: "equipment" },
+    { name: "8TB Storage Drive",              price: 360, cost: 0, type: "equipment" },
   ],
   // Commercial Audio (owner's rate sheet 2026-09-27). A ceiling speaker install is the "Ceiling Speaker"
   // preset block: speaker $75 + wire run $150 + drill/mount/tune $75 = $300 per speaker. The amplifier
   // is the system's head end (the sound service's NVR) with Rack & Mount as its add-on (its Display).
   sound: [
-    { name: "Ceiling Speaker",    price: 75,  cost: 0 },
-    { name: "Surface Speaker",    price: 135, cost: 0 },
-    { name: "Speaker Wire Run",   price: 150, cost: 0 },
-    { name: "Drill Mount Tune",   price: 75,  cost: 0 },
-    { name: "Amplifier (4-Zone)", price: 350, cost: 0 },
-    { name: "Rack & Mount",       price: 150, cost: 0 },
-    { name: "Volume Control",     price: 75,  cost: 0 },
-    { name: "Tuning & Setup",     price: 120, cost: 0 },
+    { name: "Ceiling Speaker",    price: 75,  cost: 0, type: "equipment" },
+    { name: "Surface Speaker",    price: 135, cost: 0, type: "equipment" },
+    { name: "Speaker Wire Run",   price: 150, cost: 0, type: "labor" },
+    { name: "Drill Mount Tune",   price: 75,  cost: 0, type: "labor" },
+    { name: "Amplifier (4-Zone)", price: 350, cost: 0, type: "equipment" },
+    { name: "Rack & Mount",       price: 150, cost: 0, type: "labor" },   // AMBIGUOUS: mounting labor + rack hardware → classed labor (install)
+    { name: "Volume Control",     price: 75,  cost: 0, type: "equipment" },
+    { name: "Tuning & Setup",     price: 120, cost: 0, type: "labor" },
   ],
   // Toast POS — aligned to the Toast Equipment Cable Guide (docs/toast). Network core auto-seeds
   // (ISP + Pronto/Meraki + PoE switch); each WIRED device carries a Line Drop labor line (a new
@@ -89,51 +95,127 @@ export const PROPOSAL_CATALOG = {
   toast: [
     // Network core (baseline) — hardware is Toast/customer-provided, so every device is $0; we bill
     // the labor (Line Drop + Mounting) below, never the equipment.
-    { name: "ISP Router",            price: 0,   cost: 0 },
-    { name: "Pronto / Meraki",       price: 0,   cost: 0 },
-    { name: "24-Port Switch",    price: 0,   cost: 0 },
+    { name: "ISP Router",            price: 0,   cost: 0, type: "equipment" },
+    { name: "Pronto / Meraki",       price: 0,   cost: 0, type: "equipment" },
+    { name: "24-Port Switch",    price: 0,   cost: 0, type: "equipment" },
     // Wired devices — each needs a Line Drop (equipment itself is provided → $0)
-    { name: "Access Point",          price: 0,   cost: 0 },
-    { name: "POS Terminal",          price: 0,   cost: 0 },
-    { name: "Kitchen Printer",       price: 0,   cost: 0 },
-    { name: "Kitchen Display (KDS)", price: 0,   cost: 0 },
-    { name: "Self-Service Kiosk",    price: 0,   cost: 0 },
+    { name: "Access Point",          price: 0,   cost: 0, type: "equipment" },
+    { name: "POS Terminal",          price: 0,   cost: 0, type: "equipment" },
+    { name: "Kitchen Printer",       price: 0,   cost: 0, type: "equipment" },
+    { name: "Kitchen Display (KDS)", price: 0,   cost: 0, type: "equipment" },
+    { name: "Self-Service Kiosk",    price: 0,   cost: 0, type: "equipment" },
     // Peripherals — connect THROUGH the POS terminal (no drop of their own)
-    { name: "Handheld POS",          price: 0,   cost: 0 },
-    { name: "Cash Drawer",           price: 0,   cost: 0 },
-    { name: "Customer Display",      price: 0,   cost: 0 },
-    { name: "Receipt Printer",       price: 0,   cost: 0 },
-    { name: "Barcode Scanner",       price: 0,   cost: 0 },
+    { name: "Handheld POS",          price: 0,   cost: 0, type: "equipment" },
+    { name: "Cash Drawer",           price: 0,   cost: 0, type: "equipment" },
+    { name: "Customer Display",      price: 0,   cost: 0, type: "equipment" },
+    { name: "Receipt Printer",       price: 0,   cost: 0, type: "equipment" },
+    { name: "Barcode Scanner",       price: 0,   cost: 0, type: "equipment" },
     // Labor — Line Drop toggles between a new run ($150) and an existing cable ($50, test & map);
     // Device Mounting is the $50 premium mount (displays / APs); Keystone is a $50 jack termination.
-    { name: "Line Drop",             price: 150, cost: 0 },
-    { name: "Line Drop — Existing",  price: 50,  cost: 0 },
-    { name: "Device Mounting",       price: 50,  cost: 0 },
-    { name: "Keystone",              price: 50,  cost: 0 },
+    { name: "Line Drop",             price: 150, cost: 0, type: "labor" },
+    { name: "Line Drop — Existing",  price: 50,  cost: 0, type: "labor" },
+    { name: "Device Mounting",       price: 50,  cost: 0, type: "labor" },
+    { name: "Keystone",              price: 50,  cost: 0, type: "labor" },
   ],
   alarm: [
-    { name: "Control Panel",       price: 320, cost: 0 },
-    { name: "Door/Window Sensor",  price: 45,  cost: 0 },
-    { name: "Motion Sensor",       price: 65,  cost: 0 },
-    { name: "Glass-Break Sensor",  price: 70,  cost: 0 },
-    { name: "Keypad",              price: 110, cost: 0 },
-    { name: "Smoke / CO Detector", price: 85,  cost: 0 },
+    { name: "Control Panel",       price: 320, cost: 0, type: "equipment" },
+    { name: "Door/Window Sensor",  price: 45,  cost: 0, type: "equipment" },
+    { name: "Motion Sensor",       price: 65,  cost: 0, type: "equipment" },
+    { name: "Glass-Break Sensor",  price: 70,  cost: 0, type: "equipment" },
+    { name: "Keypad",              price: 110, cost: 0, type: "equipment" },
+    { name: "Smoke / CO Detector", price: 85,  cost: 0, type: "equipment" },
   ],
   access: [
-    { name: "Card Reader",      price: 260, cost: 0 },
-    { name: "Electric Strike",  price: 180, cost: 0 },
-    { name: "Door Controller",  price: 340, cost: 0 },
-    { name: "REX / Exit Button",price: 60,  cost: 0 },
-    { name: "Maglock",          price: 210, cost: 0 },
+    { name: "Card Reader",      price: 260, cost: 0, type: "equipment" },
+    { name: "Electric Strike",  price: 180, cost: 0, type: "equipment" },
+    { name: "Door Controller",  price: 340, cost: 0, type: "equipment" },
+    { name: "REX / Exit Button",price: 60,  cost: 0, type: "equipment" },
+    { name: "Maglock",          price: 210, cost: 0, type: "equipment" },
   ],
   wiring: [
-    { name: "Cat6 Drop",           price: 150, cost: 0 },
-    { name: "Conduit Run (per ft)",price: 8,   cost: 0 },
-    { name: "Patch Panel",         price: 160, cost: 0 },
-    { name: "Rack & Dress",        price: 240, cost: 0 },
+    { name: "Cat6 Drop",           price: 150, cost: 0, type: "labor" },
+    { name: "Conduit Run (per ft)",price: 8,   cost: 0, type: "labor" },
+    { name: "Patch Panel",         price: 160, cost: 0, type: "equipment" },
+    { name: "Rack & Dress",        price: 240, cost: 0, type: "labor" },
   ],
   custom: [],
 };
+
+// Deterministic, stable canonical id for a catalog item: "<service>:<slug-of-the-anchor-name>". Assigned
+// ONCE here from the fixed const name (the identity anchor). The price book never edits this const, so the
+// id is durable across display renames + price edits. INVARIANT E: type is stored, never inferred from the
+// live display name.
+export function catalogSlug(name) {
+  return String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+function withCatalogIds(raw) {
+  const out = {};
+  for (const [svc, list] of Object.entries(raw)) {
+    out[svc] = (list || []).map((c) => ({ id: c.id || `${svc}:${catalogSlug(c.name)}`, type: c.type || "equipment", ...c }));
+  }
+  return out;
+}
+export const PROPOSAL_CATALOG = withCatalogIds(RAW_PROPOSAL_CATALOG);
+
+// Lookups by stable id and by canonical anchor name (name → item, used ONCE during legacy normalization
+// and whenever we must resolve an item that predates ids). Never used to MINT identity from a live name.
+const CATALOG_BY_ID = new Map();
+const CATALOG_BY_NAME = new Map();   // "<svc>|<name>" → item, plus a loose "<name>" fallback
+Object.entries(PROPOSAL_CATALOG).forEach(([svc, list]) => (list || []).forEach((c) => {
+  CATALOG_BY_ID.set(c.id, { ...c, service: svc });
+  CATALOG_BY_NAME.set(`${svc}|${c.name}`, { ...c, service: svc });
+  if (!CATALOG_BY_NAME.has(c.name)) CATALOG_BY_NAME.set(c.name, { ...c, service: svc });
+}));
+export const catalogItemById = (id) => (id ? CATALOG_BY_ID.get(id) || null : null);
+export const catalogItemByName = (name, service) =>
+  (service && CATALOG_BY_NAME.get(`${service}|${name}`)) || CATALOG_BY_NAME.get(name) || null;
+// The stable catalog id for a canonical name (service-scoped when known); null if not a catalog item.
+export const catalogIdForName = (name, service) => (catalogItemByName(name, service)?.id) || null;
+// INVARIANT E resolver — the Equipment/Labor type for a line WITHOUT mutating it: its own stored snapshot
+// first, then its catalog provenance (id), then a name match, else null (legacy/unknown/custom).
+export function itemTypeOf(line, service) {
+  if (line && (line.itemType === "equipment" || line.itemType === "labor")) return line.itemType;
+  const byId = line?.catalogItemId ? catalogItemById(line.catalogItemId) : null;
+  if (byId) return byId.type;
+  const byName = catalogItemByName(line?.baseName || line?.name, service);
+  return byName ? byName.type : null;
+}
+// Snapshot the canonical provenance + classification onto a NEW line built from `name` (service-scoped).
+// Returns the fields to spread onto the line; empty when the name isn't a catalog item (custom line).
+export function catalogStampFor(name, service) {
+  const c = catalogItemByName(name, service);
+  return c ? { catalogItemId: c.id, itemType: c.type } : {};
+}
+
+// Idempotent, ADDITIVE legacy normalization (sections 12–13). Returns a NEW payload with catalogItemId +
+// itemType stamped onto any line/sub that lacks them, resolved by its canonical (base)name. NEVER changes
+// price / qty / conditions / waiver / name / totals, and NEVER overwrites an existing stamp. Ambiguous or
+// custom lines are left unresolved (they still classify at read time via itemTypeOf → null for containers).
+// Running it twice yields the same result. Safe to apply going-forward on save; not auto-applied to history.
+export function normalizeProposalProvenance(payload) {
+  if (!payload || !Array.isArray(payload.options)) return payload;
+  const stampSub = (x, svc) => {
+    if (x.catalogItemId || x.itemType) return x;
+    const s = catalogStampFor(x.baseName || x.name, svc);
+    return s.catalogItemId ? { ...x, ...s } : x;
+  };
+  const stampLine = (it, svc) => {
+    let next = it;
+    if (!it.catalogItemId && !it.itemType) {
+      const s = catalogStampFor(it.baseName || it.name, svc);
+      if (s.catalogItemId) next = { ...it, ...s };
+    }
+    if (Array.isArray(next.sub)) { const sub = next.sub.map((x) => stampSub(x, svc)); if (sub.some((x, i) => x !== next.sub[i])) next = { ...next, sub }; }
+    return next;
+  };
+  return {
+    ...payload,
+    options: payload.options.map((o) => ({
+      ...o,
+      services: (o.services || []).map((s) => ({ ...s, items: (s.items || []).map((it) => stampLine(it, s.key)) })),
+    })),
+  };
+}
 
 // Per-camera labor bundle: every camera imported from the survey brings these along (qty = camera count).
 export const CAMERA_BUNDLE = [
@@ -197,7 +279,7 @@ export function makePresetBlock(preset, book) {
   return {
     id: newItemId(), name: preset.name || "Bundle", qty: 1, price: 0, cost: 0,
     ...(conditions.length ? { conditions } : {}),
-    sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: +x.qty || 1, price: px(x.name), cost: 0 })),
+    sub: (preset.items || []).map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: +x.qty || 1, price: px(x.name), cost: 0, ...catalogStampFor(x.name, preset.service) })),
   };
 }
 
@@ -210,8 +292,8 @@ export function makeCameraBundle(book, label = "Camera") {
   return {
     id: newItemId(), name: label, qty: 1, price: 0, cost: 0,
     sub: [
-      { id: newItemId(), name: dn("Camera"), baseName: "Camera", qty: 1, price: px("Camera"), cost: 0 },
-      ...CAMERA_BUNDLE.map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: 1, price: px(x.name), cost: 0 })),
+      { id: newItemId(), name: dn("Camera"), baseName: "Camera", qty: 1, price: px("Camera"), cost: 0, ...catalogStampFor("Camera", "camera") },
+      ...CAMERA_BUNDLE.map((x) => ({ id: newItemId(), name: dn(x.name), baseName: x.name, qty: 1, price: px(x.name), cost: 0, ...catalogStampFor(x.name, "camera") })),
     ],
   };
 }
@@ -224,9 +306,9 @@ export function cameraBaselineItems(book) {
   const px = (name) => priceOf(name, b);
   const dn = (name) => displayNameOf(name, b);
   return [
-    { id: newItemId(), name: "NVR (8-Channel)", qty: 1, price: px("NVR (8-Channel)"), cost: 0 },
-    { id: newItemId(), name: "4TB Storage Drive", qty: 1, price: px("4TB Storage Drive"), cost: 0, slot: 1 },
-    { id: newItemId(), name: dn("Customer Provided"), baseName: "Customer Provided", qty: 1, price: px("Customer Provided"), cost: 0, displaySlot: 1 },
+    { id: newItemId(), name: "NVR (8-Channel)", qty: 1, price: px("NVR (8-Channel)"), cost: 0, ...catalogStampFor("NVR (8-Channel)", "camera") },
+    { id: newItemId(), name: "4TB Storage Drive", qty: 1, price: px("4TB Storage Drive"), cost: 0, slot: 1, ...catalogStampFor("4TB Storage Drive", "camera") },
+    { id: newItemId(), name: dn("Customer Provided"), baseName: "Customer Provided", qty: 1, price: px("Customer Provided"), cost: 0, displaySlot: 1, ...catalogStampFor("Customer Provided", "camera") },
   ];
 }
 

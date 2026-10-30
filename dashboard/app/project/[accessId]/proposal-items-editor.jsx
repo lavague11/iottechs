@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith } from "../../../lib/proposal-terms";
@@ -196,7 +196,7 @@ function useMenuFlip(ref) {
   }, []);
   return up;
 }
-function ItemMenu({ isSub = false, hasDesc = false, conditions = [], conditionDefs = LINE_CONDITIONS, onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose }) {
+function ItemMenu({ isSub = false, hasDesc = false, conditions = [], conditionDefs = LINE_CONDITIONS, onDuplicate, onDescribe, onToggleCondition, onApplyPeers, peerLabel, waived, onToggleWaive, onRemove, removeLabel, onClose, itemType, onSetType }) {
   const [confirming, setConfirming] = useState(false);
   const ref = useRef(null);
   const up = useMenuFlip(ref);
@@ -248,9 +248,22 @@ function ItemMenu({ isSub = false, hasDesc = false, conditions = [], conditionDe
               )}
             </>
           )}
+          {onSetType && (
+            <>
+              <div className="prop-im-sep" />
+              <div className="prop-im-grouplbl">Type</div>
+              {[["equipment", "Equipment"], ["labor", "Labor"]].map(([val, lbl]) => (
+                <button key={val} type="button" className={`prop-im-item prop-im-cond${itemType === val ? " on" : ""}`}
+                        role="menuitemradio" aria-checked={itemType === val} onClick={() => { onSetType(val); onClose(); }}>
+                  <span className="prop-im-cname">{lbl}</span>
+                  {itemType === val && <svg className="prop-im-ck" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>}
+                </button>
+              ))}
+            </>
+          )}
           {onToggleWaive && (
             <>
-              {(onDescribe || onDuplicate || onRemove || onToggleCondition) && <div className="prop-im-sep" />}
+              {(onDescribe || onDuplicate || onRemove || onToggleCondition || onSetType) && <div className="prop-im-sep" />}
               <button type="button" className="prop-im-item" role="menuitem" onClick={() => { onToggleWaive(); onClose(); }}>{waived ? "Unwaive" : "Waive"}</button>
             </>
           )}
@@ -1061,6 +1074,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               onToggleWaive={!parent && canWaiveItem(it) ? () => setItemWaived(it.id, !it.waived) : null}
               onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
               removeLabel={`${camName || it.name || "Item"}${!parent ? ` · ${money(itemTotal(it))}` : ""}`}
+              /* Equipment/Labor type — offered on ATOMIC top-level lines (custom/manual items); a container
+                 bundle carries its type on its children, not the header. */
+              itemType={(!parent && !(it.sub?.length)) ? itemTypeOf(it, svc.key) : undefined}
+              onSetType={(!parent && !(it.sub?.length) && !readOnly) ? (t) => patchItem(it.id, { itemType: t }) : undefined}
               onClose={() => setMenuOpen(null)}
             />
           )}

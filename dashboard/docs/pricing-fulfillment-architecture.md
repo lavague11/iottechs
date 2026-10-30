@@ -243,9 +243,8 @@ these rules — it never guesses business logic from words.
 
 ## Suggested phases (smallest safe steps first)
 
-- **P1 — Classification + provenance (data model, additive).** Add `itemType` + `catalogItemId` to
-  `PROPOSAL_CATALOG` and stamp them onto lines when added (snapshot). No behavior change; unblocks
-  everything else. GREEN/YELLOW.
+- **P1 — Classification + provenance (data model, additive). ✅ COMPLETE (commit pending).** See
+  "Phase 1 — implemented" below.
 - **P2 — NVR Setup.** Auto-add one `NVR Setup` labor line per NVR (after drives), with catalog + tech-task
   mapping; dedupe guard. YELLOW.
 - **P3 — Condition semantics hardened.** `waiverReason`, CPE⇒waive (one-way), restore-from-snapshot on
@@ -258,3 +257,42 @@ these rules — it never guesses business logic from words.
 - **P7 — AI agent.** Structured-record retrieval + the contract above, building on [[ai-command-center]].
 
 Each phase: additive, snapshot-preserving, tested, and for RED phases confirmed with the owner first.
+
+---
+
+## Phase 1 — implemented
+
+Final model (all in `lib/proposal.js`; UI in `proposal-items-editor.jsx`):
+
+- **Catalog item** gains two fields: `type: "equipment" | "labor"` (explicit classification) and a stable
+  `id` of the form `"<service>:<slug>"` (e.g. `camera:cat6_drop`), derived once from the fixed const
+  **anchor name** via `catalogSlug()` and frozen by `withCatalogIds()`. The const name is the identity
+  anchor — the price book only overrides the *display* name/price, never this const, so the id survives
+  renames and price edits. `RAW_PROPOSAL_CATALOG` holds the authored data; `PROPOSAL_CATALOG` is the
+  id-stamped export.
+- **Lookups:** `catalogItemById(id)`, `catalogItemByName(name, service?)`, `catalogIdForName(name, service?)`.
+- **Proposal line** carries a snapshot: `catalogItemId` (provenance) + `itemType` (classification),
+  stamped at creation by `catalogStampFor(name, service)` inside `makePresetBlock` / `makeCameraBundle` /
+  `cameraBaselineItems`. Line `id` stays the instance identity. Containers (bundle headers, NVR groups) are
+  NOT catalog items → no stamp; their children carry the type.
+- **Resolver (no mutation):** `itemTypeOf(line, service)` = stored `itemType` → `catalogItemId` → name
+  match → `null` (custom/container). Every line, including legacy, classifies correctly on read.
+- **Legacy backfill:** `normalizeProposalProvenance(payload)` — idempotent, additive, never changes
+  price/qty/conditions/waiver/totals, never overwrites a stamp. Available as a utility; NOT auto-applied to
+  history (the resolver already covers reads).
+- **UI:** the shared `ItemMenu` (•••) gains an Equipment/Labor **Type** selector on atomic top-level lines
+  (custom/manual items) → `patchItem(id, { itemType })`.
+- **Invariants held:** catalog id = canonical identity; line id = instance; line values = snapshots;
+  catalog edits affect future adds only (lines carry own price — already true); type stored not inferred
+  from the live name; a service may hold mixed equipment/labor children; customer/tech pricing stay
+  separate. No customer total changes.
+- **Tests:** `tests/catalog-identity.test.mjs` (8 tests — stable/unique ids, rename/price survival,
+  classification, snapshot independence, mixed service, resolver precedence, idempotent additive migration).
+  Full suite 1041 pass; production build clean.
+- **Ambiguous classification flagged:** `sound` → **Rack & Mount** classed `labor` (mounting work + rack
+  hardware). Revisit if it should be equipment.
+- **Deferred within P1 scope (noted, low-risk):** a subtle internal Equipment/Labor *indicator* on each
+  row (section 19) was left out to avoid clutter; the Type is reachable via the ••• menu. Name-based logic
+  that remains (`priceOf`/`displayNameOf` by name, `LOCKED_CATALOG_NAMES`, NVR channel-count pattern
+  matching in `proposal-items-editor.jsx`) is intentionally untouched — it keys off the stable `baseName`
+  anchor, which is equivalent to id for pricing; converting those to id-based lookups is a safe later pass.
