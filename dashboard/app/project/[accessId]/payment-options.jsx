@@ -130,7 +130,7 @@ export default function PaymentOptions({ accessId, balanceDue = 0, kind = "depos
 
         {view === "options" && (
           <div className="po-opts">
-            <button type="button" className="po-opt" onClick={() => { openZelle(); setView("zelle"); }}>
+            <button type="button" className="po-opt" onClick={() => setView("zelle")}>
               <span className="po-opt-ic zelle">Z</span>
               <span className="po-opt-main"><span className="po-opt-t">Zelle</span><span className="po-opt-s">Opens the Zelle app/link — no fee</span></span>
               <span className="po-opt-badge free">No fee</span>
