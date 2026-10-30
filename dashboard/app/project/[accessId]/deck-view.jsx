@@ -882,6 +882,16 @@ const CSS = `
    wrapper is touched, so internal menus/dropdowns keep their overflow. */
 .cx-merged--flow{gap:0}
 .cx-merged--flow>.cx-sec>div{height:auto!important;overflow:visible!important}
+/* A merged section that collapses by default (e.g. the deposit/payment panel under the proposal). The
+   native <details> keeps it closed with no JS; a tappable header reveals the panel to pay. */
+.cx-sec-fold{border-top:1px solid var(--dv-line,#E4E4DF);padding-top:12px;margin-top:4px}
+.cx-sec-fold>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--dv-meta,#787D84);margin:0 2px;padding:4px 0}
+.cx-sec-fold>summary::-webkit-details-marker{display:none}
+.cx-sec-fold>summary:hover{color:var(--dv-ink,#101418)}
+.cx-sec-foldchev{margin-left:auto;transition:transform .15s}
+.cx-sec-fold[open]>summary{margin-bottom:12px}
+.cx-sec-fold[open]>summary .cx-sec-foldchev{transform:rotate(180deg)}
+.cx-merged--flow>.cx-sec>details>div{height:auto!important;overflow:visible!important}
 /* The outer tool card melts into the page — drop its border/radius/shadow/ground so sections flow
    into one another. Inner content boxes (info rows, payment form) keep their own styling. */
 .cx-merged--flow .prop-wrap{margin:0!important}

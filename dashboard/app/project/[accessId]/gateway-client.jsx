@@ -2485,7 +2485,19 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             const merged = (
               <div className="cx-merged cx-merged--flow">
                 {psecs.map(([h, node], k) => (
-                  <section className="cx-sec" key={k}>{k > 0 && <div className="cx-sec-h">{h}</div>}{node}</section>
+                  k === 0
+                    ? <section className="cx-sec" key={k}>{node}</section>
+                    // The deposit/payment section is COLLAPSED by default on the proposal page (per owner):
+                    // a compact tappable header keeps the proposal clean, and the panel is one tap away to pay.
+                    : <section className="cx-sec" key={k}>
+                        <details className="cx-sec-fold">
+                          <summary className="cx-sec-foldsum">
+                            <span>{h === "Approval & Deposit" ? "Deposit & Payments" : h}</span>
+                            <svg className="cx-sec-foldchev" viewBox="0 0 10 6" width="11" height="7" fill="currentColor" aria-hidden="true"><path d="M0 0l5 6 5-6z"/></svg>
+                          </summary>
+                          {node}
+                        </details>
+                      </section>
                 ))}
               </div>
             );
