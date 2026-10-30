@@ -395,7 +395,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // total (itemTotal already sums them) and are never added to any subtotal again. A $0 component
   // reads "Included".
   const CHILD_H = 15;
-  const childRow = (desc, qty, unit, amount, yPos) => {
+  const childRow = (desc, qty, unit, amount, yPos, waived = false) => {
     doc.setFillColor(...WHITE);
     doc.rect(lm, yPos, rw, CHILD_H, "F");
     doc.setDrawColor(236, 232, 224); doc.setLineWidth(0.3);
@@ -404,9 +404,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.text("·", lm + 26, yPos + 10.5);
     doc.text(doc.splitTextToSize(String(desc), DESC_W - 20)[0], lm + 34, yPos + 10.5);
     doc.text(String(qty), lm + rw * 0.72, yPos + 10.5, { align: "center" });
-    const inc = !(+amount > 0);
-    doc.text(inc ? "" : "$" + money(unit), lm + rw * 0.86, yPos + 10.5, { align: "right" });
-    doc.text(inc ? "Included" : "$" + money(amount), lm + rw - 6, yPos + 10.5, { align: "right" });
+    // A waived component (e.g. customer-provided) is comped off the block — show "Waived", not its price,
+    // so the breakdown reconciles to the block total that already excludes it.
+    const inc = !waived && !(+amount > 0);
+    doc.text(waived ? "—" : (inc ? "" : "$" + money(unit)), lm + rw * 0.86, yPos + 10.5, { align: "right" });
+    doc.text(waived ? "Waived" : (inc ? "Included" : "$" + money(amount)), lm + rw - 6, yPos + 10.5, { align: "right" });
     doc.setTextColor(...INK);
     return yPos + CHILD_H;
   };
@@ -640,11 +642,11 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
         if (showKids) {
           // Components explain the package total; a parent with its own price on top is flagged
           // (internally) as not fully explained — pricing is never altered here.
-          const kidsSum = it.sub.reduce((s2, x) => s2 + (+x.qty || 1) * (+x.price || 0), 0);
+          const kidsSum = it.sub.reduce((s2, x) => s2 + (x.waived ? 0 : (+x.qty || 1) * (+x.price || 0)), 0);
           if (meta.__warnings && Math.abs(kidsSum - tot) > 0.005) meta.__warnings.push(`${propNum} ${desc}: component breakdown ($${money(kidsSum)}) differs from package total ($${money(tot)})`);
           it.sub.forEach((x) => {
             { const ny = ensureRoom(y, CHILD_H + 2); if (movedToNewPage(y, ny)) { y = tableHeader(ny); rowIdx = 0; } else y = ny; }
-            y = childRow(titleCase(x.name), x.qty ?? 1, x.price, (+x.qty || 1) * (+x.price || 0), y);
+            y = childRow(titleCase(x.name), x.qty ?? 1, x.price, (+x.qty || 1) * (+x.price || 0), y, !!x.waived);
           });
           y += 2;
         }

@@ -109,3 +109,28 @@ test("the renderer names the file canonically: identity - service - last4 - vN [
   // No project base (legacy caller) → still a clean name from what is known.
   assert.equal(downloadProposalPdf(a, { customerName: "Zain Farooq", projectId: "ASC0046", __return: true }).__fileName, "Zain Farooq - Sound System - 0046 - v4.pdf");
 });
+
+test("CPE / waived components in the detailed PDF: 'Waived' not a price, labeled on top-level lines, no enum leak, totals reconcile (P3)", () => {
+  const nvr = { id: "nvr", name: "NVR (16-Channel)", qty: 1, price: 300, conditions: ["cxEquip"], waived: true, waiverCauses: ["customer_provided_equipment"] };
+  const setup = { id: "set", name: "NVR Setup", qty: 1, price: 100 };
+  const front = { id: "b", name: "Camera Install — Front", qty: 1, price: 0, sub: [
+    { id: "c1", name: "Camera", qty: 1, price: 150, conditions: ["cxEquip"], waived: true, waiverCauses: ["customer_provided_equipment"] },
+    { id: "c2", name: "Cat6 Drop", qty: 1, price: 150 },
+    { id: "c3", name: "Termination", qty: 1, price: 40 },
+  ] };
+  const p = { id: 99, version: 1, tax_rate: 0, deposit_pct: 50, created_at: "2026-10-30 10:00:00",
+    payload: { options: [{ id: "A", name: "A", services: [{ key: "camera", label: "Security Cameras", items: [nvr, setup, front] }] }], payment_plan: "50_50", discount: { type: "flat", value: 0 }, pcp_credit: 0 } };
+  const { texts, warnings } = render(p, "detailed");
+  const all = texts.join("\n");
+  // 1. Internal waiver enums NEVER reach the PDF.
+  assert.ok(!/customer_provided_equipment|waiverCauses/.test(all), "internal enum leaked into the PDF");
+  // 2. Top-level CPE line is labeled (friendly, uppercased) — the customer sees WHY it's $0.
+  assert.ok(texts.some((t) => t.toUpperCase() === "CUSTOMER-PROVIDED EQUIPMENT"), "CPE label missing on the NVR line");
+  // 3. A waived component shows "Waived", and the NVR hardware does too; NVR Setup labor stays billable.
+  assert.ok(texts.includes("Waived"), "waived line shows 'Waived'");
+  assert.ok(texts.includes("$100.00"), "NVR Setup labor stays billable at $100");
+  // 4. The waived $150 camera is comped off: $150 appears only for the billable Cat6 Drop (once), not twice.
+  assert.equal(texts.filter((t) => t === "$150.00").length <= 2, true);
+  // 5. The component breakdown reconciles to the package total (waived child excluded) — no mismatch warning.
+  assert.deepEqual(warnings.filter((w) => /component breakdown/.test(w)), [], `unexpected breakdown warning: ${warnings}`);
+});
