@@ -14,6 +14,7 @@ import {
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
+  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
@@ -22,7 +23,8 @@ import { describeCoverage } from "../../../lib/device-coverage";
 import { FEEDBACK_KINDS } from "../../../lib/feedback-model";
 import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
-import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult } from "../../../lib/ai-command";
+import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult, pickModel } from "../../../lib/ai-command";
+import { costCents, crossesAlert, dollars } from "../../../lib/ai-usage";
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
 import { PROJECT_ACTIONS, actionAllowed, reasonFromText } from "../../../lib/ai-project-actions";
@@ -119,21 +121,36 @@ export async function aiStatusAction() {
   return { enabled: aiGate(tok, flagOn()).ok, hasKey: !!secretValue("ANTHROPIC_API_KEY") };
 }
 
-// Router first (0 tokens); only unrouted text hits Haiku. Returns { intent, noKey }.
-async function interpret(text, context) {
+// Router first (0 tokens); only unrouted text hits a model. Returns { intent, noKey?, capped? }.
+// Model routing (owner): a strong model (Sonnet) for the heavy asks, a fast one (Haiku) otherwise — chosen
+// 0-token by pickModel. Cost control: every model call is costed + recorded (recordAiUsage); once the day's
+// spend hits the cap the model is skipped (router-only) so Maya degrades gracefully instead of overspending;
+// an alert fires to admin/manager the one call that crosses the warn threshold.
+async function interpret(text, context, meta = {}) {
   const routed = routeCommand(text);
   if (routed) return { intent: routed };
   const key = secretValue("ANTHROPIC_API_KEY");
   if (!key) return { intent: { type: "unknown" }, noKey: true };
+  const spentBefore = aiSpendTodayCents();
+  const cap = aiSpendCapCents();
+  if (cap > 0 && spentBefore >= cap) return { intent: { type: "unknown" }, capped: true };
+  const model = pickModel(text);
   try {
     const res = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify(buildClaudeBody(text, context)),
+      body: JSON.stringify(buildClaudeBody(text, context, { model })),
     });
-    if (!res.ok) return { intent: { type: "unknown" } };
-    return { intent: parseClaudeResult(await res.json()) };
-  } catch { return { intent: { type: "unknown" } }; }
+    if (!res.ok) return { intent: { type: "unknown" }, model };
+    const json = await res.json();
+    const inTok = +json?.usage?.input_tokens || 0, outTok = +json?.usage?.output_tokens || 0;
+    const cost = costCents(model, inTok, outTok);
+    recordAiUsage({ model, inTok, outTok, costCents: cost, role: meta.role || null, accessId: meta.accessId || context?.currentAccessId || null, kind: meta.kind || "interpret" });
+    if (crossesAlert(spentBefore, cost, cap, aiSpendAlertPct())) {
+      try { notifyRoles(["admin", "manager"], { type: "ai_cost", title: "Maya AI spend alert", body: `Today's AI spend passed ${aiSpendAlertPct()}% of the ${dollars(cap)} cap.` }); } catch {}
+    }
+    return { intent: parseClaudeResult(json), model };
+  } catch { return { intent: { type: "unknown" }, model }; }
 }
 
 // Run a read-only "answer" intent: retrieve real data (authorized, via existing db functions) and return
@@ -480,7 +497,9 @@ function knowledgeAnswer(text, tok) {
   };
 }
 
-function classifyMiss(text, noKey) {
+function classifyMiss(text, noKey, capped) {
+  // The daily AI spend cap is hit → the model is paused; the 0-token router still works, so say so honestly.
+  if (capped) return { ok: true, kind: "unsupported", reason: "spend_cap", speak: "I've reached today's AI usage limit, so I can only handle the quick commands right now. It resets tonight — or an admin can raise the cap in Admin ▸ Maya." };
   const t = String(text || "").trim();
   const isQuestion = /\?\s*$/.test(t) || /^(what|how|why|when|who|which|where|is|are|does|do|can|could|should|will|would|has|have)\b/i.test(t);
   if (isQuestion) return { ok: true, kind: "unanswered", reason: "company_knowledge", speak: `I don't have that answer yet. ${CAPS_LINE}` };
@@ -494,7 +513,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   const t = String(text || "").trim();
   if (!t) return { error: "Type a command." };
 
-  const { intent, noKey } = await interpret(t, context);
+  const { intent, noKey, capped } = await interpret(t, context, { role: g.tok.role, accessId });
 
   // A write intent from a role that may be IN the assistant but may not EDIT (e.g. a technician) is refused
   // with a clear reason — never silently attempted. Reads/navigation below stay available to them.
@@ -526,7 +545,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || CAPS_LINE, reason: "unsupported_action" };
-  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey);
+  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey, capped);
 }
 
 // Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
@@ -593,7 +612,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   const app = resolveAppRoute(t);
   if (app) return { ok: true, kind: "navigate", href: app.href, label: app.label };
 
-  const { intent, noKey } = await interpret(t, context);
+  const { intent, noKey, capped } = await interpret(t, context, { role: g.tok.role, accessId: context.currentAccessId || null, kind: "global" });
   // A question → retrieve + answer directly (don't navigate). This is what makes it an assistant, not a bar.
   // With no page project, the last project the assistant resolved (memory) is the referent for "it"/"that".
   if (intent.type === "answer") return answerFor(intent, g.tok, context.currentAccessId || context.memory?.project?.accessId);
@@ -624,7 +643,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   // We couldn't fully parse it, but on a project an edit-ish phrasing ("rename a camera") should still take
   // the user to the proposal — the ⌘K bar only navigates; the edit itself is done with the proposal's bar.
   if (context.currentAccessId && looksLikeEdit(t)) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
-  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey);
+  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey, capped);
 }
 
 // Apply an add_note command.

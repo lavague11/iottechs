@@ -383,8 +383,28 @@ export function applyIntentToPayload(payload, intent, { priceOf } = {}) {
   return { error: "That isn't a proposal edit." };
 }
 
-// ---- Claude (Haiku) fallback: parse free-form text into the SAME intent shape ----
-export const AI_MODEL = "claude-haiku-4-5";
+// ---- Claude fallback: parse free-form text into the SAME intent shape ----
+// Two-tier model routing (owner, 2026-10-30): a fast/cheap model handles everyday chat; a stronger model
+// handles the heavy asks — invoicing, large quotes, complex diagnostics, and multi-step requests. The
+// router's 0-token path still runs first, so neither model is touched for the common commands.
+export const AI_MODEL_FAST = "claude-haiku-4-5";
+export const AI_MODEL_SMART = "claude-sonnet-4-6";   // matches the Sonnet the rest of the app uses (read-licence, verify-document)
+export const AI_MODEL = AI_MODEL_FAST;               // back-compat default
+// Pick the model for a free-form command. Pure + tested. Escalates on cues for the four heavy classes; a
+// long / clearly multi-step utterance (several chained actions) also escalates. Everything else stays fast.
+const SMART_CUES = /\b(invoice|invoicing|bill(?:ing)?|addendum|diagnos(?:e|is|tic)|troubleshoot|why\s+(?:is|are|isn'?t|aren'?t).*(?:not working|offline|fail|down|no\s+(?:signal|feed|video)))\b/i;
+// A real quote/proposal DRAFTING ask (create/draft/build a quote, or a large/full one) — not "how much is
+// the quote" (that's a read the router answers). Escalates to the strong model.
+const QUOTE_CUES = /\b(draft|create|build|write|prepare|generate|put together)\b.{0,30}\b(quote|proposal|estimate)\b|\b(large|big|full|whole|entire|detailed|complex)\b.{0,24}\b(quote|proposal|system|job)\b/i;
+const MULTISTEP = /\b(then|after that|also|and then|followed by)\b/i;
+export function pickModel(text) {
+  const t = String(text || "");
+  if (SMART_CUES.test(t) || QUOTE_CUES.test(t)) return AI_MODEL_SMART;
+  // multi-step: an explicit sequencing word, OR several "and"-joined action verbs, OR a long request.
+  const actionVerbs = (t.match(/\b(add|remove|change|set|send|create|make|rename|move|waive|assign|record|email|draft|update|flag|resolve)\b/gi) || []).length;
+  if (MULTISTEP.test(t) || actionVerbs >= 3 || t.length > 180) return AI_MODEL_SMART;
+  return AI_MODEL_FAST;
+}
 
 const TOOL = {
   name: "proposal_command",
@@ -442,9 +462,9 @@ export function buildMemoryBlock(context = {}) {
   return lines.join("\n");
 }
 
-export function buildClaudeBody(text, context = {}) {
+export function buildClaudeBody(text, context = {}, opts = {}) {
   return {
-    model: AI_MODEL,
+    model: opts.model || AI_MODEL,
     max_tokens: 300,
     system:
       "You are the assistant for a security-install company's staff dashboard. Turn the user's message into ONE structured action via the proposal_command tool. Be genuinely helpful: if they ASK for information, retrieve it; if a command is missing one detail, ask; only refuse when there's truly no supported path. Actions:\n" +

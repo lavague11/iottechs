@@ -975,6 +975,25 @@ function init() {
     )
   `);
 
+  // Maya AI usage ledger — one row per model call (the 0-token router never hits this). Drives the daily
+  // spend cap + the Admin ▸ Maya Health page. `day` is the Eastern calendar day so the cap resets at local
+  // midnight; `cost_cents` is costed from the response token usage (lib/ai-usage.js).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_usage (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts         TEXT DEFAULT (datetime('now','localtime')),
+      day        TEXT,
+      model      TEXT,
+      in_tok     INTEGER DEFAULT 0,
+      out_tok    INTEGER DEFAULT 0,
+      cost_cents REAL DEFAULT 0,
+      role       TEXT,
+      access_id  TEXT,
+      kind       TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_day ON ai_usage(day)`);
+
   // One-time reset (2026-08-13): the aerial enhance prompt override was saved byte-identical to
   // the old "light cleanup" default. The default is now the declutter version, so drop that stale
   // override to fall through to it. Hash-guarded — a genuinely customized prompt is never touched.
@@ -5314,6 +5333,37 @@ export function getSecret(key) {
 // The value an integration should actually use: stored key first, then env.
 export function secretValue(key) {
   return getSecret(key) || process.env[String(key || "").trim()] || "";
+}
+
+// ---- Maya AI usage + spend cap ------------------------------------------------------------------------
+// The daily cap + alert threshold are settings (vault/app_secrets) so Admin ▸ Maya can edit them without a
+// deploy. Defaults: $10/day cap, warn at 70%. Stored in CENTS / PERCENT as plain strings.
+export function aiSpendCapCents() { const v = +secretValue("AI_SPEND_CAP_CENTS"); return v > 0 ? v : 1000; }
+export function aiSpendAlertPct() { const v = +secretValue("AI_SPEND_ALERT_PCT"); return v > 0 && v <= 100 ? v : 70; }
+const easternDay = () => { try { return db.prepare("SELECT date('now','localtime') d").get().d; } catch { return new Date().toISOString().slice(0, 10); } };
+// Record one model call. Never throws (telemetry must not break a command).
+export function recordAiUsage({ model, inTok = 0, outTok = 0, costCents = 0, role = null, accessId = null, kind = null } = {}) {
+  try {
+    db.prepare("INSERT INTO ai_usage (day, model, in_tok, out_tok, cost_cents, role, access_id, kind) VALUES (?,?,?,?,?,?,?,?)")
+      .run(easternDay(), String(model || ""), Math.round(+inTok || 0), Math.round(+outTok || 0), +costCents || 0, role ? String(role) : null, accessId ? String(accessId) : null, kind ? String(kind) : null);
+  } catch {}
+}
+// Cents spent (model calls) so far on the current Eastern day — what the cap is checked against.
+export function aiSpendTodayCents() {
+  try { return +db.prepare("SELECT COALESCE(SUM(cost_cents),0) c FROM ai_usage WHERE day=?").get(easternDay()).c || 0; } catch { return 0; }
+}
+// Aggregate usage for the Health page: today + last 7/30 days (cents + call counts).
+export function aiUsageSummary() {
+  try {
+    const day = easternDay();
+    const one = (where, ...a) => db.prepare(`SELECT COALESCE(SUM(cost_cents),0) cents, COUNT(*) calls FROM ai_usage WHERE ${where}`).get(...a);
+    return {
+      today: one("day=?", day),
+      days7: one("day >= date('now','localtime','-6 days')"),
+      days30: one("day >= date('now','localtime','-29 days')"),
+      capCents: aiSpendCapCents(), alertPct: aiSpendAlertPct(),
+    };
+  } catch { return { today: { cents: 0, calls: 0 }, days7: { cents: 0, calls: 0 }, days30: { cents: 0, calls: 0 }, capCents: aiSpendCapCents(), alertPct: aiSpendAlertPct() }; }
 }
 // Just the stored key NAMES (never values) — for safe diagnostics ("is this key saved, and under what
 // exact name?") without exposing any secret.

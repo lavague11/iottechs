@@ -12,6 +12,7 @@ without asking, and anything blocked on the owner.
 | P0 security hardening | S1 + S2 authz gaps | **✅ done** (on `main`) |
 | Naming | "Maya" in UI + playbook retitle | **✅ done** (maya-build) |
 | Label: existing wire waives install | waiver cause parallel to CPE, struck | **✅ done** (maya-build) |
+| Foundation: model routing + cost cap | Sonnet escalation, usage ledger, $10/day cap | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -60,3 +61,11 @@ without asking, and anything blocked on the owner.
   `existingCable` condition now carries `waiveCause:"existing_wire"`, so toggling it comps that line's new
   drop/install charge (value struck, snapshot preserved) — parallel to CPE, isolated multi-cause. Applies
   going forward only; existing stored lines are NOT retroactively re-priced (snapshot rule). Tests updated.
+- **Foundation — model routing + cost control shipped** (maya-build). `pickModel()` escalates to **Sonnet**
+  (`claude-sonnet-4-6`) for invoicing / large-quote drafting / complex diagnostics / multi-step, Haiku
+  otherwise — still 0-token router first. Every model call is costed (`lib/ai-usage.js`) and recorded to a
+  new `ai_usage` ledger (`recordAiUsage`); `interpret()` skips the model once the day's spend hits the cap
+  (graceful router-only degrade) and alerts admin/manager on the call that crosses the warn line. Cap/alert
+  are settings (`AI_SPEND_CAP_CENTS`=1000, `AI_SPEND_ALERT_PCT`=70) editable later in Admin ▸ Maya. Tests:
+  `tests/ai-usage.test.mjs` (cost math, cap/alert decisions, model routing). **Decision:** Sonnet id
+  `claude-sonnet-4-6` to match the rest of the app (read-licence/verify-document).
