@@ -7324,7 +7324,7 @@ export const RATE_KEYS = ["cam_drop", "cam_mgmt", "cam_term", "cam_mount", "cam_
 // Company defaults (used when a scope hasn't set a key). Owner-set 2026-08: camera bundle = drop
 // $10 + cable mgmt $18 + termination $12 + mounting $10 + programming $8 + waterproofing $0 =
 // $58/camera; NVR setup $15; HDD/storage drive install $10; monitor + mount $10.
-export const DEFAULT_RATES = { cam_drop: 10, cam_mgmt: 18, cam_term: 12, cam_mount: 10, cam_program: 8, cam_waterproof: 0, pos_drop: 10, pos_mgmt: 18, pos_term: 12, pos_install: 12, nvr_setup: 15, hdd_install: 10, monitor_mount: 10 };
+export const DEFAULT_RATES = { cam_drop: 10, cam_mgmt: 18, cam_term: 12, cam_mount: 10, cam_program: 8, cam_waterproof: 0, pos_drop: 10, pos_mgmt: 18, pos_term: 12, pos_install: 12, nvr_setup: 10, hdd_install: 10, monitor_mount: 10 };
 function cleanRates(data) {
   const out = {};
   RATE_KEYS.forEach((k) => { const v = data?.[k]; if (v != null && v !== "" && +v >= 0) out[k] = Math.round(+v * 100) / 100; });

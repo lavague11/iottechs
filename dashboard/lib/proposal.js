@@ -79,6 +79,9 @@ const RAW_PROPOSAL_CATALOG = {
     { id: "camera:4tb_storage_drive",            name: "4TB Storage Drive",              price: 180, cost: 0, type: "equipment" },
     { id: "camera:6tb_storage_drive",            name: "6TB Storage Drive",              price: 270, cost: 0, type: "equipment" },
     { id: "camera:8tb_storage_drive",            name: "8TB Storage Drive",              price: 360, cost: 0, type: "equipment" },
+    // NVR Setup — the LABOR to seat/format/verify drives, initialize storage, configure + confirm recording.
+    // Auto-added once per NVR (after the drives) via ensureNvrSetup(); the tech payout is rate R.nvr_setup.
+    { id: "camera:nvr_setup",                    name: "NVR Setup",                      price: 100, cost: 0, type: "labor" },
   ],
   // Commercial Audio (owner's rate sheet 2026-09-27). A ceiling speaker install is the "Ceiling Speaker"
   // preset block: speaker $75 + wire run $150 + drill/mount/tune $75 = $300 per speaker. The amplifier
@@ -318,8 +321,38 @@ export function cameraBaselineItems(book) {
   return [
     { id: newItemId(), name: "NVR (8-Channel)", qty: 1, price: px("NVR (8-Channel)"), cost: 0, ...catalogStampFor("NVR (8-Channel)", "camera") },
     { id: newItemId(), name: "4TB Storage Drive", qty: 1, price: px("4TB Storage Drive"), cost: 0, slot: 1, ...catalogStampFor("4TB Storage Drive", "camera") },
+    nvrSetupLine(b),   // P2: one NVR Setup labor line per NVR, right after the drive
     { id: newItemId(), name: dn("Customer Provided"), baseName: "Customer Provided", qty: 1, price: px("Customer Provided"), cost: 0, displaySlot: 1, ...catalogStampFor("Customer Provided", "camera") },
   ];
+}
+
+// P2 — NVR Setup. One canonical LABOR line (seat/format/verify drives, init storage, configure + confirm
+// recording), auto-added once per NVR. Carries the catalog snapshot (catalogItemId/itemType) + `nvrSetup`
+// marker; its tech payout flows through the EXISTING rate (R.nvr_setup) via defaultTechPayout — no separate
+// tech-pricing system.
+export function nvrSetupLine(book) {
+  const b = book || loadPriceBook();
+  return { id: newItemId(), name: displayNameOf("NVR Setup", b), baseName: "NVR Setup", qty: 1, price: priceOf("NVR Setup", b), cost: 0, nvrSetup: true, ...catalogStampFor("NVR Setup", "camera") };
+}
+// Enforce EXACTLY ONE NVR Setup line in a camera service's items when (and only when) it has an NVR, placed
+// right after the NVR + its drives. No NVR → no setup. Dedup-safe + idempotent. Returns a NEW items array
+// (or the same ref when nothing changes). NEVER touches other lines' price/qty — additive only. NOT applied
+// to historical proposals (snapshot rule); it runs as new camera services / NVRs are built.
+export function ensureNvrSetup(items, book) {
+  const list = Array.isArray(items) ? items : [];
+  const isNvrHardware = (it) => !it.sub && !it.nvrSetup && /^NVR/.test(it.name || "") && !/nvr setup/i.test(it.name || "");
+  const hasNvr = list.some(isNvrHardware);
+  const setups = list.filter((it) => it.nvrSetup);
+  if (!hasNvr) return setups.length ? list.filter((it) => !it.nvrSetup) : list;   // NVR removed → drop setup
+  if (setups.length === 1) return list;                                            // already exactly one
+  if (setups.length > 1) { let kept = false; return list.filter((it) => !it.nvrSetup || (kept ? false : (kept = true))); }
+  // none yet → insert after the NVR and its last slotted drive
+  const idxNvr = list.findIndex(isNvrHardware);
+  let insertAt = idxNvr + 1;
+  list.forEach((it, i) => { if (it.slot != null) insertAt = Math.max(insertAt, i + 1); });
+  const next = [...list];
+  next.splice(insertAt, 0, nvrSetupLine(book));
+  return next;
 }
 
 // NVR models and storage drives are structurally load-bearing — their exact names are
@@ -1062,16 +1095,20 @@ export function defaultTechPayout(name, serviceKey, rates) {
 // only for lines that don't already carry a positive techPrice (never clobbers an admin override).
 export function seedTechPricingMap(payload, rates) {
   const map = {};
-  const apply = (svcKey, x) => {
-    if (!x || !x.id) return;
-    if (+x.techPrice > 0) return;                      // already priced — leave it
-    const d = defaultTechPayout(x.name, svcKey, rates);
-    if (d > 0) map[x.id] = d;
-  };
-  (payload?.options || []).forEach((o) => (o.services || []).forEach((s) => (s.items || []).forEach((it) => {
-    apply(s.key, it);
-    (it.sub || []).forEach((x) => apply(s.key, x));
-  })));
+  (payload?.options || []).forEach((o) => (o.services || []).forEach((s) => {
+    const items = s.items || [];
+    // P2: when the service has a dedicated NVR Setup labor line, the NVR HARDWARE line carries NO setup
+    // payout (it's equipment — the labor is the NVR Setup line). Prevents double-counting. Legacy services
+    // WITHOUT an NVR Setup line are unaffected (the NVR line still seeds the setup rate as before).
+    const hasNvrSetup = items.some((x) => x?.nvrSetup || /nvr setup/i.test(x?.name || ""));
+    const apply = (x) => {
+      if (!x || !x.id || +x.techPrice > 0) return;     // already priced — leave it
+      if (hasNvrSetup && /\bnvr\b/i.test(x.name || "") && !/nvr setup/i.test(x.name || "")) return;
+      const d = defaultTechPayout(x.name, s.key, rates);
+      if (d > 0) map[x.id] = d;
+    };
+    items.forEach((it) => { apply(it); (it.sub || []).forEach(apply); });
+  }));
   return map;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
 import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith } from "../../../lib/proposal-terms";
@@ -556,7 +556,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       const slots = slotsFor(model.name);
       items = items.filter((it) => it.slot == null || it.slot <= slots);
     }
-    onChange({ ...svc, items });
+    // P2: keep exactly one NVR Setup labor line while there's an NVR (added after the drives); drop it when
+    // the NVR is removed. Dedup-safe + additive — never alters other lines.
+    onChange({ ...svc, items: ensureNvrSetup(items) });
   }
   // Inline NVR model change. A downgrade that would drop drives is NOT silent — it raises a compact
   // conflict the user confirms first (#7). Capacity comes from the canonical NVR_SLOTS rule (slotsFor).
@@ -692,7 +694,9 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const setDisplayField = (n, patch) => { const d = displayAt(n); if (d) patchItem(d.id, patch); };
   const setNvrField = (patch) => { if (nvrItem) patchItem(nvrItem.id, patch); };
   // NVR + slotted drives/displays live only in the system bar, not the editable item list.
-  const inSysbar = (it) => (svc.key === "camera" && (it.slot != null || it.displaySlot != null || /^NVR/.test(it.name || ""))) || (svc.key === "sound" && it.ampSlot != null);
+  // NVR hardware + drives + displays live in the NVR/Displays lead group; the NVR SETUP labor line is NOT
+  // a sysbar item (it starts with "NVR" but is a normal labor line) — it renders in the flat list.
+  const inSysbar = (it) => (svc.key === "camera" && !it.nvrSetup && (it.slot != null || it.displaySlot != null || /^NVR/.test(it.name || ""))) || (svc.key === "sound" && it.ampSlot != null);
   // ---- Audio system bar: amplifier pick (+ price/cost) and the Rack & Mount add-on ----
   const soundMode = svc.key === "sound";
   const ampModels = soundMode ? catalog.filter((c) => /^Amplifier/i.test(c.name)) : [];

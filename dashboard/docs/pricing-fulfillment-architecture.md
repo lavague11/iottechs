@@ -86,11 +86,19 @@ NVR · N-Channel
  └─ NVR Setup         LABOR        (seat/format/verify drives, init storage, confirm recording, basic setup)
 ```
 
-- Maps to a technician task (`TECH_TASK_NVR_SETUP`). Customer price + tech price are **business values** to
-  be set (flag for staff if missing — never invent a price).
+- Maps to a technician task via the EXISTING rate `R.nvr_setup` (no separate tech-pricing system).
 - **Never duplicate NVR Setup for the same NVR.**
-- Implementation touchpoint: the NVR lead-group builder in `proposal-items-editor.jsx` (`leadRows`, the
-  `NVR_SLOTS`/`slotsFor` grouping) + the camera service seed.
+
+**✅ P2 COMPLETE.** Canonical item `camera:nvr_setup` (type `labor`, customer **$100**, tech **$10** via
+`DEFAULT_RATES.nvr_setup`, owner-set). Helpers in `lib/proposal.js`: `nvrSetupLine(book)` builds the stamped
+labor line (`nvrSetup: true` + `catalogItemId`/`itemType`); `ensureNvrSetup(items, book)` keeps **exactly
+one** per NVR, inserted after the drives, dropped when the NVR is removed, collapses duplicates — idempotent,
+additive, never touches other lines. Wired into `cameraBaselineItems()` + the editor's `applyNvr()`. NOT
+applied to historical proposals (snapshot rule). `seedTechPricingMap` gives the NVR Setup line the setup
+payout and **zeroes the NVR hardware line** when a setup line exists (no double count); legacy services
+without a setup line are unchanged. `inSysbar` excludes the setup line so it renders as a normal labor row
+(flat; nesting it inside the NVR lead group is an optional follow-up). Tests: `tests/nvr-setup.test.mjs` (8).
+Full suite 1052, build clean.
 
 ---
 
@@ -245,8 +253,7 @@ these rules — it never guesses business logic from words.
 
 - **P1 — Classification + provenance (data model, additive). ✅ COMPLETE (commit pending).** See
   "Phase 1 — implemented" below.
-- **P2 — NVR Setup.** Auto-add one `NVR Setup` labor line per NVR (after drives), with catalog + tech-task
-  mapping; dedupe guard. YELLOW.
+- **P2 — NVR Setup. ✅ COMPLETE.** See the "NVR Setup" section above.
 - **P3 — Condition semantics hardened.** `waiverReason`, CPE⇒waive (one-way), restore-from-snapshot on
   condition removal; PDF wording per condition. RED (money) — confirm before shipping.
 - **P4 — WO Production number.** Add Technician Production to the WO (default = customer install value of
