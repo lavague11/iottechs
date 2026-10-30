@@ -826,14 +826,6 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
       {/* Payment plan — the SAME compact read-only plan staff see (PAYMENT PLAN · 50 / 50, a column per
           milestone), replacing the old stacked payment cards. Its own label is the section header. */}
       <div className="pcv-fin"><ProposalPaymentPlan sched={paySched} plan={payPlan} grand={t.grand} deposit={t.deposit} fullDate={fullDate} /></div>
-      {/* Unified PAY flow (per owner) — one "Pay Deposit · $X" button → Zelle (no fee) / Card·Apple·Google
-          Pay (+5%) / "I already paid". NOT gated by signature: a customer may pay before signing; it shows
-          whenever there's an amount due on a live (non-declined) proposal. */}
-      {t.grand > 0 && p?.status !== "declined" && (
-        <PaymentOptions accessId={accessId} preview={preview} showToast={showToast}
-          amountDue={t.deposit > 0 && t.deposit < t.grand ? t.deposit : t.grand}
-          label={t.deposit > 0 && t.deposit < t.grand ? "Deposit" : "Balance"} />
-      )}
       <div className="pcv-fineprint">Price subject to applicable sales tax. Proposal valid 7 days from issue.</div>
       </div>{/* /pcv-pay-region */}
 
@@ -968,9 +960,12 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
         );
       })()}
 
-      <div className="pcv-footer">
-        IOT TECHS · (646) 396-0775 · support@iot-techs.com · www.iot-techs.com · Confidential Proposal
-      </div>
+      {/* Unified PAY flow — lives UNDER the signature (per owner). One "Pay Balance · $X" button → a pop-up
+          modal (Zelle / Card·Apple·Google Pay / I already paid), amount editable, proof photos. NOT gated by
+          signature; shows whenever there's a balance on a live (non-declined) proposal. */}
+      {t.grand > 0 && p?.status !== "declined" && (
+        <PaymentOptions accessId={accessId} preview={preview} showToast={showToast} balanceDue={t.grand} kind="deposit" />
+      )}
       </div>
       )}
 

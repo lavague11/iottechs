@@ -6374,8 +6374,9 @@ export function addProjectPayment(accessId, { amount, method, kind, source, note
   const src = source === "customer" ? "customer" : "staff";
   // paid_at = the date the money changed hands (staff-set, YYYY-MM-DD). Defaults to today.
   const paid = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || "")) ? String(paidAt) : new Date().toISOString().slice(0, 10);
-  // Optional proof images — only well-formed /api/media URLs, at most 4 (front/back of a check, etc.).
-  const imgs = (Array.isArray(photos) ? photos : []).filter((u) => typeof u === "string" && /^\/api\/media\/[a-f0-9]{8,}$/.test(u)).slice(0, 4);
+  // Optional proof images — only well-formed /api/media URLs, at most 8 (check front/back, Zelle/payment
+  // screenshots, etc.).
+  const imgs = (Array.isArray(photos) ? photos : []).filter((u) => typeof u === "string" && /^\/api\/media\/[a-f0-9]{8,}$/.test(u)).slice(0, 8);
   const photosJson = imgs.length ? JSON.stringify(imgs) : null;
   db.prepare("INSERT INTO project_payments (project_access_id, amount, method, kind, source, note, recorded_by, status, paid_at, photos) VALUES (?,?,?,?,?,?,?,?,?,?)")
     .run(String(accessId), Math.max(0, +amount || 0), String(method || "").slice(0, 60) || null,

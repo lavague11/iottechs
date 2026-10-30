@@ -2,7 +2,7 @@
 // Zelle payment option — no convenience fee. Shows the business QR (tap it to open Zelle on a phone, or
 // scan it from the bank app) plus the name + number. Static business info; the link is the QR's own
 // enroll.zellepay.com payment URL (token 646-396-0775 · LA VAGUE INC.).
-const ZELLE = {
+export const ZELLE = {
   name: "LA VAGUE INC.",
   phone: "(646) 396-0775",
   url: "https://enroll.zellepay.com/qr-codes?data=ewogICJ0b2tlbiIgOiAiNjQ2Mzk2MDc3NSIsCiAgImFjdGlvbiIgOiAicGF5bWVudCIsCiAgIm5hbWUiIDogIkxBIFZBR1VFIElOQy4iCn0=",

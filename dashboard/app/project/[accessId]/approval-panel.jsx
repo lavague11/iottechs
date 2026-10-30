@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { optionTotals, fmtSignStamp, displayOptionName, projectFinancials, planDepositPct } from "../../../lib/proposal";
 import { lineConditions, LINE_CONDITION } from "../../../lib/proposal-terms";
 import { getApprovalDataAction, signProposalAction, recordPaymentAction, deletePaymentAction, confirmPaymentAction, createWorkOrderAction, voidProposalSignatureAction } from "./proposal-actions";
+import PaymentOptions from "./payment-options";
 import ProposalSignModal from "./proposal-sign-modal";
 import RecordPaymentModal from "./record-payment-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
@@ -582,87 +583,13 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
             <button className="apv-btn gold apv-payform-btn" onClick={() => setPayModalOpen(true)}>Record Payment</button>
           </div>
         )}
-        {/* Customer payment form — a clean, labeled form (no more cramped single row) */}
+        {/* Customer payment — the SAME unified Pay flow as the proposal page: one "Pay Balance · $X" button
+            → pop-up modal (Zelle / Card·Apple·Google Pay / I already paid), editable amount, proof photos.
+            Recording here refreshes this panel's history + balance via onRecorded. */}
         {isCustomer && balance > 0 && (
-        <div className="apv-payform">
-          <button type="button" className="apv-payform-hd apv-payform-toggle" onClick={() => setPayFormOpen((o) => !o)}>
-            <span>Make a payment</span>
-            <svg className={`apv-payform-chev${payFormOpen ? " open" : ""}`} viewBox="0 0 10 6" width="11" height="7" fill="currentColor"><path d="M0 0l5 6 5-6z"/></svg>
-          </button>
-          {payFormOpen && (<div style={{ display: "contents" }}>
-          <div className="apv-payform-grid">
-            <label className="apv-fld">
-              <span>Amount</span>
-              <input className="apv-input num" type="number" min="0" step="0.01" placeholder="0.00"
-                     value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} />
-            </label>
-            <label className="apv-fld">
-              <span>Method</span>
-              <select className="apv-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
-                <option>Zelle</option><option>Check</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
-              </select>
-            </label>
-            {isStaff && (
-              <label className="apv-fld">
-                <span>Date paid</span>
-                <input className="apv-input" type="date" max={today} value={pay.paidAt} onChange={(e) => setPay((v) => ({ ...v, paidAt: e.target.value }))} />
-              </label>
-            )}
-            <label className={`apv-fld${isStaff ? "" : " apv-fld-wide"}`}>
-              <span>Note / reference <em>(optional)</em></span>
-              <input className="apv-input" placeholder="Reference #…" value={pay.note} onChange={(e) => setPay((v) => ({ ...v, note: e.target.value }))} />
-            </label>
-          </div>
-          {/* Pay-by-check: optional front/back photos of the check. The customer taps to add from their
-              camera/library; staff see the images when confirming the pending payment. */}
-          {isCustomer && /check/i.test(pay.method) && (
-            <div className="apv-checkphotos">
-              <div className="apv-checkphotos-lbl">Photo of the check <em>(optional — front &amp; back)</em></div>
-              <div className="apv-checkphotos-row">
-                {["front", "back"].map((side) => (
-                  <label key={side} className={`apv-checkphoto${checkPhotos[side] ? " has" : ""}`}>
-                    {checkPhotos[side]
-                      ? <img src={checkPhotos[side]} alt={`Check ${side}`} />
-                      : <span className="apv-checkphoto-ph">{upBusy === side ? "Uploading…" : `+ ${side}`}</span>}
-                    <input type="file" accept="image/*" capture="environment" style={{ display: "none" }} disabled={!!upBusy}
-                           onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadCheckPhoto(side, f); e.target.value = ""; }} />
-                    {checkPhotos[side] && <button type="button" className="apv-checkphoto-x" aria-label={`Remove ${side}`}
-                                                  onClick={(e) => { e.preventDefault(); setCheckPhotos((p) => ({ ...p, [side]: null })); }}>×</button>}
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* One action row: the quick-fill preset(s) and the submit button share a line, same height
-              and shape, so they line up (and stack cleanly, full-width, on a phone). */}
-          <div className="apv-payact">
-            {(() => {
-              // Quick-fill presets — one tap sets the amount (still fully editable). Deposit portal
-              // offers the deposit due + full balance; the final portal just the balance.
-              const presets = isFinal
-                ? [["Full balance", balance, "final"]]
-                : [
-                    [`Deposit (${depositPct}%)`, depositDue, "deposit"],
-                    ["Full balance", balance, "final"],
-                  ];
-              const seen = new Set();
-              const shown = presets.filter(([, amt]) => amt > 0.005 && !seen.has(amt.toFixed(2)) && seen.add(amt.toFixed(2)));
-              return shown.map(([lbl, amt, kind]) => {
-                const on = +pay.amount > 0 && Math.abs(+pay.amount - amt) < 0.005;
-                return (
-                  <button key={lbl} type="button" className={`apv-chip-btn${on ? " on" : ""}`}
-                    onClick={() => setPay((v) => ({ ...v, amount: amt.toFixed(2), kind }))}>
-                    {lbl} · {money(amt)}
-                  </button>
-                );
-              });
-            })()}
-            <button className="apv-btn gold apv-payform-btn" disabled={busy || !(+pay.amount > 0)} onClick={addPayment}>
-              {isCustomer ? "I Paid This" : "Record Payment"}
-            </button>
-          </div>
-          </div>)}
-        </div>
+          <PaymentOptions accessId={accessId} showToast={showToast}
+            balanceDue={balance} kind={isFinal ? "final" : "deposit"}
+            onRecorded={(r) => { if (r?.payments) setData((d) => ({ ...d, payments: r.payments })); if (r?.stage) followStage(r.stage); }} />
         )}
         {isCustomer && <div className="apv-fine">Pending until we confirm receipt.</div>}
       </div>
