@@ -85,6 +85,7 @@ const NAV_GROUPS = [
   ]},
   { key: "admin-grp", label: "Admin", items: [
     { key: "users",      label: "Users",        href: "/users" },
+    { key: "maya",       label: "Maya",         href: "/maya" },
     { key: "onboarding", label: "Hiring",       href: "/hiring" },
     { key: "activity",   label: "Activity Log", href: "/activity" },
     { key: "bugs",       label: "Bug Portal",   href: "/bugs" },

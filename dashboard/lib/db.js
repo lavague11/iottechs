@@ -994,6 +994,21 @@ function init() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_ai_usage_day ON ai_usage(day)`);
 
+  // Maya training loop — questions Maya couldn't answer (no approved knowledge + no supported action). The
+  // Admin ▸ Maya ▸ Training queue surfaces these so Ahmed can add a support article / rule, then resolve them.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maya_unanswered (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts          TEXT DEFAULT (datetime('now','localtime')),
+      question    TEXT,
+      role        TEXT,
+      access_id   TEXT,
+      reason      TEXT,
+      hits        INTEGER DEFAULT 1,
+      resolved_at TEXT
+    )
+  `);
+
   // One-time reset (2026-08-13): the aerial enhance prompt override was saved byte-identical to
   // the old "light cleanup" default. The default is now the declutter version, so drop that stale
   // override to fall through to it. Hash-guarded — a genuinely customized prompt is never touched.
@@ -5357,6 +5372,27 @@ export function recordAiUsage({ model, inTok = 0, outTok = 0, costCents = 0, rol
 // Cents spent (model calls) so far on the current Eastern day — what the cap is checked against.
 export function aiSpendTodayCents() {
   try { return +db.prepare("SELECT COALESCE(SUM(cost_cents),0) c FROM ai_usage WHERE day=?").get(easternDay()).c || 0; } catch { return 0; }
+}
+// Recent model calls for the Activity view (never values — just what the ledger holds).
+export function recentAiActivity(limit = 40) {
+  try { return db.prepare("SELECT id, ts, model, in_tok, out_tok, cost_cents, role, access_id, kind FROM ai_usage ORDER BY id DESC LIMIT ?").all(Math.max(1, Math.min(200, +limit || 40))); } catch { return []; }
+}
+// Training loop: record a question Maya couldn't answer. Collapses a repeat of the SAME question (same day,
+// still open) into a hit counter instead of a new row, so the queue shows what's asked most. Never throws.
+export function logMayaUnanswered({ question, role = null, accessId = null, reason = null } = {}) {
+  try {
+    const q = String(question || "").trim().slice(0, 500);
+    if (q.length < 3) return;
+    const dupe = db.prepare("SELECT id FROM maya_unanswered WHERE question=? AND resolved_at IS NULL AND date(ts)=date('now','localtime')").get(q);
+    if (dupe) { db.prepare("UPDATE maya_unanswered SET hits = hits + 1 WHERE id=?").run(dupe.id); return; }
+    db.prepare("INSERT INTO maya_unanswered (question, role, access_id, reason) VALUES (?,?,?,?)").run(q, role ? String(role) : null, accessId ? String(accessId) : null, reason ? String(reason) : null);
+  } catch {}
+}
+export function listMayaUnanswered({ limit = 50, includeResolved = false } = {}) {
+  try { return db.prepare(`SELECT * FROM maya_unanswered ${includeResolved ? "" : "WHERE resolved_at IS NULL"} ORDER BY hits DESC, id DESC LIMIT ?`).all(Math.max(1, Math.min(200, +limit || 50))); } catch { return []; }
+}
+export function resolveMayaUnanswered(id) {
+  try { db.prepare("UPDATE maya_unanswered SET resolved_at = datetime('now','localtime') WHERE id=?").run(+id); return { ok: true }; } catch { return { error: "Couldn't resolve." }; }
 }
 // Aggregate usage for the Health page: today + last 7/30 days (cents + call counts).
 export function aiUsageSummary() {

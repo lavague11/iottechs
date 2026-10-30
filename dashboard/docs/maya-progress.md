@@ -15,6 +15,10 @@ without asking, and anything blocked on the owner.
 | Foundation: model routing + cost cap | Sonnet escalation, usage ledger, $10/day cap | **✅ done** (maya-build) |
 | Confirmation policy | routine edits instant + Undo; confirm only sensitive | **✅ done** (maya-build) |
 | New actions (batch 1) | bug filing, close project, ticket notify-on-create | **✅ done** (maya-build) |
+| Adversarial test set | haggling/injection/QR/price/labels/recipients | **✅ done** (maya-build) |
+| Core prompt / persona | Maya identity + principal-agent rules | **✅ done** (maya-build) |
+| Admin ▸ Maya page | Health · Settings · Activity · Training · Conversations | **✅ done** (maya-build) |
+| Knowledge / training loop | unanswered-question queue + existing KB (support articles) | **✅ done** (maya-build) |
 | 0 — Foundation | Core prompt, model routing, abuse protection, test harness | not started |
 | 1 — Admin assistant (reads) + bug reporting | mostly already shipped; gaps TBD | not started |
 | 2 — Maya admin page | Admin ▸ Maya (Training/Conversations/Activity/Settings/Health) | not started |
@@ -90,3 +94,18 @@ without asking, and anything blocked on the owner.
     was made. **Decision:** project "invoices" = the existing payment ledger (`record_payment` /
     `request_payment`, already wired); service-call invoice actions stay on the service-calls surface.
   - Tests: close/report_bug router + registry in `tests/ai-project-actions.test.mjs`.
+- **Adversarial guardrail set + persona shipped** (maya-build). `tests/maya-guardrails.test.mjs` (haggling,
+  cross-customer/QR/payout, injection, never-invent-a-price, discount clamp, wrong-recipient, label+total
+  math, cost routing). Interpreter core prompt now opens as "You are Maya … never invent prices/inventory/
+  promises; only approved services; if unsure, clarify."
+- **Admin ▸ Maya page + training loop shipped** (maya-build). New `/maya` (admin-only, linked under Admin):
+  - **Health** — today / 7d / 30d spend + call counts, cap progress bar.
+  - **Settings** — edit the **daily cap + alert %** (writes `AI_SPEND_CAP_CENTS`/`AI_SPEND_ALERT_PCT` to the
+    vault, no deploy) and toggle `AI_COMMANDS` / `AI_CUSTOMER`.
+  - **Activity** — recent model calls from the `ai_usage` ledger (time/model/role/kind/tokens/cost).
+  - **Training** — the **unanswered-question queue**: Maya now logs what she couldn't answer
+    (`maya_unanswered`, deduped by question/day with a hit counter) via `missWithLog`; admin resolves each
+    after adding a support article (the existing admin-editable knowledge base that `knowledgeAnswer` reads).
+  - **Conversations** — scaffold (honest placeholder; per-chat ratings need conversation logging, not yet on).
+  **Decision:** the "approved knowledge base" = the existing `support_articles` (already admin-editable and
+  consulted by `knowledgeAnswer`); the training loop feeds it rather than a parallel store.

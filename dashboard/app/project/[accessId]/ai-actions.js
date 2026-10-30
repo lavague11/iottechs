@@ -14,7 +14,7 @@ import {
   buildStageFacts, getProjectAssignments, getProjectFinancialState, listInstallIssues, resolveTechByName,
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
-  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport,
+  recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent } from "../../../lib/ai-customer";
@@ -516,6 +516,14 @@ function knowledgeAnswer(text, tok) {
   };
 }
 
+// Knowledge answer, else a classified miss — and log a genuine "unanswered" (no approved knowledge) to the
+// training queue so Ahmed can teach Maya. A capped/no-key/unknown miss isn't a knowledge gap, so it's skipped.
+function missWithLog(t, tok, noKey, capped, accessId) {
+  const m = knowledgeAnswer(t, tok) || classifyMiss(t, noKey, capped);
+  if (m?.kind === "unanswered") { try { logMayaUnanswered({ question: t, role: tok?.role, accessId, reason: m.reason }); } catch {} }
+  return m;
+}
+
 function classifyMiss(text, noKey, capped) {
   // The daily AI spend cap is hit → the model is paused; the 0-token router still works, so say so honestly.
   if (capped) return { ok: true, kind: "unsupported", reason: "spend_cap", speak: "I've reached today's AI usage limit, so I can only handle the quick commands right now. It resets tonight — or an admin can raise the cap in Admin ▸ Maya." };
@@ -569,7 +577,7 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   if (intent.type === "answer") return answerFor(intent, g.tok, accessId || context.memory?.project?.accessId);
   if (intent.type === "clarify") return { ok: true, kind: "clarify", speak: intent.ask };
   if (intent.type === "unsupported") return { ok: true, kind: "unsupported", speak: intent.reason || CAPS_LINE, reason: "unsupported_action" };
-  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey, capped);
+  return missWithLog(t, g.tok, noKey, capped, accessId || context.currentAccessId || null);
 }
 
 // Preview a proposal-editing intent against the CURRENT stored proposal. A rename/move that matches more
@@ -676,7 +684,7 @@ export async function aiGlobalInterpretAction(text, context = {}) {
   // We couldn't fully parse it, but on a project an edit-ish phrasing ("rename a camera") should still take
   // the user to the proposal — the ⌘K bar only navigates; the edit itself is done with the proposal's bar.
   if (context.currentAccessId && looksLikeEdit(t)) return { ok: true, kind: "navigate", href: `/project/${context.currentAccessId}?stage=proposal&open=proposal`, label: "the proposal" };
-  return knowledgeAnswer(t, g.tok) || classifyMiss(t, noKey, capped);
+  return missWithLog(t, g.tok, noKey, capped, context.currentAccessId || null);
 }
 
 // Apply an add_note command.
