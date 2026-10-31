@@ -15,6 +15,7 @@ import {
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
   recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered, getGuideBySlug, projectEditLock, setNudgePause,
+  appendMayaMessage, mayaThread, getMedia,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent, customerGuideIntent, customerHandoffIntent } from "../../../lib/ai-customer";
@@ -834,7 +835,25 @@ export async function aiCustomerInterpretAction(accessId, text) {
     if (result.speak) result.speak = await fromEnglish(result.speak, lang, meta);
     if (result.preview?.title) result.preview.title = await fromEnglish(result.preview.title, lang, meta);
   }
+  // Item 2 — persist the turn so the conversation survives reload/minimize and staff can review it. We store
+  // what the customer SAW (their original text + Maya's reply), scoped to their own project. Best-effort.
+  try {
+    appendMayaMessage({ channel: "customer", accessId, role: "you", text: t, lang: lang !== "en" ? lang : null });
+    const spoken = result?.speak || result?.preview?.title || result?.link?.label || "";
+    if (spoken) appendMayaMessage({ channel: "customer", accessId, role: "ai", text: spoken, lang: lang !== "en" ? lang : null });
+  } catch {}
   return result;
+}
+
+// Item 2 — the customer's own stored Maya thread for THIS project (so the panel reloads the conversation).
+// Re-gates exactly like the interpret action: customer + own-project + AI_CUSTOMER. Returns only this
+// project's customer-channel turns (text the customer already saw) — never any internal data.
+export async function aiCustomerHistoryAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "customer" || !customerAiOn()) return { ok: true, thread: [] };
+  const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+  if (!owns) return { ok: true, thread: [] };
+  return { ok: true, thread: mayaThread({ channel: "customer", accessId, limit: 40 }) };
 }
 
 // Apply a customer's COMMENT (the one customer-facing write). The Send/Cancel confirm in the UI is UX only —
@@ -879,4 +898,27 @@ export async function aiCustomerFeedbackAction(accessId, { body, feedbackKind, d
   addFeedbackNote(accessId, { role: "customer", name: actorName(tok), body: text, kind, deviceId: did, deviceLabel: dlabel });
   logProjectEvent(accessId, { kind: "feedback", label: `Customer concern${dlabel ? ` on ${dlabel}` : ""} — ${kind}`, actor: actorName(tok) });
   return { ok: true, message: "Shared with your project team." };
+}
+
+// Item 2 — a customer shared a PHOTO in Maya (e.g. a picture of an issue). The image was already uploaded to
+// /api/media as kind "maya", scoped to their own project by that route. This action is the real boundary: it
+// re-gates (customer + own-project + AI_CUSTOMER), verifies the media is a "maya" photo belonging to THIS
+// project (so a forged/cross-project id is dropped), relays it to the team as a public note with a link, logs
+// it, notifies staff, and persists it to the customer's own thread so their chat shows the image.
+export async function aiCustomerPhotoAction(accessId, mediaId, caption = "") {
+  const tok = await getSessionRole();
+  if (!tok || tok.role !== "customer" || !customerAiOn()) return { error: "Unavailable." };
+  const owns = (tok.viaPin && String(tok.accessId) === String(accessId)) || customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
+  if (!owns) return { error: "Unavailable." };
+  const m = getMedia(String(mediaId || ""));
+  if (!m || m.voided || m.kind !== "maya" || String(m.project_access_id || "").toUpperCase() !== String(accessId).toUpperCase())
+    return { error: "That photo isn't available." };
+  const cap = String(caption || "").trim().slice(0, 300);
+  const url = `/api/media/${m.id}`;
+  const body = cap ? `Shared a photo — "${cap}": ${url}` : `Shared a photo: ${url}`;
+  const r = await addNoteAction(accessId, body, true);
+  if (r?.error) return { error: r.error };
+  try { appendMayaMessage({ channel: "customer", accessId, role: "you", text: cap || "Shared a photo", mediaId: m.id }); } catch {}
+  try { notifyRoles(["admin", "manager"], { type: "customer_photo", title: "Customer shared a photo", body: `${accessId}${cap ? `: "${cap}"` : ""}`, link: `/project/${accessId}` }); } catch {}
+  return { ok: true, message: "Photo sent to your project team.", url };
 }

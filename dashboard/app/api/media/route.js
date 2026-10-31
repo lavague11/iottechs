@@ -47,10 +47,11 @@ export async function POST(req) {
   const file = form.get("file");
   const projectAccessId = form.get("project") || null;
   const kind = form.get("kind") || null;
-  // A customer may upload ONE thing only: a payment check photo, scoped to THEIR OWN project (kind
-  // "check-photo"). Everything else from a customer is refused — /api/media is not a general image host.
+  // A customer may upload only a payment check photo ("check-photo") or a photo shared in the Maya assistant
+  // ("maya" — e.g. a picture of an issue), both scoped to THEIR OWN project. Everything else from a customer
+  // is refused — /api/media is not a general image host.
   if (p.role === "customer") {
-    if (!projectAccessId || String(kind) !== "check-photo") return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
+    if (!projectAccessId || (String(kind) !== "check-photo" && String(kind) !== "maya")) return Response.json({ ok: false, error: "unauthorized" }, { status: 403 });
     const owns = p.accessId
       ? String(p.accessId).toUpperCase() === String(projectAccessId).toUpperCase()
       : customerOwnsProjectAccount(projectAccessId, { userId: p.userId, email: p.email });

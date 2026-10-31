@@ -1022,6 +1022,37 @@ function init() {
     )
   `);
 
+  // Item 2 — persistent Maya chat history. One row per turn so a conversation survives reload/minimize and
+  // staff can review it. channel: 'customer' (a signed-in/PIN customer on their own project, scoped by
+  // access_id) or 'public' (an unauthenticated website visitor keyed by an anonymous session cookie, NO
+  // project). role: 'you' (human) | 'ai' (Maya). media_id links an uploaded photo (customer channel only).
+  // text is ALREADY what the human typed / what Maya spoke — no internal data is ever written here.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maya_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts         TEXT DEFAULT (datetime('now','localtime')),
+      channel    TEXT NOT NULL,
+      access_id  TEXT,
+      session_key TEXT,
+      role       TEXT NOT NULL,
+      text       TEXT,
+      media_id   TEXT,
+      lang       TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_maya_messages_cust ON maya_messages(channel, access_id, id)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_maya_messages_pub ON maya_messages(channel, session_key, id)`);
+
+  // Item 2 — public receptionist throttle. DB-backed (not in-memory) so the per-visitor cap holds across
+  // workers. One row per (bucket key = hashed IP/session), a rolling window counter the server checks + bumps.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS maya_rate (
+      bucket     TEXT PRIMARY KEY,
+      window_start TEXT,
+      hits       INTEGER DEFAULT 0
+    )
+  `);
+
   // One-time reset (2026-08-13): the aerial enhance prompt override was saved byte-identical to
   // the old "light cleanup" default. The default is now the declutter version, so drop that stale
   // override to fall through to it. Hash-guarded — a genuinely customized prompt is never touched.
@@ -5484,6 +5515,69 @@ export function mayaProactiveData() {
     };
   } catch { return { awaitingSig: 0, sigOverdue: 0, dueNow: 0, dueAmt: 0, collected7: 0, sent7: 0, signed7: 0 }; }
 }
+// ---- Item 2: Maya chat history + receptionist throttle ----
+// Append one turn. channel 'customer' is scoped by access_id; 'public' by session_key (anon visitor). The
+// caller has ALREADY gated ownership — this is storage only. text is capped; media_id is a stored media id.
+export function appendMayaMessage({ channel, accessId = null, sessionKey = null, role, text = "", mediaId = null, lang = null } = {}) {
+  const ch = channel === "public" ? "public" : "customer";
+  const rl = role === "ai" ? "ai" : "you";
+  try {
+    const info = db.prepare(
+      "INSERT INTO maya_messages (channel, access_id, session_key, role, text, media_id, lang) VALUES (?,?,?,?,?,?,?)"
+    ).run(ch, accessId ? String(accessId) : null, sessionKey ? String(sessionKey) : null, rl,
+      String(text || "").slice(0, 2000), mediaId ? String(mediaId) : null, lang ? String(lang).slice(0, 8) : null);
+    return { ok: true, id: info.lastInsertRowid };
+  } catch { return { error: "store failed" }; }
+}
+// The recent thread for ONE scope, oldest→newest. Customer: (channel 'customer', access_id). Public: (channel
+// 'public', session_key). Never crosses scopes — the WHERE is exact-match on the key the caller is bound to.
+export function mayaThread({ channel, accessId = null, sessionKey = null, limit = 40 } = {}) {
+  const n = Math.max(1, Math.min(200, +limit || 40));
+  try {
+    const rows = channel === "public"
+      ? db.prepare("SELECT id, ts, role, text, media_id, lang FROM maya_messages WHERE channel='public' AND session_key=? ORDER BY id DESC LIMIT ?").all(String(sessionKey || ""), n)
+      : db.prepare("SELECT id, ts, role, text, media_id, lang FROM maya_messages WHERE channel='customer' AND access_id=? ORDER BY id DESC LIMIT ?").all(String(accessId || ""), n);
+    return rows.reverse().map((r) => ({ id: r.id, ts: r.ts, role: r.role, text: r.text || "", mediaId: r.media_id || null, lang: r.lang || null }));
+  } catch { return []; }
+}
+// Recent public receptionist conversations for the Admin ▸ Maya ▸ Conversations tab — grouped by session_key
+// with first/last timestamps + turn count + a preview. Public channel only (no customer PII beyond what the
+// visitor typed). Admin-gated at the action layer.
+export function mayaConversations({ limit = 40 } = {}) {
+  const n = Math.max(1, Math.min(200, +limit || 40));
+  try {
+    const keys = db.prepare(
+      `SELECT session_key AS k, COUNT(*) AS turns, MIN(ts) AS started, MAX(ts) AS last
+       FROM maya_messages WHERE channel='public' AND session_key IS NOT NULL
+       GROUP BY session_key ORDER BY MAX(id) DESC LIMIT ?`
+    ).all(n);
+    return keys.map((g) => {
+      const first = db.prepare("SELECT text FROM maya_messages WHERE channel='public' AND session_key=? AND role='you' ORDER BY id ASC LIMIT 1").get(g.k);
+      return { sessionKey: g.k, turns: g.turns, started: g.started, last: g.last, preview: (first?.text || "").slice(0, 120) };
+    });
+  } catch { return []; }
+}
+export function mayaConversation(sessionKey) {
+  return mayaThread({ channel: "public", sessionKey, limit: 200 });
+}
+// DB-backed rolling-window rate limit. Returns true when the call is ALLOWED (and records it); false when the
+// bucket is over `max` within `windowSec`. Atomic enough for this purpose: the window resets lazily on first
+// hit after it expires. bucket is a caller-provided opaque key (hash an IP/session, never store a raw IP).
+export function rateAllow(bucket, max = 20, windowSec = 600) {
+  const key = String(bucket || "").slice(0, 80);
+  if (!key) return false;
+  try {
+    const row = db.prepare("SELECT window_start, hits FROM maya_rate WHERE bucket=?").get(key);
+    const now = db.prepare("SELECT datetime('now','localtime') AS t").get().t;
+    const fresh = !row || !row.window_start ||
+      db.prepare("SELECT (? < datetime(?, ?)) AS expired").get(row.window_start, now, `-${Math.max(1, +windowSec || 600)} seconds`).expired === 1;
+    if (fresh) { db.prepare("INSERT INTO maya_rate (bucket, window_start, hits) VALUES (?,?,1) ON CONFLICT(bucket) DO UPDATE SET window_start=?, hits=1").run(key, now, now); return true; }
+    if (row.hits >= Math.max(1, +max || 20)) return false;
+    db.prepare("UPDATE maya_rate SET hits = hits + 1 WHERE bucket=?").run(key);
+    return true;
+  } catch { return true; }   // never let the limiter itself take the feature down
+}
+
 // Aggregate usage for the Health page: today + last 7/30 days (cents + call counts).
 export function aiUsageSummary() {
   try {

@@ -4,7 +4,7 @@
 // It renders NOTHING unless the server says the feature is on AND the caller owns this project (flag
 // AI_CUSTOMER, default off) — so there is zero exposure until the owner enables it. No writes, no voice.
 import { useState, useEffect, useRef } from "react";
-import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction, aiCustomerFeedbackAction } from "./ai-actions";
+import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction, aiCustomerFeedbackAction, aiCustomerHistoryAction, aiCustomerPhotoAction } from "./ai-actions";
 
 const CSS = `
 .cust-ai{position:fixed;right:18px;bottom:18px;z-index:60;font:14px/1.45 system-ui,-apple-system,sans-serif}
@@ -32,8 +32,11 @@ const CSS = `
 .cust-ai-input{display:flex;gap:8px;padding:10px;border-top:1px solid rgba(255,255,255,.08)}
 .cust-ai-input input{flex:1;min-width:0;background:#0b0e11;border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:9px 11px;color:#fff}
 .cust-ai-input input:focus{outline:none;border-color:rgba(185,138,46,.6)}
-.cust-ai-input button{width:40px;border:0;border-radius:9px;background:#b98a2e;color:#101418;font-size:16px;font-weight:700;cursor:pointer}
+.cust-ai-input button.send{width:40px;border:0;border-radius:9px;background:#b98a2e;color:#101418;font-size:16px;font-weight:700;cursor:pointer}
 .cust-ai-input button:disabled{opacity:.4;cursor:default}
+.cust-ai-photo{width:38px;border:1px solid rgba(255,255,255,.14);border-radius:9px;background:#0b0e11;color:rgba(255,255,255,.75);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.cust-ai-photo svg{width:18px;height:18px}
+.cust-ai-img{display:block;max-width:180px;max-height:180px;border-radius:9px;margin-top:4px}
 `;
 
 export default function CustomerAssistant({ accessId }) {
@@ -41,17 +44,48 @@ export default function CustomerAssistant({ accessId }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msgs, setMsgs] = useState([]);   // { role:"you"|"ai", text, link? }
+  const [msgs, setMsgs] = useState([]);   // { role:"you"|"ai", text, link?, mediaId? }
+  const [loaded, setLoaded] = useState(false);
   const bodyRef = useRef(null);
+  const fileRef = useRef(null);
 
   useEffect(() => {
     let live = true;
     aiCustomerStatusAction(accessId).then((s) => { if (live) setEnabled(!!s?.enabled); }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
+  // Load the stored thread once, when the panel is first opened (so a reload keeps the conversation).
+  useEffect(() => {
+    if (!open || loaded) return;
+    setLoaded(true);
+    aiCustomerHistoryAction(accessId)
+      .then((r) => { if (r?.thread?.length) setMsgs(r.thread.map((m) => ({ role: m.role, text: m.text, mediaId: m.mediaId }))); })
+      .catch(() => {});
+  }, [open, loaded, accessId]);
   useEffect(() => { const el = bodyRef.current; if (el) el.scrollTop = el.scrollHeight; }, [msgs, busy]);
 
   if (!enabled) return null;
+
+  async function onPhoto(e) {
+    const file = e?.target?.files?.[0];
+    if (fileRef.current) fileRef.current.value = "";
+    if (!file || busy) return;
+    setBusy(true);
+    setMsgs((m) => [...m, { role: "you", text: "Sharing a photo…" }]);
+    try {
+      const fd = new FormData();
+      fd.append("file", file); fd.append("project", accessId); fd.append("kind", "maya");
+      const up = await fetch("/api/media", { method: "POST", body: fd }).then((x) => x.json());
+      if (!up?.ok || !up.id) throw new Error(up?.error || "upload failed");
+      const r = await aiCustomerPhotoAction(accessId, up.id, "");
+      setMsgs((m) => {
+        const copy = m.slice(0, -1).concat({ role: "you", text: "", mediaId: up.id });
+        return copy.concat({ role: "ai", text: r?.message || r?.error || "Thanks — I've shared that with your team." });
+      });
+    } catch {
+      setMsgs((m) => m.slice(0, -1).concat({ role: "ai", text: "Couldn't send that photo — please try again." }));
+    } finally { setBusy(false); }
+  }
 
   async function ask(e) {
     e?.preventDefault?.();
@@ -110,6 +144,7 @@ export default function CustomerAssistant({ accessId }) {
             {msgs.map((m, i) => (
               <div key={i} className={`cust-ai-msg ${m.role}`}>
                 {m.text}
+                {m.mediaId && <img className="cust-ai-img" src={`/api/media/${m.mediaId}`} alt="Shared photo" />}
                 {m.link && <> <a href={m.link.href} {...(m.link.nav ? {} : { target: "_blank", rel: "noopener" })}>{m.link.label} →</a></>}
                 {m.confirm && (
                   <div className="cust-ai-confirm">
@@ -125,8 +160,12 @@ export default function CustomerAssistant({ accessId }) {
             {busy && <div className="cust-ai-msg ai" aria-live="polite">…</div>}
           </div>
           <form className="cust-ai-input" onSubmit={ask}>
+            <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={onPhoto} style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+            <button type="button" className="cust-ai-photo" disabled={busy} onClick={() => fileRef.current?.click()} aria-label="Share a photo" title="Share a photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </button>
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask a question" maxLength={300} aria-label="Ask a question" autoComplete="off" />
-            <button type="submit" disabled={busy || !q.trim()} aria-label="Send">→</button>
+            <button type="submit" className="send" disabled={busy || !q.trim()} aria-label="Send">→</button>
           </form>
         </div>
       )}

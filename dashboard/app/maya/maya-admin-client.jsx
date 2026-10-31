@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction, mayaSetBriefingHourAction } from "./actions";
+import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction, mayaSetBriefingHourAction, mayaConversationAction } from "./actions";
 
 const money = (cents) => "$" + (Math.round((+cents || 0)) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const TABS = ["Health", "Settings", "Activity", "Training", "Conversations"];
@@ -74,13 +74,45 @@ export default function MayaAdminClient({ initial }) {
         </section>
       )}
 
-      {tab === "Conversations" && (
-        <section className="mya-card">
-          <div className="mya-k">Conversations</div>
-          <p className="mya-empty">Per-conversation ratings and handoffs will appear here once conversation logging is enabled. Today Maya keeps a rolling in-session memory only; every applied command is already on each project's Job Log, and model usage is under Activity.</p>
-        </section>
-      )}
+      {tab === "Conversations" && <Conversations data={data} />}
     </main>
+  );
+}
+
+// Public receptionist conversations (website visitors). Customer-assistant threads live on each project, not
+// here. A row expands to the full turn list on tap.
+function Conversations({ data }) {
+  const [openKey, setOpenKey] = useState(null);
+  const [turns, setTurns] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const rows = data.conversations || [];
+  const expand = async (k) => {
+    if (openKey === k) { setOpenKey(null); return; }
+    setOpenKey(k); setBusy(true); setTurns([]);
+    const r = await mayaConversationAction(k).catch(() => null);
+    setTurns(r?.turns || []); setBusy(false);
+  };
+  return (
+    <section className="mya-card">
+      <div className="mya-k">Website receptionist <span className="mya-dim">— public visitor chats</span></div>
+      {!rows.length ? <p className="mya-empty">No website conversations yet. Enable the receptionist under Settings and share the <a href="/ask" target="_blank" rel="noopener">/ask</a> page.</p> : (
+        <ul className="mya-q">{rows.map((c) => (
+          <li key={c.sessionKey} className="mya-conv">
+            <button className="mya-convrow" onClick={() => expand(c.sessionKey)}>
+              <span className="mya-qtext">“{c.preview || "(photo or action)"}”</span>
+              <span className="mya-qmeta">{c.turns} turns · {c.last}</span>
+            </button>
+            {openKey === c.sessionKey && (
+              <div className="mya-thread">
+                {busy ? <p className="mya-empty">Loading…</p> : turns.map((t) => (
+                  <div key={t.id} className={`mya-bubble ${t.role}`}>{t.text}</div>
+                ))}
+              </div>
+            )}
+          </li>
+        ))}</ul>
+      )}
+    </section>
   );
 }
 
@@ -103,7 +135,8 @@ function Settings({ data, busy, setBusy, refresh }) {
         <div className="mya-k">Availability</div>
         <label className="mya-toggle"><input type="checkbox" checked={!!data.flags?.commands} disabled={busy} onChange={(e) => toggle("commands", e.target.checked)} /> Staff assistant (AI_COMMANDS)</label>
         <label className="mya-toggle"><input type="checkbox" checked={!!data.flags?.customer} disabled={busy} onChange={(e) => toggle("customer", e.target.checked)} /> Customer assistant (AI_CUSTOMER)</label>
-        <p className="mya-note">The model fallback needs <code>ANTHROPIC_API_KEY</code> in Dev ▸ API Keys{data.flags?.hasKey ? " (set ✓)" : " (not set)"}. The zero-token router works without it.</p>
+        <label className="mya-toggle"><input type="checkbox" checked={!!data.flags?.receptionist} disabled={busy} onChange={(e) => toggle("receptionist", e.target.checked)} /> Website receptionist (MAYA_RECEPTIONIST)</label>
+        <p className="mya-note">The receptionist is the public <a href="/ask" target="_blank" rel="noopener">/ask</a> chat for website visitors — deterministic, no account data, captures leads only. The model fallback needs <code>ANTHROPIC_API_KEY</code> in Dev ▸ API Keys{data.flags?.hasKey ? " (set ✓)" : " (not set)"}. The zero-token router works without it.</p>
       </div>
       <Proactive data={data} busy={busy} setBusy={setBusy} refresh={refresh} />
     </section>
@@ -169,6 +202,13 @@ const CSS = `
 .mya-hits{color:#e0a33a;font-weight:700;font-size:.8rem;margin-left:6px}
 .mya-qmeta{grid-column:1;font-size:11.5px;color:#7f8798}
 .mya-resolve{grid-column:2;grid-row:1/span 2}
+.mya-conv{display:block;grid-template-columns:none;padding:0;background:transparent;border:0}
+.mya-convrow{width:100%;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid rgba(255,255,255,.08);border-radius:11px;background:rgba(0,0,0,.14);color:inherit;cursor:pointer;font-family:inherit;text-align:left}
+.mya-convrow:hover{background:rgba(255,255,255,.05)}
+.mya-thread{display:flex;flex-direction:column;gap:7px;padding:10px 4px 2px}
+.mya-bubble{padding:8px 11px;border-radius:10px;max-width:84%;font-size:.9rem;white-space:pre-wrap;word-break:break-word}
+.mya-bubble.you{align-self:flex-end;background:rgba(201,169,110,.16);color:#EDE4D3}
+.mya-bubble.ai{align-self:flex-start;background:rgba(255,255,255,.05);color:#d7dce6}
 .mya a{color:#C9A96E}
 .mya code{background:rgba(255,255,255,.08);border-radius:4px;padding:1px 5px;font-size:12px}
 @media (prefers-color-scheme:light){.mya{color:#1a1e24}.mya-sub,.mya-note,.mya-k,.mya-empty,.mya-qmeta{color:#5a6472}.mya-card{background:#fff;border-color:#e4e6ea}.mya-in{background:#fff;color:#1a1e24;border-color:#d7dadf}.mya-tabs{border-color:#e4e6ea}.mya-qtext{color:#1a1e24}.mya-table td{color:#2c333d}}
