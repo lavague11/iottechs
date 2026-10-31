@@ -5434,6 +5434,22 @@ export function nudgedWithin(accessId, type, days = 3) {
 export function recordNudge(accessId, type) {
   try { db.prepare("INSERT INTO maya_nudges (access_id, type, last_sent, sends) VALUES (?,?,datetime('now','localtime'),1) ON CONFLICT(access_id,type) DO UPDATE SET last_sent=datetime('now','localtime'), sends=sends+1").run(String(accessId), String(type)); } catch {}
 }
+// ATOMIC claim-before-send: reserve this (project,type) nudge slot in ONE statement and report whether THIS
+// caller won it. Replaces a read-then-write (nudgedWithin → send → recordNudge), which could double-send if
+// two workers swept at once (the appointment sweep uses an atomic claim the same way). SQLite serializes the
+// write, so exactly one concurrent caller gets changes>0; the loser sees the just-set recent last_sent and
+// is blocked by the cooldown WHERE. The slot is reserved BEFORE the email, so a failed send won't double-fire
+// (it simply waits out the cooldown). Returns true if claimed.
+export function claimNudge(accessId, type, days = 3) {
+  try {
+    const info = db.prepare(
+      `INSERT INTO maya_nudges (access_id, type, last_sent, sends) VALUES (?,?,datetime('now','localtime'),1)
+       ON CONFLICT(access_id,type) DO UPDATE SET last_sent=datetime('now','localtime'), sends=sends+1
+       WHERE maya_nudges.last_sent < datetime('now','localtime', ?)`
+    ).run(String(accessId), String(type), `-${Math.max(0, +days || 0)} days`);
+    return info.changes > 0;
+  } catch { return false; }
+}
 // Candidate projects for a nudge, by type, from the canonical receivables. Excludes paused projects and
 // rows with no contact email. type: unsigned (sent, not signed) | deposit (deposit due) | balance (balance due).
 export function mayaNudgeCandidates() {

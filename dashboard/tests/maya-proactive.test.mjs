@@ -3,6 +3,7 @@
 // here we prove the composed copy is correct (and singular/plural + $ are grounded in the real counts).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { briefingLines, weeklyLines, runMayaNudges } from "../lib/maya-proactive.js";
 
 test("briefing: nothing outstanding reads calmly", () => {
@@ -33,4 +34,13 @@ test("weekly: sent / signed / collected / open, from the counts", () => {
 
 test("runMayaNudges is wired (customer nudge sweep)", () => {
   assert.equal(typeof runMayaNudges, "function");
+});
+
+test("nudge sweep claims each (project,type) atomically before sending (no double-send race)", () => {
+  const mp = readFileSync(new URL("../lib/maya-proactive.js", import.meta.url), "utf8");
+  assert.ok(/if \(!claimNudge\(c\.accessId, c\.type, cooldown\)\) continue;/.test(mp), "claims before sending");
+  assert.ok(!/nudgedWithin\(/.test(mp), "no read-then-write nudgedWithin in the sweep");
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.ok(/export function claimNudge[\s\S]{0,400}ON CONFLICT\(access_id,type\) DO UPDATE[\s\S]{0,160}WHERE maya_nudges\.last_sent < datetime/.test(db), "claimNudge is an atomic UPSERT gated by the cooldown");
+  assert.ok(/export function claimNudge[\s\S]{0,500}info\.changes > 0/.test(db), "returns whether THIS caller won the claim");
 });

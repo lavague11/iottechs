@@ -3,7 +3,7 @@
 // DARK until the owner enables it (MAYA_PROACTIVE=on) — so nothing fires unexpectedly. Dedup markers in the
 // vault keep it to once per day / once per Monday even across restarts. Briefing + weekly go to staff only
 // (admin/manager portal + office email) — never to customers.
-import { getSecret, setSecret, secretValue, notifyRoles, mayaProactiveData, mayaNudgeCandidates, nudgedWithin, recordNudge, logProjectEvent } from "./db.js";
+import { getSecret, setSecret, secretValue, notifyRoles, mayaProactiveData, mayaNudgeCandidates, claimNudge, logProjectEvent } from "./db.js";
 
 const moneyD = (d) => "$" + (Math.round((+d || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -66,12 +66,12 @@ export async function runMayaNudges() {
   const email = await import("./email.js").catch(() => null);
   let sent = 0;
   for (const c of mayaNudgeCandidates()) {
-    if (nudgedWithin(c.accessId, c.type, cooldown)) continue;
+    // Atomic claim BEFORE sending — one winner per (project,type) per cooldown, even across workers.
+    if (!claimNudge(c.accessId, c.type, cooldown)) continue;
     try {
       if (c.type === "unsigned") await email?.emailSignatureRequest?.(c.accessId);
       else if (c.type === "deposit") await email?.emailPaymentReminder?.(c.accessId, { kind: "deposit", amount: c.amount });
       else if (c.type === "balance") await email?.emailPaymentReminder?.(c.accessId, { kind: "final", amount: c.amount });
-      recordNudge(c.accessId, c.type);
       try { logProjectEvent(c.accessId, { kind: "nudge", label: `Maya sent a ${c.type} reminder`, actor: "Maya" }); } catch {}
       sent++;
     } catch {}

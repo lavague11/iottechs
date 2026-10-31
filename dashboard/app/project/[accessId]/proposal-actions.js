@@ -151,6 +151,7 @@ export async function saveProposalDraftAction(accessId, { payload, taxRate, depo
 export async function sendProposalAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  { const lk = projectEditLock(accessId); if (lk.locked) return { error: lk.reason }; }   // sending moves draft→Sent — a state change, blocked on a closed project
   const cur = getActiveProposal(accessId);
   if (!cur || cur.status !== "draft") return { error: "No draft to send." };
   let payload;

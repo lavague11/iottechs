@@ -14,7 +14,7 @@ function fnBody(src, name) {
 
 test("deal-mutating actions enforce the closed-project edit-lock", () => {
   const pa = read("../app/project/[accessId]/proposal-actions.js");
-  for (const fn of ["saveProposalDraftAction", "recordPaymentAction", "saveToolDataAction"])
+  for (const fn of ["saveProposalDraftAction", "recordPaymentAction", "saveToolDataAction", "sendProposalAction"])
     assert.ok(/projectEditLock\(accessId\)/.test(fnBody(pa, fn)), `${fn} checks projectEditLock`);
   const ac = read("../app/project/[accessId]/actions.js");
   for (const fn of ["setStage", "addAssignmentAction"])
