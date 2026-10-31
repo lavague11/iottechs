@@ -16,7 +16,7 @@ export default function AiCommandBar({ accessId, projectName, payload, patchPayl
   const [enabled, setEnabled] = useState(false);
   useEffect(() => { let live = true; aiStatusAction().then((s) => live && setEnabled(!!s?.enabled)).catch(() => {}); return () => { live = false; }; }, []);
 
-  const interpret = (text, opts) => aiInterpretAction(accessId, text, { projectName, recent: opts?.recent, memory: opts?.memory });
+  const interpret = (text, opts) => aiInterpretAction(accessId, text, { projectName, recent: opts?.recent, memory: opts?.memory, learnMode: opts?.learnMode });
   const onPick = (res, id) => aiResolvePickAction(accessId, res.intent, id);
   // A different project → client-side push. An IN-project jump (?stage=/?open=) → hard navigate, because
   // the deck reads those deep-link params only on mount, so a soft push wouldn't actually move it.

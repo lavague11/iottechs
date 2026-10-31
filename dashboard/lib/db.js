@@ -1022,6 +1022,44 @@ function init() {
     )
   `);
 
+  // Maya LEARN MODE — admin-reported coaching items (bugs, wrong answers, knowledge gaps, behavior requests).
+  // Records feedback for REVIEW; it never changes Maya's behavior. Context is a JSON snapshot of the moment.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS learn_items (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at    TEXT DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT DEFAULT (datetime('now','localtime')),
+      title         TEXT,
+      category      TEXT,
+      severity      TEXT,
+      status        TEXT DEFAULT 'reported',
+      reported_by   TEXT,
+      reported_role TEXT,
+      access_id     TEXT,
+      what_happened TEXT,
+      expected      TEXT,
+      proposed_fix  TEXT,
+      resolution    TEXT,
+      context       TEXT,
+      occurrences   INTEGER DEFAULT 1,
+      first_reported TEXT DEFAULT (datetime('now','localtime')),
+      last_reported  TEXT DEFAULT (datetime('now','localtime')),
+      related_to    INTEGER
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_learn_status ON learn_items(status)`);
+  // Append-only audit of every change to a learning item (who reported/edited/approved/implemented/verified).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS learn_events (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id  INTEGER,
+      ts       TEXT DEFAULT (datetime('now','localtime')),
+      actor    TEXT,
+      action   TEXT,
+      detail   TEXT
+    )
+  `);
+
   // One-time reset (2026-08-13): the aerial enhance prompt override was saved byte-identical to
   // the old "light cleanup" default. The default is now the declutter version, so drop that stale
   // override to fall through to it. Hash-guarded — a genuinely customized prompt is never touched.
@@ -5420,6 +5458,80 @@ export function listMayaUnanswered({ limit = 50, includeResolved = false } = {})
 }
 export function resolveMayaUnanswered(id) {
   try { db.prepare("UPDATE maya_unanswered SET resolved_at = datetime('now','localtime') WHERE id=?").run(+id); return { ok: true }; } catch { return { error: "Couldn't resolve." }; }
+}
+
+// ---- Maya Learn Mode items (admin coaching — recorded for review, never auto-applied) -----------------
+export function logLearnEvent(itemId, actor, action, detail = null) {
+  try { db.prepare("INSERT INTO learn_events (item_id, actor, action, detail) VALUES (?,?,?,?)").run(+itemId, String(actor || "Admin"), String(action || ""), detail ? String(detail).slice(0, 2000) : null); } catch {}
+}
+export function createLearnItem({ title, category, severity, reportedBy, reportedRole, accessId = null, whatHappened = "", expected = "", proposedFix = "", context = null } = {}) {
+  try {
+    const ctx = context ? (typeof context === "string" ? context : JSON.stringify(context)).slice(0, 8000) : null;
+    const info = db.prepare(`INSERT INTO learn_items (title, category, severity, reported_by, reported_role, access_id, what_happened, expected, proposed_fix, context)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      String(title || "Maya feedback").slice(0, 160), String(category || "Other"), String(severity || "Medium"),
+      String(reportedBy || "Admin"), reportedRole ? String(reportedRole) : null, accessId ? String(accessId) : null,
+      String(whatHappened || "").slice(0, 2000), String(expected || "").slice(0, 500), String(proposedFix || "").slice(0, 1000), ctx);
+    const id = Number(info.lastInsertRowid);
+    logLearnEvent(id, reportedBy, "reported", `${category} · ${severity}`);
+    return { ok: true, id };
+  } catch { return { error: "Couldn't record that." }; }
+}
+export function bumpLearnOccurrence(id, actor, exampleContext = null) {
+  try {
+    db.prepare("UPDATE learn_items SET occurrences = occurrences + 1, last_reported = datetime('now','localtime'), updated_at = datetime('now','localtime') WHERE id=?").run(+id);
+    logLearnEvent(id, actor, "recurrence", exampleContext ? (typeof exampleContext === "string" ? exampleContext : JSON.stringify(exampleContext)).slice(0, 2000) : "another occurrence");
+    return { ok: true, id: +id };
+  } catch { return { error: "Couldn't update." }; }
+}
+const LEARN_UPDATABLE = new Set(["status", "severity", "category", "title", "expected", "proposed_fix", "resolution", "related_to"]);
+export function updateLearnItem(id, patch = {}, actor = "Admin") {
+  try {
+    const sets = [], vals = [];
+    for (const [k, v] of Object.entries(patch)) if (LEARN_UPDATABLE.has(k)) { sets.push(`${k}=?`); vals.push(v == null ? null : String(v).slice(0, 2000)); }
+    if (!sets.length) return { error: "Nothing to update." };
+    sets.push("updated_at=datetime('now','localtime')");
+    db.prepare(`UPDATE learn_items SET ${sets.join(", ")} WHERE id=?`).run(...vals, +id);
+    logLearnEvent(id, actor, patch.status ? `status → ${patch.status}` : "edited", Object.keys(patch).join(", "));
+    return { ok: true, id: +id };
+  } catch { return { error: "Couldn't update." }; }
+}
+const LEARN_OPEN = "('reported','reviewed','approved','implemented','deferred')";
+export function listLearnItems({ status = null, severity = null, category = null, recurring = false, open = false, limit = 100 } = {}) {
+  try {
+    const where = [], vals = [];
+    if (open) where.push(`status IN ${LEARN_OPEN}`);
+    if (status) { where.push("status=?"); vals.push(String(status)); }
+    if (severity) { where.push("severity=?"); vals.push(String(severity)); }
+    if (category) { where.push("category=?"); vals.push(String(category)); }
+    if (recurring) where.push("occurrences > 1");
+    const sql = `SELECT * FROM learn_items ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY (severity='Critical') DESC, (severity='High') DESC, id DESC LIMIT ?`;
+    return db.prepare(sql).all(...vals, Math.max(1, Math.min(300, +limit || 100)));
+  } catch { return []; }
+}
+export function getLearnItem(id) {
+  try {
+    const item = db.prepare("SELECT * FROM learn_items WHERE id=?").get(+id);
+    if (!item) return null;
+    item.events = db.prepare("SELECT ts, actor, action, detail FROM learn_events WHERE item_id=? ORDER BY id ASC").all(+id);
+    return item;
+  } catch { return null; }
+}
+// Summary for the Learn analytics reads + the queue header.
+export function learnAnalytics() {
+  try {
+    const q = (sql, ...a) => { try { return db.prepare(sql).all(...a); } catch { return []; } };
+    const one = (sql, ...a) => { try { return db.prepare(sql).get(...a); } catch { return {}; } };
+    return {
+      open: (one(`SELECT COUNT(*) n FROM learn_items WHERE status IN ${LEARN_OPEN}`).n) || 0,
+      highOpen: (one(`SELECT COUNT(*) n FROM learn_items WHERE status IN ${LEARN_OPEN} AND severity IN ('High','Critical')`).n) || 0,
+      recurring: (one(`SELECT COUNT(*) n FROM learn_items WHERE occurrences > 1`).n) || 0,
+      byCategory: q("SELECT category, COUNT(*) n FROM learn_items GROUP BY category ORDER BY n DESC"),
+      byStatus: q("SELECT status, COUNT(*) n FROM learn_items GROUP BY status"),
+      thisMonth: (one("SELECT COUNT(*) n FROM learn_items WHERE created_at >= date('now','localtime','start of month')").n) || 0,
+      verifiedThisWeek: (one("SELECT COUNT(*) n FROM learn_events WHERE action='status → verified' AND ts >= date('now','localtime','-6 days')").n) || 0,
+    };
+  } catch { return { open: 0, highOpen: 0, recurring: 0, byCategory: [], byStatus: [], thisMonth: 0, verifiedThisWeek: 0 }; }
 }
 // ---- Maya customer nudges (per-project pause + cooldown dedup) ----------------------------------------
 export function setNudgePause(accessId, on) {

@@ -15,6 +15,7 @@ import {
   getSupportArticles, getProjectDevices, openInstallIssues, getToolData, listFeedback, reviseProposal,
   customerOwnsProjectAccount, addFeedbackNote,
   recordAiUsage, aiSpendTodayCents, aiSpendCapCents, aiSpendAlertPct, notifyRoles, createBugReport, logMayaUnanswered, getGuideBySlug, projectEditLock, setNudgePause,
+  createLearnItem, listLearnItems, bumpLearnOccurrence, learnAnalytics,
 } from "../../../lib/db";
 import { findKnowledge } from "../../../lib/ai-knowledge";
 import { customerReadIntent, customerActionIntent, customerGuideIntent, customerHandoffIntent } from "../../../lib/ai-customer";
@@ -25,6 +26,7 @@ import { optionTotals, priceOf } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { routeCommand, applyIntentToPayload, buildClaudeBody, parseClaudeResult, pickModel, AI_MODEL_FAST } from "../../../lib/ai-command";
 import { looksNonEnglish } from "../../../lib/ai-translate";
+import { parseLearnModeToggle, parseDirectReport, detectLearnFeedback, buildLearnItem, similarity, parseLearnAnalyticsQuery } from "../../../lib/maya-learn";
 import { costCents, crossesAlert, dollars } from "../../../lib/ai-usage";
 import { runQuery } from "../../../lib/ai-answer";
 import { aiGate, aiCanEdit } from "../../../lib/ai-authz";
@@ -152,6 +154,62 @@ async function interpret(text, context, meta = {}) {
     }
     return { intent: parseClaudeResult(json), model };
   } catch { return { intent: { type: "unknown" }, model }; }
+}
+
+// ---- Maya LEARN MODE (admin coaching) ------------------------------------------------------------------
+// Admin-only, gated SERVER-SIDE on the session role (never on prompt wording) — so customer text / injected
+// instructions can never activate it. Learn Mode only RECORDS feedback for review; it changes nothing about
+// Maya's behavior. Returns a result object (toggle / logged / permission) or null (= not a Learn Mode turn).
+async function handleLearnMode(text, tok, context = {}, accessId = null) {
+  const toggle = parseLearnModeToggle(text);
+  if (toggle) {
+    if (tok?.role !== "admin") return { ok: true, kind: "unsupported", speak: "Learn Mode is only available to administrators.", reason: "permission" };
+    return { ok: true, kind: "learnmode", learn: toggle,
+      speak: toggle === "on"
+        ? "Learn Mode enabled for this session. Corrections and feedback will be recorded for review and won't automatically change my behavior."
+        : "Learn Mode off. I'm back to normal — nothing about how I work has changed." };
+  }
+  const explicit = parseDirectReport(text);
+  const inLearn = !!context.learnMode;
+  if (!(explicit || (inLearn && detectLearnFeedback(text)))) return null;
+  // Recording is admin-only too (defense in depth — the toggle already gates activation).
+  if (tok?.role !== "admin") return { ok: true, kind: "unsupported", speak: "Reporting feedback to me is for administrators.", reason: "permission" };
+
+  const li = buildLearnItem(text);
+  // Context snapshot from the client-supplied rolling memory (no extra customer data): the request being
+  // critiqued + Maya's prior reply + the project in view.
+  const turns = Array.isArray(context.memory?.turns) ? context.memory.turns.slice(-6) : [];
+  const priorAssistant = [...turns].reverse().find((t) => t.role === "assistant")?.text || null;
+  const priorUser = [...turns].reverse().find((t) => t.role === "user")?.text || null;
+  const ctx = { originalRequest: priorUser, originalResponse: priorAssistant, project: accessId || context.currentAccessId || context.memory?.project?.accessId || null, turns };
+
+  // Dedup: attach to the most similar OPEN item instead of creating a near-duplicate.
+  let dupe = null, best = 0;
+  for (const it of listLearnItems({ open: true, limit: 60 })) {
+    const s = Math.max(similarity(li.whatHappened, it.what_happened), similarity(li.title, it.title));
+    if (s > best) { best = s; dupe = it; }
+  }
+  if (dupe && best >= 0.6) {
+    bumpLearnOccurrence(dupe.id, actorName(tok), ctx);
+    return { ok: true, kind: "answer", speak: `This looks related to Learn Item LM-${dupe.id} ("${String(dupe.title).slice(0, 50)}"). I attached this as another occurrence instead of creating a duplicate.` };
+  }
+  const r = createLearnItem({ title: li.title, category: li.category, severity: li.severity, reportedBy: actorName(tok), reportedRole: tok.role, accessId: ctx.project, whatHappened: li.whatHappened, expected: li.expected, proposedFix: li.proposedFix, context: ctx });
+  if (r?.error) return { ok: true, kind: "unsupported", speak: r.error };
+  return { ok: true, kind: "answer", speak: `Logged as a ${li.category}${li.severity === "Critical" || li.severity === "High" ? ` (${li.severity.toLowerCase()} severity)` : ""} — LM-${r.id}. Proposed improvement: ${li.proposedFix} It won't change my behavior until you review and approve it.` };
+}
+
+// Learn analytics — an ADMIN asking what they've taught Maya / what recurs / what's open. Read-only summary
+// from the recorded items (never invented). Returns a result or null.
+function learnAnalyticsAnswer(text, tok) {
+  if (tok?.role !== "admin" || !parseLearnAnalyticsQuery(text)) return null;
+  const a = learnAnalytics();
+  const cats = (a.byCategory || []).slice(0, 3).map((c) => `${c.category} (${c.n})`).join(", ");
+  const top = [...listLearnItems({ open: true, severity: "Critical", limit: 3 }), ...listLearnItems({ open: true, severity: "High", limit: 3 })].slice(0, 3);
+  const lines = [`${a.open} open learning item${a.open === 1 ? "" : "s"}, ${a.highOpen} high/critical, ${a.recurring} recurring. ${a.thisMonth} reported this month, ${a.verifiedThisWeek} verified this week.`];
+  if (cats) lines.push(`Most common: ${cats}.`);
+  if (top.length) lines.push(`Top open: ${top.map((i) => `LM-${i.id} ${i.title}`).join("; ")}.`);
+  lines.push("Full list: Admin ▸ Maya ▸ Learn Queue.");
+  return { ok: true, kind: "answer", speak: lines.join(" ") };
 }
 
 // File a bug to the portal from Maya — the user describes it, Maya captures page/role/browser automatically.
@@ -584,6 +642,10 @@ export async function aiInterpretAction(accessId, text, context = {}) {
   const t = String(text || "").trim();
   if (!t) return { error: "Type a command." };
 
+  // Learn Mode (admin coaching) is handled before the interpreter — it records feedback, it isn't a command.
+  { const lm = await handleLearnMode(t, g.tok, context, accessId); if (lm) return lm; }
+  { const la = learnAnalyticsAnswer(t, g.tok); if (la) return la; }
+
   const { intent, noKey, capped } = await interpret(t, context, { role: g.tok.role, accessId });
 
   // A write intent from a role that may be IN the assistant but may not EDIT (e.g. a technician) is refused
@@ -693,6 +755,9 @@ export async function aiGlobalInterpretAction(text, context = {}) {
 
   const app = resolveAppRoute(t);
   if (app) return { ok: true, kind: "navigate", href: app.href, label: app.label };
+
+  { const lm = await handleLearnMode(t, g.tok, context, context.currentAccessId || null); if (lm) return lm; }
+  { const la = learnAnalyticsAnswer(t, g.tok); if (la) return la; }
 
   const { intent, noKey, capped } = await interpret(t, context, { role: g.tok.role, accessId: context.currentAccessId || null, kind: "global" });
   // A question → retrieve + answer directly (don't navigate). This is what makes it an assistant, not a bar.

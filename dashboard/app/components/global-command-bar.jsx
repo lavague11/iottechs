@@ -24,7 +24,7 @@ export default function GlobalCommandBar({ currentAccessId = null }) {
   }, []);
   if (!enabled || !primary) return null;
 
-  const interpret = (text, opts) => aiGlobalInterpretAction(text, { currentAccessId, recent: opts?.recent, memory: opts?.memory });
+  const interpret = (text, opts) => aiGlobalInterpretAction(text, { currentAccessId, recent: opts?.recent, memory: opts?.memory, learnMode: opts?.learnMode });
   const onNavigate = (res) => {
     // In-project deep links (?stage=/?open=) need a hard nav so the deck re-reads them; everything else is a push.
     if (typeof window !== "undefined" && res.href.startsWith(window.location.pathname)) window.location.assign(res.href);

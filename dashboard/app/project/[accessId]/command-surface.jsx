@@ -57,6 +57,8 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
   const [pending, setPending] = useState(null);       // { id, res } — the single actionable awaiting a decision
   const [undoItem, setUndoItem] = useState(null);      // { fn, label } — a just-applied ROUTINE edit, reversible for ~12s
   const undoTimer = useRef(null);
+  const [learnMode, setLearnMode] = useState(false);   // admin coaching session (server gates on role; this just steers context)
+  const learnRef = useRef(false);
   const [support, setSupport] = useState({ recognition: false, synthesis: false });
   const [voiceOk, setVoiceOk] = useState(false);     // mic capture available (getUserMedia + MediaRecorder)
   const [convoOn, setConvoOn] = useState(false);      // hands-free Conversation Mode on/off (drives the UI)
@@ -200,6 +202,8 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
       pushTurn("assistant", `(open ${r.label})`);
       return r;
     }
+    // Learn Mode toggle — flip the session flag (server already verified admin) and show the confirmation.
+    if (r.kind === "learnmode") { const on = r.learn === "on"; setLearnMode(on); learnRef.current = on; sysMsg("ok", r.speak); pushTurn("assistant", r.speak); return r; }
     // Confirmation policy: a ROUTINE edit (r.instant) applies right away with an Undo — no "are you sure".
     // Only the unusual/irreversible (sends, payments, stage moves, removals, a large discount) still confirm.
     if (r.kind === "write" && r.instant) { applyInstant(r); return r; }
@@ -235,7 +239,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
     setBusy(true); setThinking(true);
     const m = memRef.current;
     const memory = { project: m.project, customer: m.customer, facts: m.facts.slice(-6), pending: m.pending, turns: m.turns.slice(-16) };
-    const r = await interpret(q, { recent: recentRef.current, memory }).catch(() => ({ error: "Couldn’t reach the assistant." }));
+    const r = await interpret(q, { recent: recentRef.current, memory, learnMode: learnRef.current }).catch(() => ({ error: "Couldn’t reach the assistant." }));
     setBusy(false); setThinking(false);
     recentRef.current = (r && !r.error && (r.preview?.title || r.label)) ? (r.preview?.title || `open ${r.label}`) : recentRef.current;
     return present(r);
@@ -528,6 +532,7 @@ export default function CommandSurface({ enabled = true, placeholder = "Ask Maya
                 </div>
               )}
               <div className="aicore-ctrls">
+                {learnMode && <span className="aicore-learn" title="Learn Mode — feedback is recorded for review">Learn</span>}
                 {undoItem && <button type="button" className="aicore-undo" onClick={doUndo} title="Undo the last change">Undo</button>}
                 {typing
                   ? <button type="button" className="aicore-ic" onClick={toVoice} aria-label="Voice" title="Voice"><MicIcon /></button>
@@ -703,6 +708,7 @@ const COREBAR_CSS = `
 .aicore-in{flex:1;min-width:0;border:0;background:transparent;outline:none;font-size:13px;color:#FAF8F4;font-family:inherit}
 .aicore-in::placeholder{color:#7b8296}
 .aicore-ctrls{flex:none;display:flex;align-items:center;gap:1px}
+.aicore-learn{flex:none;font-size:10px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:#8FB7FF;border:1px solid rgba(143,183,255,.45);background:rgba(143,183,255,.12);border-radius:6px;padding:2px 6px;margin-right:4px}
 .aicore-undo{flex:none;border:1px solid rgba(201,169,110,.5);background:rgba(201,169,110,.14);color:#EDE4D3;border-radius:7px;font-size:11.5px;font-weight:600;padding:3px 8px;margin-right:4px;cursor:pointer;font-family:inherit}
 .aicore-undo:hover{background:rgba(201,169,110,.26)}
 .aicore-ic{flex:none;width:28px;height:28px;border:0;background:transparent;color:#9aa6bd;border-radius:7px;display:grid;place-items:center;cursor:pointer;font-size:17px;line-height:1}

@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
-import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction, mayaSetBriefingHourAction } from "./actions";
+import { useState, useEffect } from "react";
+import { mayaDashboardAction, mayaSetCapAction, mayaSetFlagAction, mayaResolveUnansweredAction, mayaSetBriefingHourAction, mayaLearnQueueAction, mayaLearnGetAction, mayaLearnUpdateAction } from "./actions";
 
 const money = (cents) => "$" + (Math.round((+cents || 0)) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const TABS = ["Health", "Settings", "Activity", "Training", "Conversations"];
+const TABS = ["Health", "Settings", "Activity", "Training", "Learn Queue", "Conversations"];
 
 export default function MayaAdminClient({ initial }) {
   const [tab, setTab] = useState("Health");
@@ -16,7 +16,7 @@ export default function MayaAdminClient({ initial }) {
 
   return (
     <main className="mya">
-      <style>{CSS}</style>
+      <style>{CSS_BASE}{CSS}</style>
       <header className="mya-head">
         <div>
           <h1>Maya</h1>
@@ -74,6 +74,8 @@ export default function MayaAdminClient({ initial }) {
         </section>
       )}
 
+      {tab === "Learn Queue" && <LearnQueue />}
+
       {tab === "Conversations" && (
         <section className="mya-card">
           <div className="mya-k">Conversations</div>
@@ -125,7 +127,84 @@ function Proactive({ data, busy, setBusy, refresh }) {
   );
 }
 
+const SEV_COLOR = { Critical: "#e0574f", High: "#e0a33a", Medium: "#8b93a4", Low: "#6f7686" };
+const STATUS_ACTIONS = ["reviewed", "approved", "implemented", "verified", "rejected", "duplicate", "deferred", "cannot_reproduce"];
+const FILTERS = [["Open", { open: true }], ["All", {}], ["High / Critical", { severity: "High" }], ["Recurring", { recurring: true }]];
+
+function LearnQueue() {
+  const [data, setData] = useState(null);
+  const [filter, setFilter] = useState({ open: true });
+  const [openId, setOpenId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = async (f) => { const r = await mayaLearnQueueAction(f || filter).catch(() => null); if (r?.ok) setData(r); };
+  useEffect(() => { load(filter); /* eslint-disable-next-line */ }, [filter]);
+  const expand = async (id) => { if (openId === id) { setOpenId(null); setDetail(null); return; } setOpenId(id); const r = await mayaLearnGetAction(id).catch(() => null); setDetail(r?.item || null); };
+  const setStatus = async (id, status) => { setBusy(true); await mayaLearnUpdateAction(id, { status }).catch(() => {}); await load(); const r = await mayaLearnGetAction(id).catch(() => null); setDetail(r?.item || null); setBusy(false); };
+  const a = data?.analytics || {};
+  return (
+    <section>
+      <div className="mya-grid" style={{ marginBottom: 14 }}>
+        <div className="mya-card"><div className="mya-k">Open</div><div className="mya-big">{a.open || 0}</div><div className="mya-note">{a.highOpen || 0} high / critical · {a.recurring || 0} recurring</div></div>
+        <div className="mya-card"><div className="mya-k">This month</div><div className="mya-big">{a.thisMonth || 0}</div><div className="mya-note">reported</div></div>
+        <div className="mya-card"><div className="mya-k">Verified (7 days)</div><div className="mya-big">{a.verifiedThisWeek || 0}</div><div className="mya-note">fixes confirmed</div></div>
+      </div>
+      <div className="mya-card">
+        <div className="lq-filters">{FILTERS.map(([lbl, f]) => <button key={lbl} className={`lq-chip${JSON.stringify(filter) === JSON.stringify(f) ? " on" : ""}`} onClick={() => setFilter(f)}>{lbl}</button>)}</div>
+        {(!data || !data.items?.length) ? <p className="mya-empty">No learning items{filter.open ? " open" : ""}. Teach Maya in Learn Mode (admin) — reports land here for review.</p> : (
+          <ul className="lq-list">
+            {data.items.map((it) => (
+              <li key={it.id} className="lq-item">
+                <button type="button" className="lq-head" onClick={() => expand(it.id)}>
+                  <span className="lq-sev" style={{ background: SEV_COLOR[it.severity] || "#8b93a4" }}>{it.severity}</span>
+                  <span className="lq-title">LM-{it.id} · {it.title}</span>
+                  <span className="lq-cat">{it.category}</span>
+                  {it.occurrences > 1 && <span className="lq-occ">×{it.occurrences}</span>}
+                  <span className="lq-stat">{String(it.status).replace("_", " ")}</span>
+                </button>
+                {openId === it.id && detail && (
+                  <div className="lq-detail">
+                    <p><b>What happened:</b> {detail.what_happened}</p>
+                    {detail.expected && <p><b>Expected:</b> {detail.expected}</p>}
+                    {detail.proposed_fix && <p><b>Proposed fix:</b> {detail.proposed_fix}</p>}
+                    {detail.resolution && <p><b>Resolution:</b> {detail.resolution}</p>}
+                    <p className="lq-metaline">Reported by {detail.reported_by} · {detail.created_at}{detail.access_id ? ` · ${detail.access_id}` : ""}</p>
+                    <div className="lq-acts">{STATUS_ACTIONS.map((s) => <button key={s} type="button" className="lq-sbtn" disabled={busy || detail.status === s} onClick={() => setStatus(it.id, s)}>{s.replace("_", " ")}</button>)}</div>
+                    {detail.events?.length > 0 && <div className="lq-audit">{detail.events.map((e, i) => <div key={i}>{e.ts} · {e.actor} · {e.action}{e.detail ? ` — ${e.detail}` : ""}</div>)}</div>}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
 const CSS = `
+.lq-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.lq-chip{border:1px solid rgba(255,255,255,.14);background:transparent;color:#9aa3b2;border-radius:999px;font-size:12px;font-weight:600;padding:4px 11px;cursor:pointer;font-family:inherit}
+.lq-chip.on{border-color:#C9A96E;color:#EDE4D3;background:rgba(201,169,110,.14)}
+.lq-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.lq-item{border:1px solid rgba(255,255,255,.08);border-radius:11px;overflow:hidden;background:rgba(0,0,0,.14)}
+.lq-head{width:100%;display:flex;align-items:center;gap:9px;padding:9px 12px;background:transparent;border:0;cursor:pointer;text-align:left;font-family:inherit;color:#e3e7ee}
+.lq-sev{flex:none;font-size:10px;font-weight:700;color:#0b0e13;border-radius:5px;padding:2px 6px;text-transform:uppercase}
+.lq-title{flex:1;min-width:0;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lq-cat{flex:none;font-size:11px;color:#8b93a4}
+.lq-occ{flex:none;font-size:11px;font-weight:700;color:#e0a33a}
+.lq-stat{flex:none;font-size:11px;color:#9aa3b2;text-transform:capitalize;border:1px solid rgba(255,255,255,.12);border-radius:5px;padding:1px 7px}
+.lq-detail{padding:4px 14px 14px;border-top:1px solid rgba(255,255,255,.06);font-size:.88rem;color:#c7cdd8}
+.lq-detail p{margin:8px 0}
+.lq-metaline{font-size:11.5px;color:#7f8798}
+.lq-acts{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0 0}
+.lq-sbtn{border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.03);color:#c7cdd8;border-radius:7px;font-size:11.5px;padding:4px 9px;cursor:pointer;text-transform:capitalize;font-family:inherit}
+.lq-sbtn:hover:not(:disabled){border-color:#C9A96E;color:#EDE4D3}
+.lq-sbtn:disabled{opacity:.4;cursor:default}
+.lq-audit{margin-top:10px;padding-top:8px;border-top:1px dashed rgba(255,255,255,.08);font-size:11px;color:#7f8798;line-height:1.6}
+@media (prefers-color-scheme:light){.lq-item{background:#fff;border-color:#e4e6ea}.lq-head{color:#1a1e24}.lq-detail{color:#2c333d}.lq-chip{color:#5a6472;border-color:#d7dadf}}
+`;
+const CSS_BASE = `
 .mya{max-width:1000px;margin:0 auto;padding:26px 22px 90px;color:var(--ink,#e9ecf2);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .mya-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:18px}
 .mya h1{font-size:1.7rem;letter-spacing:-.02em;margin:0}

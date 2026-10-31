@@ -3,7 +3,8 @@
 // the client). Settings write to the vault (app_secrets) so changes take effect with no deploy; Health +
 // Activity read the AI usage ledger; Training reads the unanswered-question queue (teach Maya → resolve).
 import { getSessionUser } from "../../lib/session";
-import { aiUsageSummary, recentAiActivity, listMayaUnanswered, resolveMayaUnanswered, setSecret, secretValue } from "../../lib/db";
+import { aiUsageSummary, recentAiActivity, listMayaUnanswered, resolveMayaUnanswered, setSecret, secretValue,
+  listLearnItems, getLearnItem, updateLearnItem, learnAnalytics } from "../../lib/db";
 
 async function admin() { const u = await getSessionUser().catch(() => null); return u && u.role === "admin" ? u : null; }
 
@@ -44,4 +45,31 @@ export async function mayaSetFlagAction(flag, on) {
 export async function mayaResolveUnansweredAction(id) {
   const u = await admin(); if (!u) return { error: "Admin only." };
   return resolveMayaUnanswered(id);
+}
+
+// ---- Learn Queue (Learn Mode review) — admin only ----
+export async function mayaLearnQueueAction(filter = {}) {
+  const u = await admin(); if (!u) return { error: "Admin only." };
+  const f = {};
+  if (filter.open) f.open = true;
+  if (filter.status) f.status = filter.status;
+  if (filter.severity) f.severity = filter.severity;
+  if (filter.category) f.category = filter.category;
+  if (filter.recurring) f.recurring = true;
+  return { ok: true, analytics: learnAnalytics(), items: listLearnItems(f) };
+}
+export async function mayaLearnGetAction(id) {
+  const u = await admin(); if (!u) return { error: "Admin only." };
+  const item = getLearnItem(id);
+  return item ? { ok: true, item } : { error: "Not found." };
+}
+export async function mayaLearnUpdateAction(id, patch = {}) {
+  const u = await admin(); if (!u) return { error: "Admin only." };
+  // Only the reviewable fields; status is validated against the lifecycle.
+  const { LEARN_STATUSES } = await import("../../lib/maya-learn");
+  const clean = {};
+  if (patch.status && LEARN_STATUSES.includes(patch.status)) clean.status = patch.status;
+  for (const k of ["severity", "category", "resolution", "title", "expected", "proposed_fix", "related_to"]) if (patch[k] != null) clean[k] = patch[k];
+  if (!Object.keys(clean).length) return { error: "Nothing to update." };
+  return updateLearnItem(id, clean, u.name || u.email || "Admin");
 }
