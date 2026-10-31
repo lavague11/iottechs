@@ -4,7 +4,7 @@
 // Activity read the AI usage ledger; Training reads the unanswered-question queue (teach Maya → resolve).
 import { getSessionUser } from "../../lib/session";
 import { aiUsageSummary, recentAiActivity, listMayaUnanswered, resolveMayaUnanswered, setSecret, secretValue,
-  listLearnItems, getLearnItem, updateLearnItem, learnAnalytics } from "../../lib/db";
+  listLearnItems, getLearnItem, updateLearnItem, learnAnalytics, mayaConversations, mayaConversation } from "../../lib/db";
 
 async function admin() { const u = await getSessionUser().catch(() => null); return u && u.role === "admin" ? u : null; }
 
@@ -15,9 +15,16 @@ export async function mayaDashboardAction() {
     usage: aiUsageSummary(),
     activity: recentAiActivity(40),
     unanswered: listMayaUnanswered({ limit: 60 }),
-    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", proactive: secretValue("MAYA_PROACTIVE") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
+    flags: { commands: secretValue("AI_COMMANDS") === "on", customer: secretValue("AI_CUSTOMER") === "on", proactive: secretValue("MAYA_PROACTIVE") === "on", receptionist: secretValue("MAYA_RECEPTIONIST") === "on", hasKey: !!secretValue("ANTHROPIC_API_KEY") },
     briefingHour: +secretValue("MAYA_BRIEFING_HOUR") || 7,
+    conversations: mayaConversations({ limit: 40 }),
   };
+}
+
+// One public receptionist conversation (its full turn list) for the Conversations tab drill-down.
+export async function mayaConversationAction(sessionKey) {
+  const u = await admin(); if (!u) return { error: "Admin only." };
+  return { ok: true, turns: mayaConversation(String(sessionKey || "")) };
 }
 
 export async function mayaSetBriefingHourAction(hour) {
@@ -37,7 +44,7 @@ export async function mayaSetCapAction(capDollars, alertPct) {
 
 export async function mayaSetFlagAction(flag, on) {
   const u = await admin(); if (!u) return { error: "Admin only." };
-  const key = flag === "customer" ? "AI_CUSTOMER" : flag === "proactive" ? "MAYA_PROACTIVE" : "AI_COMMANDS";
+  const key = flag === "customer" ? "AI_CUSTOMER" : flag === "proactive" ? "MAYA_PROACTIVE" : flag === "receptionist" ? "MAYA_RECEPTIONIST" : "AI_COMMANDS";
   setSecret(key, on ? "on" : "off", u.name);
   return { ok: true };
 }
