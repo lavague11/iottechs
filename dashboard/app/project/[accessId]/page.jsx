@@ -1,9 +1,10 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getPublishedProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getPublishedProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink, getProjectFinancialState, amountDueForPayment, secretValue } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
+import { customerPortalV2For, financeSummary } from "../../../lib/customer-portal";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
@@ -100,6 +101,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     service:         p.service,          // decorated by db.js (SERVICE_CODES lookup)
     service_code:    p.service_code,
     project_type:    p.project_type,
+    portal_version:  p.portal_version || null,   // Customer Portal V2 per-project override (v2|v1|null=inherit)
     property_type:   p.property_type,   // canonical Residential/Commercial (visible to authorized viewers)
     survey_skipped_at: p.survey_skipped_at || null,   // explicit "no survey for this job" (gate fact)
     survey_skipped_by: p.survey_skipped_by || null,
@@ -363,5 +365,18 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     }
   }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} />;
+  // Customer Portal V2 — resolve the flag + a SANITIZED balance summary, server-side, for the customer view
+  // only. Presentation-only: reuses the canonical financial engine (published proposal + ledger) and exposes
+  // no cost/margin/processor data. V1 (the deck) is unaffected when this is off.
+  // Resolved per-PROJECT (not per-viewer) so admin/manager previewing as a customer also see V2 to QA it;
+  // the gateway only renders it when the effective view is the customer (cView === "customer").
+  const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
+  let customerFinance = null;
+  if (customerPortalV2) {
+    const fin = getProjectFinancialState(p.access_id);
+    const dep = amountDueForPayment(p.access_id, "deposit");
+    customerFinance = financeSummary(fin, dep?.ok ? dep.due : 0);
+  }
+
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} />;
 }

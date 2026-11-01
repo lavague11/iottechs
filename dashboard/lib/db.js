@@ -202,6 +202,9 @@ function init() {
   // pin_custom = 1 means an admin hand-set the PIN; the last-4-phone normalizer leaves those alone.
   if (!cols.includes("pin_custom"))      db.exec("ALTER TABLE projects ADD COLUMN pin_custom INTEGER DEFAULT 0");
   if (!cols.includes("tech_pin"))        db.exec("ALTER TABLE projects ADD COLUMN tech_pin TEXT");
+  // Customer Portal V2 per-project override: "v2" forces the new simple portal, "v1" forces the classic
+  // deck, NULL inherits the global CUSTOMER_PORTAL_V2 flag. Presentation-only — never affects project data.
+  if (!cols.includes("portal_version"))  db.exec("ALTER TABLE projects ADD COLUMN portal_version TEXT");
   // Field-created project (a tech logged a legacy/on-site job with just name + address). needs_details=1
   // flags it "missing details" for the office to complete later; clears once a phone is on file.
   if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
@@ -3538,6 +3541,14 @@ export function importLegacyClients(rows, createdByName) {
 export function setInternalJob(accessId, on) {
   db.prepare("UPDATE projects SET internal_job=? WHERE access_id=? COLLATE NOCASE").run(on ? 1 : 0, String(accessId));
   return getJobByAccessId(accessId);
+}
+
+// Customer Portal V2 per-project override. version: "v2" | "v1" | null (inherit the global flag).
+// Presentation-only — never touches project data. Returns the stored value.
+export function setPortalVersion(accessId, version) {
+  const v = version === "v2" || version === "v1" ? version : null;
+  db.prepare("UPDATE projects SET portal_version=? WHERE access_id=? COLLATE NOCASE").run(v, String(accessId));
+  return v;
 }
 
 export function setCommission(accessId, { rate, status, salesRep }) {

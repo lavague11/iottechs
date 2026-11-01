@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -42,6 +42,8 @@ import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
 import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
+import CustomerPortal from "./customer-portal";
+import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
@@ -1550,7 +1552,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
@@ -2932,6 +2934,111 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // NOT its own lifecycle step — so the deck stays 1:1 with the phases and the rail isn't renumbered.
     const deckIdx = Math.max(0, phaseList.findIndex((p) => p.key === vPhase));
     const onDeckIdx = (i) => { const p = phaseList[i]; if (p) browse(p.primary); };
+
+    // Customer Portal V2 — render the simple status portal instead of the deck for customers (flag + eligible,
+    // resolved server-side). Each overlay mounts the SAME customer component the deck uses, so no business
+    // logic is duplicated; the portal only owns layout, the progress/balance summary, and which overlay is open.
+    if (isCustomerView && customerPortalV2) {
+      const padOvl = { padding: "16px 18px", maxWidth: 760, margin: "0 auto" };
+      const renderPortalOverlay = (key, o = {}) => {
+        switch (key) {
+          case "proposal":
+            return (
+              <AccordionProvider><div style={{ maxWidth: 820, margin: "0 auto" }}>
+                <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                  defaultService={proposalServiceForCode(lp.service_code)} proposal={proposalData} onProposalChange={setProposalData}
+                  onAdvance={(s) => browse(s)} onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                  customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
+                  viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
+                  signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
+              </div></AccordionProvider>
+            );
+          case "payment": {
+            // The self-contained customer pay surface (Zelle / card / "I already paid") — works regardless of
+            // signature state, unlike the deck's Approval & Deposit block (which is gated behind signing).
+            const payKind = projState === "AWAITING_FINAL_PAYMENT" ? "balance" : "deposit";
+            const due = customerFinance?.amountDueNow > 0 ? customerFinance.amountDueNow
+              : (payKind === "deposit" && customerFinance?.depositDue > 0 ? customerFinance.depositDue : (customerFinance?.balance || 0));
+            return (
+              <div style={padOvl}>
+                <PaymentOptions accessId={lp.access_id} balanceDue={due} kind={payKind} preview={!!previewRole}
+                  showToast={showLiveToast} onRecorded={() => refreshAcceptances()} />
+              </div>
+            );
+          }
+          case "survey":
+            return (
+              <div style={{ height: "100%" }}>
+                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView noApproval noRoster
+                  propertyType={lp.property_type || "commercial"} customerName={lp.contact_name || lp.customer} hasData />
+              </div>
+            );
+          case "mockup":
+            return (
+              <div style={padOvl}>
+                <MockupWidget embedded accessId={lp.access_id} view={view} customerView noApproval
+                  customerName={lp.contact_name || lp.customer} hasData />
+              </div>
+            );
+          case "closeout": {
+            const sign = (
+              <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+                onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+            );
+            return (
+              <div style={padOvl}>
+                <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
+                  role="customer" readOnly signoff={sign} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+                  onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+              </div>
+            );
+          }
+          case "completion":
+            return (
+              <div style={padOvl}>
+                <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={!!previewRole || cView === "tech"}
+                  onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
+                  onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
+              </div>
+            );
+          default: return null;
+        }
+      };
+      const portalCtx = {
+        stage: projectStage,
+        facts: sFacts,
+        surveyHasData: !!(toolMeta?.survey?.has || custFacts.survey_has),
+        mockupHasData: !!(toolMeta?.mockup?.has || custFacts.mockup_has),
+        proposalPublished: !!resolverFacts.proposal_status,
+        proposalStatus: resolverFacts.proposal_status,
+        proposalSigned: !!resolverFacts.proposal_signed,
+        installComplete: !!sFacts.install_done,
+        // Real install status: use the actual appointment (or a confirmed booking), never the inquiry's
+        // requested install_date fallback — so the portal never shows a phantom "Scheduled".
+        installStatus: (sFacts.install_done || ["qc", "payment", "completion"].includes(projectStage)) ? "complete"
+          : projectStage === "install" ? "in_progress"
+          : realInstallDate ? "scheduled" : "awaiting",
+        closeoutAvailable: ["qc", "payment", "completion"].includes(projectStage) || !!sFacts.install_done,
+        closeoutSigned: !!sFacts.qc_customer_signed,
+        complete: !!sFacts.completion_docs || projState === "COMPLETE",
+        paidInFull: !!customerFinance?.paidInFull,
+      };
+      const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
+      return (
+        <CustomerPortal
+          accessId={lp.access_id}
+          project={lp}
+          status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
+          finance={customerFinance}
+          appt={pickUpcomingAny()}
+          phases={gate.phases}
+          currentPhaseKey={masterToPhaseKey(projectStage)}
+          ctx={portalCtx}
+          signedDate={proposalData?.signed_at || null}
+          renderOverlay={renderPortalOverlay}
+        />
+      );
+    }
     return (
       <>
       <DeckView
@@ -2950,6 +3057,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           // Waive the survey for jobs that never get one (monitoring/ADT, phone-quoted). Low-frequency → lives here.
           ...(["admin", "manager"].includes(cView) && !previewRole
             ? [{ label: lp.survey_skipped_at ? "Restore survey" : "Skip survey", onClick: () => setShowSkipSurvey(true) }] : []),
+          // Customer Portal version override (admin/manager): cycle Inherit → V2 → V1 → Inherit. Presentation only.
+          ...(["admin", "manager"].includes(cView) && !previewRole
+            ? [{ label: `Customer portal: ${lp.portal_version === "v2" ? "V2" : lp.portal_version === "v1" ? "V1" : "Inherit"}`,
+                onClick: async () => { const next = lp.portal_version === "v2" ? "v1" : lp.portal_version === "v1" ? "" : "v2";
+                  await setPortalVersionAction(lp.access_id, next).catch(() => {}); window.location.reload(); } }] : []),
           // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"
@@ -4075,7 +4187,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4117,6 +4229,8 @@ export default function GatewayClient({ project, initialView = null, currentUser
       proposalViews={proposalViews}
       proposal={proposal}
       svcCall={svcCall}
+      customerPortalV2={customerPortalV2}
+      customerFinance={customerFinance}
     />
   );
 

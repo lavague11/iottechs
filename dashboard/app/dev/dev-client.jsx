@@ -185,6 +185,36 @@ function KeyRow({ row, onFlash, onDismiss }) {
   );
 }
 
+// Feature flags — a small toggle surface. CUSTOMER_PORTAL_V2 is the global default for the new customer
+// portal (per-project overrides live on each project's staff menu). Writes to the same app_secrets vault.
+function FeatureFlagsCard({ flags = {}, onFlash }) {
+  const [on, setOn] = useState(!!flags.customerPortalV2);
+  const [busy, setBusy] = useState(false);
+  const toggle = async () => {
+    const next = !on; setBusy(true); setOn(next);
+    const r = await saveSecretAction("CUSTOMER_PORTAL_V2", next ? "on" : "off").catch(() => ({ error: "Failed" }));
+    setBusy(false);
+    if (r?.error) { setOn(!next); onFlash?.(r.error); } else onFlash?.(next ? "Customer Portal V2 on" : "Customer Portal V2 off");
+  };
+  return (
+    <div className="kv-card">
+      <div className="kv-head">
+        <div>
+          <div className="kv-title">Feature flags</div>
+          <div className="kv-sub">Global defaults. Per-project overrides live on each project (staff Portal menu → “Customer portal”).</div>
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 2px" }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>Customer Portal V2</div>
+          <div className="kv-sub" style={{ margin: 0 }}>Simplified customer project portal (install projects). Off = classic deck.</div>
+        </div>
+        <button className="kv-addbtn" disabled={busy} onClick={toggle} aria-pressed={on}>{on ? "On" : "Off"}</button>
+      </div>
+    </div>
+  );
+}
+
 function ApiKeysCard({ secrets, onFlash }) {
   const [showAdd, setShowAdd] = useState(false);
   const [nk, setNk] = useState(""); const [nv, setNv] = useState("");
@@ -386,7 +416,7 @@ function RestoreCard({ onFlash }) {
   );
 }
 
-export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [], twoFactor = {} }) {
+export default function DevClient({ user, alerts, tasks: initTasks, sampleProjectId, secrets = [], twoFactor = {}, flags = {} }) {
   const [tasks, setTasks] = useState(initTasks);
   const [pending, startTx] = useTransition();
   const [showAdd, setShowAdd] = useState(false);
@@ -501,6 +531,7 @@ export default function DevClient({ user, alerts, tasks: initTasks, sampleProjec
 
         {/* API key vault */}
         <ApiKeysCard secrets={secrets} onFlash={flash} />
+        <FeatureFlagsCard flags={flags} onFlash={flash} />
         <TwoFactorCard twoFactor={twoFactor} onFlash={flash} />
         <BackupCard onFlash={flash} />
         <RestoreCard onFlash={flash} />

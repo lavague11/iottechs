@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getDevTasks, getAllJobs, listSecretsMeta, loginTwoFactorEnabled } from "../../lib/db";
+import { getDevTasks, getAllJobs, listSecretsMeta, loginTwoFactorEnabled, secretValue } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import { INTEGRATIONS } from "../../lib/integrations";
 import { smsVerifyConfigured, smsProvider } from "../../lib/sms-verify";
@@ -15,6 +15,7 @@ export default async function DevPage() {
   // Display-safe key metadata only (masked values, source, timestamp) — never raw secrets.
   const secrets = listSecretsMeta(INTEGRATIONS);
   const twoFactor = { enabled: loginTwoFactorEnabled(), ready: smsVerifyConfigured(), provider: smsProvider() };
+  const flags = { customerPortalV2: secretValue("CUSTOMER_PORTAL_V2") === "on" };
 
-  return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} secrets={secrets} twoFactor={twoFactor} />;
+  return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} secrets={secrets} twoFactor={twoFactor} flags={flags} />;
 }

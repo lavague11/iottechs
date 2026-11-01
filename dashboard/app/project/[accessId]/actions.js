@@ -190,6 +190,18 @@ export async function setInternalJobAction(accessId, on) {
   return { ok: true, internal: !!proj?.internal_job };
 }
 
+// Customer Portal V2 per-project override (admin/manager). version: "v2" | "v1" | "" / null (inherit global).
+export async function setPortalVersionAction(accessId, version) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can change this." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const { setPortalVersion } = await import("../../../lib/db");
+  const v = setPortalVersion(accessId, version || null);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, portalVersion: v };
+}
+
 // Admin/manager override the customer PIN. A 4-digit value is set as a CUSTOM pin (survives the
 // last-4-phone normalizer); an empty value resets the project back to following the phone.
 export async function setCustomerPinAction(accessId, pin) {
