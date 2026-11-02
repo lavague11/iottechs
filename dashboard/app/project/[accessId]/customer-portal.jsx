@@ -90,7 +90,11 @@ export default function CustomerPortal({
   }, [activeView]);
 
   const cards = portalCards(ctx);
-  const cta = status?.state ? STATUS_CTA[status.state] : null;
+  let cta = status?.state ? STATUS_CTA[status.state] : null;
+  // Defensive: never offer "Make Payment" in the hero unless money is actually collectible now (matches the
+  // balance card). Guards the edge case where the status engine says payment-due but there is no billable
+  // contract (e.g. a legacy project with install facts but no published proposal).
+  if (cta?.view === "payment" && !payable(finance)) cta = null;
 
   return (
     <div className="cpv">
