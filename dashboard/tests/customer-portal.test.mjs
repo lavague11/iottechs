@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   eligibleForCustomerPortalV2, customerPortalV2For, pickUpcomingAppt, financeSummary,
-  installStatusOf, proposalCardState, portalCards, viewFromParams, PORTAL_VIEWS,
+  installStatusOf, proposalCardState, portalCards, viewFromParams, PORTAL_VIEWS, payable,
 } from "../lib/customer-portal.js";
 
 test("eligibility: install types A/B only, service-call C excluded", () => {
@@ -55,6 +55,19 @@ test("balance summary: canonical fields, paid-in-full, no-contract hides card", 
   assert.equal(done.paidInFull, true);
   // balance derived when not provided
   assert.equal(financeSummary({ total: 1000, paid: 250, financialState: "due_now" }).balance, 750);
+});
+
+test("payment eligibility: pay CTA only when money is collectible now (amountDueNow>0)", () => {
+  // approved/unsigned proposal: contract exists, balance > 0, but NOTHING is due yet → no pay CTA
+  assert.equal(payable(financeSummary({ total: 2220, paid: 0, balance: 2220, amountDueNow: 0, financialState: "awaiting_signature" })), false);
+  assert.equal(payable(financeSummary({ total: 2220, paid: 0, balance: 2220, amountDueNow: 0, financialState: "none" })), false);
+  // deposit due after signing → pay CTA
+  assert.equal(payable(financeSummary({ total: 2220, paid: 0, balance: 2220, amountDueNow: 1110, financialState: "awaiting_deposit" }, 1110)), true);
+  // final balance due → pay CTA
+  assert.equal(payable(financeSummary({ total: 2220, paid: 1110, balance: 1110, amountDueNow: 1110, financialState: "due_now" })), true);
+  // paid in full / no contract → no pay CTA
+  assert.equal(payable(financeSummary({ total: 2220, paid: 2220, balance: 0, financialState: "collected" })), false);
+  assert.equal(payable(financeSummary(null)), false);
 });
 
 test("installation status mapping", () => {

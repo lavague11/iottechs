@@ -48,7 +48,7 @@ import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
-import { getAcceptancesAction, getLiveSnapshotAction, logCallAction } from "./proposal-actions";
+import { getAcceptancesAction, getLiveSnapshotAction, logCallAction, getCustomerFinanceAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
 
@@ -1554,6 +1554,10 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 // ---- Resolved project view ----
 function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
   const [proposalData, setProposalData] = useState(proposal);
+  // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
+  // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
+  const [custFin, setCustFin] = useState(customerFinance);
+  const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) setCustFin(r.finance); }).catch(() => {}); };
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
@@ -1707,6 +1711,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       } else if (snap.paymentsConfirmedTotal > prev.paymentsConfirmedTotal) {
         showLiveToast("Payment confirmed — balance updated");
       }
+      // Keep the Portal V2 balance canonical: a payment, a new signature (deposit becomes due), a stage move,
+      // or completion all change what's owed — pull the fresh sanitized summary.
+      if (snap.paymentsCount !== prev.paymentsCount || snap.paymentsConfirmedTotal !== prev.paymentsConfirmedTotal
+        || (snap.proposal?.signed_at && !prev.proposal?.signed_at) || snap.stage !== prev.stage
+        || (snap.completed_at && !prev.completed_at)) refreshCustFin();
       let acceptanceChanged = false;
       for (const key of Object.keys(snap.acceptances || {})) {
         if (snap.acceptances[key] && !prev.acceptances?.[key]) {
@@ -2957,12 +2966,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             // The self-contained customer pay surface (Zelle / card / "I already paid") — works regardless of
             // signature state, unlike the deck's Approval & Deposit block (which is gated behind signing).
             const payKind = projState === "AWAITING_FINAL_PAYMENT" ? "balance" : "deposit";
-            const due = customerFinance?.amountDueNow > 0 ? customerFinance.amountDueNow
-              : (payKind === "deposit" && customerFinance?.depositDue > 0 ? customerFinance.depositDue : (customerFinance?.balance || 0));
+            const due = custFin?.amountDueNow > 0 ? custFin.amountDueNow
+              : (payKind === "deposit" && custFin?.depositDue > 0 ? custFin.depositDue : (custFin?.balance || 0));
             return (
               <div style={padOvl}>
                 <PaymentOptions accessId={lp.access_id} balanceDue={due} kind={payKind} preview={!!previewRole}
-                  showToast={showLiveToast} onRecorded={() => refreshAcceptances()} />
+                  showToast={showLiveToast} onRecorded={() => { refreshAcceptances(); refreshCustFin(); }} />
               </div>
             );
           }
@@ -3021,7 +3030,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         closeoutAvailable: ["qc", "payment", "completion"].includes(projectStage) || !!sFacts.install_done,
         closeoutSigned: !!sFacts.qc_customer_signed,
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
-        paidInFull: !!customerFinance?.paidInFull,
+        paidInFull: !!custFin?.paidInFull,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
       return (
@@ -3029,13 +3038,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           accessId={lp.access_id}
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
-          finance={customerFinance}
+          finance={custFin}
           appt={pickUpcomingAny()}
           phases={gate.phases}
           currentPhaseKey={masterToPhaseKey(projectStage)}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
           renderOverlay={renderPortalOverlay}
+          onRefresh={() => { refreshCustFin(); refreshAcceptances(); }}
         />
       );
     }

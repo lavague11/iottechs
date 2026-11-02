@@ -10,7 +10,7 @@ import {
   getStageAcceptances, notifyRoles, createNotification, getCustomerUserForProject, acceptStage, unacceptStage, updateStage,
   declineOption, resolveCustomerFlag,
   getProjectNotes, getScopedNotes, addProjectNote, setNotePublic, requestNotePublic, getProjectEvents, logProjectEvent, setProjectPoc, maybeAutoAdvance, advanceStageForward,
-  addFeedbackNote, listFeedback, setFeedbackStatus, getProjectFinancialState,
+  addFeedbackNote, listFeedback, setFeedbackStatus, getProjectFinancialState, amountDueForPayment,
   getToolData, saveToolData, TOOL_KEYS, getToolMeta,
   getRateBook, saveRateScope, getEffectiveRates, DEFAULT_RATES,
   getApprovedAddons, submitRequest,
@@ -50,6 +50,18 @@ function customerOwnsProject(tok, accessId) {
 async function revalidate(accessId) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
+}
+
+// Customer Portal V2 — the sanitized balance summary, re-fetchable client-side so the portal's balance stays
+// live after a payment/signature. Gated to the project's own people (canReadProject), same as every other
+// project read; exposes only customer-safe money (no cost/margin/processor IDs). Mirrors the server snapshot
+// page.jsx computes, via the same canonical engine.
+export async function getCustomerFinanceAction(accessId) {
+  if (!(await canReadProject(accessId))) return { ok: false };
+  const { financeSummary } = await import("../../../lib/customer-portal");
+  const fin = getProjectFinancialState(accessId);
+  const dep = amountDueForPayment(accessId, "deposit");
+  return { ok: true, finance: financeSummary(fin, dep?.ok ? dep.due : 0) };
 }
 
 export async function getProposalAction(accessId) {

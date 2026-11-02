@@ -7,7 +7,7 @@
 // the deck uses (via the `renderOverlay` the gateway supplies) so there is zero duplicated business logic.
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { portalCards, viewFromParams } from "../../../lib/customer-portal";
+import { portalCards, viewFromParams, payable } from "../../../lib/customer-portal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
@@ -53,7 +53,7 @@ const CARD_COPY = {
 
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
-  signedDate = null, renderOverlay,
+  signedDate = null, renderOverlay, onRefresh,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -63,13 +63,24 @@ export default function CustomerPortal({
   const activeView = viewFromParams({ view: params.get("view"), open: params.get("open") });
   const signMode = params.get("sign") != null || String(params.get("open")) === "proposal" && params.get("sign") != null;
 
+  // Preserve every other query param (session/preview token, etc.) — only the overlay keys change, so a
+  // refresh inside an overlay stays authorized and deep links keep working.
   const open = (view, extra = {}) => {
-    const sp = new URLSearchParams();
+    const sp = new URLSearchParams(params.toString());
+    sp.delete("open");
     sp.set("view", view);
-    if (extra.sign) sp.set("sign", "1");
+    if (extra.sign) sp.set("sign", "1"); else sp.delete("sign");
     router.push(`${pathname}?${sp.toString()}`);
   };
-  const close = () => router.replace(pathname);
+  // Closing an overlay returns to the portal AND pulls fresh canonical state (balance/status/next action), so
+  // a just-completed sign / payment / QC signoff / completion is reflected immediately, never stale.
+  const close = () => {
+    const sp = new URLSearchParams(params.toString());
+    ["view", "open", "sign"].forEach((k) => sp.delete(k));
+    const qs = sp.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    onRefresh?.();
+  };
   // Lock body scroll under an overlay.
   const scrollRef = useRef(0);
   useEffect(() => {
@@ -141,7 +152,7 @@ export default function CustomerPortal({
                   <div><span>Paid</span><b>{money(finance.paid)}</b></div>
                   <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
                 </div>
-                {finance.balance > 0 && <button className="cpv-cta" onClick={() => open("payment")}>Make payment</button>}
+                {payable(finance) && <button className="cpv-cta" onClick={() => open("payment")}>Make payment</button>}
               </>
             )}
           </section>

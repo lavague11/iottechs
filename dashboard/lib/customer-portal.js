@@ -56,6 +56,13 @@ export function financeSummary(fin, depositDue = 0) {
   };
 }
 
+// May the portal offer a "Make Payment" action? ONLY when money is actually collectible now — the canonical
+// amountDueNow (0 for an approved-but-unsigned proposal, positive at awaiting_deposit / due_now). This keeps
+// the business rule — no deposit is collected before signing — enforced in the UI, not just server-side.
+export function payable(finance) {
+  return !!finance?.hasContract && Number(finance.amountDueNow || 0) > 0;
+}
+
 // Installation status from facts — one of awaiting | scheduled | in_progress | complete.
 export function installStatusOf(facts = {}, stage = null) {
   if (facts.install_done || stage === "qc" || stage === "payment" || stage === "completion") return "complete";
