@@ -378,13 +378,14 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     const dep = amountDueForPayment(p.access_id, "deposit");
     customerFinance = financeSummary(fin, dep?.ok ? dep.due : 0);
     // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
-    // customer-safe fields only — never crew/roster/invitees/confirmations. The client keeps a localStorage
-    // cache for responsiveness, but this prop is the source of truth so the hero never depends on stale browser data.
+    // customer-safe fields only — never crew/roster/invitees/confirmations, and NOT the free-text `notes`
+    // (a staff-internal field: technician instructions, access concerns, internal scheduling notes). The
+    // client keeps a localStorage cache for responsiveness, but this prop is the source of truth.
     try {
       const sched = getToolData(p.access_id, "schedule");
       const events = sched?.data ? (JSON.parse(sched.data)?.events || []) : [];
       const ev = pickUpcomingAppt(Array.isArray(events) ? events : []);
-      if (ev) customerAppt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null, notes: ev.notes || null };
+      if (ev) customerAppt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null };
     } catch { /* no schedule / bad blob → no appointment */ }
   }
 

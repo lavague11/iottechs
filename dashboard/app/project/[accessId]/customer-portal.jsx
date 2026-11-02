@@ -228,7 +228,6 @@ function InstallDetail({ appt }) {
       <div className="cpv-kick">{apptType(appt)}</div>
       <div className="cpv-install-when">{fmtDate(appt.date)}{appt.time ? ` · ${fmtTime(appt.time)}` : ""}</div>
       {appt.location && <div className="cpv-install-row"><span>Location</span><b>{appt.location}</b></div>}
-      {appt.notes && <div className="cpv-install-notes">{appt.notes}</div>}
     </div>
   );
 }
