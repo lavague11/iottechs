@@ -7,7 +7,7 @@
 // the deck uses (via the `renderOverlay` the gateway supplies) so there is zero duplicated business logic.
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { portalCards, viewFromParams, payable } from "../../../lib/customer-portal";
+import { portalCards, viewFromParams, payable, overlayAvailable } from "../../../lib/customer-portal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
@@ -60,8 +60,12 @@ export default function CustomerPortal({
   const params = useSearchParams();
 
   // URL drives the open overlay: ?view=<key> (or a legacy ?open=…). ?sign carries the signer intent through.
-  const activeView = viewFromParams({ view: params.get("view"), open: params.get("open") });
-  const signMode = params.get("sign") != null || String(params.get("open")) === "proposal" && params.get("sign") != null;
+  const requestedView = viewFromParams({ view: params.get("view"), open: params.get("open") });
+  const signMode = params.get("sign") != null;
+  // The URL selects a view; it NEVER overrides availability. A ?view the project can't meaningfully show
+  // (payment with nothing due, survey with no survey, completion before eligibility, phone — a link not an
+  // overlay) is treated as closed, and the effect below returns the customer to the portal home.
+  const activeView = requestedView && overlayAvailable(requestedView, ctx, finance) ? requestedView : null;
 
   // Preserve every other query param (session/preview token, etc.) — only the overlay keys change, so a
   // refresh inside an overlay stays authorized and deep links keep working.
@@ -81,6 +85,16 @@ export default function CustomerPortal({
     router.replace(qs ? `${pathname}?${qs}` : pathname);
     onRefresh?.();
   };
+  // A direct link to an unavailable/unknown/non-overlay view (incl. ?view=phone) → strip it and land on the
+  // portal home. Never a blank overlay. Runs only when a view was requested but resolved unavailable.
+  useEffect(() => {
+    if (requestedView && !activeView) {
+      const sp = new URLSearchParams(params.toString());
+      ["view", "open", "sign"].forEach((k) => sp.delete(k));
+      const qs = sp.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname);
+    }
+  }, [requestedView, activeView, params, pathname, router]);
   // Lock body scroll under an overlay.
   const scrollRef = useRef(0);
   useEffect(() => {
@@ -89,7 +103,7 @@ export default function CustomerPortal({
     return () => { document.body.style.overflow = ""; };
   }, [activeView]);
 
-  const cards = portalCards(ctx);
+  const cards = portalCards(ctx, finance);
   let cta = status?.state ? STATUS_CTA[status.state] : null;
   // Defensive: never offer "Make Payment" in the hero unless money is actually collectible now (matches the
   // balance card). Guards the edge case where the status engine says payment-due but there is no billable

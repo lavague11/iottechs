@@ -80,38 +80,57 @@ export function proposalCardState({ proposalPublished, proposalStatus, proposalS
   return null;
 }
 
-// The ordered list of customer cards that ACTUALLY apply — never an empty placeholder. ctx is already-shaped
-// booleans/values from the portal (survey/mockup data presence, proposal state, install status, stage,
-// completion + paid-in-full). Returns [{ key, view, state }] in lifecycle order; the component owns copy/CTA.
-export function portalCards(ctx = {}) {
-  const cards = [];
-  const stage = ctx.stage || null;
-  if (ctx.surveyHasData) cards.push({ key: "survey", view: "survey", state: "available" });
-  if (ctx.mockupHasData) cards.push({ key: "mockup", view: "mockup", state: "available" });
-
+// THE canonical applicability resolver — the single source of truth for "is this customer view meaningful
+// right now?". BOTH the portal cards AND the URL ?view= overlays consult this, so a card and a direct link
+// can never disagree and a hand-typed ?view can never force an empty/unavailable overlay. A view is available
+// only when opening it yields real customer content:
+//   proposal   — a published proposal exists
+//   survey     — customer-facing survey data exists
+//   mockup     — customer-facing mockup data exists
+//   payment    — money is collectible NOW (canonical amountDueNow > 0), never merely a remaining balance
+//   install    — a real upcoming appointment, or install scheduled/in-progress/complete
+//   closeout   — customer-facing closeout content is READY (QC all-pass, or a customer signoff already on
+//                file) — NOT merely that the master stage says QC (that can be empty for the customer)
+//   completion — the project is complete AND paid in full (certificate eligibility)
+//   phone      — signed and install not yet complete (the one real pre-install setup step)
+// ctx carries already-shaped booleans from the portal; finance is the sanitized financeSummary (for payment).
+export function viewAvailability(ctx = {}, finance = null) {
   const pState = proposalCardState(ctx);
-  if (pState) cards.push({ key: "proposal", view: "proposal", state: pState });
+  const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
+  return {
+    proposal:   !!pState,
+    survey:     !!ctx.surveyHasData,
+    mockup:     !!ctx.mockupHasData,
+    payment:    payable(finance),
+    install:    !!ctx.hasAppt || iStatus !== "awaiting",
+    closeout:   !!ctx.closeoutReady,
+    completion: !!(ctx.complete && ctx.paidInFull),
+    phone:      pState === "signed" && !ctx.installComplete,
+  };
+}
 
-  // Phone setup: a real next step only once signed and before install is complete.
-  if (pState === "signed" && !ctx.installComplete) cards.push({ key: "phone", view: "phone", state: "available" });
-
-  // Install status: prefer an explicit value (gateway computes it from the REAL appointment, not a stale
-  // inquiry install_date), else derive from facts. Show the card only once scheduled or beyond.
-  const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, stage);
-  if (iStatus !== "awaiting") cards.push({ key: "install", view: "install", state: iStatus });
-
-  // Closeout: available once the project reaches QC / payment (or install marked done).
-  if (ctx.closeoutAvailable) cards.push({ key: "closeout", view: "closeout", state: ctx.closeoutSigned ? "signed" : "available" });
-
-  // Completion certificate: only when complete AND paid in full.
-  if (ctx.complete && ctx.paidInFull) cards.push({ key: "completion", view: "completion", state: "available" });
-
-  return cards;
+// The ordered list of customer cards that ACTUALLY apply — never an empty placeholder. Derived from the SAME
+// viewAvailability resolver the overlays use, so cards and routes stay in lockstep. Returns [{key,view,state}]
+// in lifecycle order; the component owns copy/CTA. (payment is never a card — it's reached from the balance.)
+const CARD_ORDER = ["survey", "mockup", "proposal", "phone", "install", "closeout", "completion"];
+export function portalCards(ctx = {}, finance = null) {
+  const avail = viewAvailability(ctx, finance);
+  const pState = proposalCardState(ctx);
+  const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
+  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available" };
+  return CARD_ORDER.filter((k) => avail[k]).map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
 }
 
 // The overlay keys the portal understands (URL ?view=<key>). Used to validate an incoming ?view / legacy
-// ?open mapping so a hand-typed value can't open something unexpected.
+// ?open mapping so a hand-typed value can't open something unexpected. `phone` is a link-out (a guide), not
+// an in-portal overlay, so it is deliberately absent from OVERLAY_VIEWS below.
 export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone"]);
+// The views that render as an in-portal overlay (phone is excluded — it navigates to a support guide).
+export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install"]);
+// Is `view` both a renderable overlay AND currently available? One check for direct-URL + card clicks.
+export function overlayAvailable(view, ctx = {}, finance = null) {
+  return OVERLAY_VIEWS.includes(view) && !!viewAvailability(ctx, finance)[view];
+}
 // Legacy email/SMS deep links (?open=proposal&sign=1, ?open=survey, …) → the V2 overlay key.
 export function viewFromParams({ view, open } = {}) {
   if (view && PORTAL_VIEWS.includes(view)) return view;

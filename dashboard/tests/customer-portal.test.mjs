@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   eligibleForCustomerPortalV2, customerPortalV2For, pickUpcomingAppt, financeSummary,
   installStatusOf, proposalCardState, portalCards, viewFromParams, PORTAL_VIEWS, payable,
+  viewAvailability, overlayAvailable, OVERLAY_VIEWS,
 } from "../lib/customer-portal.js";
 
 test("eligibility: install types A/B only, service-call C excluded", () => {
@@ -101,7 +102,7 @@ test("portalCards: only applicable cards, in order, never empty placeholders", (
   assert.ok(signed.map((c) => c.key).includes("install"));
 
   // completed + paid → completion card; no phone card once install complete
-  const complete = portalCards({ proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "completion", facts: { install_done: true }, closeoutAvailable: true, complete: true, paidInFull: true, installComplete: true });
+  const complete = portalCards({ proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "completion", facts: { install_done: true }, closeoutReady: true, complete: true, paidInFull: true, installComplete: true });
   assert.ok(complete.map((c) => c.key).includes("completion"));
   assert.ok(!complete.map((c) => c.key).includes("phone"));
 
@@ -111,6 +112,62 @@ test("portalCards: only applicable cards, in order, never empty placeholders", (
 
   // no data at all → empty list (no placeholders)
   assert.deepEqual(portalCards({ facts: {}, stage: "inquiry" }), []);
+});
+
+test("closeout readiness: card appears only with real customer-closeout content (not merely qc stage)", () => {
+  // qc stage but NO customer-facing closeout content → no closeout card (the empty-state fix)
+  const empty = portalCards({ stage: "qc", facts: { install_done: true }, proposalPublished: true, proposalSigned: true });
+  assert.ok(!empty.map((c) => c.key).includes("closeout"));
+  // QC all-pass ready → closeout card appears
+  const ready = portalCards({ stage: "qc", facts: { install_done: true }, proposalPublished: true, proposalSigned: true, closeoutReady: true });
+  assert.ok(ready.map((c) => c.key).includes("closeout"));
+  // a customer signoff already on file also counts as ready (don't hide a legitimate required signoff)
+  assert.equal(viewAvailability({ stage: "qc", closeoutReady: true }).closeout, true);
+  assert.equal(viewAvailability({ stage: "qc", closeoutReady: false }).closeout, false);
+});
+
+test("viewAvailability: one canonical resolver gates every view", () => {
+  const F = (o) => financeSummary(o);
+  // payment only when collectible now
+  assert.equal(viewAvailability({}, F({ total: 2220, amountDueNow: 0, financialState: "awaiting_signature" })).payment, false);
+  assert.equal(viewAvailability({}, F({ total: 2220, amountDueNow: 1110, financialState: "awaiting_deposit" })).payment, true);
+  // survey/mockup only with data
+  assert.equal(viewAvailability({ surveyHasData: true }).survey, true);
+  assert.equal(viewAvailability({ surveyHasData: false }).survey, false);
+  assert.equal(viewAvailability({ mockupHasData: true }).mockup, true);
+  // proposal only when published
+  assert.equal(viewAvailability({ proposalPublished: true, proposalStatus: "sent" }).proposal, true);
+  assert.equal(viewAvailability({ proposalPublished: false }).proposal, false);
+  // install with an upcoming appointment or a scheduled+ status
+  assert.equal(viewAvailability({ hasAppt: true, facts: {} }).install, true);
+  assert.equal(viewAvailability({ facts: {}, stage: "inquiry" }).install, false);
+  // completion only when complete AND paid in full
+  assert.equal(viewAvailability({ complete: true, paidInFull: true }).completion, true);
+  assert.equal(viewAvailability({ complete: true, paidInFull: false }).completion, false);
+});
+
+test("overlayAvailable: direct ?view selects a view but never overrides availability", () => {
+  const owing = financeSummary({ total: 2220, amountDueNow: 1110, financialState: "awaiting_deposit" });
+  const none = financeSummary(null);
+  // payment route unavailable when nothing is due; available when due
+  assert.equal(overlayAvailable("payment", {}, none), false);
+  assert.equal(overlayAvailable("payment", {}, owing), true);
+  // survey/completion routes gated by content/eligibility
+  assert.equal(overlayAvailable("survey", { surveyHasData: false }), false);
+  assert.equal(overlayAvailable("completion", { complete: true, paidInFull: false }), false);
+  assert.equal(overlayAvailable("completion", { complete: true, paidInFull: true }), true);
+  // phone is a link-out, never an overlay; unknown views are not overlays
+  assert.equal(overlayAvailable("phone", { proposalPublished: true, proposalSigned: true }), false);
+  assert.equal(overlayAvailable("bogus", {}), false);
+  assert.ok(!OVERLAY_VIEWS.includes("phone"));
+});
+
+test("appointment picker ignores past/cancelled dates and never invents one from install_date", () => {
+  const now = new Date("2026-11-05T12:00:00").getTime();
+  // only a past event → none upcoming
+  assert.equal(pickUpcomingAppt([{ id: 1, date: "2026-11-01", time: "09:00", kind: "install" }], now), null);
+  // facts.install_date is NOT a schedule event → the picker (events only) returns null
+  assert.equal(pickUpcomingAppt([], now), null);
 });
 
 test("viewFromParams: validates ?view and maps legacy ?open", () => {

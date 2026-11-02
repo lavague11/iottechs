@@ -4,7 +4,8 @@ import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersB
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
-import { customerPortalV2For, financeSummary } from "../../../lib/customer-portal";
+import { customerPortalV2For, financeSummary, pickUpcomingAppt } from "../../../lib/customer-portal";
+import { getToolData } from "../../../lib/db";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
@@ -371,12 +372,21 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // Resolved per-PROJECT (not per-viewer) so admin/manager previewing as a customer also see V2 to QA it;
   // the gateway only renders it when the effective view is the customer (cView === "customer").
   const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
-  let customerFinance = null;
+  let customerFinance = null, customerAppt = null;
   if (customerPortalV2) {
     const fin = getProjectFinancialState(p.access_id);
     const dep = amountDueForPayment(p.access_id, "deposit");
     customerFinance = financeSummary(fin, dep?.ok ? dep.due : 0);
+    // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
+    // customer-safe fields only — never crew/roster/invitees/confirmations. The client keeps a localStorage
+    // cache for responsiveness, but this prop is the source of truth so the hero never depends on stale browser data.
+    try {
+      const sched = getToolData(p.access_id, "schedule");
+      const events = sched?.data ? (JSON.parse(sched.data)?.events || []) : [];
+      const ev = pickUpcomingAppt(Array.isArray(events) ? events : []);
+      if (ev) customerAppt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null, notes: ev.notes || null };
+    } catch { /* no schedule / bad blob → no appointment */ }
   }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} />;
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} />;
 }

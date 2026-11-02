@@ -1552,7 +1552,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
@@ -3013,6 +3013,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           default: return null;
         }
       };
+      // Appointment for the portal: the SERVER-resolved, customer-sanitized appointment is canonical (computed
+      // in page.jsx from the schedule tool-blob). The client localStorage picker is only a fallback so an
+      // in-session booking still shows; the customer experience never DEPENDS on browser-only schedule state.
+      const portalAppt = customerAppt || pickUpcomingAny();
       const portalCtx = {
         stage: projectStage,
         facts: sFacts,
@@ -3026,11 +3030,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // requested install_date fallback — so the portal never shows a phantom "Scheduled".
         installStatus: (sFacts.install_done || ["qc", "payment", "completion"].includes(projectStage)) ? "complete"
           : projectStage === "install" ? "in_progress"
-          : realInstallDate ? "scheduled" : "awaiting",
-        closeoutAvailable: ["qc", "payment", "completion"].includes(projectStage) || !!sFacts.install_done,
+          : (realInstallDate || (portalAppt && (portalAppt.kind === "install" || /install/i.test(portalAppt.title || "")))) ? "scheduled" : "awaiting",
+        // Closeout is "ready" for the customer ONLY when there is real closeout content — QC all-pass or a
+        // customer signoff already on file (the exact signal the deck uses to show the customer Walkthrough,
+        // line ~2658). The master stage being qc/payment is NOT enough: it can open to an empty experience.
+        closeoutReady: !!(toolMeta?.qc?.allPass || acceptances?.qc_customer),
         closeoutSigned: !!sFacts.qc_customer_signed,
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
         paidInFull: !!custFin?.paidInFull,
+        hasAppt: !!portalAppt,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
       return (
@@ -3039,7 +3047,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
-          appt={pickUpcomingAny()}
+          appt={portalAppt}
           phases={gate.phases}
           currentPhaseKey={masterToPhaseKey(projectStage)}
           ctx={portalCtx}
@@ -4197,7 +4205,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4241,6 +4249,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       svcCall={svcCall}
       customerPortalV2={customerPortalV2}
       customerFinance={customerFinance}
+      customerAppt={customerAppt}
     />
   );
 
