@@ -10,6 +10,10 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PORTAL_CSS } from "./customer-portal";
 import ProjectContactCard from "./project-contact-card";
+import { getPaymentsForLogAction } from "./proposal-actions";
+
+const fmtPayDate = (s) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return ""; try { return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return `${m[2]}/${m[3]}/${m[1]}`; } };
+const payKindLabel = (k) => ({ deposit: "Deposit", final: "Final payment", partial: "Partial payment", other: "Payment" }[k] || "Payment");
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
@@ -30,6 +34,20 @@ export default function StaffHub({
   const [group, setGroup] = useState(defaultGroup);   // Project-tools filter: Customer-facing vs Internal (techs default to Internal)
   const [logOpen, setLogOpen] = useState(false);      // Job Log collapsed by default, like the deck
   const [balOpen, setBalOpen] = useState(false);      // Project balance detail pop-up
+  const [payments, setPayments] = useState([]);       // recorded payments (shown under the balance)
+  const [payDetail, setPayDetail] = useState(null);   // one payment opened for full detail
+  const [lightbox, setLightbox] = useState(null);     // a payment proof photo opened full-size
+
+  // Pull the payment ledger so recorded payments show under the balance (date · method · amount),
+  // each openable for its full detail + any proof photos. Only when there's a contract to pay against.
+  useEffect(() => {
+    if (!accessId || !finance?.hasContract) { setPayments([]); return; }
+    let live = true;
+    getPaymentsForLogAction(accessId).then((r) => { if (live && r?.ok) setPayments(r.payments || []); }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId, finance?.hasContract]);
+  // Confirmed money-in-hand plus any still-pending submissions (tagged), newest first.
+  const shownPays = (payments || []).filter((p) => (+p.amount || 0) > 0 && p.status !== "void");
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -123,13 +141,32 @@ export default function StaffHub({
 .cpv-card.locked{opacity:.6;cursor:default;background:var(--paper)}
 .cpv-card.locked:hover{border-color:var(--line);background:var(--paper)}
 .cpv-card.locked .cpv-card-act{color:var(--faint)}
-/* Full-width Job Log — spans the whole page, below the centered content. */
-.cpv-logsec{padding:8px 20px 20px}
+/* Job Log — matches the project content width (same as cpv-main), centered, below the cards. */
+.cpv-logsec{max-width:1040px;margin:0 auto;padding:8px 20px 20px}
 /* Footer credit — full width, centered, clears the corner orbs (AI left, bug right). */
 .cpv-credit{padding:14px 72px 26px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--faint);border-top:1px solid var(--line-soft)}
 .cpv-card-act.done{color:var(--green)}
-.cpv-bal-btn{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer}
-.cpv-bal-btn:hover{border-color:var(--ink)}
+/* Balance card: clickable summary (opens the balance pop-up) + the payment ledger beneath it. */
+.cpv-bal-sum{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer;background:none;border:0;padding:0}
+.cpv-bal-sum:hover .cpv-balrem b{text-decoration:underline;text-underline-offset:2px}
+.cpv-pays{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.cpv-pays-h{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:8px}
+.cpv-pay{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--paper);font-family:inherit;cursor:pointer;margin-bottom:7px}
+.cpv-pay:last-child{margin-bottom:0}
+.cpv-pay:hover{border-color:var(--ink);background:#fff}
+.cpv-pay-date{font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap}
+.cpv-pay-method{font-size:13px;color:var(--meta);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpv-pay-tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--gold-text);background:rgba(201,169,110,.16);border-radius:100px;padding:2px 8px;white-space:nowrap}
+.cpv-pay-clip{display:inline-flex;color:var(--faint)}
+.cpv-pay-amt{margin-left:auto;font-size:14px;font-weight:700;color:var(--green);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cpv-paymodal{max-width:400px}
+.cpv-pay-note{margin-top:12px;font-size:13px;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:9px 11px;white-space:pre-wrap}
+.cpv-pay-photos{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.cpv-pay-thumb{width:72px;height:72px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--paper);cursor:pointer;padding:0}
+.cpv-pay-thumb:hover{border-color:var(--ink)}
+.cpv-pay-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.cpv-lightbox{position:fixed;inset:0;z-index:60;background:rgba(16,20,24,.86);display:flex;align-items:center;justify-content:center;padding:28px;cursor:zoom-out}
+.cpv-lightbox img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
 .cpv-balmodal-bg{position:fixed;inset:0;z-index:50;background:rgba(16,20,24,.42);display:flex;align-items:center;justify-content:center;padding:20px}
 .cpv-balmodal{width:100%;max-width:360px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.22);padding:18px 20px 22px}
 .cpv-balmodal-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:14px}
@@ -247,20 +284,41 @@ export default function StaffHub({
           );
         })()}
 
-        {/* BALANCE — a button; tap for the remaining-balance pop-up. Hidden when there is no contract yet. */}
+        {/* BALANCE — summary (tap for the remaining-balance pop-up) + the payment ledger beneath it.
+            Hidden when there is no contract yet. */}
         {finance?.hasContract && (
-          <button type="button" className="cpv-bal cpv-bal-btn" onClick={() => setBalOpen(true)}>
-            <div className="cpv-kick">Project balance</div>
-            {finance.paidInFull ? (
-              <div className="cpv-paid">Paid in full ✓</div>
-            ) : (
-              <div className="cpv-balrows">
-                <div><span>Total</span><b>{money(finance.total)}</b></div>
-                <div><span>Paid</span><b>{money(finance.paid)}</b></div>
-                <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
+          <div className="cpv-bal">
+            <button type="button" className="cpv-bal-sum" onClick={() => setBalOpen(true)}>
+              <div className="cpv-kick">Project balance</div>
+              {finance.paidInFull ? (
+                <div className="cpv-paid">Paid in full ✓</div>
+              ) : (
+                <div className="cpv-balrows">
+                  <div><span>Total</span><b>{money(finance.total)}</b></div>
+                  <div><span>Paid</span><b>{money(finance.paid)}</b></div>
+                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
+                </div>
+              )}
+            </button>
+            {shownPays.length > 0 && (
+              <div className="cpv-pays">
+                <div className="cpv-pays-h">Payments</div>
+                {shownPays.map((p) => (
+                  <button key={p.id} type="button" className="cpv-pay" onClick={() => setPayDetail(p)}>
+                    <span className="cpv-pay-date">{fmtPayDate(p.paid_at || p.created_at)}</span>
+                    <span className="cpv-pay-method">{p.method || payKindLabel(p.kind)}</span>
+                    {p.status === "pending" && <span className="cpv-pay-tag">Pending</span>}
+                    {p.photos?.length > 0 && (
+                      <span className="cpv-pay-clip" title={`${p.photos.length} photo${p.photos.length > 1 ? "s" : ""}`}>
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05 12.25 20.24a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                      </span>
+                    )}
+                    <span className="cpv-pay-amt">{money(p.amount)}</span>
+                  </button>
+                ))}
               </div>
             )}
-          </button>
+          </div>
         )}
         {balOpen && finance?.hasContract && (
           <div className="cpv-balmodal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setBalOpen(false); }}>
@@ -282,6 +340,43 @@ export default function StaffHub({
                 </>
               )}
             </div>
+          </div>
+        )}
+
+        {/* PAYMENT DETAIL — full record for one payment, with any proof photos (Zelle screenshots, check
+            front/back). Click a photo to view it full-size. */}
+        {payDetail && (
+          <div className="cpv-balmodal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setPayDetail(null); }}>
+            <div className="cpv-balmodal cpv-paymodal" role="dialog" aria-modal="true" aria-label="Payment detail">
+              <div className="cpv-balmodal-head">
+                <span>Payment</span>
+                <button type="button" onClick={() => setPayDetail(null)} aria-label="Close">×</button>
+              </div>
+              <div className="cpv-balmodal-big" style={{ color: payDetail.status === "pending" ? "var(--meta)" : "var(--green)" }}>{money(payDetail.amount)}</div>
+              <div className="cpv-balmodal-sub">{payKindLabel(payDetail.kind)}{payDetail.status === "pending" ? " · awaiting confirmation" : ""}</div>
+              <div className="cpv-balmodal-rows">
+                <div><span>Date</span><b>{fmtPayDate(payDetail.paid_at || payDetail.created_at)}</b></div>
+                {payDetail.method && <div><span>Method</span><b>{payDetail.method}</b></div>}
+                {+payDetail.fee_amount > 0 && <div><span>Processing fee</span><b>{money(payDetail.fee_amount)}</b></div>}
+                {payDetail.recorded_by && <div><span>Recorded by</span><b>{payDetail.recorded_by}</b></div>}
+                {payDetail.source === "customer" && <div><span>Source</span><b>Customer</b></div>}
+              </div>
+              {payDetail.note && <div className="cpv-pay-note">{payDetail.note}</div>}
+              {payDetail.photos?.length > 0 && (
+                <div className="cpv-pay-photos">
+                  {payDetail.photos.map((src, i) => (
+                    <button key={i} type="button" className="cpv-pay-thumb" onClick={() => setLightbox(src)} aria-label="View photo full size">
+                      <img src={src} alt={`Payment proof ${i + 1}`} loading="lazy" />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {lightbox && (
+          <div className="cpv-lightbox" onMouseDown={() => setLightbox(null)} role="dialog" aria-modal="true" aria-label="Payment photo">
+            <img src={lightbox} alt="Payment proof" />
           </div>
         )}
 
