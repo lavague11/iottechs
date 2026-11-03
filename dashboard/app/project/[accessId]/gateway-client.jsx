@@ -3124,9 +3124,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <ProposalVersionLog accessId={lp.access_id} />
             </div></AccordionProvider>);
           case "survey":
-            return (<div style={{ height: "100%" }}>
-              <SiteSurveyWidget accessId={lp.access_id} view={view} propertyType={lp.property_type || "commercial"}
-                customerName={lp.contact_name || lp.customer} hasData={sHasSurvey} />
+            // Full-height flex column (same as the deck's heavy tool) so the planner fills the overlay
+            // instead of collapsing to a strip.
+            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+              <div style={{ flex: 1, minHeight: 0 }}>
+                <SiteSurveyWidget accessId={lp.access_id} view={view} propertyType={lp.property_type || "commercial"}
+                  canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
+                  customerName={lp.contact_name || lp.customer} hasData={sHasSurvey} />
+              </div>
             </div>);
           case "mockup":
             return (<div style={ovl(900)}>
