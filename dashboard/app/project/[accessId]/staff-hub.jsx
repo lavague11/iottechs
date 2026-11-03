@@ -29,6 +29,7 @@ export default function StaffHub({
   const [menuOpen, setMenuOpen] = useState(false);
   const [group, setGroup] = useState(defaultGroup);   // Project-tools filter: Customer-facing vs Internal (techs default to Internal)
   const [logOpen, setLogOpen] = useState(false);      // Job Log collapsed by default, like the deck
+  const [balOpen, setBalOpen] = useState(false);      // Project balance detail pop-up
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -125,6 +126,17 @@ export default function StaffHub({
 /* Full-width Job Log — spans the whole page, below the centered content. */
 .cpv-logsec{padding:8px 20px 56px}
 .cpv-card-act.done{color:var(--green)}
+.cpv-bal-btn{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer}
+.cpv-bal-btn:hover{border-color:var(--ink)}
+.cpv-balmodal-bg{position:fixed;inset:0;z-index:50;background:rgba(16,20,24,.42);display:flex;align-items:center;justify-content:center;padding:20px}
+.cpv-balmodal{width:100%;max-width:360px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.22);padding:18px 20px 22px}
+.cpv-balmodal-head{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:14px}
+.cpv-balmodal-head button{border:0;background:none;font-size:1.4rem;line-height:1;color:var(--meta);cursor:pointer}
+.cpv-balmodal-big{font-size:2.2rem;font-weight:800;color:var(--gold-text);font-variant-numeric:tabular-nums}
+.cpv-balmodal-sub{font-size:13px;color:var(--meta);margin-top:2px;margin-bottom:14px}
+.cpv-balmodal-rows>div{display:flex;justify-content:space-between;font-size:14px;color:var(--ink-soft);padding:5px 0;border-top:1px solid var(--line)}
+.cpv-balmodal-rows b{font-variant-numeric:tabular-nums;color:var(--ink)}
+.cpv-balmodal-paid{font-size:1.4rem;font-weight:700;color:var(--green)}
 .cpv-mark-link{text-decoration:none;color:var(--ink);cursor:pointer;justify-self:start}
 .cpv-mark-link:hover{color:var(--gold-text)}
 `}</style>
@@ -233,9 +245,9 @@ export default function StaffHub({
           );
         })()}
 
-        {/* BALANCE — at the very bottom. Hidden when there is no contract yet. */}
+        {/* BALANCE — a button; tap for the remaining-balance pop-up. Hidden when there is no contract yet. */}
         {finance?.hasContract && (
-          <section className="cpv-bal">
+          <button type="button" className="cpv-bal cpv-bal-btn" onClick={() => setBalOpen(true)}>
             <div className="cpv-kick">Project balance</div>
             {finance.paidInFull ? (
               <div className="cpv-paid">Paid in full ✓</div>
@@ -246,7 +258,29 @@ export default function StaffHub({
                 <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
               </div>
             )}
-          </section>
+          </button>
+        )}
+        {balOpen && finance?.hasContract && (
+          <div className="cpv-balmodal-bg" onMouseDown={(e) => { if (e.target === e.currentTarget) setBalOpen(false); }}>
+            <div className="cpv-balmodal" role="dialog" aria-modal="true" aria-label="Project balance">
+              <div className="cpv-balmodal-head">
+                <span>Project balance</span>
+                <button type="button" onClick={() => setBalOpen(false)} aria-label="Close">×</button>
+              </div>
+              {finance.paidInFull ? (
+                <div className="cpv-balmodal-paid">Paid in full ✓</div>
+              ) : (
+                <>
+                  <div className="cpv-balmodal-big">{money(finance.balance)}</div>
+                  <div className="cpv-balmodal-sub">remaining balance</div>
+                  <div className="cpv-balmodal-rows">
+                    <div><span>Total</span><b>{money(finance.total)}</b></div>
+                    <div><span>Paid</span><b>{money(finance.paid)}</b></div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         )}
 
       </main>

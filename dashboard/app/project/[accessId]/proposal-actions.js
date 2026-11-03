@@ -1219,34 +1219,28 @@ export async function createWorkOrderAction(accessId) {
   if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can create the work order." };
   // Pipeline order is accepted → deposit → work order. The work order is an INTERNAL tool, so the
   // customer signature is NOT required to create it (only acceptance + a confirmed deposit).
+  // Customer acceptance is no longer required to create the work order (staff can build it from a sent
+  // proposal, e.g. after skipping the signature). A confirmed payment on file is still required.
   const cur = getActiveProposal(accessId);
-  if (!cur || cur.status !== "accepted") return { error: "The customer hasn't accepted a proposal option yet." };
-  const paid = getProjectPayments(accessId).some((p) => p.kind === "deposit" && +p.amount > 0 && p.status === "confirmed");
-  if (!paid) return { error: "A confirmed deposit is required before creating the work order." };
+  if (!cur) return { error: "Send the proposal first — the work order builds out on send." };
+  const paid = getProjectPayments(accessId).some((p) => +p.amount > 0 && p.status === "confirmed");
+  if (!paid) return { error: "A confirmed payment is required before creating the work order." };
   const updated = updateStage(accessId, "schedule");
   if (!updated) return { error: "Could not advance the project." };
   await revalidate(accessId);
   return { ok: true, stage: "schedule" };
 }
 
-// Override the customer signature (admin/manager): record acceptance on their behalf so the project can
-// progress and be scheduled now. The e-signature on the document is NOT applied — it stays outstanding and
-// remains required; this only unblocks the lifecycle. Logged as an override.
+// Skip the customer signature (admin/manager): the project advances and can be scheduled now. It does NOT
+// sign or accept on the customer's behalf — the signature is simply skipped and remains outstanding. Logged.
 export async function overrideSignatureAction(accessId) {
   const tok = await getSessionRole();
-  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can override the signature." };
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can skip the signature." };
   const cur = getPublishedProposal(accessId);
   if (!cur) return { error: "Send the proposal first." };
   if (cur.signed_name) return { error: "This proposal is already signed." };
-  let optKey = cur.selected_option || null;
-  if (!optKey) { try { const opts = JSON.parse(cur.payload || "{}").options || []; if (opts.length) optKey = String(opts[0].id); } catch { /* bad payload */ } }
-  if (!optKey) return { error: "No proposal option to accept." };
-  if (cur.status !== "accepted") {
-    const r = selectProposalOption(accessId, optKey);
-    if (!r) return { error: "Could not accept the proposal." };
-  }
   const stage = updateStage(accessId, "schedule") ? "schedule" : null;
-  logProjectEvent(accessId, { kind: "override", label: `Signature overridden — proposal v${cur.version} accepted by ${actorName(tok)} to proceed; e-signature still required`, actor: actorName(tok) });
+  logProjectEvent(accessId, { kind: "override", label: `Signature skipped by ${actorName(tok)} — project advanced to scheduling; customer signature still required`, actor: actorName(tok) });
   await revalidate(accessId);
   return { ok: true, stage };
 }

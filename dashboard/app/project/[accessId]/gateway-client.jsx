@@ -3123,16 +3123,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
               <ProposalVersionLog accessId={lp.access_id} />
             </div></AccordionProvider>);
-          case "survey":
-            // Full-height flex column (same as the deck's heavy tool) so the planner fills the overlay
-            // instead of collapsing to a strip.
-            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <SiteSurveyWidget accessId={lp.access_id} view={view} propertyType={lp.property_type || "commercial"}
-                  canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
-                  customerName={lp.contact_name || lp.customer} hasData={sHasSurvey} />
+          case "survey": {
+            // EXACTLY the deck's heavy-tool mount — same container and props — so the planner fills the
+            // overlay and behaves identically (no wizard/strip, no need to hit fullscreen).
+            const svMetaEff = { ...(toolMeta?.survey || {}), has: (toolMeta?.survey?.has) || surveyHasLocal };
+            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
+              <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
+                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                  propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
+                  customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has}
+                  submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
+                  onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { setAcceptances(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
+                  onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) setAcceptances(r.acceptances); }} />
               </div>
             </div>);
+          }
           case "mockup":
             return (<div style={ovl(900)}>
               <MockupWidget embedded accessId={lp.access_id} view={view} customerName={lp.contact_name || lp.customer} hasData={sHasMockup} />
