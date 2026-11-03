@@ -15,6 +15,32 @@ import AddressAutocomplete from "../components/address-autocomplete";
 // its phase and count against the phases that apply to its type (service calls have fewer).
 const phaseListFor = (p) => (p?.type ? phasesForType(p.type) : PHASES);
 
+// PIN masked by default; the eye reveals it for 10 seconds, then it re-hides.
+function PinReveal({ pin }) {
+  const [shown, setShown] = useState(false);
+  const timer = useRef(null);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const toggle = () => {
+    clearTimeout(timer.current);
+    if (shown) { setShown(false); return; }
+    setShown(true);
+    timer.current = setTimeout(() => setShown(false), 10000);
+  };
+  return (
+    <span className="cp-pin">
+      <span className="cp-pin-lbl">PIN</span>
+      <span className="cp-pin-num">{shown ? pin : "•".repeat(pin.length || 4)}</span>
+      <button type="button" className="cp-pin-eye" onClick={toggle} aria-label={shown ? "Hide PIN" : "Show PIN"}>
+        {shown ? (
+          <svg viewBox="0 0 24 24"><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M6.61 6.61A18.45 18.45 0 0 0 1 12s4 8 11 8a9.12 9.12 0 0 0 5.39-1.61"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24M1 1l22 22"/></svg>
+        ) : (
+          <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        )}
+      </button>
+    </span>
+  );
+}
+
 // Project kind, from the access-id type letter: A = a full new system, B = an add-on (extra
 // cameras/upgrade to an existing system), C = a service call. Shown as a pill so a customer with
 // several "Security Cameras" entries can tell a system apart from an add-on or a service visit.
@@ -542,19 +568,19 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-user-menu .um-link svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.9;flex-shrink:0}
 
         .cp-req-actions{display:grid;gap:10px;margin-top:16px}
-        .cp-req-card{display:flex;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;transition:border-color .2s,box-shadow .2s;cursor:pointer;text-decoration:none;color:inherit}
+        .cp-req-card{display:flex;align-items:center;gap:16px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 22px;transition:border-color .2s,box-shadow .2s;cursor:pointer;text-decoration:none;color:inherit}
         .cp-req-card:hover{border-color:var(--gold);box-shadow:0 10px 24px -14px rgba(14,19,32,.35)}
         .cp-req-card.pay{border-color:#bfe0cd;background:#f6fbf8}
         .cp-req-card.pay:hover{border-color:#2E7D5B}
-        .cp-req-ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
-        .cp-req-ic svg{width:17px;height:17px;fill:none;stroke-width:2}
+        .cp-req-ic{width:48px;height:48px;border-radius:12px;display:grid;place-items:center;flex-shrink:0}
+        .cp-req-ic svg{width:23px;height:23px;fill:none;stroke-width:2}
         .cp-req-ic.sig{background:#faf4e8}.cp-req-ic.sig svg{stroke:var(--gold-deep)}
         .cp-req-ic.review{background:#faf4e8}.cp-req-ic.review svg{stroke:var(--gold-deep)}
         .cp-req-ic.money{background:#e9f3ed}.cp-req-ic.money svg{stroke:#2E7D5B}
         .cp-req-body{flex:1;min-width:0}
-        .cp-req-body .r-title{font-weight:700;font-size:.92rem;margin-bottom:2px}
-        .cp-req-body .r-sub{font-size:.82rem;color:var(--muted)}
-        .cp-req-cta{font-size:.82rem;font-weight:800;color:var(--gold-deep);white-space:nowrap;transition:transform .2s}
+        .cp-req-body .r-title{font-weight:700;font-size:1.08rem;margin-bottom:3px}
+        .cp-req-body .r-sub{font-size:.9rem;color:var(--muted)}
+        .cp-req-cta{font-size:.92rem;font-weight:800;color:var(--gold-deep);white-space:nowrap;transition:transform .2s}
         .cp-req-card:hover .cp-req-cta{transform:translateX(3px)}
         .cp-req-card.pay .cp-req-cta{color:#2E7D5B}
 
@@ -609,7 +635,10 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-p-foot{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
         .cp-pin{display:inline-flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px}
         .cp-pin-lbl{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
-        .cp-pin-num{font-family:'Bricolage Grotesque',monospace;font-weight:700;font-size:1.05rem;letter-spacing:.18em;color:var(--ink)}
+        .cp-pin-num{font-family:'Bricolage Grotesque',monospace;font-weight:700;font-size:1.05rem;letter-spacing:.18em;color:var(--ink);min-width:3.2em}
+        .cp-pin-eye{background:none;border:0;padding:2px;margin:0;cursor:pointer;display:inline-flex;color:var(--muted);line-height:0}
+        .cp-pin-eye:hover{color:var(--ink)}
+        .cp-pin-eye svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
         .cp-copy{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:8px 14px;font-family:inherit;font-weight:600;font-size:.86rem;color:var(--ink);cursor:pointer;transition:.18s}
         .cp-copy:hover{border-color:var(--gold);background:var(--bg-soft)}
         .cp-copy svg{width:15px;height:15px;stroke:var(--gold-deep);fill:none;stroke-width:2}
@@ -755,7 +784,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                         ) : sign ? (
                           <svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
                         ) : (
-                          <svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                          <svg viewBox="0 0 24 24"><rect x="4.5" y="11" width="15" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>
                         )}
                       </span>
                       <div className="cp-req-body"><div className="r-title">{p.todo.label}</div><div className="r-sub">{p.customer}{p.address?` · ${p.address}`:""}</div></div>
@@ -838,12 +867,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                             <div className="cp-bar"><span style={{width:`${pct}%`}}/></div>
                             <div className="cp-stage">Stage {snum} of {total} · <b>{slbl}{p.date?` — ${p.date}`:""}</b></div>
                             <div className="cp-p-foot">
-                              {p.customer_pin && (
-                                <span className="cp-pin">
-                                  <span className="cp-pin-lbl">PIN</span>
-                                  <span className="cp-pin-num">{p.customer_pin}</span>
-                                </span>
-                              )}
+                              {p.customer_pin && <PinReveal pin={String(p.customer_pin)} />}
                               <button className={`cp-copy${copiedId===p.access_id?" copied":""}`} onClick={()=>copyLink(p)}>
                                 <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>
                                 {copiedId===p.access_id?"Copied!":"Copy link"}
