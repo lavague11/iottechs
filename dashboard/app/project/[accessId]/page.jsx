@@ -5,6 +5,7 @@ import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
 import { customerPortalV2For, financeSummary, pickUpcomingAppt } from "../../../lib/customer-portal";
+import { staffHubFor } from "../../../lib/staff-hub";
 import { getToolData } from "../../../lib/db";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
@@ -104,6 +105,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project_type:    p.project_type,
     customer_id:     p.customer_id || null,       // canonical customer (users row) — links the header name to the CRM record
     portal_version:  p.portal_version || null,   // Customer Portal V2 per-project override (v2|v1|null=inherit)
+    staff_view:      p.staff_view || null,        // Staff Project Hub per-project override (hub|deck|null=inherit)
     reopen_requested_at: p.reopen_requested_at || null,   // customer asked to reopen an expired quote (blocks sign until re-sent)
     price_reopened_at:   p.price_reopened_at || null,     // auto-reopen within grace restarts the 7-day price window
     property_type:   p.property_type,   // canonical Residential/Commercial (visible to authorized viewers)
@@ -375,11 +377,16 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // Resolved per-PROJECT (not per-viewer) so admin/manager previewing as a customer also see V2 to QA it;
   // the gateway only renders it when the effective view is the customer (cView === "customer").
   const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
-  let customerFinance = null, customerAppt = null;
-  if (customerPortalV2) {
+  // Staff Project Hub (Phase 1) — the clean customer-style hub for STAFF, flag + per-project override.
+  // Presentation-only; the same tools open from its cards in staff (editable) mode. Deck is unaffected when off.
+  const staffHub = staffHubFor(p, { globalOn: secretValue("STAFF_PROJECT_HUB") === "on" });
+  let customerFinance = null, customerAppt = null, staffFinance = null, staffAppt = null;
+  if (customerPortalV2 || staffHub) {
     const fin = getProjectFinancialState(p.access_id);
     const dep = amountDueForPayment(p.access_id, "deposit");
-    customerFinance = financeSummary(fin, dep?.ok ? dep.due : 0);
+    const finSum = financeSummary(fin, dep?.ok ? dep.due : 0);
+    if (customerPortalV2) customerFinance = finSum;
+    if (staffHub) staffFinance = finSum;
     // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
     // customer-safe fields only — never crew/roster/invitees/confirmations, and NOT the free-text `notes`
     // (a staff-internal field: technician instructions, access concerns, internal scheduling notes). The
@@ -388,9 +395,13 @@ export default async function ProjectLinkPage({ params, searchParams }) {
       const sched = getToolData(p.access_id, "schedule");
       const events = sched?.data ? (JSON.parse(sched.data)?.events || []) : [];
       const ev = pickUpcomingAppt(Array.isArray(events) ? events : []);
-      if (ev) customerAppt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null };
+      if (ev) {
+        const appt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null };
+        if (customerPortalV2) customerAppt = appt;
+        if (staffHub) staffAppt = appt;
+      }
     } catch { /* no schedule / bad blob → no appointment */ }
   }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} />;
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt} />;
 }
