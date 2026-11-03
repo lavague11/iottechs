@@ -115,16 +115,18 @@ export default function StaffHub({
 .cpv-headdrop{border-bottom:1px solid var(--line);background:rgba(255,255,255,.75)}
 .cpv-headdrop .pcc-flush{max-width:1040px;margin:0 auto}
 /* Job Log — collapsed toggle at the bottom. */
-.cpv-logtog{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 16px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);font:700 14px/1 inherit;cursor:pointer}
+.cpv-logtog{display:flex;align-items:center;gap:9px;width:100%;height:44px;padding:0 18px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);font:700 14px/1 inherit;cursor:pointer}
 .cpv-logtog:hover{border-color:var(--ink);background:#fff}
-.cpv-logchev{color:var(--meta);margin-left:2px}
+.cpv-logchev{color:var(--meta);margin-left:auto}
 .cpv-logbody{margin-top:12px}
 /* Locked tool cards — visible but gated until their prerequisite is met. */
 .cpv-card.locked{opacity:.6;cursor:default;background:var(--paper)}
 .cpv-card.locked:hover{border-color:var(--line);background:var(--paper)}
 .cpv-card.locked .cpv-card-act{color:var(--faint)}
 /* Full-width Job Log — spans the whole page, below the centered content. */
-.cpv-logsec{padding:8px 20px 56px}
+.cpv-logsec{padding:8px 20px 20px}
+/* Footer credit — full width, centered, clears the corner orbs (AI left, bug right). */
+.cpv-credit{padding:14px 72px 26px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--faint);border-top:1px solid var(--line-soft)}
 .cpv-card-act.done{color:var(--green)}
 .cpv-bal-btn{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer}
 .cpv-bal-btn:hover{border-color:var(--ink)}
@@ -296,6 +298,9 @@ export default function StaffHub({
           {logOpen && <div className="cpv-logbody">{log}</div>}
         </section>
       )}
+
+      {/* Footer credit — very bottom, full width. */}
+      <footer className="cpv-credit">Developed by Mpress 2026</footer>
 
       {/* OVERLAY — focused full-screen; URL-addressable; Back/X returns to the hub. */}
       {activeView && (
