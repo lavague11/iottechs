@@ -3138,10 +3138,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             </div>);
           }
-          case "mockup":
-            return (<div style={ovl(900)}>
-              <MockupWidget embedded accessId={lp.access_id} view={view} customerName={lp.contact_name || lp.customer} hasData={sHasMockup} />
+          case "mockup": {
+            // Same full-size treatment as the survey overlay — the mockup fills the panel (no narrow
+            // centered box / page margins), mounted with the deck's exact prop set so it behaves identically.
+            const mkMetaEff = { ...(toolMeta?.mockup || {}), has: (toolMeta?.mockup?.has) || mockupHasLocal };
+            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
+              <div style={{ flex: 1, minHeight: 0, overflow: "auto" }} className="ss-tool-body">
+                <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
+              </div>
             </div>);
+          }
           case "closeout": {
             const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}
               onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />);
