@@ -54,7 +54,7 @@ const CARD_COPY = {
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
-  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen,
+  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen, reopenPending = false,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -158,6 +158,12 @@ export default function CustomerPortal({
             {appt.location && <div className="cpv-appt-where">{appt.location}</div>}
             <button className="cpv-cta" onClick={() => open("install")}>View appointment</button>
           </section>
+        ) : reopenPending ? (
+          // Customer asked to reopen an expired quote — they can't sign until staff re-send the proposal.
+          <section className="cpv-hero" style={{ "--tone": "var(--red,#C4553D)" }}>
+            <div className="cpv-status">We're refreshing your quote</div>
+            <p className="cpv-herosub">You asked to reopen your proposal. Because the price had expired, your team is updating it — you'll be able to review and sign as soon as they send the refreshed proposal.</p>
+          </section>
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-hero-top">
@@ -218,7 +224,7 @@ export default function CustomerPortal({
                 : c.key === "install" ? installSub(c.state, appt) : copy.sub;
               const onClick = c.key === "phone"
                 ? () => { window.location.href = `/guide/mobile-setup?project=${accessId}`; }
-                : () => open(c.view, { sign: c.key === "proposal" && c.state === "awaiting" });
+                : () => open(c.view, { sign: c.key === "proposal" && c.state === "awaiting" && !reopenPending });
               return (
                 <button key={c.key} className="cpv-card" onClick={onClick}>
                   <div className="cpv-card-main">
@@ -354,6 +360,7 @@ const CSS = `
 .cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}
 .cpv-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .cpv-status{font-size:1.6rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);text-wrap:balance}
+.cpv-herosub{margin:10px 0 0;font-size:14px;line-height:1.5;color:var(--ink-soft);max-width:48ch}
 .cpv-pricewrap{position:relative;flex:0 0 auto;margin-top:5px}
 .cpv-pricepill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-family:inherit;font-size:12px;font-weight:600;color:var(--gold-text);white-space:nowrap;cursor:pointer}
 .cpv-pricepill:hover{border-color:var(--gold)}

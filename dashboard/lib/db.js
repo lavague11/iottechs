@@ -205,6 +205,9 @@ function init() {
   // Customer Portal V2 per-project override: "v2" forces the new simple portal, "v1" forces the classic
   // deck, NULL inherits the global CUSTOMER_PORTAL_V2 flag. Presentation-only — never affects project data.
   if (!cols.includes("portal_version"))  db.exec("ALTER TABLE projects ADD COLUMN portal_version TEXT");
+  // Customer Portal V2 — when a customer whose 7-day price lock expired asks to reopen, we stamp this. The
+  // customer can't sign again until staff re-send the proposal (a newer sent_at clears it, compared downstream).
+  if (!cols.includes("reopen_requested_at")) db.exec("ALTER TABLE projects ADD COLUMN reopen_requested_at TEXT");
   // Field-created project (a tech logged a legacy/on-site job with just name + address). needs_details=1
   // flags it "missing details" for the office to complete later; clears once a phone is on file.
   if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
@@ -3549,6 +3552,13 @@ export function setPortalVersion(accessId, version) {
   const v = version === "v2" || version === "v1" ? version : null;
   db.prepare("UPDATE projects SET portal_version=? WHERE access_id=? COLLATE NOCASE").run(v, String(accessId));
   return v;
+}
+// Stamp a customer reopen request (expired price lock). Cleared implicitly when staff re-send the proposal
+// (its newer sent_at wins downstream). Returns the stamp.
+export function setReopenRequested(accessId) {
+  const now = db.prepare("SELECT datetime('now','localtime') AS t").get().t;
+  db.prepare("UPDATE projects SET reopen_requested_at=? WHERE access_id=? COLLATE NOCASE").run(now, String(accessId));
+  return now;
 }
 
 export function setCommission(accessId, { rate, status, salesRep }) {

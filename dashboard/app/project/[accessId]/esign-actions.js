@@ -28,6 +28,20 @@ const valuesView = (v, row, doc) => ({ name: v?.name || null, signature: v?.sign
 const ackList = (row, doc) => requiredAcks(payloadOf(row), factsOf(doc)).map((a) => ({ key: a.key, required: !!a.required }));
 const err = (r) => ({ error: r.error || "Couldn't sign.", code: r.code });
 
+// A customer who asked to reopen an expired quote can't sign until staff re-send the proposal. Blocked while
+// reopen_requested_at is set and the published proposal hasn't been re-sent since (newer sent_at clears it).
+async function reopenBlocked(accessId) {
+  try {
+    const { getJobByAccessId, getPublishedProposal } = await import("../../../lib/db");
+    const proj = getJobByAccessId(accessId);
+    const req = proj?.reopen_requested_at;
+    if (!req) return false;
+    const sent = getPublishedProposal(accessId)?.sent_at;
+    return !sent || new Date(sent).getTime() <= new Date(req).getTime();
+  } catch { return false; }
+}
+const REOPEN_MSG = "This quote expired and your team is refreshing the price — you'll be able to sign once they send the updated proposal.";
+
 // Open (or resume, with `resumeToken`) a signing session for one option. Generates + stores the unsigned
 // PDF the first time (or when the content changed); returns the token, document and any saved values.
 // The survey/mockup appendix is NOT passed here — it's multi-MB client-rendered images with nested
@@ -37,6 +51,7 @@ const err = (r) => ({ error: r.error || "Couldn't sign.", code: r.code });
 export async function startSignAction(accessId, optKey, resumeToken = null) {
   const { caller, ip, ua } = await ctx();
   if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
+  if (await reopenBlocked(accessId)) return { error: REOPEN_MSG, code: "REOPEN_PENDING" };
   let r;
   try { r = startSession({ accessId, optKey: String(optKey || ""), caller, resumeToken, ip, ua }); }
   catch (e) { return { error: "Couldn't prepare the document.", code: "ERROR" }; }
@@ -58,6 +73,7 @@ export async function saveSignValuesAction(accessId, token, patch) {
 export async function completeSignAction(accessId, token, acks = null) {
   const { caller, ip, ua } = await ctx();
   if (!caller) return { error: "Session expired — unlock the project again to sign.", code: "DENIED" };
+  if (await reopenBlocked(accessId)) return { error: REOPEN_MSG, code: "REOPEN_PENDING" };
   if (acks) { const r = saveValues({ token, accessId, caller, patch: { acks }, ip, ua }); if (!r.ok) return err(r); }
   const r = await completeSession({ token, accessId, caller, ip, ua });
   if (!r.ok) return err(r);

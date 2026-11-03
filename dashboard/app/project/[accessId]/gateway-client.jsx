@@ -3041,6 +3041,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         hasAppt: !!portalAppt,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
+      // Reopen pending: the customer asked to reopen an expired quote and staff haven't re-sent yet. Until a
+      // newer proposal is sent (sent_at > the request), the customer can't sign — the portal shows a waiting state.
+      const reopenPending = (() => {
+        const req = lp.reopen_requested_at;
+        if (!req || proposalData?.signed_name) return false;
+        const sent = proposalData?.sent_at;
+        if (!sent) return true;
+        return new Date(sent).getTime() <= new Date(req).getTime();
+      })();
       // Price-lock window: a sent, not-yet-signed proposal is honored for 7 days from when it was sent.
       // After that the price may be re-evaluated. Null once signed (price is locked) or if never sent.
       const priceValidUntil = (() => {
@@ -3055,7 +3064,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       return (
         <CustomerPortal
           accessId={lp.access_id}
-          priceValidUntil={priceValidUntil}
+          priceValidUntil={reopenPending ? null : priceValidUntil}
+          reopenPending={reopenPending}
           onRequestReopen={previewRole ? null : () => requestReopenAction(lp.access_id)}
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}

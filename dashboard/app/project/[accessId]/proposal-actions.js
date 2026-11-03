@@ -960,8 +960,25 @@ export async function requestReopenAction(accessId) {
   if (!tok) return { error: "Session expired — unlock the project again." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   const who = actorName(tok);
+  // Stamp the reopen request — this is what blocks a new signature until staff re-send the proposal.
+  const { setReopenRequested } = await import("../../../lib/db");
+  try { setReopenRequested(accessId); } catch {}
   addProjectNote(accessId, { role: tok.role, name: who, body: "Requested to reopen the proposal — the 7-day price lock has expired. Please refresh the quote.", isPublic: true });
   try { notifyRoles(["admin", "manager", "sales"], { type: "reopen_request", title: "Customer requested to reopen an expired quote", body: `${accessId}`, link: `/project/${accessId}` }); } catch {}
+  // Email the office/admin so they re-send the proposal (which resets the 7-day price window).
+  try {
+    const { sendOfficeEmail } = await import("../../../lib/email");
+    await sendOfficeEmail({
+      subject: `Reopen requested — ${accessId}`,
+      heading: "Customer asked to reopen an expired quote",
+      lines: [
+        `${who} requested to reopen project ${accessId}.`,
+        "Their 7-day price lock has expired, so they can't sign until you re-send the proposal.",
+        "Open the project, review/refresh pricing, and re-send the proposal to reset the price window.",
+      ],
+      accessId,
+    });
+  } catch {}
   try { logProjectEvent(accessId, { kind: "request", label: "Customer requested to reopen expired quote", actor: who }); } catch {}
   await revalidate(accessId);
   return { ok: true, message: "Sent — your team will refresh your quote." };
