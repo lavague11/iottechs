@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, saveProposalDraft, markProposalSent,
+  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -56,6 +56,17 @@ async function revalidate(accessId) {
 // live after a payment/signature. Gated to the project's own people (canReadProject), same as every other
 // project read; exposes only customer-safe money (no cost/margin/processor IDs). Mirrors the server snapshot
 // page.jsx computes, via the same canonical engine.
+// Sent-version log for the proposal (staff only) — every version that was ever sent, newest first, with its
+// send date/author and whether it was signed. Read-only; powers the "Sent versions" list under the proposal.
+export async function getProposalHistoryAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || tok.role === "customer") return { ok: false, versions: [] };
+  const sent = (getProposalHistory(accessId) || [])
+    .filter((p) => p.sent_at)
+    .map((p) => ({ version: p.version, sent_at: p.sent_at, sent_by_name: p.sent_by_name || null, status: p.status, signed_at: p.signed_at || null, signed_name: p.signed_name || null }));
+  return { ok: true, versions: sent };
+}
+
 export async function getCustomerFinanceAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };
   const { financeSummary } = await import("../../../lib/customer-portal");
@@ -1216,4 +1227,26 @@ export async function createWorkOrderAction(accessId) {
   if (!updated) return { error: "Could not advance the project." };
   await revalidate(accessId);
   return { ok: true, stage: "schedule" };
+}
+
+// Override the customer signature (admin/manager): record acceptance on their behalf so the project can
+// progress and be scheduled now. The e-signature on the document is NOT applied — it stays outstanding and
+// remains required; this only unblocks the lifecycle. Logged as an override.
+export async function overrideSignatureAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can override the signature." };
+  const cur = getPublishedProposal(accessId);
+  if (!cur) return { error: "Send the proposal first." };
+  if (cur.signed_name) return { error: "This proposal is already signed." };
+  let optKey = cur.selected_option || null;
+  if (!optKey) { try { const opts = JSON.parse(cur.payload || "{}").options || []; if (opts.length) optKey = String(opts[0].id); } catch { /* bad payload */ } }
+  if (!optKey) return { error: "No proposal option to accept." };
+  if (cur.status !== "accepted") {
+    const r = selectProposalOption(accessId, optKey);
+    if (!r) return { error: "Could not accept the proposal." };
+  }
+  const stage = updateStage(accessId, "schedule") ? "schedule" : null;
+  logProjectEvent(accessId, { kind: "override", label: `Signature overridden — proposal v${cur.version} accepted by ${actorName(tok)} to proceed; e-signature still required`, actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, stage };
 }

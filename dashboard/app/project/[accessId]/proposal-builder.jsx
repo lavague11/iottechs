@@ -11,7 +11,7 @@ import {
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
 import MobileFieldNav from "./mobile-field-nav";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, requestSignatureEmailAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction, overrideSignatureAction } from "./proposal-actions";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
@@ -623,6 +623,20 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     if (r?.error) { showToast(r.error); return; }
     showToast(r?.sent ? "Signature request emailed" : (r?.note || "Email isn’t configured yet"));
   }
+  // Override the signature (admin/manager): record acceptance so the project can progress and be scheduled
+  // now. The e-signature is NOT applied — it stays required. Confirm first, since it moves the lifecycle.
+  const canOverrideSign = ["admin", "manager"].includes(role);
+  async function doOverrideSign() {
+    if (sigBusy) return;
+    if (!window.confirm("Override the signature? The project will progress and can be scheduled now. The customer's signature is still required.")) return;
+    setSigBusy(true);
+    const r = await overrideSignatureAction(accessId).catch(() => null);
+    setSigBusy(false);
+    setSigSheet(false);
+    if (r?.error) { showToast(r.error); return; }
+    showToast("Signature overridden — project can be scheduled");
+    try { const u = new URL(window.location.href); ["view", "reqsign", "sign"].forEach((k) => u.searchParams.delete(k)); window.location.assign(u.toString()); } catch { window.location.reload(); }
+  }
 
   const totals = optionTotals(opt, taxRate, payload.discount, depositPct, payload.pcp_credit);
   // Canonical contract math: base proposal (this doc) + approved add-ons = current contract total.
@@ -894,7 +908,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
               <span>{sigBusy ? "Sending…" : "Request via Email"}</span>
             </button>
-            <div className="prop-sig-note">Opens their proposal to sign — identity is confirmed at the door.</div>
+            {canOverrideSign && (
+              <button type="button" className="prop-sig-act prop-sig-override" disabled={sigBusy} onClick={doOverrideSign}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 1 0 9 9"/></svg>
+                <span className="prop-sig-override-wrap"><b>{sigBusy ? "Working…" : "Override signature"}</b><small>Progress &amp; schedule now — signature still required.</small></span>
+              </button>
+            )}
           </div>
           <style>{SIG_SHEET_CSS}</style>
         </div>
@@ -1433,6 +1452,9 @@ const SIG_SHEET_CSS = `
 .prop-sig-act:disabled{opacity:.5;cursor:default}
 .prop-sig-act svg{color:#C9A96E;flex-shrink:0}
 .prop-sig-note{font-size:11.5px;color:var(--dv-meta,#787D84);padding:10px 2px 2px}
+.prop-sig-override{margin-top:12px;border-top:1px solid var(--dv-line,#E4E4DF);border-radius:12px}
+.prop-sig-override-wrap{display:flex;flex-direction:column;gap:2px}
+.prop-sig-override-wrap small{font-weight:500;font-size:11.5px;color:var(--dv-meta,#787D84)}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .prop-sig-sheet{background:#14171f}}
 `;
 

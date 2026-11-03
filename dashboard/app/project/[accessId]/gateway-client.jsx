@@ -45,6 +45,7 @@ import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, s
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
 import StaffHub from "./staff-hub";
+import ProposalVersionLog from "./proposal-version-log";
 import { threeStepPhases } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
@@ -3120,6 +3121,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                 viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
+              <ProposalVersionLog accessId={lp.access_id} />
             </div></AccordionProvider>);
           case "survey":
             return (<div style={{ height: "100%" }}>
