@@ -202,6 +202,19 @@ export async function setPortalVersionAction(accessId, version) {
   return { ok: true, portalVersion: v };
 }
 
+// Staff Project Hub per-project override (admin/manager): "hub" | "deck" | null (inherit the global flag).
+// Presentation only — mirrors setPortalVersionAction.
+export async function setStaffViewAction(accessId, value) {
+  const tok = await getAnyTok();
+  if (!tok || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can change this." };
+  if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  const { setStaffView } = await import("../../../lib/db");
+  const v = setStaffView(accessId, value || null);
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, staffView: v };
+}
+
 // Admin/manager override the customer PIN. A 4-digit value is set as a CUSTOM pin (survives the
 // last-4-phone normalizer); an empty value resets the project back to following the phone.
 export async function setCustomerPinAction(accessId, pin) {

@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction, setStaffViewAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -3240,6 +3240,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ? [{ label: `Customer portal: ${lp.portal_version === "v2" ? "V2" : lp.portal_version === "v1" ? "V1" : "Inherit"}`,
                 onClick: async () => { const next = lp.portal_version === "v2" ? "v1" : lp.portal_version === "v1" ? "" : "v2";
                   await setPortalVersionAction(lp.access_id, next).catch(() => {}); window.location.reload(); } }] : []),
+          // Staff Project Hub override (admin/manager): cycle Inherit → Hub → Deck → Inherit. Presentation only.
+          ...(["admin", "manager"].includes(cView) && !previewRole
+            ? [{ label: `Staff view: ${lp.staff_view === "hub" ? "Hub" : lp.staff_view === "deck" ? "Deck" : "Inherit"}`,
+                onClick: async () => { const next = lp.staff_view === "hub" ? "deck" : lp.staff_view === "deck" ? "" : "hub";
+                  await setStaffViewAction(lp.access_id, next).catch(() => {}); const u = new URL(window.location.href); u.searchParams.delete("classic"); window.location.assign(u.toString()); } }] : []),
           // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"
