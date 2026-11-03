@@ -132,8 +132,7 @@ export default function StaffHub({
         <span className="cpv-mark">IOT TECHS</span>
         <span className="cpv-htitle">
           <span className="cpv-htitle-name">{contact?.businessName || project?.contact_name || project?.customer || "Project"}</span>
-          <span className="cpv-htitle-id">· {String(accessId).slice(-4)}</span>
-          {contact && <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)", pointerEvents: "none" }}><path d="M18 15l-6-6-6 6"/></svg>}
+          <span className="cpv-htitle-id">· {String(accessId)}</span>
         </span>
         {/* Portal dropdown — stops propagation so it doesn't toggle the bar. */}
         <div className="cpv-portwrap" onClick={(e) => e.stopPropagation()}>
