@@ -125,12 +125,14 @@ export default function StaffHub({
 /* Full-width Job Log — spans the whole page, below the centered content. */
 .cpv-logsec{padding:8px 20px 56px}
 .cpv-card-act.done{color:var(--green)}
+.cpv-mark-link{text-decoration:none;color:var(--ink);cursor:pointer;justify-self:start}
+.cpv-mark-link:hover{color:var(--gold-text)}
 `}</style>
 
       {/* Unified bar — click anywhere (except Portal) to drop down the full contact details. */}
       <div className={`cpv-head${contact && contactOpen ? " open" : ""}`} onClick={() => contact && setContactOpen((v) => !v)}
         role={contact ? "button" : undefined} aria-expanded={contact ? contactOpen : undefined} aria-label={contact ? (contactOpen ? "Hide contact details" : "Show contact details") : undefined}>
-        <span className="cpv-mark">IOT TECHS</span>
+        <a className="cpv-mark cpv-mark-link" href={dashboardHref || "/dashboard"} onClick={(e) => e.stopPropagation()} aria-label="Dashboard">IOT TECHS</a>
         <span className="cpv-htitle">
           <span className="cpv-htitle-name">{contact?.businessName || project?.contact_name || project?.customer || "Project"}</span>
           <span className="cpv-htitle-id">· {String(accessId)}</span>
