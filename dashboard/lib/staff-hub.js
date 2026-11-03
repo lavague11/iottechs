@@ -17,3 +17,20 @@ export function staffHubFor(project) {
   if (!eligibleForStaffHub(project)) return false;
   return project?.staff_view !== "deck";
 }
+
+// The Simple view (hub + customer portal) shows a 3-step progress rail, not the full 5-phase lifecycle:
+// Consulting (= consulting + proposal), Install, Completion (= closeout + completion). Collapses whichever
+// of the 5 master phases is current into one of the three. Returns { phases:[{key,label,unlocked}], currentKey }.
+const SIMPLE_STEPS = [
+  { key: "consulting", label: "Consulting" },
+  { key: "install", label: "Install" },
+  { key: "completion", label: "Completion" },
+];
+// The 5 master phase keys (lib/spec PHASES) → the 3 Simple steps.
+const PHASE_TO_STEP = { ph_survey: "consulting", ph_proposal: "consulting", ph_install: "install", ph_wrap: "completion", ph_complete: "completion" };
+export function threeStepPhases(currentPhaseKey) {
+  const currentKey = PHASE_TO_STEP[currentPhaseKey] || "consulting";
+  const curIdx = SIMPLE_STEPS.findIndex((s) => s.key === currentKey);
+  const phases = SIMPLE_STEPS.map((s, i) => ({ key: s.key, label: s.label, unlocked: i <= curIdx }));
+  return { phases, currentKey };
+}

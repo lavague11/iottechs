@@ -45,6 +45,7 @@ import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, s
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
 import StaffHub from "./staff-hub";
+import { threeStepPhases } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -3073,8 +3074,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
           appt={portalAppt}
-          phases={gate.phases}
-          currentPhaseKey={masterToPhaseKey(projectStage)}
+          phases={threeStepPhases(masterToPhaseKey(projectStage)).phases}
+          currentPhaseKey={threeStepPhases(masterToPhaseKey(projectStage)).currentKey}
           progressPct={custProgressPct}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
@@ -3104,6 +3105,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const qcSigned = !!sFacts.qc_customer_signed;
       const isComplete = !!sFacts.completion_docs || projState === "COMPLETE";
       const hubAppt = staffAppt || pickUpcomingAny();
+      const simple3 = threeStepPhases(masterToPhaseKey(projectStage));   // Simple view = 3 steps: Consulting · Install · Completion
 
       const renderStaffOverlay = (key) => {
         switch (key) {
@@ -3202,12 +3204,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
             finance={staffFinance}
             appt={hubAppt}
-            phases={gate.phases}
-            currentPhaseKey={masterToPhaseKey(projectStage)}
+            phases={simple3.phases}
+            currentPhaseKey={simple3.currentKey}
             progressPct={custProgressPct}
             sections={hubSections}
             actions={hubActions}
             contact={deckCustomer}
+            log={deckLog}
+            defaultGroup={["tech", "vendor"].includes(cView) ? "internal" : "customer"}
             primaryCta={projState ? (CTA[projState] || null) : null}
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}

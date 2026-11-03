@@ -20,14 +20,14 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
-  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null,
+  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [contactOpen, setContactOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [group, setGroup] = useState("customer");   // Project-tools filter: Customer-facing vs Internal
+  const [group, setGroup] = useState(defaultGroup);   // Project-tools filter: Customer-facing vs Internal (techs default to Internal)
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -215,6 +215,14 @@ export default function StaffHub({
                 <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* JOB LOG — the project's activity log, at the very bottom. */}
+        {log && (
+          <section className="cpv-logsec">
+            <div className="cpv-kick">Log</div>
+            {log}
           </section>
         )}
       </main>
