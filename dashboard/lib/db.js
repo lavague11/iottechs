@@ -205,6 +205,9 @@ function init() {
   // Customer Portal V2 per-project override: "v2" forces the new simple portal, "v1" forces the classic
   // deck, NULL inherits the global CUSTOMER_PORTAL_V2 flag. Presentation-only — never affects project data.
   if (!cols.includes("portal_version"))  db.exec("ALTER TABLE projects ADD COLUMN portal_version TEXT");
+  // Staff Project Hub per-project override: "hub" forces the clean customer-style hub for STAFF, "deck"
+  // forces the classic stage deck, NULL inherits the global STAFF_PROJECT_HUB flag. Presentation-only.
+  if (!cols.includes("staff_view"))      db.exec("ALTER TABLE projects ADD COLUMN staff_view TEXT");
   // Customer Portal V2 — when a customer whose 7-day price lock expired asks to reopen, we stamp this. The
   // customer can't sign again until staff re-send the proposal (a newer sent_at clears it, compared downstream).
   if (!cols.includes("reopen_requested_at")) db.exec("ALTER TABLE projects ADD COLUMN reopen_requested_at TEXT");
@@ -3654,6 +3657,14 @@ export function setInternalJob(accessId, on) {
 export function setPortalVersion(accessId, version) {
   const v = version === "v2" || version === "v1" ? version : null;
   db.prepare("UPDATE projects SET portal_version=? WHERE access_id=? COLLATE NOCASE").run(v, String(accessId));
+  return v;
+}
+
+// Staff Project Hub per-project override. value: "hub" | "deck" | null (inherit the global flag).
+// Presentation-only — never touches project data. Returns the stored value.
+export function setStaffView(accessId, value) {
+  const v = value === "hub" || value === "deck" ? value : null;
+  db.prepare("UPDATE projects SET staff_view=? WHERE access_id=? COLLATE NOCASE").run(v, String(accessId));
   return v;
 }
 // Stamp a customer reopen request (expired price lock). Cleared implicitly when staff re-send the proposal

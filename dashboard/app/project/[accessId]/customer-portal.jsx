@@ -124,7 +124,7 @@ export default function CustomerPortal({
 
   return (
     <div className="cpv">
-      <style>{CSS}</style>
+      <style>{PORTAL_CSS}</style>
 
       {/* Header — lean, same branding family as the rest of the app. */}
       <header className="cpv-head">
@@ -356,7 +356,9 @@ function installSub(state, appt) {
   return "Awaiting scheduling.";
 }
 
-const CSS = `
+// Exported so the staff Project Hub (staff-hub.jsx) renders the IDENTICAL shell — same `.cpv` scope,
+// same tokens — and genuinely inherits this style instead of forking a copy.
+export const PORTAL_CSS = `
 .cpv{--ink:#101418;--ink-soft:#3A4048;--meta:#787D84;--faint:#A1A6AC;--paper:#F4F4F2;--raise:#FBFBFA;--line:#E4E4DF;--line-soft:#EDEDE9;--gold:#C9A96E;--gold-deep:#A8842F;--gold-text:#8A6A1F;--green:#2E7D5B;
   position:fixed;inset:0;overflow-y:auto;background:#fff;color:var(--ink);font:15px/1.5 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
 .cpv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}

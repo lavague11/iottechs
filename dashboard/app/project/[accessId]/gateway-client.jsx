@@ -43,6 +43,7 @@ import { customerPointer, customerAnnouncement, customerAction } from "../../../
 import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
+import StaffHub from "./staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -1552,7 +1553,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
@@ -3084,6 +3085,98 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         />
       );
     }
+
+    // Staff Project Hub (Phase 1) — render the clean customer-style hub for STAFF instead of the deck, behind
+    // the STAFF_PROJECT_HUB flag / per-project `staff_view`. `?classic=1` is the escape hatch back to the deck.
+    // Each card opens the SAME tool the deck mounts, in staff (editable) mode — zero duplicated logic.
+    const forceDeck = searchParams?.get("classic") != null;
+    if (staffHub && !isCustomerView && !forceDeck) {
+      const padOvl = { padding: "16px 18px", maxWidth: 820, margin: "0 auto" };
+      const sHasSurvey = !!(toolMeta?.survey?.has || custFacts.survey_has);
+      const sHasMockup = !!(toolMeta?.mockup?.has || custFacts.mockup_has);
+      const pStatus = resolverFacts.proposal_status;
+      const pSigned = !!resolverFacts.proposal_signed;
+      const installDone = !!sFacts.install_done;
+      const qcSigned = !!sFacts.qc_customer_signed;
+      const isComplete = !!sFacts.completion_docs || projState === "COMPLETE";
+      const hubAppt = staffAppt || pickUpcomingAny();
+
+      const renderStaffOverlay = (key) => {
+        switch (key) {
+          case "proposal":
+            return (<AccordionProvider><div style={{ maxWidth: 900, margin: "0 auto" }}>
+              <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={false}
+                defaultService={proposalServiceForCode(lp.service_code)} proposal={proposalData} onProposalChange={setProposalData}
+                onAdvance={(s) => browse(s)} onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
+                viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
+                signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
+            </div></AccordionProvider>);
+          case "survey":
+            return (<div style={{ height: "100%" }}>
+              <SiteSurveyWidget accessId={lp.access_id} view={view} propertyType={lp.property_type || "commercial"}
+                customerName={lp.contact_name || lp.customer} hasData={sHasSurvey} />
+            </div>);
+          case "mockup":
+            return (<div style={padOvl}>
+              <MockupWidget embedded accessId={lp.access_id} view={view} customerName={lp.contact_name || lp.customer} hasData={sHasMockup} />
+            </div>);
+          case "closeout": {
+            const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}
+              onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />);
+            return (<div style={padOvl}>
+              <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
+                role={cView} signoff={sign} meta={toolMeta?.qc} acceptances={acceptances}
+                onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+            </div>);
+          }
+          case "completion":
+            return (<div style={padOvl}>
+              <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={cView === "tech"}
+                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
+                onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
+            </div>);
+          default: return null;
+        }
+      };
+
+      const as = projState ? (ADMIN_STATUS[projState] || ADMIN_STATUS.INTAKE) : null;
+      const CTA = {
+        AWAITING_SIGNATURE: { label: "Open Proposal", view: "proposal" },
+        CHANGES_REQUESTED:  { label: "Open Proposal", view: "proposal" },
+        SEND_PROPOSAL:      { label: "Open Proposal", view: "proposal" },
+        CREATE_PROPOSAL:    { label: "Open Proposal", view: "proposal" },
+        AWAITING_SURVEY_APPROVAL: { label: "Open Site Survey", view: "survey" },
+        BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
+      };
+      const hubSections = [
+        { key: "survey", title: "Site Survey", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: "Open" },
+        { key: "mockup", title: "System Preview", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
+        { key: "proposal", title: "Proposal", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
+        { key: "install", title: "Installation", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: "View" },
+        { key: "closeout", title: "Closeout", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open" },
+        { key: "completion", title: "Completion", sub: isComplete ? "Complete." : "Final documents.", action: "Open" },
+      ];
+
+      return (
+        <StaffHub
+          accessId={lp.access_id}
+          project={lp}
+          status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
+          finance={staffFinance}
+          appt={hubAppt}
+          phases={gate.phases}
+          currentPhaseKey={masterToPhaseKey(projectStage)}
+          progressPct={custProgressPct}
+          sections={hubSections}
+          primaryCta={projState ? (CTA[projState] || null) : null}
+          renderOverlay={renderStaffOverlay}
+          onRefresh={() => { refreshAcceptances(); }}
+          onExitHub={() => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); window.location.assign(u.toString()); } catch { /* noop */ } }}
+        />
+      );
+    }
+
     return (
       <>
       <DeckView
@@ -4232,7 +4325,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4277,6 +4370,9 @@ export default function GatewayClient({ project, initialView = null, currentUser
       customerPortalV2={customerPortalV2}
       customerFinance={customerFinance}
       customerAppt={customerAppt}
+      staffHub={staffHub}
+      staffFinance={staffFinance}
+      staffAppt={staffAppt}
     />
   );
 
