@@ -46,11 +46,12 @@ export default function StaffHub({
     sp.delete("open");
     sp.set("view", view);
     if (extra.sign) sp.set("sign", "1"); else sp.delete("sign");
+    if (extra.reqsign) sp.set("reqsign", "1"); else sp.delete("reqsign");
     router.push(`${pathname}?${sp.toString()}`);
   };
   const close = () => {
     const sp = new URLSearchParams(params.toString());
-    ["view", "open", "sign"].forEach((k) => sp.delete(k));
+    ["view", "open", "sign", "reqsign"].forEach((k) => sp.delete(k));
     const qs = sp.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
     onRefresh?.();
@@ -117,6 +118,12 @@ export default function StaffHub({
 .cpv-logtog:hover{border-color:var(--ink);background:#fff}
 .cpv-logchev{color:var(--meta);margin-left:2px}
 .cpv-logbody{margin-top:12px}
+/* Locked tool cards — visible but gated until their prerequisite is met. */
+.cpv-card.locked{opacity:.6;cursor:default;background:var(--paper)}
+.cpv-card.locked:hover{border-color:var(--line);background:var(--paper)}
+.cpv-card.locked .cpv-card-act{color:var(--faint)}
+/* Full-width Job Log — spans the whole page, below the centered content. */
+.cpv-logsec{padding:8px 20px 56px}
 `}</style>
 
       {/* Unified bar — click anywhere (except Portal) to drop down the full contact details. */}
@@ -183,7 +190,7 @@ export default function StaffHub({
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-status">{status.label}</div>
-            {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign })}>{primaryCta.label}</button>}
+            {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
           </section>
         ) : null}
 
@@ -206,12 +213,16 @@ export default function StaffHub({
               </div>
               <div className="cpv-cardgrid">
                 {shown.map((c) => (
-                  <button key={c.key} className="cpv-card" onClick={() => open(c.view || c.key, { sign: c.sign })}>
+                  <button key={c.key} className={`cpv-card${c.locked ? " locked" : ""}`} disabled={c.locked} onClick={() => !c.locked && open(c.view || c.key, { sign: c.sign })}>
                     <div className="cpv-card-main">
                       <div className="cpv-card-title">{c.title}{c.done ? " ✓" : ""}</div>
-                      {c.sub && <div className="cpv-card-sub">{c.sub}</div>}
+                      <div className="cpv-card-sub">{c.locked ? (c.lockMsg || "Locked") : c.sub}</div>
                     </div>
-                    <span className="cpv-card-act">{c.action || "Open"} →</span>
+                    <span className="cpv-card-act">
+                      {c.locked
+                        ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        : `${c.action || "Open"} →`}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -235,18 +246,19 @@ export default function StaffHub({
           </section>
         )}
 
-        {/* JOB LOG — collapsed by default, like the deck; click to expand. */}
-        {log && (
-          <section className="cpv-logsec">
-            <button className="cpv-logtog" onClick={() => setLogOpen((v) => !v)} aria-expanded={logOpen}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-              Log
-              <svg className="cpv-logchev" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: logOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            {logOpen && <div className="cpv-logbody">{log}</div>}
-          </section>
-        )}
       </main>
+
+      {/* JOB LOG — full width of the page, collapsed by default (like the deck); click to expand. */}
+      {log && (
+        <section className="cpv-logsec">
+          <button className="cpv-logtog" onClick={() => setLogOpen((v) => !v)} aria-expanded={logOpen}>
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Log
+            <svg className="cpv-logchev" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: logOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          {logOpen && <div className="cpv-logbody">{log}</div>}
+        </section>
+      )}
 
       {/* OVERLAY — focused full-screen; URL-addressable; Back/X returns to the hub. */}
       {activeView && (
