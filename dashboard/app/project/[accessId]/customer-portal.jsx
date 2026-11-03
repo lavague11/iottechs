@@ -53,7 +53,7 @@ const CARD_COPY = {
 
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
-  signedDate = null, renderOverlay, onRefresh,
+  signedDate = null, renderOverlay, onRefresh, progressPct = null,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -141,19 +141,24 @@ export default function CustomerPortal({
           </section>
         ) : null}
 
-        {/* PROGRESS — read-only 5 steps. Not navigation. */}
+        {/* PROGRESS — read-only, styled to match the staff deck rail (segmented underline bars + labels).
+            Non-interactive: it answers "how far along am I", it is NOT navigation. */}
         {phases.length > 0 && (
           <section className="cpv-prog" aria-label="Project progress">
-            {phases.map((p) => {
-              const cur = p.key === currentPhaseKey;
-              const done = p.unlocked && !cur;
-              return (
-                <div key={p.key} className={`cpv-step${cur ? " cur" : done ? " done" : " future"}`}>
-                  <span className="cpv-dot">{done ? "✓" : ""}</span>
-                  <span className="cpv-slabel">{p.label}</span>
-                </div>
-              );
-            })}
+            <div className="cpv-track">
+              {phases.map((p, i) => {
+                const cur = p.key === currentPhaseKey;
+                const done = p.unlocked && !cur;
+                const fill = done ? 100 : cur ? 50 : 0;
+                return (
+                  <div key={p.key} className={`cpv-seg${done ? " done" : ""}${cur ? " cur" : ""}`}>
+                    <div className="cpv-bar"><i style={{ width: fill + "%" }} /></div>
+                    <div className="cpv-lab"><b>{done ? "✓" : i + 1}</b><span className="cpv-nm">{p.label}</span></div>
+                  </div>
+                );
+              })}
+            </div>
+            {progressPct != null && <div className="cpv-readout">{progressPct}%</div>}
           </section>
         )}
 
@@ -203,12 +208,12 @@ export default function CustomerPortal({
 
       {/* OVERLAY — focused full-screen; URL-addressable; Back/X returns to the portal. */}
       {activeView && (
-        <div className="cpv-ovl" role="dialog" aria-modal="true">
+        <div className={`cpv-ovl v-${activeView}`} role="dialog" aria-modal="true">
           <div className="cpv-ovl-bar">
-            <button className="cpv-ovl-x" onClick={close} aria-label="Close">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-            </button>
             <span className="cpv-ovl-title">{activeView === "payment" ? "Payment" : (CARD_COPY[activeView] || {}).title || "Details"}</span>
+            <button className="cpv-ovl-x" onClick={close} aria-label="Close">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
           </div>
           <div className="cpv-ovl-body">
             {activeView === "install"
@@ -250,52 +255,60 @@ function installSub(state, appt) {
 }
 
 const CSS = `
-.cpv{position:fixed;inset:0;overflow-y:auto;background:#0b0e11;color:#e9ecf2;font:15px/1.5 "Hanken Grotesk",system-ui,-apple-system,sans-serif}
-.cpv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;background:rgba(10,13,17,.86);backdrop-filter:blur(8px);border-bottom:1px solid rgba(255,255,255,.08)}
+.cpv{--ink:#101418;--ink-soft:#3A4048;--meta:#787D84;--faint:#A1A6AC;--paper:#F4F4F2;--raise:#FBFBFA;--line:#E4E4DF;--line-soft:#EDEDE9;--gold:#C9A96E;--gold-deep:#A8842F;--gold-text:#8A6A1F;--green:#2E7D5B;
+  position:fixed;inset:0;overflow-y:auto;background:#fff;color:var(--ink);font:15px/1.5 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
+.cpv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .cpv-brand{display:flex;flex-direction:column;min-width:0}
-.cpv-mark{font-weight:800;letter-spacing:.08em;font-size:13px;color:var(--gold,#C9A96E)}
-.cpv-proj{font-size:12.5px;color:#9aa3b2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cpv-port{font-size:13px;color:#cfd4dd;text-decoration:none;border:1px solid rgba(255,255,255,.14);border-radius:999px;padding:6px 12px;white-space:nowrap}
-.cpv-main{max-width:620px;margin:0 auto;padding:18px 16px 80px;display:flex;flex-direction:column;gap:16px}
-.cpv-kick{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#8b93a4;margin-bottom:8px}
-.cpv-hero{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-left:3px solid var(--tone,var(--gold,#C9A96E));border-radius:16px;padding:18px 20px}
-.cpv-status{font-size:1.5rem;font-weight:700;letter-spacing:-.01em;color:#f2f4f8}
-.cpv-appt-type{font-size:1.3rem;font-weight:700;color:#f2f4f8}
-.cpv-appt-when{font-size:1.05rem;color:#e8c061;margin-top:3px}
-.cpv-appt-where{font-size:.95rem;color:#9aa3b2;margin-top:3px}
-.cpv-cta{margin-top:14px;display:inline-block;background:var(--gold,#C9A96E);color:#101418;font-weight:700;font-size:15px;border:0;border-radius:11px;padding:12px 20px;cursor:pointer;width:100%}
-.cpv-cta:hover{filter:brightness(1.06)}
-.cpv-prog{display:flex;align-items:flex-start;justify-content:space-between;gap:4px;padding:6px 4px}
-.cpv-step{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center;position:relative}
-.cpv-step:not(:last-child)::after{content:"";position:absolute;top:9px;left:calc(50% + 12px);right:calc(-50% + 12px);height:2px;background:rgba(255,255,255,.12)}
-.cpv-step.done:not(:last-child)::after{background:var(--gold,#C9A96E)}
-.cpv-dot{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;background:rgba(255,255,255,.12);color:#0b0e11;z-index:1}
-.cpv-step.done .cpv-dot{background:var(--gold,#C9A96E)}
-.cpv-step.cur .cpv-dot{background:#e8c061;box-shadow:0 0 0 4px rgba(201,169,110,.25)}
-.cpv-slabel{font-size:11px;color:#8b93a4}
-.cpv-step.cur .cpv-slabel{color:#f2f4f8;font-weight:700}
-.cpv-bal{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:16px 20px}
+.cpv-mark{font-weight:800;letter-spacing:-.01em;font-size:14px;color:var(--ink)}
+.cpv-proj{font-size:12.5px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cpv-port{font-size:13px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;white-space:nowrap;background:var(--raise)}
+.cpv-port:hover{border-color:var(--ink);color:var(--ink)}
+.cpv-main{max-width:640px;margin:0 auto;padding:20px 16px 90px;display:flex;flex-direction:column;gap:16px}
+.cpv-kick{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:9px}
+.cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}
+.cpv-status{font-size:1.6rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);text-wrap:balance}
+.cpv-appt-type{font-size:1.35rem;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
+.cpv-appt-when{font-size:1.05rem;font-weight:600;color:var(--gold-text);margin-top:4px}
+.cpv-appt-where{font-size:.95rem;color:var(--meta);margin-top:3px}
+.cpv-cta{margin-top:16px;display:block;background:var(--gold);color:#1a1205;font-weight:700;font-size:15px;border:0;border-radius:11px;padding:13px 20px;cursor:pointer;width:100%;box-shadow:0 1px 0 rgba(0,0,0,.04)}
+.cpv-cta:hover{background:var(--gold-deep);color:#fff}
+/* Progress — deck-rail style: segmented top bars + small uppercase labels + % readout. Read-only. */
+.cpv-prog{display:flex;align-items:flex-end;gap:14px;padding:4px 6px 2px}
+.cpv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}
+.cpv-seg{flex:1;min-width:0;text-align:left;padding-top:6px}
+.cpv-bar{height:2px;border-radius:99px;background:var(--line);overflow:hidden;position:relative}
+.cpv-bar i{position:absolute;inset:0;width:0;border-radius:99px;background:var(--ink);transition:width .7s cubic-bezier(.16,1,.3,1)}
+.cpv-seg.cur .cpv-bar i{background:var(--gold)}
+.cpv-lab{margin-top:9px;display:flex;align-items:center;gap:6px;font-family:var(--font-mono),"JetBrains Mono",ui-monospace,monospace;font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cpv-seg.done .cpv-lab{color:var(--ink-soft)}
+.cpv-seg.cur .cpv-lab{color:var(--ink)}
+.cpv-lab b{font-weight:700}
+.cpv-readout{flex:0 0 auto;font-family:var(--font-mono),"JetBrains Mono",ui-monospace,monospace;font-size:15px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums;padding-bottom:1px}
+.cpv-bal{background:var(--raise);border:1px solid var(--line);border-radius:16px;padding:16px 20px}
 .cpv-balrows{display:flex;flex-direction:column;gap:7px}
-.cpv-balrows>div{display:flex;justify-content:space-between;font-size:15px;color:#c7cdd8}
-.cpv-balrows b{font-variant-numeric:tabular-nums;color:#f2f4f8}
-.cpv-balrem{border-top:1px solid rgba(255,255,255,.1);padding-top:8px;margin-top:2px;font-weight:700}
-.cpv-balrem b{color:#e8c061}
-.cpv-paid{font-size:1.3rem;font-weight:700;color:#5dc47f}
+.cpv-balrows>div{display:flex;justify-content:space-between;font-size:15px;color:var(--ink-soft)}
+.cpv-balrows b{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:700}
+.cpv-balrem{border-top:1px solid var(--line);padding-top:9px;margin-top:2px;font-weight:700}
+.cpv-balrem span{color:var(--ink)}
+.cpv-balrem b{color:var(--gold-text)}
+.cpv-paid{font-size:1.3rem;font-weight:700;color:var(--green)}
 .cpv-cards{display:flex;flex-direction:column;gap:10px}
-.cpv-card{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:15px 18px;cursor:pointer;color:inherit;font-family:inherit}
-.cpv-card:hover{background:rgba(255,255,255,.07)}
-.cpv-card-title{font-size:16px;font-weight:700;color:#f2f4f8}
-.cpv-card-sub{font-size:13px;color:#9aa3b2;margin-top:2px}
-.cpv-card-act{color:var(--gold,#C9A96E);font-weight:700;font-size:14px;white-space:nowrap}
-.cpv-ovl{position:fixed;inset:0;z-index:40;background:#0b0e11;display:flex;flex-direction:column}
-.cpv-ovl-bar{position:sticky;top:0;display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(10,13,17,.92);border-bottom:1px solid rgba(255,255,255,.08)}
-.cpv-ovl-x{background:none;border:0;color:#cfd4dd;cursor:pointer;display:flex;padding:4px}
-.cpv-ovl-title{font-weight:700;color:#f2f4f8}
-.cpv-ovl-body{flex:1;overflow-y:auto}
-.cpv-install{padding:22px 18px;max-width:620px;margin:0 auto}
-.cpv-install-when{font-size:1.2rem;font-weight:700;color:#e8c061;margin-bottom:12px}
-.cpv-install-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid rgba(255,255,255,.08);font-size:15px}
-.cpv-install-row b{color:#f2f4f8}
-.cpv-install-notes{margin-top:12px;color:#c7cdd8;white-space:pre-wrap}
-.cpv-empty{padding:28px 18px;color:#9aa3b2;text-align:center}
+.cpv-card{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--raise);border:1px solid var(--line);border-radius:14px;padding:15px 18px;cursor:pointer;color:inherit;font-family:inherit}
+.cpv-card:hover{border-color:var(--ink);background:#fff}
+.cpv-card-title{font-size:16px;font-weight:700;color:var(--ink)}
+.cpv-card-sub{font-size:13px;color:var(--meta);margin-top:2px}
+.cpv-card-act{color:var(--gold-text);font-weight:700;font-size:14px;white-space:nowrap}
+.cpv-ovl{position:fixed;inset:0;z-index:40;background:#fff;display:flex;flex-direction:column}
+.cpv-ovl-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.cpv-ovl-x{background:none;border:0;color:var(--ink-soft);cursor:pointer;display:flex;padding:4px;flex:0 0 auto}
+.cpv-ovl-x:hover{color:var(--ink)}
+.cpv-ovl-title{font-weight:700;color:var(--ink)}
+.cpv-ovl-body{flex:1;overflow-y:auto;background:#fff}
+/* The proposal reads like a document — give it a touch more size than the dense staff view. */
+.cpv-ovl.v-proposal .cpv-ovl-body{font-size:16.5px;line-height:1.55}
+.cpv-install{padding:22px 18px;max-width:640px;margin:0 auto}
+.cpv-install-when{font-size:1.2rem;font-weight:700;color:var(--gold-text);margin-bottom:12px}
+.cpv-install-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:15px;color:var(--ink-soft)}
+.cpv-install-row b{color:var(--ink)}
+.cpv-empty{padding:28px 18px;color:var(--meta);text-align:center}
 `;

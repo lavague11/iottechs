@@ -3050,6 +3050,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           appt={portalAppt}
           phases={gate.phases}
           currentPhaseKey={masterToPhaseKey(projectStage)}
+          progressPct={custProgressPct}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
           renderOverlay={renderPortalOverlay}
