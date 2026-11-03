@@ -27,6 +27,7 @@ import GlobalCommandBar   from "../../components/global-command-bar";
 import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
+import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
@@ -1788,6 +1789,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [addSaving,  setAddSaving]      = useState(false);
   const [verifyCust, setVerifyCust]     = useState(null); // pending external customer awaiting identity confirmation
   const [expOpen,    setExpOpen]        = useState(false);
+  const [hubPayOpen, setHubPayOpen]     = useState(false);   // Staff Hub "Record Payment" modal
   const [reqOpen,    setReqOpen]        = useState(false);
   const [pvwOpen,    setPvwOpen]        = useState(false);   // Proposal Views modal (header icon)
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -3136,6 +3138,22 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
                 onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
             </div>);
+          case "schedule":
+            return (<div style={padOvl}>
+              <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+                currentUser={currentUser} project={lp} view={view} apptKind="install"
+                defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
+            </div>);
+          case "workorder":
+            return (<div style={padOvl}>
+              <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
+                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
+                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
+            </div>);
+          case "expenses":
+            return (<div style={padOvl}>
+              <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
+            </div>);
           default: return null;
         }
       };
@@ -3153,27 +3171,49 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { key: "survey", title: "Site Survey", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: "Open" },
         { key: "mockup", title: "System Preview", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
         { key: "proposal", title: "Proposal", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
-        { key: "install", title: "Installation", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: "View" },
-        { key: "closeout", title: "Closeout", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open" },
-        { key: "completion", title: "Completion", sub: isComplete ? "Complete." : "Final documents.", action: "Open" },
+        { key: "install", title: "Installation", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: hubAppt ? "Reschedule" : "Schedule" },
+        { key: "workorder", title: "Work Order", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length },
+        { key: "closeout", title: "Closeout", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open", done: qcSigned },
+        { key: "completion", title: "Completion", sub: isComplete ? "Complete." : "Final documents.", action: "Open", done: isComplete },
+        { key: "expenses", title: "Expenses", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open" },
       ];
 
+      // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
+      const SI = {
+        pay:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+        cal:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+        phone: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>,
+        mail:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>,
+      };
+      const hubActions = [
+        (staffFinance?.hasContract && !staffFinance?.paidInFull) && { key: "pay", label: "Record Payment", tone: "pay", icon: SI.pay, onClick: () => setHubPayOpen(true) },
+        { key: "schedule", label: hubAppt ? "Reschedule" : "Schedule", view: "schedule", icon: SI.cal },
+        lp.contact_phone && { key: "call", label: "Call", href: `tel:${lp.contact_phone}`, icon: SI.phone },
+        lp.contact_email && { key: "email", label: "Email", href: `mailto:${lp.contact_email}`, icon: SI.mail },
+      ].filter(Boolean);
+
       return (
-        <StaffHub
-          accessId={lp.access_id}
-          project={lp}
-          status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
-          finance={staffFinance}
-          appt={hubAppt}
-          phases={gate.phases}
-          currentPhaseKey={masterToPhaseKey(projectStage)}
-          progressPct={custProgressPct}
-          sections={hubSections}
-          primaryCta={projState ? (CTA[projState] || null) : null}
-          renderOverlay={renderStaffOverlay}
-          onRefresh={() => { refreshAcceptances(); }}
-          onExitHub={() => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); window.location.assign(u.toString()); } catch { /* noop */ } }}
-        />
+        <>
+          <StaffHub
+            accessId={lp.access_id}
+            project={lp}
+            status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
+            finance={staffFinance}
+            appt={hubAppt}
+            phases={gate.phases}
+            currentPhaseKey={masterToPhaseKey(projectStage)}
+            progressPct={custProgressPct}
+            sections={hubSections}
+            actions={hubActions}
+            primaryCta={projState ? (CTA[projState] || null) : null}
+            renderOverlay={renderStaffOverlay}
+            onRefresh={() => { refreshAcceptances(); }}
+            onExitHub={() => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); window.location.assign(u.toString()); } catch { /* noop */ } }}
+          />
+          <RecordPaymentModal open={hubPayOpen} onClose={() => setHubPayOpen(false)} accessId={lp.access_id}
+            stage={projectStage === "payment" ? "payment" : "approval_deposit"} showToast={showLiveToast}
+            onRecorded={() => { setHubPayOpen(false); refreshAcceptances(); }} />
+        </>
       );
     }
 
