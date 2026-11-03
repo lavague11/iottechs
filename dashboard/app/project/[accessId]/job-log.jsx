@@ -27,6 +27,9 @@ const KIND_COLOR = {
   review: "var(--dv-blue,#3E6C9E)", pay: "var(--dv-green,#2E7D5B)", done: "var(--dv-green,#2E7D5B)",
   call: "var(--dv-gold-deep,#A8842F)", open: "var(--dv-faint,#A1A6AC)",
   request: "var(--dv-gold,#C9A96E)", schedule: "var(--dv-blue,#3E6C9E)",
+  // An override is a deliberate bypass of a normal gate (signature, walkthrough, stage) — color it
+  // as an exception so it's scannable in the log.
+  override: "var(--dv-red,#C4553D)", change: "var(--dv-faint,#A1A6AC)",
 };
 // A tool comment is tagged with the surface it came from + the item it was tapped on (e.g. a mockup
 // camera). Surface the tool + item so a note like "TOO FAR" reads against the camera it's about.

@@ -1162,6 +1162,28 @@ export async function acceptStageAction(accessId, stage, on = true) {
   return { ok: true, stage: newStage, acceptances };
 }
 
+// Admin/manager override of the customer QC walkthrough. The walkthrough is normally the customer's
+// own sign-off; sometimes the office needs to close the job without it (customer unreachable, remote
+// site, verbal OK). This records the qc_customer acceptance against the current checklist fingerprint
+// on the office's authority — and, like every override, writes it to the Job Log so the record shows
+// it was skipped by the office, not confirmed by the customer. Same all-devices-pass gate applies.
+export async function overrideQcCustomerAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Not authenticated." };
+  if (!["admin", "manager"].includes(tok.role)) return { error: "Only an admin or manager can override the walkthrough." };
+  const meta = getToolMeta(accessId);
+  if (!meta.qc.allPass) return { error: "Every device must pass QC first." };
+  const acceptances = acceptStage(accessId, "qc_customer", `${actorName(tok)} (override)`, meta.qc.fingerprint);
+  logProjectEvent(accessId, {
+    kind: "override",
+    label: `QC walkthrough overridden by the office — customer confirmation skipped`,
+    actor: actorName(tok),
+  });
+  const newStage = maybeAutoAdvance(accessId);
+  await revalidate(accessId);
+  return { ok: true, stage: newStage, acceptances };
+}
+
 // Office submits the survey / mockup for the customer to review. Recorded under a `submit_<tool>`
 // key (reusing the acceptance store) with the tool's current fingerprint — so if the office edits
 // the tool afterward, the fingerprint changes and the submission reads as "changed, re-submit",

@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, cloneElement } from "react";
 import { titleCase } from "../../../lib/proposal";
-import { getToolDataAction, saveToolDataAction, acceptStageAction } from "./proposal-actions";
+import { getToolDataAction, saveToolDataAction, acceptStageAction, overrideQcCustomerAction } from "./proposal-actions";
 import { setStage } from "./actions";
 import { installItemsFromProposal, QC_LABOR_RX, qcChecksFor as checksFor } from "../../../lib/install-checklist-model";
 
@@ -35,7 +35,16 @@ export function QcSignoff({ accessId, role, meta, acceptances, preview, onChange
     if (r?.error) { setErr(r.error); return; }
     onChange?.(r.acceptances, r.stage);
   }
-  const row = (key, a, label, mine, verb) => {
+  async function overrideCust() {
+    if (busy || preview) return;
+    if (!window.confirm("Override the customer walkthrough? The customer's confirmation will be skipped and this is logged.")) return;
+    setBusy("qc_customer"); setErr(null);
+    const r = await overrideQcCustomerAction(accessId);
+    setBusy(null);
+    if (r?.error) { setErr(r.error); return; }
+    onChange?.(r.acceptances, r.stage);
+  }
+  const row = (key, a, label, mine, verb, canOverride = false) => {
     const ok = current(a);
     const stale = !!a && !ok;
     return (
@@ -44,6 +53,7 @@ export function QcSignoff({ accessId, role, meta, acceptances, preview, onChange
         <span className="qcs-lbl">{label}</span>
         {ok ? <span className="qcs-meta">{a.by || ""}{a.at ? ` · ${fmtWhen(a.at)}` : ""}</span>
           : mine && allPass ? <button type="button" className="qcs-btn" disabled={!!busy || preview} onClick={() => sign(key)}>{busy === key ? "…" : stale ? `Re-${verb.toLowerCase()}` : verb}</button>
+          : canOverride && allPass ? <button type="button" className="qcs-btn ghost" disabled={!!busy || preview} onClick={overrideCust}>{busy === key ? "…" : "Override"}</button>
           : <span className="qcs-meta">{stale ? "Edited — re-sign" : "Awaiting"}</span>}
       </div>
     );
@@ -51,7 +61,7 @@ export function QcSignoff({ accessId, role, meta, acceptances, preview, onChange
   return (
     <div className="qcs">
       {row("qc_manager", mgr, "Manager", isOffice, "Approve")}
-      {row("qc_customer", cust, "Customer walkthrough", isCustomer, "Confirm")}
+      {row("qc_customer", cust, "Customer walkthrough", isCustomer, "Confirm", isOffice)}
       {err && <div className="qc-err">{err}</div>}
     </div>
   );
@@ -290,5 +300,7 @@ const QC_CSS = `
 .qcs-meta{font-size:.78rem;color:var(--dv-meta,#787D84)}
 .qcs-btn{height:32px;padding:0 14px;border:none;border-radius:8px;background:var(--dv-ink,#101418);color:#fff;font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .qcs-btn:disabled{opacity:.6;cursor:default}
+.qcs-btn.ghost{background:none;border:1px solid var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84);font-weight:500}
+.qcs-btn.ghost:hover:not(:disabled){border-color:var(--dv-faint,#A1A6AC);color:var(--dv-ink,#101418)}
 .qc-pending-note{text-align:center;font-size:.8rem;color:var(--dv-faint,#A1A6AC);padding:2px}
 `;
