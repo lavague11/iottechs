@@ -36,9 +36,11 @@ export default function ProjectContactCard({ customer, open = true, flush = fals
     if ((!r || r.ok) && svcOk) setEdit(false); else if (r && !r.ok) alert(r.error || "Save failed.");
   };
 
+  // Read-only in the normal (display) view — the property is only editable inside the Edit form (below),
+  // which the contact card's pencil opens.
   const propEl = customer.propertyType ? (
     <div className="pcc-field" key="prop"><dt>Property</dt><dd>
-      <PropertyToggle value={customer.propertyType} editable={!!customer.canEditProperty} onChange={customer.onPropertyChange} />
+      <PropertyToggle value={customer.propertyType} editable={false} />
     </dd></div>
   ) : null;
   const fieldEl = (f, i) => (
@@ -71,6 +73,10 @@ export default function ProjectContactCard({ customer, open = true, flush = fals
             <select className="pcc-i" value={cf.service_code || ""} onChange={(e) => setCf((s) => ({ ...s, service_code: e.target.value }))}>
               {customer.serviceOptions.map((o) => <option key={o.code} value={o.code}>{o.label}</option>)}
             </select>
+          </>)}
+          {customer.propertyType && (<>
+            <label className="pcc-l">Property</label>
+            <PropertyToggle value={customer.propertyType} editable={!!customer.canEditProperty} onChange={customer.onPropertyChange} />
           </>)}
           <div className="pcc-acts">
             <button className="pcc-mini primary" disabled={saving} onClick={save}>{saving ? "Saving…" : "Save"}</button>
