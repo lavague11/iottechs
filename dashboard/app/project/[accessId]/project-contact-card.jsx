@@ -9,7 +9,7 @@ import { useState } from "react";
 import AddressAutocomplete from "../../components/address-autocomplete";
 import PropertyToggle from "../../components/property-type";
 
-export default function ProjectContactCard({ customer, open = true }) {
+export default function ProjectContactCard({ customer, open = true, flush = false }) {
   const [edit, setEdit] = useState(false);
   const [saving, setSaving] = useState(false);
   const [cf, setCf] = useState({ contact_name: "", contact_phone: "", contact_email: "", address: "", service_code: "" });
@@ -54,7 +54,7 @@ export default function ProjectContactCard({ customer, open = true }) {
   if (propEl && !placed) rows.push(propEl);
 
   return (
-    <section className="pcc">
+    <section className={`pcc${flush ? " pcc-flush" : ""}`}>
       <style>{CSS}</style>
       {edit ? (
         <div className="pcc-edit">
@@ -100,6 +100,7 @@ export default function ProjectContactCard({ customer, open = true }) {
 
 const CSS = `
 .pcc{background:var(--raise,#FBFBFA);border:1px solid var(--line,#E4E4DF);border-radius:16px;padding:16px 18px}
+.pcc-flush{background:none;border:0;border-radius:0;padding:16px 20px 18px}
 .pcc-fields{display:flex;flex-wrap:wrap;gap:14px 34px}
 .pcc-field{min-width:0}
 .pcc-field dt{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--meta,#787D84);margin-bottom:3px}

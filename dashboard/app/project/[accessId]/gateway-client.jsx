@@ -2811,11 +2811,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       code: lp.access_id,
       name: lp.customer,
       statusText: stageShortLabel(barMarker),
+      businessName: lp.company_name || null,
       // A vendor gets the job-site address (delivery) and nothing personal — no name, phone or email.
       fields: [
-        can(cView, "customer.contact.view") && lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null, href: (lp.customer_id && ["admin", "manager", "sales"].includes(cView)) ? `/customers/${lp.customer_id}` : undefined },
-        lp.address && { k: "Job site", v: lp.address, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lp.address)}` },
+        can(cView, "customer.contact.view") && lp.company_name && { k: "Business", v: lp.company_name },
+        can(cView, "customer.contact.view") && lp.contact_name && { k: "Contact", v: lp.contact_name, href: (lp.customer_id && ["admin", "manager", "sales"].includes(cView)) ? `/customers/${lp.customer_id}` : undefined },
+        can(cView, "customer.contact.view") && lp.contact_phone && { k: "Phone", v: fmtPhone(lp.contact_phone), href: `tel:${lp.contact_phone}` },
         can(cView, "customer.contact.view") && lp.contact_email && { k: "Email", v: lp.contact_email, href: `mailto:${lp.contact_email}` },
+        lp.address && { k: "Job site", v: lp.address, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lp.address)}` },
       ].filter(Boolean),
       actions: [
         can(cView, "customer.contact.view") && lp.contact_phone && { label: "Call", icon: DVI.call, href: `tel:${lp.contact_phone}`,

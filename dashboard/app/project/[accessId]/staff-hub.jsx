@@ -103,18 +103,27 @@ export default function StaffHub({
 .cpv-seg2 button{border:0;background:none;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.01em;padding:6px 15px;color:var(--meta);cursor:pointer}
 .cpv-seg2 button.on{background:var(--ink);color:#fff}
 .cpv-cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+/* Unified header bar — the whole bar is clickable and drops down the full contact details. */
+.cpv-head{position:static}
+.cpv-head[role="button"]{cursor:pointer}
+.cpv-head[role="button"]:hover{background:var(--raise)}
+.cpv-head.open{border-bottom:0}
+.cpv-htitle{cursor:inherit;pointer-events:none}
+.cpv-headdrop{border-bottom:1px solid var(--line);background:rgba(255,255,255,.75)}
+.cpv-headdrop .pcc-flush{max-width:1040px;margin:0 auto}
 `}</style>
 
-      <header className="cpv-head">
+      {/* Unified bar — click anywhere (except Portal) to drop down the full contact details. */}
+      <div className={`cpv-head${contact && contactOpen ? " open" : ""}`} onClick={() => contact && setContactOpen((v) => !v)}
+        role={contact ? "button" : undefined} aria-expanded={contact ? contactOpen : undefined} aria-label={contact ? (contactOpen ? "Hide contact details" : "Show contact details") : undefined}>
         <span className="cpv-mark">IOT TECHS</span>
-        {/* Centered, clickable title — toggles the contact card. */}
-        <button className="cpv-htitle" onClick={() => contact && setContactOpen((v) => !v)} aria-expanded={contactOpen} aria-label={contact ? (contactOpen ? "Hide contact" : "Show contact") : undefined}>
-          <span className="cpv-htitle-name">{project?.contact_name || project?.customer || "Project"}</span>
+        <span className="cpv-htitle">
+          <span className="cpv-htitle-name">{contact?.businessName || project?.contact_name || project?.customer || "Project"}</span>
           <span className="cpv-htitle-id">· {String(accessId).slice(-4)}</span>
-          {contact && <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)" }}><path d="M18 15l-6-6-6 6"/></svg>}
-        </button>
-        {/* Portal dropdown — Dashboard + the Simple/Advanced view toggle (this is Simple view). */}
-        <div className="cpv-portwrap">
+          {contact && <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)", pointerEvents: "none" }}><path d="M18 15l-6-6-6 6"/></svg>}
+        </span>
+        {/* Portal dropdown — stops propagation so it doesn't toggle the bar. */}
+        <div className="cpv-portwrap" onClick={(e) => e.stopPropagation()}>
           <button className="cpv-port" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
             Portal <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: menuOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
           </button>
@@ -128,13 +137,15 @@ export default function StaffHub({
             </>
           )}
         </div>
-      </header>
+      </div>
+      {contact && contactOpen && (
+        <div className="cpv-headdrop">
+          <ProjectContactCard customer={contact} open flush />
+        </div>
+      )}
 
       <main className="cpv-main">
-        {/* Customer information. */}
-        {contact && contactOpen && <ProjectContactCard customer={contact} open />}
-
-        {/* PROGRESS — immediately under the customer information. */}
+        {/* PROGRESS — immediately under the unified contact bar. */}
         {phases.length > 0 && (
           <section className="cpv-prog" aria-label="Project progress">
             <div className="cpv-track">
