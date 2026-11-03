@@ -3045,7 +3045,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // After that the price may be re-evaluated. Null once signed (price is locked) or if never sent.
       const priceValidUntil = (() => {
         const sent = proposalData?.sent_at;
-        if (!sent || proposalData?.signed_name) return null;
+        if (!sent || proposalData?.signed_name) return null;                 // locked once signed
+        if ((custFin?.paid || 0) > 0 || sFacts.deposit_recorded) return null; // locked once a deposit/payment is on file
         if (!["sent", "changes_requested", "accepted"].includes(proposalData?.status)) return null;
         const d = new Date(sent); if (Number.isNaN(d.getTime())) return null;
         d.setDate(d.getDate() + 7);

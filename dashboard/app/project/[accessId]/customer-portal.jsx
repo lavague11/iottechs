@@ -256,15 +256,30 @@ export default function CustomerPortal({
 // Price-lock countdown + info. The proposal price is honored for 7 days from issue; after that it may be
 // re-evaluated. Shown beside the status headline while the proposal is unsigned.
 function PriceValid({ until }) {
+  const [open, setOpen] = useState(false);
   const d = new Date(until);
   if (Number.isNaN(d.getTime())) return null;
   const days = Math.ceil((d.getTime() - Date.now()) / 864e5);
-  const label = days > 1 ? `${days} days left` : days === 1 ? "1 day left" : days === 0 ? "expires today" : "price under review";
-  const tip = "Material and labor costs change often, so we can only lock this price for 7 days from when your proposal was sent. After that, it may be re-evaluated.";
+  const expired = days < 0;
+  const text = expired ? "Price expired"
+    : `Price valid · ${days > 1 ? `${days} days left` : days === 1 ? "1 day left" : "expires today"}`;
   return (
-    <div className={`cpv-pricepill${days < 0 ? " exp" : ""}`} title={tip}>
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
-      <span>Price valid · {label}</span>
+    <div className="cpv-pricewrap">
+      <button className={`cpv-pricepill${expired ? " exp" : ""}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+        <span>{text}</span>
+      </button>
+      {open && (
+        <>
+          <div className="cpv-pricescrim" onClick={() => setOpen(false)} />
+          <div className="cpv-pricepop" role="dialog">
+            {expired
+              ? <p>This price has <b>expired</b>. Equipment and supply costs change often, so your quote may be re-evaluated — please contact us to refresh it.</p>
+              : <p>We can only hold this price for <b>7 days</b> from when your proposal is sent. Equipment and supply costs change often, so after that it may be re-evaluated — we recommend locking in your price as soon as possible.</p>}
+            <button className="cpv-pricepop-ok" onClick={() => setOpen(false)}>Got it</button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -319,9 +334,17 @@ const CSS = `
 .cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}
 .cpv-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .cpv-status{font-size:1.6rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);text-wrap:balance}
-.cpv-pricepill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;margin-top:5px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px;font-weight:600;color:var(--gold-text);white-space:nowrap;cursor:help}
+.cpv-pricewrap{position:relative;flex:0 0 auto;margin-top:5px}
+.cpv-pricepill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-family:inherit;font-size:12px;font-weight:600;color:var(--gold-text);white-space:nowrap;cursor:pointer}
+.cpv-pricepill:hover{border-color:var(--gold)}
 .cpv-pricepill svg{color:var(--meta);flex:0 0 auto}
-.cpv-pricepill.exp{color:var(--meta)}
+.cpv-pricepill.exp{color:var(--red,#C4553D);border-color:color-mix(in srgb,var(--red,#C4553D) 35%,var(--line))}
+.cpv-pricepill.exp svg,.cpv-pricepill.exp:hover{color:var(--red,#C4553D);border-color:color-mix(in srgb,var(--red,#C4553D) 55%,var(--line))}
+.cpv-pricescrim{position:fixed;inset:0;z-index:9}
+.cpv-pricepop{position:absolute;top:calc(100% + 8px);right:0;z-index:10;width:min(300px,78vw);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 38px rgba(16,20,24,.18);padding:14px 15px}
+.cpv-pricepop p{margin:0 0 11px;font-size:13px;line-height:1.5;color:var(--ink-soft);font-weight:500;letter-spacing:0;text-transform:none}
+.cpv-pricepop b{color:var(--ink);font-weight:700}
+.cpv-pricepop-ok{background:var(--ink);color:#fff;border:0;border-radius:8px;padding:7px 15px;font:600 13px inherit;cursor:pointer}
 .cpv-appt-type{font-size:1.35rem;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
 .cpv-appt-when{font-size:1.05rem;font-weight:600;color:var(--gold-text);margin-top:4px}
 .cpv-appt-where{font-size:.95rem;color:var(--meta);margin-top:3px}
