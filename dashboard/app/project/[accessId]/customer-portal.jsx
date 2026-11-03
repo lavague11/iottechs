@@ -54,12 +54,22 @@ const CARD_COPY = {
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
-  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen, reopenPending = false,
+  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen, reopenPending = false, priceExpired = false,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [menuOpen, setMenuOpen] = useState(false);   // the "Portal" dropdown (staff previewing as a customer)
+  const [reopenBusy, setReopenBusy] = useState(false);
+  // Expired hero's "Request to reopen": within 7 days of expiry the server auto-reopens (customer can sign
+  // again); past that it flips to the staff-reopen flow. Either way we reload to render the new state.
+  async function doReopen() {
+    if (reopenBusy || !onRequestReopen) return;
+    setReopenBusy(true);
+    try { const r = await onRequestReopen(); if (!r?.error) { window.location.reload(); return; } }
+    catch { /* leave the button; the customer can retry */ }
+    setReopenBusy(false);
+  }
 
   // URL drives the open overlay: ?view=<key> (or a legacy ?open=…). ?sign carries the signer intent through.
   const requestedView = viewFromParams({ view: params.get("view"), open: params.get("open") });
@@ -163,6 +173,14 @@ export default function CustomerPortal({
           <section className="cpv-hero" style={{ "--tone": "var(--red,#C4553D)" }}>
             <div className="cpv-status">We're refreshing your quote</div>
             <p className="cpv-herosub">You asked to reopen your proposal. Because the price had expired, your team is updating it — you'll be able to review and sign as soon as they send the refreshed proposal.</p>
+          </section>
+        ) : priceExpired ? (
+          // Expired, unsigned, no deposit — red hero inviting a reopen. A request within 7 days of expiry
+          // reopens immediately (server-side); after that it goes to the team.
+          <section className="cpv-hero" style={{ "--tone": "var(--red,#C4553D)" }}>
+            <div className="cpv-status">Your proposal has expired</div>
+            <p className="cpv-herosub">This quote's 7-day price lock has passed. Reopen it now — if it's been under a week we'll reactivate it right away so you can review and sign.</p>
+            <button className="cpv-cta cpv-cta-red" disabled={reopenBusy} onClick={doReopen}>{reopenBusy ? "Reopening…" : "Request to reopen"}</button>
           </section>
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
@@ -381,6 +399,9 @@ const CSS = `
 .cpv-appt-where{font-size:.95rem;color:var(--meta);margin-top:3px}
 .cpv-cta{margin-top:16px;display:block;background:var(--gold);color:#1a1205;font-weight:700;font-size:15px;border:0;border-radius:11px;padding:13px 20px;cursor:pointer;width:100%;box-shadow:0 1px 0 rgba(0,0,0,.04)}
 .cpv-cta:hover{background:var(--gold-deep);color:#fff}
+.cpv-cta-red{background:var(--red,#C4553D);color:#fff}
+.cpv-cta-red:hover{background:#A6432F;color:#fff}
+.cpv-cta-red:disabled{opacity:.65;cursor:default}
 /* Progress — deck-rail style: segmented top bars + small uppercase labels + % readout. Read-only. */
 .cpv-prog{display:flex;align-items:flex-end;gap:14px;padding:4px 6px 2px}
 .cpv-track{flex:1;display:flex;gap:5px;align-items:flex-end;min-width:0}

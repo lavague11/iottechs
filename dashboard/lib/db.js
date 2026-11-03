@@ -208,6 +208,10 @@ function init() {
   // Customer Portal V2 — when a customer whose 7-day price lock expired asks to reopen, we stamp this. The
   // customer can't sign again until staff re-send the proposal (a newer sent_at clears it, compared downstream).
   if (!cols.includes("reopen_requested_at")) db.exec("ALTER TABLE projects ADD COLUMN reopen_requested_at TEXT");
+  // Auto-reopen within the 7-day grace after expiry: stamping this restarts the 7-day price window (the
+  // customer can sign again at the same price) without staff re-sending. Downstream the effective window
+  // start is max(proposal sent_at, price_reopened_at).
+  if (!cols.includes("price_reopened_at")) db.exec("ALTER TABLE projects ADD COLUMN price_reopened_at TEXT");
   // Field-created project (a tech logged a legacy/on-site job with just name + address). needs_details=1
   // flags it "missing details" for the office to complete later; clears once a phone is on file.
   if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
@@ -3558,6 +3562,12 @@ export function setPortalVersion(accessId, version) {
 export function setReopenRequested(accessId) {
   const now = db.prepare("SELECT datetime('now','localtime') AS t").get().t;
   db.prepare("UPDATE projects SET reopen_requested_at=? WHERE access_id=? COLLATE NOCASE").run(now, String(accessId));
+  return now;
+}
+// Auto-reopen (within grace): restart the price window now and clear any pending staff-reopen request.
+export function setPriceReopened(accessId) {
+  const now = db.prepare("SELECT datetime('now','localtime') AS t").get().t;
+  db.prepare("UPDATE projects SET price_reopened_at=?, reopen_requested_at=NULL WHERE access_id=? COLLATE NOCASE").run(now, String(accessId));
   return now;
 }
 

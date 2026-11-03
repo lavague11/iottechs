@@ -3041,30 +3041,29 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         hasAppt: !!portalAppt,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
-      // Reopen pending: the customer asked to reopen an expired quote and staff haven't re-sent yet. Until a
-      // newer proposal is sent (sent_at > the request), the customer can't sign — the portal shows a waiting state.
+      // --- Price-lock window (Portal V2) ---------------------------------------------------------------
+      // A sent, unsigned, undeposited proposal is honored for 7 days from the window start (the later of its
+      // sent date and any auto-reopen). Past that it's EXPIRED (→ red hero, "Request to reopen"). Locked once
+      // signed or a deposit is on file. A staff-reopen is pending only when the customer asked AFTER the grace
+      // window (auto-reopen inside grace clears it via price_reopened_at and never reaches here).
+      const tOf = (s) => { const t = s ? new Date(s).getTime() : NaN; return Number.isNaN(t) ? 0 : t; };
+      const priceLocked = !!proposalData?.signed_name || (custFin?.paid || 0) > 0 || !!sFacts.deposit_recorded;
+      const priceActive = !priceLocked && ["sent", "changes_requested", "accepted"].includes(proposalData?.status);
+      const windowStart = Math.max(tOf(proposalData?.sent_at), tOf(lp.price_reopened_at));
+      const windowUntil = priceActive && windowStart ? windowStart + 7 * 864e5 : null;
+      const expired = windowUntil != null && Date.now() > windowUntil;
       const reopenPending = (() => {
         const req = lp.reopen_requested_at;
-        if (!req || proposalData?.signed_name) return false;
-        const sent = proposalData?.sent_at;
-        if (!sent) return true;
-        return new Date(sent).getTime() <= new Date(req).getTime();
+        if (!req || priceLocked) return false;
+        return Math.max(tOf(proposalData?.sent_at), tOf(lp.price_reopened_at)) <= tOf(req);
       })();
-      // Price-lock window: a sent, not-yet-signed proposal is honored for 7 days from when it was sent.
-      // After that the price may be re-evaluated. Null once signed (price is locked) or if never sent.
-      const priceValidUntil = (() => {
-        const sent = proposalData?.sent_at;
-        if (!sent || proposalData?.signed_name) return null;                 // locked once signed
-        if ((custFin?.paid || 0) > 0 || sFacts.deposit_recorded) return null; // locked once a deposit/payment is on file
-        if (!["sent", "changes_requested", "accepted"].includes(proposalData?.status)) return null;
-        const d = new Date(sent); if (Number.isNaN(d.getTime())) return null;
-        d.setDate(d.getDate() + 7);
-        return d.toISOString();
-      })();
+      const priceExpired = priceActive && expired && !reopenPending;
+      const priceValidUntil = (priceActive && !expired && !reopenPending && windowUntil) ? new Date(windowUntil).toISOString() : null;
       return (
         <CustomerPortal
           accessId={lp.access_id}
-          priceValidUntil={reopenPending ? null : priceValidUntil}
+          priceValidUntil={priceValidUntil}
+          priceExpired={priceExpired}
           reopenPending={reopenPending}
           onRequestReopen={previewRole ? null : () => requestReopenAction(lp.access_id)}
           project={lp}

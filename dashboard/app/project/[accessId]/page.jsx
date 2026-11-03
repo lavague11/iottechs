@@ -104,6 +104,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project_type:    p.project_type,
     portal_version:  p.portal_version || null,   // Customer Portal V2 per-project override (v2|v1|null=inherit)
     reopen_requested_at: p.reopen_requested_at || null,   // customer asked to reopen an expired quote (blocks sign until re-sent)
+    price_reopened_at:   p.price_reopened_at || null,     // auto-reopen within grace restarts the 7-day price window
     property_type:   p.property_type,   // canonical Residential/Commercial (visible to authorized viewers)
     survey_skipped_at: p.survey_skipped_at || null,   // explicit "no survey for this job" (gate fact)
     survey_skipped_by: p.survey_skipped_by || null,

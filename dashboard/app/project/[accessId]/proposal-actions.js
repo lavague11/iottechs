@@ -960,12 +960,24 @@ export async function requestReopenAction(accessId) {
   if (!tok) return { error: "Session expired — unlock the project again." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   const who = actorName(tok);
-  // Stamp the reopen request — this is what blocks a new signature until staff re-send the proposal.
-  const { setReopenRequested } = await import("../../../lib/db");
+  const { setReopenRequested, setPriceReopened, getPublishedProposal, getJobByAccessId } = await import("../../../lib/db");
+  const tOf = (s) => { const t = s ? new Date(s).getTime() : NaN; return Number.isNaN(t) ? 0 : t; };
+  const pub = getPublishedProposal(accessId);
+  const proj = getJobByAccessId(accessId);
+  const windowStart = Math.max(tOf(pub?.sent_at), tOf(proj?.price_reopened_at));
+  const expiry = windowStart ? windowStart + 7 * 864e5 : 0;
+  const now = Date.now();
+  // Within 7 days of expiry → AUTO-REOPEN: restart the 7-day window, no staff action. Customer can sign now.
+  if (expiry && now > expiry && now <= expiry + 7 * 864e5) {
+    try { setPriceReopened(accessId); } catch {}
+    try { logProjectEvent(accessId, { kind: "request", label: "Customer reopened the proposal (within grace) — 7-day price window restarted", actor: who }); } catch {}
+    await revalidate(accessId);
+    return { ok: true, reopened: true, message: "Your proposal is active again — you have 7 more days to review and sign." };
+  }
+  // Past the grace window → staff must refresh the quote. Stamp the request (blocks signing), notify + email.
   try { setReopenRequested(accessId); } catch {}
-  addProjectNote(accessId, { role: tok.role, name: who, body: "Requested to reopen the proposal — the 7-day price lock has expired. Please refresh the quote.", isPublic: true });
+  addProjectNote(accessId, { role: tok.role, name: who, body: "Requested to reopen the proposal — the price lock has expired. Please refresh the quote.", isPublic: true });
   try { notifyRoles(["admin", "manager", "sales"], { type: "reopen_request", title: "Customer requested to reopen an expired quote", body: `${accessId}`, link: `/project/${accessId}` }); } catch {}
-  // Email the office/admin so they re-send the proposal (which resets the 7-day price window).
   try {
     const { sendOfficeEmail } = await import("../../../lib/email");
     await sendOfficeEmail({
@@ -973,7 +985,7 @@ export async function requestReopenAction(accessId) {
       heading: "Customer asked to reopen an expired quote",
       lines: [
         `${who} requested to reopen project ${accessId}.`,
-        "Their 7-day price lock has expired, so they can't sign until you re-send the proposal.",
+        "Their price lock has expired (past the 7-day grace), so they can't sign until you re-send the proposal.",
         "Open the project, review/refresh pricing, and re-send the proposal to reset the price window.",
       ],
       accessId,
