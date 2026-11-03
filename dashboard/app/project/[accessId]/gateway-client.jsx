@@ -27,6 +27,7 @@ import GlobalCommandBar   from "../../components/global-command-bar";
 import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
+import WorkOrderSheet   from "./work-order-sheet";
 import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -3172,7 +3173,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
             </div>);
           case "workorder":
-            return (<div style={ovl(760)}>
+            return (<div style={ovl(820)}>
+              {/* The work order IS the proposal, re-priced at tech payout — same line items, titled Work
+                  Order, service named. The assign/finalize/create controls sit below it. */}
+              <WorkOrderSheet proposal={proposalData} />
               <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
