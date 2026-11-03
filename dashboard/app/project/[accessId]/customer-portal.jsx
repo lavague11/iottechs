@@ -54,7 +54,7 @@ const CARD_COPY = {
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
-  previewRole = null, onPreviewRole, previewRoles = [], onLock,
+  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -160,8 +160,10 @@ export default function CustomerPortal({
           </section>
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
-            <div className="cpv-kick">Current status</div>
-            <div className="cpv-status">{STATUS_HEADLINE[status.state] || status.label}</div>
+            <div className="cpv-hero-top">
+              <div className="cpv-status">{STATUS_HEADLINE[status.state] || status.label}</div>
+              {priceValidUntil && <PriceValid until={priceValidUntil} />}
+            </div>
             {cta && <button className="cpv-cta" onClick={() => open(cta.view, { sign: cta.sign })}>{cta.label}</button>}
           </section>
         ) : null}
@@ -251,6 +253,22 @@ export default function CustomerPortal({
   );
 }
 
+// Price-lock countdown + info. The proposal price is honored for 7 days from issue; after that it may be
+// re-evaluated. Shown beside the status headline while the proposal is unsigned.
+function PriceValid({ until }) {
+  const d = new Date(until);
+  if (Number.isNaN(d.getTime())) return null;
+  const days = Math.ceil((d.getTime() - Date.now()) / 864e5);
+  const label = days > 1 ? `${days} days left` : days === 1 ? "1 day left" : days === 0 ? "expires today" : "price under review";
+  const tip = "Material and labor costs change often, so we can only lock this price for 7 days from when your proposal was sent. After that, it may be re-evaluated.";
+  return (
+    <div className={`cpv-pricepill${days < 0 ? " exp" : ""}`} title={tip}>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span>Price valid · {label}</span>
+    </div>
+  );
+}
+
 function InstallDetail({ appt }) {
   if (!appt) return <div className="cpv-empty">No appointment scheduled yet. Your team will be in touch to set a date.</div>;
   return (
@@ -299,7 +317,11 @@ const CSS = `
 .cpv-main{max-width:640px;margin:0 auto;padding:20px 16px 90px;display:flex;flex-direction:column;gap:16px}
 .cpv-kick{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:9px}
 .cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}
+.cpv-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .cpv-status{font-size:1.6rem;font-weight:750;letter-spacing:-.02em;color:var(--ink);text-wrap:balance}
+.cpv-pricepill{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;margin-top:5px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-size:12px;font-weight:600;color:var(--gold-text);white-space:nowrap;cursor:help}
+.cpv-pricepill svg{color:var(--meta);flex:0 0 auto}
+.cpv-pricepill.exp{color:var(--meta)}
 .cpv-appt-type{font-size:1.35rem;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
 .cpv-appt-when{font-size:1.05rem;font-weight:600;color:var(--gold-text);margin-top:4px}
 .cpv-appt-where{font-size:.95rem;color:var(--meta);margin-top:3px}

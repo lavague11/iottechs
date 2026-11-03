@@ -3041,9 +3041,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         hasAppt: !!portalAppt,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
+      // Price-lock window: a sent, not-yet-signed proposal is honored for 7 days from when it was sent.
+      // After that the price may be re-evaluated. Null once signed (price is locked) or if never sent.
+      const priceValidUntil = (() => {
+        const sent = proposalData?.sent_at;
+        if (!sent || proposalData?.signed_name) return null;
+        if (!["sent", "changes_requested", "accepted"].includes(proposalData?.status)) return null;
+        const d = new Date(sent); if (Number.isNaN(d.getTime())) return null;
+        d.setDate(d.getDate() + 7);
+        return d.toISOString();
+      })();
       return (
         <CustomerPortal
           accessId={lp.access_id}
+          priceValidUntil={priceValidUntil}
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
