@@ -1313,6 +1313,21 @@ function init() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_events_project ON project_events(project_access_id)`);
 
+  // Customer-level log — the CRM activity note a rep adds against the whole client ("called, left VM"),
+  // not tied to one project. The customer hub merges these with the per-project Job Log and service-call
+  // events into one timeline. customer_id → users row (role customer).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_notes (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id  INTEGER NOT NULL,
+      body         TEXT NOT NULL,
+      author_name  TEXT,
+      author_role  TEXT,
+      created_at   TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_notes_cust ON customer_notes(customer_id)`);
+
   // Per-user "recently opened" projects — powers the dashboard launchpad. One row per (user, project),
   // bumped on every open, so the six most-recent DISTINCT projects a user touched are a cheap query.
   db.exec(`
@@ -3414,6 +3429,90 @@ export function updateCustomerUser(id, { name, email, phone }) {
 // Every project of one customer, newest first (id-based — the canonical relationship).
 export function getProjectsForCustomerId(id) {
   return db.prepare("SELECT * FROM projects WHERE customer_id=? ORDER BY id DESC").all(Number(id)).map(decorate);
+}
+
+// ---- Customer hub (admin-side customer homepage) -----------------------------------------------------
+// One id-based aggregator behind /customers/<id>. Pure reads over the canonical tables; it never invents
+// money or status — projects come decorated (status/value/category), quotes are the latest proposal row
+// per project, service calls and inquiries read their own tables, and the activity feed merges the
+// customer log, per-project Job Log and service-call events into one timeline.
+
+// Best-effort name → canonical customer id, for the legacy name-keyed /customers links. Prefers the
+// customer user with the most projects when a name is shared; returns null when no users row matches.
+export function findCustomerIdByName(name) {
+  const n = String(name || "").trim();
+  if (!n) return null;
+  const row = db.prepare(`
+    SELECT u.id, (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id) AS projects
+    FROM users u WHERE u.role='customer' AND u.name = ? COLLATE NOCASE
+    ORDER BY projects DESC, u.id DESC LIMIT 1`).get(n);
+  return row ? row.id : null;
+}
+
+export function addCustomerNote(customerId, { body, authorName, authorRole }) {
+  const text = String(body || "").trim();
+  if (!text) return { error: "Empty note." };
+  db.prepare("INSERT INTO customer_notes (customer_id, body, author_name, author_role) VALUES (?,?,?,?)")
+    .run(Number(customerId), text.slice(0, 1000), authorName || null, authorRole || null);
+  return { ok: true, notes: getCustomerNotes(customerId) };
+}
+export function getCustomerNotes(customerId) {
+  return db.prepare("SELECT * FROM customer_notes WHERE customer_id=? ORDER BY id DESC LIMIT 200").all(Number(customerId));
+}
+
+// Latest proposal (quote) per project for this customer — version, status, sent date, and the project's
+// current contract value. Drafts and sent/signed versions all surface; opening one links into the project.
+export function getCustomerQuotes(customerId) {
+  const projects = db.prepare("SELECT access_id, customer, value FROM projects WHERE customer_id=? ORDER BY id DESC").all(Number(customerId));
+  const out = [];
+  for (const p of projects) {
+    const q = db.prepare("SELECT id, version, status, sent_at, selected_at, created_at FROM proposals WHERE project_access_id=? ORDER BY id DESC LIMIT 1").get(p.access_id);
+    if (q) out.push({ ...q, access_id: p.access_id, value: p.value || 0 });
+  }
+  return out;
+}
+
+// One merged activity timeline for the customer: the customer-level log, the Job Log of every one of
+// their projects, and their service-call events — newest first, capped.
+export function getCustomerActivity(customerId, limit = 50) {
+  const projIds = db.prepare("SELECT access_id FROM projects WHERE customer_id=?").all(Number(customerId)).map((r) => r.access_id);
+  const svcIds = db.prepare("SELECT svc_id FROM service_calls WHERE customer_id=?").all(Number(customerId)).map((r) => r.svc_id);
+  const feed = [];
+  for (const n of getCustomerNotes(customerId))
+    feed.push({ at: n.created_at, kind: "note", label: n.body, actor: n.author_name, source: "customer" });
+  if (projIds.length) {
+    const ph = projIds.map(() => "?").join(",");
+    const evs = db.prepare(`SELECT kind, label, actor, created_at, project_access_id FROM project_events WHERE project_access_id IN (${ph}) ORDER BY id DESC LIMIT ?`).all(...projIds, limit);
+    for (const e of evs) feed.push({ at: e.created_at, kind: e.kind, label: e.label, actor: e.actor, source: "project", ref: e.project_access_id });
+  }
+  if (svcIds.length) {
+    const ph = svcIds.map(() => "?").join(",");
+    const evs = db.prepare(`SELECT kind, detail, actor_name, at, svc_id FROM service_call_events WHERE svc_id IN (${ph}) ORDER BY id DESC LIMIT ?`).all(...svcIds, limit);
+    for (const e of evs) feed.push({ at: e.at, kind: e.kind, label: e.detail || e.kind, actor: e.actor_name, source: "service", ref: e.svc_id });
+  }
+  feed.sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  return feed.slice(0, limit);
+}
+
+// Everything the customer hub renders, in one call. Returns null when the id isn't a customer.
+export function getCustomerHub(customerId) {
+  const summary = getCustomerSummary(customerId);
+  if (!summary) return null;
+  const projects = getProjectsForCustomerId(customerId);
+  const serviceCalls = listServiceCallsForCustomerId(customerId, { email: summary.email, phone: summary.phone });
+  // Inquiries = the earliest-stage leads (projects still at inquiry/site_survey) + any CCTV quote snapshot.
+  const inquiries = projects
+    .filter((p) => ["inquiry", "site_survey"].includes(p.stage))
+    .map((p) => ({ access_id: p.access_id, stage: p.stage, stageLabel: p.stageLabel, source: p.source, address: p.address, created_at: p.created_at, service: p.service_code }));
+  return {
+    summary,
+    projects,
+    quotes: getCustomerQuotes(customerId),
+    serviceCalls,
+    inquiries,
+    activity: getCustomerActivity(customerId),
+    notes: getCustomerNotes(customerId),
+  };
 }
 
 // Field capture (tech, on-site): create a project from JUST a name + address for a legacy/pre-software

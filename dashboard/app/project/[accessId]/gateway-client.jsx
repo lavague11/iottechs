@@ -2809,7 +2809,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       statusText: stageShortLabel(barMarker),
       // A vendor gets the job-site address (delivery) and nothing personal — no name, phone or email.
       fields: [
-        can(cView, "customer.contact.view") && lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null, href: (lp.customer_id && ["admin", "manager"].includes(cView)) ? `/users/${lp.customer_id}` : undefined },
+        can(cView, "customer.contact.view") && lp.contact_name && { k: "Contact", v: lp.contact_name, sub: lp.contact_phone ? fmtPhone(lp.contact_phone) : "", subHref: lp.contact_phone ? `tel:${lp.contact_phone}` : null, href: (lp.customer_id && ["admin", "manager", "sales"].includes(cView)) ? `/customers/${lp.customer_id}` : undefined },
         lp.address && { k: "Job site", v: lp.address, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lp.address)}` },
         can(cView, "customer.contact.view") && lp.contact_email && { k: "Email", v: lp.contact_email, href: `mailto:${lp.contact_email}` },
       ].filter(Boolean),
