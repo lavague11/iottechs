@@ -10,12 +10,10 @@ export function eligibleForStaffHub(project) {
   return eligibleForCustomerPortalV2(project);
 }
 
-// Precedence: ineligible → always deck; per-project override wins over global; else the global flag.
-//   project.staff_view: "hub" force on · "deck" force off · null/undefined → inherit global
-export function staffHubFor(project, { globalOn = false } = {}) {
+// Simple view (the hub, "V2") is the DEFAULT for eligible projects. Only an explicit "deck" override
+// (Advanced view, "V1") opts out. `staff_view`: "deck" → Advanced deck · "hub"/null/undefined → Simple hub.
+// (The old global STAFF_PROJECT_HUB flag is no longer consulted — Simple is simply the default now.)
+export function staffHubFor(project) {
   if (!eligibleForStaffHub(project)) return false;
-  const ov = project?.staff_view;
-  if (ov === "hub") return true;
-  if (ov === "deck") return false;
-  return !!globalOn;
+  return project?.staff_view !== "deck";
 }

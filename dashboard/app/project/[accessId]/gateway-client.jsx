@@ -3211,7 +3211,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             primaryCta={projState ? (CTA[projState] || null) : null}
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
-            onExitHub={() => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); window.location.assign(u.toString()); } catch { /* noop */ } }}
+            dashboardHref={DECK_DASH_HOME[view] || "/dashboard"}
+            onAdvanced={["admin", "manager"].includes(cView)
+              ? async () => { await setStaffViewAction(lp.access_id, "deck").catch(() => {}); const u = new URL(window.location.href); u.searchParams.delete("view"); u.searchParams.delete("classic"); window.location.assign(u.toString()); }
+              : () => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); u.searchParams.delete("view"); window.location.assign(u.toString()); } catch { /* noop */ } }}
           />
           <RecordPaymentModal open={hubPayOpen} onClose={() => setHubPayOpen(false)} accessId={lp.access_id}
             stage={projectStage === "payment" ? "payment" : "approval_deposit"} showToast={showLiveToast}
@@ -3234,6 +3237,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
         menu={[
+          // View toggle — Simple (the hub, V2, default) ↔ Advanced (this deck, V1). Right under Dashboard.
+          // On the deck you're in Advanced, so this switches you to Simple (clears the per-project override).
+          ...(["admin", "manager"].includes(cView) && !previewRole
+            ? [{ label: "Simple view", onClick: async () => { await setStaffViewAction(lp.access_id, "").catch(() => {});
+                const u = new URL(window.location.href); u.searchParams.delete("classic"); u.searchParams.delete("view"); window.location.assign(u.toString()); } }] : []),
           ...(cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []),
           // Waive the survey for jobs that never get one (monitoring/ADT, phone-quoted). Low-frequency → lives here.
           ...(["admin", "manager"].includes(cView) && !previewRole
@@ -3243,11 +3251,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ? [{ label: `Customer portal: ${lp.portal_version === "v2" ? "V2" : lp.portal_version === "v1" ? "V1" : "Inherit"}`,
                 onClick: async () => { const next = lp.portal_version === "v2" ? "v1" : lp.portal_version === "v1" ? "" : "v2";
                   await setPortalVersionAction(lp.access_id, next).catch(() => {}); window.location.reload(); } }] : []),
-          // Staff Project Hub override (admin/manager): cycle Inherit → Hub → Deck → Inherit. Presentation only.
-          ...(["admin", "manager"].includes(cView) && !previewRole
-            ? [{ label: `Staff view: ${lp.staff_view === "hub" ? "Hub" : lp.staff_view === "deck" ? "Deck" : "Inherit"}`,
-                onClick: async () => { const next = lp.staff_view === "hub" ? "deck" : lp.staff_view === "deck" ? "" : "hub";
-                  await setStaffViewAction(lp.access_id, next).catch(() => {}); const u = new URL(window.location.href); u.searchParams.delete("classic"); window.location.assign(u.toString()); } }] : []),
           // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"

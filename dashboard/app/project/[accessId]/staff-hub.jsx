@@ -20,12 +20,13 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
-  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onExitHub, contact = null,
+  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
   const [contactOpen, setContactOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -79,7 +80,7 @@ export default function StaffHub({
 .cpv-railbtn.pay:hover{border-color:var(--green)}
 .cpv-collapse{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:999px;background:var(--raise);color:var(--meta);cursor:pointer}
 .cpv-collapse:hover{border-color:var(--ink);color:var(--ink)}
-.cpv-collapse + .cpv-port{margin-left:8px}
+.cpv-collapse + .cpv-portwrap{margin-left:8px}
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
@@ -98,11 +99,21 @@ export default function StaffHub({
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)" }}><path d="M18 15l-6-6-6 6"/></svg>
           </button>
         )}
-        {/* Escape hatch — back to the classic stage deck (?classic=1). */}
-        <button className="cpv-port" onClick={() => onExitHub?.()}>
-          Deck
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        </button>
+        {/* Portal dropdown — Dashboard + the Simple/Advanced view toggle (this is Simple view). */}
+        <div className="cpv-portwrap">
+          <button className="cpv-port" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
+            Portal <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: menuOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          {menuOpen && (
+            <>
+              <div className="cpv-menu-scrim" onClick={() => setMenuOpen(false)} />
+              <div className="cpv-menu" role="menu">
+                {dashboardHref && <button role="menuitem" onClick={() => { setMenuOpen(false); window.location.href = dashboardHref; }}>Dashboard</button>}
+                <button role="menuitem" onClick={() => { setMenuOpen(false); onAdvanced?.(); }}>Advanced view</button>
+              </div>
+            </>
+          )}
+        </div>
       </header>
 
       <main className="cpv-main">

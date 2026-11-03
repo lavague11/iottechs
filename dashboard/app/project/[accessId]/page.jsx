@@ -379,7 +379,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
   // Staff Project Hub (Phase 1) — the clean customer-style hub for STAFF, flag + per-project override.
   // Presentation-only; the same tools open from its cards in staff (editable) mode. Deck is unaffected when off.
-  const staffHub = staffHubFor(p, { globalOn: secretValue("STAFF_PROJECT_HUB") === "on" });
+  const staffHub = staffHubFor(p);   // Simple view (the hub) is the default for eligible projects; only a "deck" override opts out.
   let customerFinance = null, customerAppt = null, staffFinance = null, staffAppt = null;
   if (customerPortalV2 || staffHub) {
     const fin = getProjectFinancialState(p.access_id);
