@@ -9,6 +9,7 @@
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PORTAL_CSS } from "./customer-portal";
+import ProjectContactCard from "./project-contact-card";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
@@ -19,11 +20,12 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
-  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onExitHub,
+  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onExitHub, contact = null,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const [contactOpen, setContactOpen] = useState(true);
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -72,6 +74,9 @@ export default function StaffHub({
 .cpv-railbtn svg{width:16px;height:16px;flex:0 0 auto}
 .cpv-railbtn.pay{border-color:#bfe0cd;background:#f6fbf8;color:var(--green)}
 .cpv-railbtn.pay:hover{border-color:var(--green)}
+.cpv-collapse{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:999px;background:var(--raise);color:var(--meta);cursor:pointer}
+.cpv-collapse:hover{border-color:var(--ink);color:var(--ink)}
+.cpv-collapse + .cpv-port{margin-left:8px}
 `}</style>
 
       <header className="cpv-head">
@@ -79,6 +84,11 @@ export default function StaffHub({
           <span className="cpv-mark">IOT TECHS</span>
           <span className="cpv-proj">{project?.contact_name || project?.customer || "Project"} · {String(accessId).slice(-4)}</span>
         </div>
+        {contact && (
+          <button className="cpv-collapse" onClick={() => setContactOpen((v) => !v)} aria-expanded={contactOpen} aria-label={contactOpen ? "Hide contact" : "Show contact"}>
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)" }}><path d="M18 15l-6-6-6 6"/></svg>
+          </button>
+        )}
         {/* Escape hatch — back to the classic stage deck (?classic=1). */}
         <button className="cpv-port" onClick={() => onExitHub?.()}>
           Deck
@@ -87,6 +97,7 @@ export default function StaffHub({
       </header>
 
       <main className="cpv-main">
+        {contact && contactOpen && <ProjectContactCard customer={contact} open />}
         {/* HERO — appointment first; else the project status. One primary staff action. */}
         {appt ? (
           <section className="cpv-hero cpv-appt">

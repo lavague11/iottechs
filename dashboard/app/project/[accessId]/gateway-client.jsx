@@ -3205,6 +3205,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             progressPct={custProgressPct}
             sections={hubSections}
             actions={hubActions}
+            contact={deckCustomer}
             primaryCta={projState ? (CTA[projState] || null) : null}
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
