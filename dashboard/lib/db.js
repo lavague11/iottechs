@@ -2742,8 +2742,11 @@ export function buildStageFacts(accessId) {
   // Final balance paid — same math as the payment portal (accepted option(s) total + approved
   // add-ons vs. confirmed payments). Lets `payment` auto-advance once the balance is truly $0,
   // without needing a human to eyeball it.
+  // Paid-in-full is a money fact, not an acceptance fact: if confirmed payments cover the published total,
+  // the balance is $0 even when the proposal was never formally accepted/signed (e.g. a skipped signature
+  // or a paid-up-front job). So compute it for any published proposal, not only accepted ones.
   let finalBalancePaid = false;
-  if (prop?.payload && prop.status === "accepted") {
+  if (prop?.payload) {
     try {
       const payload = typeof prop.payload === "string" ? JSON.parse(prop.payload) : prop.payload;
       const acceptedIds = (() => { try { const a = JSON.parse(prop.accepted_options || "[]"); return a.length ? a : (prop.selected_option ? [prop.selected_option] : []); } catch { return prop.selected_option ? [prop.selected_option] : []; } })();
