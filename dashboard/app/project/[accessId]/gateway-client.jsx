@@ -48,7 +48,7 @@ import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
-import { getAcceptancesAction, getLiveSnapshotAction, logCallAction, getCustomerFinanceAction } from "./proposal-actions";
+import { getAcceptancesAction, getLiveSnapshotAction, logCallAction, getCustomerFinanceAction, requestReopenAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
 
@@ -3056,6 +3056,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         <CustomerPortal
           accessId={lp.access_id}
           priceValidUntil={priceValidUntil}
+          onRequestReopen={previewRole ? null : () => requestReopenAction(lp.access_id)}
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}

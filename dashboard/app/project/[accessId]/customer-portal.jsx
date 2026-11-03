@@ -54,7 +54,7 @@ const CARD_COPY = {
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
-  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null,
+  previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -162,7 +162,7 @@ export default function CustomerPortal({
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-hero-top">
               <div className="cpv-status">{STATUS_HEADLINE[status.state] || status.label}</div>
-              {priceValidUntil && <PriceValid until={priceValidUntil} />}
+              {priceValidUntil && <PriceValid until={priceValidUntil} onRequestReopen={onRequestReopen} />}
             </div>
             {cta && <button className="cpv-cta" onClick={() => open(cta.view, { sign: cta.sign })}>{cta.label}</button>}
           </section>
@@ -255,14 +255,21 @@ export default function CustomerPortal({
 
 // Price-lock countdown + info. The proposal price is honored for 7 days from issue; after that it may be
 // re-evaluated. Shown beside the status headline while the proposal is unsigned.
-function PriceValid({ until }) {
+function PriceValid({ until, onRequestReopen }) {
   const [open, setOpen] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [busy, setBusy] = useState(false);
   const d = new Date(until);
   if (Number.isNaN(d.getTime())) return null;
   const days = Math.ceil((d.getTime() - Date.now()) / 864e5);
   const expired = days < 0;
   const text = expired ? "Price expired"
     : `Price valid · ${days > 1 ? `${days} days left` : days === 1 ? "1 day left" : "expires today"}`;
+  async function reopen() {
+    if (busy || !onRequestReopen) return;
+    setBusy(true);
+    try { const r = await onRequestReopen(); setSent(!r?.error); } catch { setSent(false); } finally { setBusy(false); }
+  }
   return (
     <div className="cpv-pricewrap">
       <button className={`cpv-pricepill${expired ? " exp" : ""}`} onClick={() => setOpen((v) => !v)} aria-expanded={open}>
@@ -273,10 +280,23 @@ function PriceValid({ until }) {
         <>
           <div className="cpv-pricescrim" onClick={() => setOpen(false)} />
           <div className="cpv-pricepop" role="dialog">
-            {expired
-              ? <p>This price has <b>expired</b>. Equipment and supply costs change often, so your quote may be re-evaluated — please contact us to refresh it.</p>
-              : <p>We can only hold this price for <b>7 days</b> from when your proposal is sent. Equipment and supply costs change often, so after that it may be re-evaluated — we recommend locking in your price as soon as possible.</p>}
-            <button className="cpv-pricepop-ok" onClick={() => setOpen(false)}>Got it</button>
+            {expired ? (
+              sent ? (
+                <p>Thanks — your team has been notified and will refresh your quote. <button className="cpv-pricepop-ok" onClick={() => setOpen(false)}>Close</button></p>
+              ) : (
+                <>
+                  <p>This price has <b>expired</b>. Equipment and supply costs change often, so your quote may need to be re-evaluated. Ask us to refresh it and we'll send an updated proposal.</p>
+                  {onRequestReopen
+                    ? <button className="cpv-pricepop-reopen" disabled={busy} onClick={reopen}>{busy ? "Sending…" : "Request to reopen"}</button>
+                    : <button className="cpv-pricepop-ok" onClick={() => setOpen(false)}>Got it</button>}
+                </>
+              )
+            ) : (
+              <>
+                <p>We can only hold this price for <b>7 days</b> from when your proposal is sent. Equipment and supply costs change often, so after that it may be re-evaluated — we recommend locking in your price as soon as possible.</p>
+                <button className="cpv-pricepop-ok" onClick={() => setOpen(false)}>Got it</button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -338,13 +358,17 @@ const CSS = `
 .cpv-pricepill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;background:#fff;font-family:inherit;font-size:12px;font-weight:600;color:var(--gold-text);white-space:nowrap;cursor:pointer}
 .cpv-pricepill:hover{border-color:var(--gold)}
 .cpv-pricepill svg{color:var(--meta);flex:0 0 auto}
-.cpv-pricepill.exp{color:var(--red,#C4553D);border-color:color-mix(in srgb,var(--red,#C4553D) 35%,var(--line))}
-.cpv-pricepill.exp svg,.cpv-pricepill.exp:hover{color:var(--red,#C4553D);border-color:color-mix(in srgb,var(--red,#C4553D) 55%,var(--line))}
+.cpv-pricepill.exp{background:var(--red,#C4553D);border-color:var(--red,#C4553D);color:#fff}
+.cpv-pricepill.exp svg{color:#fff}
+.cpv-pricepill.exp:hover{background:#A6432F;border-color:#A6432F}
 .cpv-pricescrim{position:fixed;inset:0;z-index:9}
 .cpv-pricepop{position:absolute;top:calc(100% + 8px);right:0;z-index:10;width:min(300px,78vw);background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 38px rgba(16,20,24,.18);padding:14px 15px}
 .cpv-pricepop p{margin:0 0 11px;font-size:13px;line-height:1.5;color:var(--ink-soft);font-weight:500;letter-spacing:0;text-transform:none}
 .cpv-pricepop b{color:var(--ink);font-weight:700}
 .cpv-pricepop-ok{background:var(--ink);color:#fff;border:0;border-radius:8px;padding:7px 15px;font:600 13px inherit;cursor:pointer}
+.cpv-pricepop-reopen{background:var(--red,#C4553D);color:#fff;border:0;border-radius:8px;padding:9px 15px;font:700 13px inherit;cursor:pointer;width:100%}
+.cpv-pricepop-reopen:hover{background:#A6432F}
+.cpv-pricepop-reopen:disabled{opacity:.6;cursor:default}
 .cpv-appt-type{font-size:1.35rem;font-weight:750;letter-spacing:-.02em;color:var(--ink)}
 .cpv-appt-when{font-size:1.05rem;font-weight:600;color:var(--gold-text);margin-top:4px}
 .cpv-appt-where{font-size:.95rem;color:var(--meta);margin-top:3px}

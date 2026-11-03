@@ -952,6 +952,20 @@ export async function captureFeedbackAction(accessId, { body, kind, deviceId, de
   await revalidate(accessId);
   return { ok: true, feedback };
 }
+// Customer Portal V2 — a customer whose 7-day price lock has expired asks the team to refresh their quote.
+// Records a public note + notifies the office + logs it. Re-gated: customer must own the project. No proposal
+// mutation here — staff revise/re-send (which resets the price window). Safe to call more than once.
+export async function requestReopenAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok) return { error: "Session expired — unlock the project again." };
+  if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
+  const who = actorName(tok);
+  addProjectNote(accessId, { role: tok.role, name: who, body: "Requested to reopen the proposal — the 7-day price lock has expired. Please refresh the quote.", isPublic: true });
+  try { notifyRoles(["admin", "manager", "sales"], { type: "reopen_request", title: "Customer requested to reopen an expired quote", body: `${accessId}`, link: `/project/${accessId}` }); } catch {}
+  try { logProjectEvent(accessId, { kind: "request", label: "Customer requested to reopen expired quote", actor: who }); } catch {}
+  await revalidate(accessId);
+  return { ok: true, message: "Sent — your team will refresh your quote." };
+}
 // Advance a captured item's review status (open → reviewed → resolved). Admin/manager only.
 export async function setFeedbackStatusAction(accessId, id, status) {
   const tok = await getSessionRole();
