@@ -55,10 +55,6 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [histOpen, setHistOpen] = useState(false);
-  const [sqOn, setSqOn] = useState(false);     // Square configured → offer "Create payment link"
-  const [link, setLink] = useState(null);      // { url, base, fee, total } once generated
-  const [linkBusy, setLinkBusy] = useState(false);
-  const [copied, setCopied] = useState(false);
   const panelRef = useRef(null);
   const amountRef = useRef(null);
 
@@ -66,7 +62,7 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
   useEffect(() => {
     if (!open) return;
     let live = true;
-    setData(null); setFin(null); setErr(null); setLink(null); setCopied(false);
+    setData(null); setFin(null); setErr(null);
     getApprovalDataAction(accessId).then((r) => {
       if (!live || !r?.ok) return;
       setData(r);
@@ -74,9 +70,6 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
       setFin(f);
       setPay((v) => ({ ...v, amount: f && f.prefill > 0 ? f.prefill.toFixed(2) : "", kind: f?.kind || v.kind, paidAt: today }));
     }).catch(() => { if (live) setErr("Couldn't load the balance. Try again."); });
-    // Is online payment turned on? (controls whether we offer the "Create payment link" action)
-    fetch(`/api/pay/create?project=${encodeURIComponent(accessId)}`, { credentials: "same-origin" })
-      .then((r) => r.json()).then((d) => { if (live) setSqOn(!!d?.configured); }).catch(() => {});
     return () => { live = false; };
   }, [open, accessId, isFinal]);  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -117,27 +110,7 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
     onClose?.();
   }
 
-  // Generate a Square "pay this amount" link for the entered amount, tied to this project (credits the
-  // balance when paid). The 5% convenience fee is added on top. Staff copy/send the link.
-  async function makeLink() {
-    if (linkBusy || !(+pay.amount > 0)) return;
-    setLinkBusy(true); setErr(null);
-    const r = await fetch("/api/pay/link", {
-      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",
-      body: JSON.stringify({ amount: +pay.amount, accessId, label: pay.note?.trim() || `Payment · ${accessId}` }),
-    }).then((x) => x.json()).catch(() => null);
-    setLinkBusy(false);
-    if (r?.url) { setLink(r); setCopied(false); } else setErr(r?.error || "Couldn't create a payment link.");
-  }
-  async function copyLink() { try { await navigator.clipboard.writeText(link.url); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* clipboard blocked */ } }
-  // Take the payment now: open Square's hosted checkout (card / Apple Pay / Google Pay / Cash App) in a new
-  // tab. Hand the device to the customer or let them tap Apple Pay — payment credits this project on return.
-  function openCheckout() { if (link?.url) window.open(link.url, "_blank", "noopener,noreferrer"); }
-
   const payments = data?.payments || [];
-  const dueNote = fin && !isFinal && fin.currentlyDue <= 0 && fin.depositTarget > 0
-    ? `Deposit isn't due until the agreement is signed — this records an early payment.`
-    : null;
 
   return (
     <div className="rpm-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
@@ -159,14 +132,13 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
               <div className="rpm-ctx-row"><span>{isFinal ? "Final Payment Due" : "Deposit Due"}</span><b className="rpm-due">{money(fin.currentlyDue)}</b></div>
             )}
           </div>
-          {dueNote && <div className="rpm-note-manual">{dueNote}</div>}
 
           {err && <div className="rpm-err">{err}</div>}
 
           <div className="rpm-grid">
             <label className="rpm-fld"><span>Amount</span>
               <input ref={amountRef} className="rpm-input num" type="number" min="0" step="0.01" placeholder="0.00"
-                value={pay.amount} onChange={(e) => { setLink(null); setPay((v) => ({ ...v, amount: e.target.value })); }} /></label>
+                value={pay.amount} onChange={(e) => setPay((v) => ({ ...v, amount: e.target.value }))} /></label>
             <label className="rpm-fld"><span>Method</span>
               <select className="rpm-input" value={pay.method} onChange={(e) => setPay((v) => ({ ...v, method: e.target.value }))}>
                 <option>Zelle</option><option>Certified Check</option><option>Cash</option><option>Card</option><option>Wire</option><option>Other</option>
@@ -198,32 +170,8 @@ export default function RecordPaymentModal({ accessId, open, onClose, onRecorded
           )}
 
           <div className="rpm-acts">
-            <button type="button" className="rpm-btn ghost" onClick={close} disabled={busy}>Cancel</button>
             <button type="button" className="rpm-btn gold" onClick={submit} disabled={busy || !(+pay.amount > 0)}>Record Payment</button>
           </div>
-
-          {/* Pay with Square — build a hosted checkout for the amount above, then either take the payment
-              now (Open checkout → card / Apple Pay / Google Pay / Cash App on Square's page) or copy the link
-              to send. 5% convenience fee added on top; credits this project when paid. */}
-          {sqOn && (
-            <div className="rpm-link">
-              {!link ? (
-                <button type="button" className="rpm-linkbtn" disabled={linkBusy || !(+pay.amount > 0)} onClick={makeLink}>
-                  {linkBusy ? "Starting…" : "Pay with Square"}
-                </button>
-              ) : (
-                <div className="rpm-linkres">
-                  <div className="rpm-linkmeta">Total <b>{money(link.total)}</b> · includes 5% fee ({money(link.fee)})</div>
-                  <div className="rpm-linkrow">
-                    <button type="button" className="rpm-linkopen" onClick={openCheckout}>Open checkout</button>
-                    <button type="button" className="rpm-linkcopy" onClick={copyLink}>{copied ? "Copied" : "Copy link"}</button>
-                  </div>
-                  <input className="rpm-linkurl" readOnly value={link.url} onFocus={(e) => e.target.select()} />
-                </div>
-              )}
-              <span className="rpm-linkhint">Open checkout to take the payment now (card · Apple&nbsp;Pay · Google&nbsp;Pay), or copy the link to send it. 5% fee added on top; credits this project when paid.</span>
-            </div>
-          )}
         </>)}
       </div>
     </div>
@@ -243,7 +191,6 @@ const RPM_CSS = `
 .rpm-ctx-row span{color:var(--dv-meta,#787D84);font-weight:500}
 .rpm-ctx-row b{color:var(--dv-ink,#101418);font-weight:700}
 .rpm-ctx-row b.rpm-due{color:var(--dv-gold-text,#8A6A1F)}
-.rpm-note-manual{font-size:.75rem;color:var(--dv-gold-text,#8A6A1F);background:rgba(201,169,110,.1);border:1px solid rgba(201,169,110,.26);border-radius:8px;padding:7px 11px;margin-bottom:10px;line-height:1.4}
 .rpm-err{font-size:.8rem;font-weight:600;color:var(--dv-red,#C4553D);background:#fbe9e6;border:1px solid #e3b4ab;border-radius:8px;padding:8px 11px;margin-bottom:10px}
 .rpm-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .rpm-fld{display:flex;flex-direction:column;gap:5px;min-width:0;font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--dv-meta,#787D84)}
@@ -263,25 +210,9 @@ const RPM_CSS = `
 .rpm-hrow-st.ok{color:var(--dv-green,#2E7D5B)}.rpm-hrow-st.pend{color:var(--dv-gold-text,#8A6A1F)}
 .rpm-acts{display:flex;gap:10px;margin-top:16px}
 .rpm-btn{height:42px;border-radius:10px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid transparent}
-.rpm-btn.ghost{flex:0 0 auto;padding:0 18px;background:none;border-color:var(--dv-line,#E4E4DF);color:var(--dv-meta,#787D84)}
-.rpm-btn.ghost:hover:not(:disabled){border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-ink,#101418)}
 .rpm-btn.gold{flex:1 1 auto;background:#C9A96E;color:#101418}
 .rpm-btn.gold:hover:not(:disabled){filter:brightness(1.06)}
 .rpm-btn:disabled{opacity:.5;cursor:default}
-.rpm-link{margin-top:12px;border-top:1px solid var(--dv-line,#E4E4DF);padding-top:12px;display:flex;flex-direction:column;gap:8px}
-.rpm-linkbtn{align-self:flex-start;height:38px;padding:0 15px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit}
-.rpm-linkbtn:hover:not(:disabled){border-color:var(--dv-gold-text,#8A6A1F)}
-.rpm-linkbtn:disabled{opacity:.5;cursor:default}
-.rpm-linkres{display:flex;flex-direction:column;gap:7px}
-.rpm-linkmeta{font-size:.82rem;color:var(--dv-ink,#101418)}
-.rpm-linkmeta b{font-variant-numeric:tabular-nums}
-.rpm-linkrow{display:flex;gap:8px}
-.rpm-linkopen{flex:1 1 auto;height:40px;padding:0 16px;border:0;border-radius:9px;background:#C9A96E;color:#101418;font-size:.86rem;font-weight:800;cursor:pointer;font-family:inherit}
-.rpm-linkopen:hover{filter:brightness(1.06)}
-.rpm-linkurl{width:100%;min-width:0;box-sizing:border-box;height:36px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;padding:0 10px;font-size:.76rem;color:var(--dv-meta,#787D84);font-family:var(--font-mono),ui-monospace,Menlo,monospace;outline:none}
-.rpm-linkcopy{flex:0 0 auto;height:40px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);font-size:.82rem;font-weight:700;cursor:pointer;font-family:inherit}
-.rpm-linkcopy:hover{border-color:var(--dv-gold-text,#8A6A1F)}
-.rpm-linkhint{font-size:.7rem;color:var(--dv-meta,#787D84);line-height:1.4}
 @media(max-width:640px){
   .rpm-overlay{align-items:flex-end;padding:0}
   .rpm-panel{max-width:100%;border-radius:16px 16px 0 0;max-height:90vh;padding-bottom:calc(16px + env(safe-area-inset-bottom,0))}
