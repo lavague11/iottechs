@@ -3,7 +3,7 @@
 // Customer homepage (admin side) — one place to see a client and act on them: start a project or a
 // service call, log an interaction, and review their projects, quotes, inquiries and full activity.
 // Presentation only: every project/quote/call/number comes from the canonical tables via getCustomerHub.
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell, { NewProjectModal } from "../../components/admin-shell";
 import { STATUS, STATUS_TONE } from "../../../lib/spec";
@@ -337,7 +337,7 @@ function ServiceCallModal({ customerId, onClose, onCreated }) {
   const [category, setCategory] = useState("other");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  if (rows === null) customerProjectsAction(customerId).then((r) => setRows(r?.rows || [])).catch(() => setRows([]));
+  useEffect(() => { let live = true; customerProjectsAction(customerId).then((r) => { if (live) setRows(r?.rows || []); }).catch(() => { if (live) setRows([]); }); return () => { live = false; }; }, [customerId]);
 
   async function submit() {
     const text = issue.trim();
