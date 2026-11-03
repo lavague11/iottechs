@@ -28,6 +28,7 @@ export default function StaffHub({
   const [contactOpen, setContactOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const [group, setGroup] = useState(defaultGroup);   // Project-tools filter: Customer-facing vs Internal (techs default to Internal)
+  const [logOpen, setLogOpen] = useState(false);      // Job Log collapsed by default, like the deck
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -111,6 +112,11 @@ export default function StaffHub({
 .cpv-htitle{cursor:inherit;pointer-events:none}
 .cpv-headdrop{border-bottom:1px solid var(--line);background:rgba(255,255,255,.75)}
 .cpv-headdrop .pcc-flush{max-width:1040px;margin:0 auto}
+/* Job Log — collapsed toggle at the bottom. */
+.cpv-logtog{display:inline-flex;align-items:center;gap:9px;height:40px;padding:0 16px;border:1px solid var(--line);border-radius:12px;background:var(--raise);color:var(--ink);font:700 14px/1 inherit;cursor:pointer}
+.cpv-logtog:hover{border-color:var(--ink);background:#fff}
+.cpv-logchev{color:var(--meta);margin-left:2px}
+.cpv-logbody{margin-top:12px}
 `}</style>
 
       {/* Unified bar — click anywhere (except Portal) to drop down the full contact details. */}
@@ -229,11 +235,15 @@ export default function StaffHub({
           </section>
         )}
 
-        {/* JOB LOG — the project's activity log, at the very bottom. */}
+        {/* JOB LOG — collapsed by default, like the deck; click to expand. */}
         {log && (
           <section className="cpv-logsec">
-            <div className="cpv-kick">Log</div>
-            {log}
+            <button className="cpv-logtog" onClick={() => setLogOpen((v) => !v)} aria-expanded={logOpen}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              Log
+              <svg className="cpv-logchev" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: logOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            {logOpen && <div className="cpv-logbody">{log}</div>}
           </section>
         )}
       </main>
