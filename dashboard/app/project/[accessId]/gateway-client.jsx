@@ -3148,7 +3148,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             return (<div style={ovl(820)}>
               <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
                 role={cView} signoff={sign} meta={toolMeta?.qc} acceptances={acceptances}
-                onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+                onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }}
+                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); syncStage(s); refreshAcceptances(); }} />
             </div>);
           }
           case "completion":
