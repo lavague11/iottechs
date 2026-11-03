@@ -1,7 +1,8 @@
 "use client";
 
-import AdminShell, { USER_ROLE_COLOR } from "../../components/admin-shell";
+import AdminShell, { USER_ROLE_COLOR, NewProjectModal } from "../../components/admin-shell";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 const ROLE_LABEL = { admin: "Admin", manager: "Manager", sales: "Sales", tech: "Tech", customer: "Customer" };
 const STAGE_LABEL = {
@@ -21,8 +22,9 @@ function timeAgo(iso) {
   return `${Math.floor(mins / 1440)}d ago`;
 }
 
-export default function ProfileClient({ user, alerts, profile, projects, devices = [] }) {
+export default function ProfileClient({ user, alerts, profile, projects, devices = [], canStartProject = false }) {
   const router = useRouter();
+  const [npOpen, setNpOpen] = useState(false);
   const roleColor = USER_ROLE_COLOR[profile.role] || "#888";
 
   return (
@@ -83,8 +85,14 @@ export default function ProfileClient({ user, alerts, profile, projects, devices
 
         {/* Projects */}
         <div className="panel">
-          <div className="panel-head">
+          <div className="panel-head" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <h3>Projects ({projects.length})</h3>
+            {canStartProject && (
+              <button className="btn btn-primary" onClick={() => setNpOpen(true)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: ".82rem", padding: "6px 14px" }}>
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+                New
+              </button>
+            )}
           </div>
           {projects.length === 0 ? (
             <div style={{ padding: "32px 18px", textAlign: "center", color: "var(--muted)", fontSize: ".88rem" }}>
@@ -134,6 +142,7 @@ export default function ProfileClient({ user, alerts, profile, projects, devices
 
         <DevicesPanel devices={devices} />
       </div>
+      {npOpen && <NewProjectModal user={user} initialClientId={profile.id} onClose={() => setNpOpen(false)} />}
     </AdminShell>
   );
 }

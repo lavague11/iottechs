@@ -102,6 +102,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     service:         p.service,          // decorated by db.js (SERVICE_CODES lookup)
     service_code:    p.service_code,
     project_type:    p.project_type,
+    customer_id:     p.customer_id || null,       // canonical customer (users row) — links the header name to the CRM record
     portal_version:  p.portal_version || null,   // Customer Portal V2 per-project override (v2|v1|null=inherit)
     reopen_requested_at: p.reopen_requested_at || null,   // customer asked to reopen an expired quote (blocks sign until re-sent)
     price_reopened_at:   p.price_reopened_at || null,     // auto-reopen within grace restarts the 7-day price window
