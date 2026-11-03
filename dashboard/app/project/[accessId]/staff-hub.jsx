@@ -124,6 +124,7 @@ export default function StaffHub({
 .cpv-card.locked .cpv-card-act{color:var(--faint)}
 /* Full-width Job Log — spans the whole page, below the centered content. */
 .cpv-logsec{padding:8px 20px 56px}
+.cpv-card-act.done{color:var(--green)}
 `}</style>
 
       {/* Unified bar — click anywhere (except Portal) to drop down the full contact details. */}
@@ -218,10 +219,10 @@ export default function StaffHub({
                       <div className="cpv-card-title">{c.title}{c.done ? " ✓" : ""}</div>
                       <div className="cpv-card-sub">{c.locked ? (c.lockMsg || "Locked") : c.sub}</div>
                     </div>
-                    <span className="cpv-card-act">
+                    <span className={`cpv-card-act${c.done ? " done" : ""}`}>
                       {c.locked
                         ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        : `${c.action || "Open"} →`}
+                        : c.done ? (c.action || "View") : `${c.action || "Open"} →`}
                     </span>
                   </button>
                 ))}

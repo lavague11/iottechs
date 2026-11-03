@@ -3176,16 +3176,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         AWAITING_SURVEY_APPROVAL: { label: "Open Site Survey", view: "survey" },
         BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
       };
+      // Card verb reflects state: Create (never started) · Edit (started/submitted) · Completed (signed/done).
       const hubSections = [
         // Customer-facing, in order. Closeout unlocks after the proposal is signed; Completion after QC sign-off.
-        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
-        { key: "survey", title: "Site Survey", group: "customer", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: "Open" },
-        { key: "mockup", title: "System Preview", group: "customer", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
-        { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
-        { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: "Open", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
-        { key: "install", title: "Installation", group: "internal", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: hubAppt ? "Reschedule" : "Schedule" },
-        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length, ownHeader: true },
-        { key: "expenses", title: "Expenses", group: "internal", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open", ownHeader: true },
+        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
+        { key: "survey", title: "Site Survey", group: "customer", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: sHasSurvey ? "Edit" : "Create" },
+        { key: "mockup", title: "System Preview", group: "customer", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: sHasMockup ? "Edit" : "Create" },
+        { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
+        { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
+        { key: "install", title: "Installation", group: "internal", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: installDone ? "Completed" : hubAppt ? "Reschedule" : "Schedule", done: installDone },
+        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? "Created." : "Create the work order.", action: workOrders?.length ? "Edit" : "Create", done: !!workOrders?.length, ownHeader: true },
+        { key: "expenses", title: "Expenses", group: "internal", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: expenses?.length ? "Edit" : "Add", ownHeader: true },
       ];
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
