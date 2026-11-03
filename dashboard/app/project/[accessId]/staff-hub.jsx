@@ -15,20 +15,23 @@ const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateStri
 const fmtTime = (t) => { try { const [h, m] = String(t).split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; const hh = ((h + 11) % 12) + 1; return `${hh}:${String(m).padStart(2, "0")} ${ap}`; } catch { return t; } };
 const apptType = (a) => (a?.kind === "install" || /install/i.test(a?.title || "")) ? "Installation" : (a?.kind === "survey" || /survey/i.test(a?.title || "")) ? "Site Survey" : (a?.title || "Appointment");
 
+const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Work Order", expenses: "Expenses" };
+
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
-  sections = [], primaryCta = null, renderOverlay, onRefresh, onExitHub,
+  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onExitHub,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
 
-  // URL drives the open overlay, exactly like the customer portal: ?view=<key>. A staff section is always
-  // openable, so availability is simply "is there a section with this key" (plus the synthetic `install`).
-  const keys = new Set([...sections.map((s) => s.key), "install"]);
+  // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
+  // that carries a `view` is openable (plus the synthetic `install` detail).
+  const viewOf = (x) => x.view || x.key;
+  const keys = new Set([...sections.map(viewOf), ...actions.map((a) => a.view).filter(Boolean), "install"]);
   const requested = (params.get("view") || "").toLowerCase();
   const activeView = requested && keys.has(requested) ? requested : null;
-  const activeTitle = activeView === "install" ? "Installation" : (sections.find((s) => s.key === activeView)?.title || "Details");
+  const activeTitle = TITLES[activeView] || sections.find((s) => viewOf(s) === activeView)?.title || "Details";
 
   const open = (view, extra = {}) => {
     const sp = new URLSearchParams(params.toString());
@@ -62,6 +65,14 @@ export default function StaffHub({
   return (
     <div className="cpv">
       <style>{PORTAL_CSS}</style>
+      <style>{`
+.cpv-rail{display:flex;flex-wrap:wrap;gap:8px}
+.cpv-railbtn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 15px;border:1px solid var(--line);border-radius:10px;background:var(--raise);color:var(--ink);font:700 13.5px/1 inherit;text-decoration:none;cursor:pointer}
+.cpv-railbtn:hover{border-color:var(--ink);background:#fff}
+.cpv-railbtn svg{width:16px;height:16px;flex:0 0 auto}
+.cpv-railbtn.pay{border-color:#bfe0cd;background:#f6fbf8;color:var(--green)}
+.cpv-railbtn.pay:hover{border-color:var(--green)}
+`}</style>
 
       <header className="cpv-head">
         <div className="cpv-brand">
@@ -91,6 +102,18 @@ export default function StaffHub({
             {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign })}>{primaryCta.label}</button>}
           </section>
         ) : null}
+
+        {/* ACTION RAIL — quick staff actions (record payment, schedule, call, email). */}
+        {actions.length > 0 && (
+          <section className="cpv-rail">
+            {actions.map((a) => {
+              const cls = `cpv-railbtn${a.tone ? ` ${a.tone}` : ""}`;
+              const inner = <>{a.icon}{a.label}</>;
+              if (a.href) return <a key={a.key} className={cls} href={a.href}>{inner}</a>;
+              return <button key={a.key} className={cls} onClick={() => (a.view ? open(a.view) : a.onClick?.())}>{inner}</button>;
+            })}
+          </section>
+        )}
 
         {/* PROGRESS — read-only rail, same as the portal. */}
         {phases.length > 0 && (
