@@ -202,7 +202,7 @@ function UserMenu({ user }) {
 // ONE service field (NEW_PROJECT_SERVICES, the catalog + ADT Monitoring) decides the module: catalog
 // services create a project; ADT Monitoring hands the form to the ADT intake (its own record + deck)
 // prefilled — no separate "project kind" question anywhere.
-function NewProjectModal({ onClose, user = null }) {
+export function NewProjectModal({ onClose, user = null, initialClientId = null }) {
   const r = useRouter();
   const [f, setF] = useState({ name: "", company: "", email: "", phone: "", address: "", serviceCode: DEFAULT_NEW_PROJECT_SERVICE, propertyType: "commercial", message: "" });
   // CRM client: Existing (search + pick a canonical customer row; no customer is created) or New
@@ -221,6 +221,9 @@ function NewProjectModal({ onClose, user = null }) {
     const t = setTimeout(() => { searchCustomersAction(cq).then((res) => setCRows(res?.rows || [])).catch(() => setCRows([])); }, 250);
     return () => clearTimeout(t);
   }, [cq, clientMode, client]);
+  // Seeded from a customer's profile ("+ New project" for them) — pick the client up front so the
+  // modal opens on the Existing-client path with that customer already chosen.
+  useEffect(() => { if (initialClientId) pickClient(Number(initialClientId)); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [initialClientId]);
   async function pickClient(id) {
     const res = await customerSummaryAction(id).catch(() => null);
     if (!res?.ok) { setErr("Couldn't load that client."); return; }

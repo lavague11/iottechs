@@ -7470,3 +7470,16 @@ export function getProjectsForUser(userId) {
     ORDER BY p.id DESC
   `).all(Number(userId)).map(r => ({ ...r, service: SERVICE_CODES[r.service_code] || r.service_code || "General" }));
 }
+
+// Projects a customer OWNS (projects.customer_id → users row). A customer has no project_assignments
+// row, so getProjectsForUser misses these; the user-profile page merges both so a customer's profile
+// shows the projects that are actually theirs. assignment_role is reported as "customer".
+export function getProjectsForCustomer(customerId) {
+  return db.prepare(`
+    SELECT p.access_id, p.customer, p.address, p.stage, p.service_code, p.project_type, p.value,
+           'customer' AS assignment_role
+    FROM projects p
+    WHERE p.customer_id = ?
+    ORDER BY p.id DESC
+  `).all(Number(customerId)).map(r => ({ ...r, service: SERVICE_CODES[r.service_code] || r.service_code || "General" }));
+}
