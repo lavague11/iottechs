@@ -33,7 +33,10 @@ export default function StaffHub({
   const keys = new Set([...sections.map(viewOf), ...actions.map((a) => a.view).filter(Boolean), "install"]);
   const requested = (params.get("view") || "").toLowerCase();
   const activeView = requested && keys.has(requested) ? requested : null;
-  const activeTitle = TITLES[activeView] || sections.find((s) => viewOf(s) === activeView)?.title || "Details";
+  const activeSection = sections.find((s) => viewOf(s) === activeView);
+  // Tools that render their own prominent header set `ownHeader` — we drop the overlay's title text for
+  // them (keeping the project id + X) so there's no duplicate heading.
+  const activeTitle = activeSection?.ownHeader ? "" : (TITLES[activeView] || activeSection?.title || "Details");
 
   const open = (view, extra = {}) => {
     const sp = new URLSearchParams(params.toString());
@@ -77,6 +80,12 @@ export default function StaffHub({
 .cpv-collapse{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:999px;background:var(--raise);color:var(--meta);cursor:pointer}
 .cpv-collapse:hover{border-color:var(--ink);color:var(--ink)}
 .cpv-collapse + .cpv-port{margin-left:8px}
+/* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
+   a slightly stronger title bar, and the project id for context. */
+.cpv-ovl-body{background:var(--paper)}
+.cpv-ovl-bar{box-shadow:0 1px 0 rgba(16,20,24,.03)}
+.cpv-ovl-title{font-size:15px}
+.cpv-ovl-ctx{margin-left:8px;font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace}
 `}</style>
 
       <header className="cpv-head">
@@ -183,7 +192,10 @@ export default function StaffHub({
       {activeView && (
         <div className={`cpv-ovl v-${activeView}`} role="dialog" aria-modal="true">
           <div className="cpv-ovl-bar">
-            <span className="cpv-ovl-title">{activeTitle}</span>
+            <span style={{ display: "inline-flex", alignItems: "baseline", minWidth: 0 }}>
+              <span className="cpv-ovl-title">{activeTitle}</span>
+              <span className="cpv-ovl-ctx">{String(accessId).slice(-4)}</span>
+            </span>
             <button className="cpv-ovl-x" onClick={close} aria-label="Close">
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>

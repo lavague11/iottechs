@@ -3093,7 +3093,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // Each card opens the SAME tool the deck mounts, in staff (editable) mode — zero duplicated logic.
     const forceDeck = searchParams?.get("classic") != null;
     if (staffHub && !isCustomerView && !forceDeck) {
-      const padOvl = { padding: "16px 18px", maxWidth: 820, margin: "0 auto" };
+      // One consistent overlay frame: centered, comfortable padding, per-tool width. The overlay body is
+      // lightly tinted (staff-hub CSS) so each tool's white cards read as a polished page.
+      const ovl = (w = 820) => ({ maxWidth: w, margin: "0 auto", padding: "24px 18px 56px" });
       const sHasSurvey = !!(toolMeta?.survey?.has || custFacts.survey_has);
       const sHasMockup = !!(toolMeta?.mockup?.has || custFacts.mockup_has);
       const pStatus = resolverFacts.proposal_status;
@@ -3106,7 +3108,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const renderStaffOverlay = (key) => {
         switch (key) {
           case "proposal":
-            return (<AccordionProvider><div style={{ maxWidth: 900, margin: "0 auto" }}>
+            return (<AccordionProvider><div style={ovl(900)}>
               <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={false}
                 defaultService={proposalServiceForCode(lp.service_code)} proposal={proposalData} onProposalChange={setProposalData}
                 onAdvance={(s) => browse(s)} onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
@@ -3120,38 +3122,38 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerName={lp.contact_name || lp.customer} hasData={sHasSurvey} />
             </div>);
           case "mockup":
-            return (<div style={padOvl}>
+            return (<div style={ovl(900)}>
               <MockupWidget embedded accessId={lp.access_id} view={view} customerName={lp.contact_name || lp.customer} hasData={sHasMockup} />
             </div>);
           case "closeout": {
             const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}
               onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />);
-            return (<div style={padOvl}>
+            return (<div style={ovl(820)}>
               <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
                 role={cView} signoff={sign} meta={toolMeta?.qc} acceptances={acceptances}
                 onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
             </div>);
           }
           case "completion":
-            return (<div style={padOvl}>
+            return (<div style={ovl(820)}>
               <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={cView === "tech"}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
                 onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
             </div>);
           case "schedule":
-            return (<div style={padOvl}>
+            return (<div style={ovl(760)}>
               <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
                 currentUser={currentUser} project={lp} view={view} apptKind="install"
                 defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
             </div>);
           case "workorder":
-            return (<div style={padOvl}>
+            return (<div style={ovl(760)}>
               <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
             </div>);
           case "expenses":
-            return (<div style={padOvl}>
+            return (<div style={ovl(640)}>
               <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
             </div>);
           default: return null;
@@ -3172,10 +3174,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { key: "mockup", title: "System Preview", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
         { key: "proposal", title: "Proposal", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
         { key: "install", title: "Installation", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: hubAppt ? "Reschedule" : "Schedule" },
-        { key: "workorder", title: "Work Order", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length },
+        { key: "workorder", title: "Work Order", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length, ownHeader: true },
         { key: "closeout", title: "Closeout", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open", done: qcSigned },
         { key: "completion", title: "Completion", sub: isComplete ? "Complete." : "Final documents.", action: "Open", done: isComplete },
-        { key: "expenses", title: "Expenses", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open" },
+        { key: "expenses", title: "Expenses", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open", ownHeader: true },
       ];
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
