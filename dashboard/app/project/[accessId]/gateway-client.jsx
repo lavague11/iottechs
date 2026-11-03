@@ -3174,9 +3174,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>);
           case "workorder":
             return (<div style={ovl(820)}>
-              {/* The work order IS the proposal, re-priced at tech payout — same line items, titled Work
-                  Order, service named. The assign/finalize/create controls sit below it. */}
-              <WorkOrderSheet proposal={proposalData} />
+              {/* The work order IS the proposal, re-priced at tech payout — editable while creating,
+                  Submit to finalize, then the technician signs to accept. Assign/create controls below. */}
+              <WorkOrderSheet accessId={lp.access_id} proposal={proposalData} role={cView} onProposalChange={setProposalData}
+                preview={!!previewRole} signerName={currentUser?.name || currentUser?.email || ""}
+                assignedTech={lp.tech ? { name: lp.tech } : null} />
               <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />

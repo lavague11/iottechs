@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { getApprovalDataAction, createWorkOrderAction, finalizeWorkOrderAction } from "./proposal-actions";
+import { getApprovalDataAction, createWorkOrderAction } from "./proposal-actions";
 import { addAssignmentAction, removeAssignmentAction, setInternalJobAction } from "./actions";
-import TechPricingEditor from "./proposal-tech-pricing";
 
 // Third card of the proposal-phase flow (admin/manager): everything to stand up the work order once
 // the proposal is signed + the deposit is in. Groups, in order: assign the technician(s) → set their
@@ -35,21 +34,6 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
   const techSigned = !!p?.tech_signed_name;
   const [woCreated, setWoCreated] = useState(false);
   const created = woCreated || techSigned;
-
-  // Finalize: the office reviews the auto-seeded payout, then finalizes so a tech can accept it.
-  const [finBusy, setFinBusy] = useState(false);
-  const [finalizedAt, setFinalizedAt] = useState(proposal?.wo_finalized_at || null);
-  const [finalizedBy, setFinalizedBy] = useState(proposal?.wo_finalized_by || null);
-  useEffect(() => { setFinalizedAt(proposal?.wo_finalized_at || null); setFinalizedBy(proposal?.wo_finalized_by || null); }, [proposal?.wo_finalized_at, proposal?.wo_finalized_by]);
-  async function toggleFinalize(on) {
-    setFinBusy(true); setErr(null);
-    const r = await finalizeWorkOrderAction(accessId, on);
-    setFinBusy(false);
-    if (r?.error) { setErr(r.error); return; }
-    setFinalizedAt(r.proposal?.wo_finalized_at || null);
-    setFinalizedBy(r.proposal?.wo_finalized_by || null);
-    onProposalChange?.(r.proposal);
-  }
 
   const techs = assignments.filter((a) => a.role === "tech");
   const availableTechs = staffUsers.filter((u) => u.role === "tech" && !techs.some((t) => String(t.user_id) === String(u.id)));
@@ -154,33 +138,9 @@ export default function WorkOrderCard({ accessId, proposal, onProposalChange, as
             )}
           </div>
 
-          {/* ② Their per-line payout — the pricing editor, moved here from Install */}
-          {proposal?.payload?.options?.length > 0 && (
-            <div className="woc-sec">
-              <TechPricingEditor accessId={accessId} proposal={proposal} onSaved={onProposalChange} />
-            </div>
-          )}
+          {/* Pricing, submit + the technician signature now live on the Work Order sheet above. */}
 
-          {/* ③ Finalize the payout so a technician can accept the work order */}
-          {proposal?.payload?.options?.length > 0 && (
-            <div className="woc-sec">
-              {finalizedAt ? (
-                <div className="woc-final done">
-                  <span className="woc-final-msg">
-                    <b>✓ Finalized{finalizedBy ? ` by ${finalizedBy}` : ""}</b> — techs can accept.
-                  </span>
-                  {!created && <button type="button" className="woc-reopen" disabled={finBusy} onClick={() => toggleFinalize(false)}>Re-open</button>}
-                </div>
-              ) : (
-                <div className="woc-final">
-                  <p className="woc-final-msg">Review payout, then finalize.</p>
-                  <button type="button" className="woc-final-btn" disabled={finBusy} onClick={() => toggleFinalize(true)}>{finBusy ? "Finalizing…" : "Finalize Work Order"}</button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ④ Create it */}
+          {/* ② Create it */}
           <div className="woc-sec">
             {!created && (
               <label className="woc-intern">
