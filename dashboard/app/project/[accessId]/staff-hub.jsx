@@ -27,6 +27,7 @@ export default function StaffHub({
   const params = useSearchParams();
   const [contactOpen, setContactOpen] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [group, setGroup] = useState("customer");   // Project-tools filter: Customer-facing vs Internal
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -87,18 +88,31 @@ export default function StaffHub({
 .cpv-ovl-bar{box-shadow:0 1px 0 rgba(16,20,24,.03)}
 .cpv-ovl-title{font-size:15px}
 .cpv-ovl-ctx{margin-left:8px;font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace}
+/* Redesign — full-width desktop, centered clickable title, progress under contact, grouped tools, balance last. */
+.cpv-main{max-width:1040px}
+.cpv-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+.cpv-htitle{justify-self:center;display:inline-flex;align-items:center;gap:7px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink);padding:6px 12px;border-radius:999px;max-width:100%;min-width:0}
+.cpv-htitle:hover{background:var(--line-soft)}
+.cpv-htitle-name{font-weight:800;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cpv-htitle-id{color:var(--meta);font-size:13px;font-family:var(--font-mono),ui-monospace,monospace;flex:0 0 auto}
+.cpv-htitle svg{color:var(--meta);flex:0 0 auto}
+.cpv-portwrap{justify-self:end}
+.cpv-kick-row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.cpv-kick-row .cpv-kick{margin-bottom:0}
+.cpv-seg2{display:inline-flex;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:var(--raise)}
+.cpv-seg2 button{border:0;background:none;font-family:inherit;font-size:12px;font-weight:700;letter-spacing:.01em;padding:6px 15px;color:var(--meta);cursor:pointer}
+.cpv-seg2 button.on{background:var(--ink);color:#fff}
+.cpv-cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
 `}</style>
 
       <header className="cpv-head">
-        <div className="cpv-brand">
-          <span className="cpv-mark">IOT TECHS</span>
-          <span className="cpv-proj">{project?.contact_name || project?.customer || "Project"} · {String(accessId).slice(-4)}</span>
-        </div>
-        {contact && (
-          <button className="cpv-collapse" onClick={() => setContactOpen((v) => !v)} aria-expanded={contactOpen} aria-label={contactOpen ? "Hide contact" : "Show contact"}>
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)" }}><path d="M18 15l-6-6-6 6"/></svg>
-          </button>
-        )}
+        <span className="cpv-mark">IOT TECHS</span>
+        {/* Centered, clickable title — toggles the contact card. */}
+        <button className="cpv-htitle" onClick={() => contact && setContactOpen((v) => !v)} aria-expanded={contactOpen} aria-label={contact ? (contactOpen ? "Hide contact" : "Show contact") : undefined}>
+          <span className="cpv-htitle-name">{project?.contact_name || project?.customer || "Project"}</span>
+          <span className="cpv-htitle-id">· {String(accessId).slice(-4)}</span>
+          {contact && <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: contactOpen ? "none" : "rotate(180deg)" }}><path d="M18 15l-6-6-6 6"/></svg>}
+        </button>
         {/* Portal dropdown — Dashboard + the Simple/Advanced view toggle (this is Simple view). */}
         <div className="cpv-portwrap">
           <button className="cpv-port" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
@@ -117,36 +131,10 @@ export default function StaffHub({
       </header>
 
       <main className="cpv-main">
+        {/* Customer information. */}
         {contact && contactOpen && <ProjectContactCard customer={contact} open />}
-        {/* HERO — appointment first; else the project status. One primary staff action. */}
-        {appt ? (
-          <section className="cpv-hero cpv-appt">
-            <div className="cpv-kick">Upcoming appointment</div>
-            <div className="cpv-appt-type">{apptType(appt)}</div>
-            <div className="cpv-appt-when">{fmtDate(appt.date)}{appt.time ? ` · ${fmtTime(appt.time)}` : ""}</div>
-            {appt.location && <div className="cpv-appt-where">{appt.location}</div>}
-            <button className="cpv-cta" onClick={() => open("install")}>View appointment</button>
-          </section>
-        ) : status?.label ? (
-          <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
-            <div className="cpv-status">{status.label}</div>
-            {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign })}>{primaryCta.label}</button>}
-          </section>
-        ) : null}
 
-        {/* ACTION RAIL — quick staff actions (record payment, schedule, call, email). */}
-        {actions.length > 0 && (
-          <section className="cpv-rail">
-            {actions.map((a) => {
-              const cls = `cpv-railbtn${a.tone ? ` ${a.tone}` : ""}`;
-              const inner = <>{a.icon}{a.label}</>;
-              if (a.href) return <a key={a.key} className={cls} href={a.href}>{inner}</a>;
-              return <button key={a.key} className={cls} onClick={() => (a.view ? open(a.view) : a.onClick?.())}>{inner}</button>;
-            })}
-          </section>
-        )}
-
-        {/* PROGRESS — read-only rail, same as the portal. */}
+        {/* PROGRESS — immediately under the customer information. */}
         {phases.length > 0 && (
           <section className="cpv-prog" aria-label="Project progress">
             <div className="cpv-track">
@@ -166,7 +154,55 @@ export default function StaffHub({
           </section>
         )}
 
-        {/* BALANCE — canonical; hidden when there is no contract yet. Read-only in Phase 1. */}
+        {/* STATUS hero — the current step + its one action. */}
+        {appt ? (
+          <section className="cpv-hero cpv-appt">
+            <div className="cpv-kick">Upcoming appointment</div>
+            <div className="cpv-appt-type">{apptType(appt)}</div>
+            <div className="cpv-appt-when">{fmtDate(appt.date)}{appt.time ? ` · ${fmtTime(appt.time)}` : ""}</div>
+            {appt.location && <div className="cpv-appt-where">{appt.location}</div>}
+            <button className="cpv-cta" onClick={() => open("install")}>View appointment</button>
+          </section>
+        ) : status?.label ? (
+          <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
+            <div className="cpv-status">{status.label}</div>
+            {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign })}>{primaryCta.label}</button>}
+          </section>
+        ) : null}
+
+        {/* PROJECT tools — grouped Customer / Internal (admin sees both via the toggle). */}
+        {sections.length > 0 && (() => {
+          const hasInternal = sections.some((s) => s.group === "internal");
+          const hasCustomer = sections.some((s) => (s.group || "customer") === "customer");
+          const showToggle = hasInternal && hasCustomer;
+          const shown = showToggle ? sections.filter((s) => (s.group || "customer") === group) : sections;
+          return (
+            <section className="cpv-cards">
+              <div className="cpv-kick-row">
+                <span className="cpv-kick">Project</span>
+                {showToggle && (
+                  <div className="cpv-seg2" role="tablist">
+                    <button role="tab" className={group === "customer" ? "on" : ""} onClick={() => setGroup("customer")}>Customer</button>
+                    <button role="tab" className={group === "internal" ? "on" : ""} onClick={() => setGroup("internal")}>Internal</button>
+                  </div>
+                )}
+              </div>
+              <div className="cpv-cardgrid">
+                {shown.map((c) => (
+                  <button key={c.key} className="cpv-card" onClick={() => open(c.view || c.key, { sign: c.sign })}>
+                    <div className="cpv-card-main">
+                      <div className="cpv-card-title">{c.title}{c.done ? " ✓" : ""}</div>
+                      {c.sub && <div className="cpv-card-sub">{c.sub}</div>}
+                    </div>
+                    <span className="cpv-card-act">{c.action || "Open"} →</span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* BALANCE — at the very bottom. Hidden when there is no contract yet. */}
         {finance?.hasContract && (
           <section className="cpv-bal">
             <div className="cpv-kick">Project balance</div>
@@ -179,22 +215,6 @@ export default function StaffHub({
                 <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
               </div>
             )}
-          </section>
-        )}
-
-        {/* CARDS — the staff sections; each opens the editable tool. */}
-        {sections.length > 0 && (
-          <section className="cpv-cards">
-            <div className="cpv-kick">Project</div>
-            {sections.map((c) => (
-              <button key={c.key} className="cpv-card" onClick={() => open(c.view || c.key, { sign: c.sign })}>
-                <div className="cpv-card-main">
-                  <div className="cpv-card-title">{c.title}{c.done ? " ✓" : ""}</div>
-                  {c.sub && <div className="cpv-card-sub">{c.sub}</div>}
-                </div>
-                <span className="cpv-card-act">{c.action || "Open"} →</span>
-              </button>
-            ))}
           </section>
         )}
       </main>

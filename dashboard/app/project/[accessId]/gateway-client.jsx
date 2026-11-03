@@ -3170,14 +3170,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
       };
       const hubSections = [
-        { key: "survey", title: "Site Survey", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: "Open" },
-        { key: "mockup", title: "System Preview", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
-        { key: "proposal", title: "Proposal", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
-        { key: "install", title: "Installation", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: hubAppt ? "Reschedule" : "Schedule" },
-        { key: "workorder", title: "Work Order", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length, ownHeader: true },
-        { key: "closeout", title: "Closeout", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open", done: qcSigned },
-        { key: "completion", title: "Completion", sub: isComplete ? "Complete." : "Final documents.", action: "Open", done: isComplete },
-        { key: "expenses", title: "Expenses", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open", ownHeader: true },
+        { key: "survey", title: "Site Survey", group: "customer", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: "Open" },
+        { key: "mockup", title: "System Preview", group: "customer", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: "Open" },
+        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: "Open", done: pSigned },
+        { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: "Open", done: qcSigned },
+        { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: "Open", done: isComplete },
+        { key: "install", title: "Installation", group: "internal", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: hubAppt ? "Reschedule" : "Schedule" },
+        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? "Created." : "Create the work order.", action: "Open", done: !!workOrders?.length, ownHeader: true },
+        { key: "expenses", title: "Expenses", group: "internal", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: "Open", ownHeader: true },
       ];
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
