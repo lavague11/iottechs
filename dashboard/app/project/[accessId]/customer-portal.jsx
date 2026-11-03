@@ -6,7 +6,7 @@
 // the canonical engines (passed in already-computed), and every overlay mounts the SAME customer component
 // the deck uses (via the `renderOverlay` the gateway supplies) so there is zero duplicated business logic.
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { portalCards, viewFromParams, payable, overlayAvailable } from "../../../lib/customer-portal";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
@@ -54,10 +54,12 @@ const CARD_COPY = {
 export default function CustomerPortal({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
+  previewRole = null, onPreviewRole, previewRoles = [], onLock,
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const [menuOpen, setMenuOpen] = useState(false);   // the "Portal" dropdown (staff previewing as a customer)
 
   // URL drives the open overlay: ?view=<key> (or a legacy ?open=…). ?sign carries the signer intent through.
   const requestedView = viewFromParams({ view: params.get("view"), open: params.get("open") });
@@ -120,7 +122,30 @@ export default function CustomerPortal({
           <span className="cpv-mark">IOT TECHS</span>
           <span className="cpv-proj">{project?.contact_name || project?.customer || "Your project"} · {String(accessId).slice(-4)}</span>
         </div>
-        <a className="cpv-port" href="/my-projects">My projects</a>
+        {previewRole ? (
+          // Staff previewing as a customer: keep the Portal dropdown so they can switch role / exit the
+          // preview — never a one-way trip into the customer gateway.
+          <div className="cpv-portwrap">
+            <button className="cpv-port" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
+              Portal <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: menuOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            {menuOpen && (
+              <>
+                <div className="cpv-menu-scrim" onClick={() => setMenuOpen(false)} />
+                <div className="cpv-menu" role="menu">
+                  <button role="menuitem" onClick={() => { setMenuOpen(false); onPreviewRole?.(null); }}>Exit preview</button>
+                  {previewRoles.length > 0 && <div className="cpv-menu-head">Preview as</div>}
+                  {previewRoles.map((r) => (
+                    <button key={r} role="menuitem" className={r === previewRole ? "on" : ""} onClick={() => { setMenuOpen(false); onPreviewRole?.(r); }}>{r[0].toUpperCase() + r.slice(1)}</button>
+                  ))}
+                  {onLock && <button role="menuitem" className="cpv-menu-lock" onClick={() => { setMenuOpen(false); onLock(); }}>Lock</button>}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <a className="cpv-port" href="/my-projects">My projects</a>
+        )}
       </header>
 
       <main className="cpv-main">
@@ -261,8 +286,16 @@ const CSS = `
 .cpv-brand{display:flex;flex-direction:column;min-width:0}
 .cpv-mark{font-weight:800;letter-spacing:-.01em;font-size:14px;color:var(--ink)}
 .cpv-proj{font-size:12.5px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cpv-port{font-size:13px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;white-space:nowrap;background:var(--raise)}
+.cpv-port{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;white-space:nowrap;background:var(--raise);cursor:pointer;font-family:inherit}
 .cpv-port:hover{border-color:var(--ink);color:var(--ink)}
+.cpv-portwrap{position:relative}
+.cpv-menu-scrim{position:fixed;inset:0;z-index:9}
+.cpv-menu{position:absolute;top:calc(100% + 6px);right:0;z-index:10;min-width:172px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 34px rgba(16,20,24,.14);padding:5px;display:flex;flex-direction:column;gap:1px}
+.cpv-menu button{width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:9px 11px;font:500 13px/1 inherit;color:var(--ink-soft);cursor:pointer}
+.cpv-menu button:hover{background:var(--line-soft);color:var(--ink)}
+.cpv-menu button.on{color:var(--ink);font-weight:700}
+.cpv-menu-head{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:8px 11px 4px}
+.cpv-menu-lock{margin-top:3px;border-top:1px solid var(--line)!important;border-radius:0 0 8px 8px}
 .cpv-main{max-width:640px;margin:0 auto;padding:20px 16px 90px;display:flex;flex-direction:column;gap:16px}
 .cpv-kick{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:9px}
 .cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}

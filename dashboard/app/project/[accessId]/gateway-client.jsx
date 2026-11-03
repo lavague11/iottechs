@@ -3055,6 +3055,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           signedDate={proposalData?.signed_at || null}
           renderOverlay={renderPortalOverlay}
           onRefresh={() => { refreshCustFin(); refreshAcceptances(); }}
+          previewRole={previewRole}
+          onPreviewRole={onPreviewRole}
+          previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
+          onLock={onReAuth}
         />
       );
     }
