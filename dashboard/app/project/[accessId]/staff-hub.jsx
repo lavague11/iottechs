@@ -199,7 +199,8 @@ export default function StaffHub({
           const hasInternal = sections.some((s) => s.group === "internal");
           const hasCustomer = sections.some((s) => (s.group || "customer") === "customer");
           const showToggle = hasInternal && hasCustomer;
-          const shown = showToggle ? sections.filter((s) => (s.group || "customer") === group) : sections;
+          // Locked tools (prerequisite not met yet) are hidden entirely, not shown greyed.
+          const shown = (showToggle ? sections.filter((s) => (s.group || "customer") === group) : sections).filter((s) => !s.locked);
           return (
             <section className="cpv-cards">
               <div className="cpv-kick-row">
