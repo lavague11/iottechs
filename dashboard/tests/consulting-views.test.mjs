@@ -41,18 +41,19 @@ test("db wiring: migration columns, setMockupSkipped/setViewsRequired, gate hono
   assert.ok(db.includes("mockup_skipped: !!p.mockup_skipped_at,") && db.includes("views_required: !!p.views_required,"), "facts exposed for the client/deck");
 });
 
-test("Views Start/Skip UI + action wiring", () => {
+test("rebuild: Views folded into Plan — no Start/Skip splash; Camera Photos reachable; Submit summary", () => {
   const shell = read("app/project/[accessId]/system-planner.jsx");
   const actions = read("app/project/[accessId]/actions.js");
-  const gw = read("app/project/[accessId]/gateway-client.jsx");
-  assert.ok(shell.includes("function ViewsStart("), "the Start/Skip entry component exists");
-  assert.ok(shell.includes("(hasViews || viewsStarted)"), "the mockup opens once started or data exists, else the strip shows");
-  assert.ok(shell.includes("onStart={() => { setViewsStarted(true); if (skipped) persistSkip(false); }}"), "Start opens Views + un-skips");
-  assert.ok(shell.includes("onSkip={() => { persistSkip(true); setRailStep(\"plan\"); }}"), "Skip for now persists + leaves Views");
-  assert.ok(actions.includes("export async function skipViewsAction(accessId, skip)"), "skipViewsAction server action");
-  assert.ok(actions.includes("export async function setViewsRequiredAction(accessId, required)"), "setViewsRequiredAction server action");
-  assert.ok(gw.includes("onSkipViews={(cView === \"customer\" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}"), "gateway wires onSkipViews (office only)");
-  assert.ok(gw.includes("mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}"), "gateway passes the skip/required state");
+  // The Start/Skip "Views" gate is gone — Views is no longer a blocking step.
+  assert.ok(!shell.includes("function ViewsStart("), "the Start/Skip splash component is removed");
+  assert.ok(!/\bStart Views\b/.test(shell), "no 'Start Views' splash copy");
+  // The phone-mockup photo surface is still reachable, as a non-gating 'Camera Photos' Go-to entry.
+  assert.ok(shell.includes("Camera Photos"), "Camera Photos reachable from the Go-to menu");
+  // Step 3 shows a real summary instead of a Start/Skip strip.
+  assert.ok(shell.includes("function SubmitSummary("), "the Submit step renders a real summary (thumbnail/count/missing photos)");
+  // The server actions remain (still used elsewhere / for views_required), even though the splash is gone.
+  assert.ok(actions.includes("export async function skipViewsAction(accessId, skip)"), "skipViewsAction server action still exists");
+  assert.ok(actions.includes("export async function setViewsRequiredAction(accessId, required)"), "setViewsRequiredAction server action still exists");
 });
 
 test("P7: Review status surface summarizes both deliverables (Camera Views shown even when not started)", () => {

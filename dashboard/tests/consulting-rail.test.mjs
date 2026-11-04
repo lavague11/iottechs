@@ -13,7 +13,9 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
   assert.ok(!shell.includes('className="syp-seg"'), "the old Plans|Views segmented toggle is gone");
   assert.ok(!/>Plans<\/button>/.test(shell) && !/setMode\(/.test(shell), "no Plans/Views tab buttons or mode toggle remain");
   assert.ok(shell.includes('className="syp-nav"'), "the contextual nav footer exists (replaced the 5-tab rail)");
-  for (const label of ["Background", "Floor Plan", "Cameras", "Views", "Review"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
+  // REBUILD: 5 steps → 3. Base · Plan · Submit (Cameras + Views folded into Plan / the ••• Go-to menu).
+  for (const label of ["Base", "Plan", "Submit"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
+  assert.ok(!/label: "Views"/.test(shell) && !/label: "Cameras"/.test(shell), "Cameras + Views are no longer separate rail steps");
 });
 
 test("rail drives the survey's internal step via postMessage (Background→0, Plan→1, Cameras→1+devices); Views/Review shell-only", () => {

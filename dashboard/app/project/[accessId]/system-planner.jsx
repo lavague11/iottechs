@@ -231,31 +231,28 @@ export default function SystemPlanner({
   }, [accessId]);   // eslint-disable-line react-hooks/exhaustive-deps -- goRail/surveyCmd use refs + stable setters
 
   const camsPlaced = sig.camCount || camCount;
+  // REBUILD: 5 steps → 3. Base (pick a background) · Plan (one live map: structure + areas + cameras +
+  // photos) · Submit (summary + lock). Cameras folded into Plan; Views is no longer a gating step (the
+  // phone-mockup photo surface is reachable from the ••• Go-to menu as "Camera Photos").
   const steps = [
-    { key: "background", label: "Background", done: sig.bgReady, enabled: true },
-    // Floor Plan is "done" when built geometry exists OR the survey was submitted — a submitted survey
-    // proves the plan regardless of which floor is in view or whether a structure was explicitly drawn.
-    { key: "plan", label: "Floor Plan", done: sig.hasPlan || surveySubmitted, enabled: sig.bgReady },
-    { key: "cameras", label: "Cameras", done: camsPlaced > 0, enabled: sig.bgReady },
-    { key: "views", label: "Views", done: hasViews, enabled: camsPlaced > 0 || hasViews },
-    { key: "review", label: "Review", done: false, enabled: true },
+    { key: "background", label: "Base", done: sig.bgReady, enabled: true },
+    // Plan is "done" when a structure was drawn OR cameras were placed OR the survey was submitted.
+    { key: "plan", label: "Plan", done: sig.hasPlan || camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady },
+    { key: "review", label: "Submit", done: false, enabled: sig.bgReady },
   ];
 
-  // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next / Submit, replacing the always-on 5-tab rail.
-  // The canonical workflow still lives in steps/railStep/goRail; this only derives the next/prev + CTA.
-  // Views drops out of the Next flow when it's optional and untouched (Cameras → Review), but stays
-  // reachable via the ••• Go-to menu.
-  const viewsInFlow = hasViews || viewsStarted || viewsRequired;
-  const navOrder = ["background", "plan", "cameras", ...(viewsInFlow ? ["views"] : []), "review"];
-  const navIdx = Math.max(0, navOrder.indexOf(railStep === "views" && !viewsInFlow ? "cameras" : railStep));
+  // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next, three steps. The canonical workflow still lives in
+  // railStep/goRail; this only derives next/prev + CTA. "views" (Camera Photos) stays reachable via the
+  // ••• Go-to menu but is OUT of the linear Base→Plan→Submit flow.
+  const navOrder = ["background", "plan", "review"];
+  const navIdx = Math.max(0, navOrder.indexOf(["cameras", "views"].includes(railStep) ? "plan" : railStep));
   const prevStep = navOrder[navIdx - 1] || null;
   const nextStep = navOrder[navIdx + 1] || null;
-  // Don't surface a Next CTA that can't fire yet — e.g. "Create Floor Plan" while this floor still has no
-  // background (you must pick Satellite/Upload/Draw first). Keeps the empty chooser a clean first screen
-  // instead of showing a dead button.
+  // Don't surface a Next CTA that can't fire yet — e.g. the Plan step while this floor still has no
+  // background (you must pick Satellite/Upload/Draw first). Keeps the empty chooser a clean first screen.
   const nextStepMeta = steps.find((s) => s.key === nextStep);
   const nextEnabled = !nextStep || !nextStepMeta || nextStepMeta.enabled;
-  const NEXT_PROMPT = { background: "Background", plan: "Create Floor Plan", cameras: "Place Cameras", views: "Add Camera Views", review: "Review & Submit" };
+  const NEXT_PROMPT = { plan: "Floor Plan", review: "Review & Submit" };
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).
   const svApproved = toolAccepted(svMeta, acceptances && acceptances.site_survey);
@@ -264,20 +261,19 @@ export default function SystemPlanner({
   const mkApproved = toolAccepted(mkMeta, acceptances && acceptances.mockup);
   const mkSubCurrent = toolAccepted(mkMeta, acceptances && acceptances.submit_mockup);
   const mkStale = !!(acceptances && acceptances.submit_mockup) && !mkSubCurrent;
+  // REBUILD: ONE Submit button, gated on the SURVEY only. Photos are no longer a submit blocker (they
+  // stay editable after submit; only geometry locks). Mockup/Camera-Views submission is dropped from the
+  // flow — the mkStale/mkSubCurrent reads remain available but no longer gate the CTA.
   const reviewCta = (() => {
     if (svMeta && svMeta.has && !svApproved) {
-      if (svStale) return { label: "Re-submit Site Survey", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
+      if (svStale) return { label: "Re-submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
       if (svSubCurrent) return { label: "Awaiting customer approval", muted: true };
-      return { label: "Submit Site Survey", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
-    }
-    if (viewsInFlow && mkMeta && mkMeta.has && !mkApproved) {
-      if (mkStale) return { label: "Re-submit Camera Views", primary: true, act: () => onSubmitTool && onSubmitTool("mockup") };
-      if (mkSubCurrent) return { label: "Awaiting customer approval", muted: true };
-      return { label: "Submit Camera Views", primary: true, act: () => onSubmitTool && onSubmitTool("mockup") };
+      return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
     }
     if (surveyOk) return { label: "Continue to Proposal →", primary: true, act: () => onContinue && onContinue() };
     return null;
   })();
+  void mkStale; void mkSubCurrent; void mkApproved;   // retained reads (mockup state) — no longer gate Submit
   const [navMenuOpen, setNavMenuOpen] = useState(false);
 
   // CUSTOMER head: no staff rail — just a floor/view pager + a full-width Walkthrough. The pager steps
@@ -356,19 +352,26 @@ export default function SystemPlanner({
       <div className="syp-pane syp-plan" hidden={paneMode !== "plan"}>
         {planNode || <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
       </div>
+      {/* Camera Photos — the phone-mockup photo surface, reachable from the ••• Go-to menu. No longer a
+          gating "Views" step with a Start/Skip splash; it just shows the photos tool when opened. */}
       <div className="syp-pane" hidden={paneMode !== "views"}>
-        {(hasViews || viewsStarted)
-          ? (viewsNode || <div className="syp-empty">Camera views will appear here once photos are added.</div>)
-          : <ViewsStart camCount={camsPlaced} skipped={skipped} required={viewsRequired} canEdit={!!onSkipViews}
-              onStart={() => { setViewsStarted(true); if (skipped) persistSkip(false); }}
-              onSkip={() => { persistSkip(true); setRailStep("plan"); }} />}
+        {viewsNode || <div className="syp-empty">Add each camera&apos;s photo on its device card.</div>}
       </div>
-      {/* Review — the Consulting status surface. The detailed per-tool submit/approve bars (footer) live
-          HERE now (contextual to Review), not always-below; the nav footer's CTA is the headline action. */}
+      {/* Submit — a real summary (per-floor plan thumbnail, camera count, cameras missing photos), the
+          submitted-lock banner, then the one Submit CTA (the footer approve bars). */}
       {!customer && paneMode === "review" && (
         <div className="syp-review">
+          {surveySubmitted && (
+            <div className="syp-lockbanner" role="status">
+              <span className="syp-lockbanner-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+              </span>
+              <span className="syp-lockbanner-t"><b>Submitted — locked.</b> The floor plan and cameras are locked for the customer to approve. Photos stay editable. Use <b>Unsubmit</b> to change the plan.</span>
+            </div>
+          )}
           <div className="syp-review-h">Review &amp; submit</div>
-          <div className="syp-review-sub">Confirm the site survey{hasViews ? " and camera views" : ""}, then submit for the customer to approve.</div>
+          <div className="syp-review-sub">Check each floor, then submit for the customer to approve.</div>
+          <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("plan")} onGoPhotos={() => goRail("views")} />
           {footer}
         </div>
       )}
@@ -413,6 +416,11 @@ export default function SystemPlanner({
                         <span className="syp-nav-mi-dot">{s.done ? "✓" : ""}</span>{s.label}
                       </button>
                     ))}
+                    {/* Camera Photos — the phone-mockup photo surface, out of the linear Base→Plan→Submit flow. */}
+                    <button className={`syp-nav-mi${railStep === "views" ? " on" : ""}`} role="menuitem" disabled={!sig.bgReady}
+                      onClick={() => { if (sig.bgReady) { goRail("views"); setNavMenuOpen(false); } }}>
+                      <span className="syp-nav-mi-dot">{hasViews ? "✓" : ""}</span>Camera Photos
+                    </button>
                     {canWalk && (
                       <>
                         <div className="syp-nav-sep" />
@@ -460,19 +468,39 @@ export default function SystemPlanner({
 
 // Views entry — shown instead of a second build screen when the mockup was never started. The system
 // already knows the cameras, so this just offers Start (open the mockup on those cameras) or Skip for now.
-function ViewsStart({ camCount = 0, skipped = false, required = false, canEdit = false, onStart, onSkip }) {
+// SUBMIT SUMMARY — the real Step-3 summary: per-floor plan thumbnail, camera count, and a flag for
+// cameras still missing a photo. Thumbnails open the Plan; the missing-photo flag opens Camera Photos.
+function SubmitSummary({ floors = [], roster = [], onGoPlan, onGoPhotos }) {
+  const src = (roster && roster.length) ? roster : floors;
+  const list = src.map((f, i) => {
+    const devices = Array.isArray(f.devices) ? f.devices : [];
+    const cams = devices.filter((d) => d && d.k === "cam");
+    const missing = cams.filter((c) => !c.photo).length;
+    const bg = (floors[i] && floors[i].bg) || f.bg || null;
+    return { name: f.name || `Floor ${i + 1}`, bg, camCount: cams.length, missing };
+  });
+  if (!list.length) return <div className="syp-summary-empty">Start a floor to see the summary.</div>;
+  const totalCams = list.reduce((n, f) => n + f.camCount, 0);
+  const totalMissing = list.reduce((n, f) => n + f.missing, 0);
   return (
-    <div className="syp-vstart">
-      <div className="syp-vstart-h">{camCount > 0 ? `${camCount} camera${camCount === 1 ? "" : "s"} ready` : "Camera Views"}</div>
-      <div className="syp-vstart-sub">
-        {skipped ? "Skipped for now — start anytime." : required ? "Required for this project — attach a shot for each camera." : "Optional — attach a real shot for each camera, or skip if this job doesn't need it."}
-      </div>
-      {canEdit ? (
-        <div className="syp-vstart-actions">
-          <button className="syp-vbtn primary" onClick={onStart}>Start Views</button>
-          {!required && !skipped && <button className="syp-vbtn" onClick={onSkip}>Skip for now</button>}
+    <div className="syp-summary">
+      {list.map((f, i) => (
+        <div className="syp-sum-floor" key={i}>
+          <button className="syp-sum-thumb" onClick={onGoPlan} title="Open the floor plan" aria-label={`Open ${f.name} plan`}>
+            {f.bg ? <img src={f.bg} alt="" /> : <span className="syp-sum-noimg">No plan</span>}
+          </button>
+          <div className="syp-sum-meta">
+            <div className="syp-sum-name">{f.name}</div>
+            <div className="syp-sum-stat">{f.camCount} camera{f.camCount === 1 ? "" : "s"}</div>
+            {f.missing > 0 && (
+              <button className="syp-sum-flag" onClick={onGoPhotos} title="Add the missing photos">
+                {f.missing} missing photo{f.missing === 1 ? "" : "s"}
+              </button>
+            )}
+          </div>
         </div>
-      ) : <div className="syp-vstart-sub">No camera views yet.</div>}
+      ))}
+      <div className="syp-sum-total">{totalCams} camera{totalCams === 1 ? "" : "s"} total{totalMissing > 0 ? ` · ${totalMissing} still need a photo` : (totalCams > 0 ? " · all have photos" : "")}</div>
     </div>
   );
 }
@@ -569,6 +597,22 @@ const CSS = `
   .syp-dot{width:12px;height:12px;font-size:8px}
   .syp-vstart{padding:20px 14px}
 }
+/* Submitted-lock banner + Submit summary (Step 3) */
+.syp-lockbanner{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;margin-bottom:12px;border:1px solid rgba(196,85,61,.3);background:rgba(196,85,61,.08);border-radius:12px;color:#8a3a28}
+.syp-lockbanner-ico{flex:none;margin-top:1px}
+.syp-lockbanner-t{font-size:.82rem;line-height:1.4}
+.syp-summary{display:flex;flex-direction:column;gap:10px;margin:12px 0 14px}
+.syp-summary-empty{font-size:.84rem;color:var(--dv-meta,#787D84);margin:10px 0}
+.syp-sum-floor{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-bg,#fff)}
+.syp-sum-thumb{flex:none;width:92px;height:62px;border-radius:9px;overflow:hidden;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#F2F2EF);cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center}
+.syp-sum-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.syp-sum-noimg{font-size:.72rem;color:var(--dv-meta,#787D84)}
+.syp-sum-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.syp-sum-name{font-weight:700;font-size:.9rem;color:var(--dv-ink,#101418)}
+.syp-sum-stat{font-size:.8rem;color:var(--dv-meta,#787D84)}
+.syp-sum-flag{align-self:flex-start;margin-top:2px;font:inherit;font-size:.74rem;font-weight:700;color:#8a3a28;background:rgba(196,85,61,.1);border:1px solid rgba(196,85,61,.28);border-radius:100px;padding:2px 9px;cursor:pointer}
+.syp-sum-flag:hover{background:rgba(196,85,61,.18)}
+.syp-sum-total{font-size:.82rem;color:var(--dv-meta,#787D84);font-weight:600}
 .syp-vstart{border:1px dashed var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:26px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
 .syp-vstart-h{font-size:1rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-vstart-sub{font-size:.84rem;color:var(--dv-meta,#787D84);max-width:420px}

@@ -9,10 +9,10 @@ const widget = readFileSync(new URL("../public/widgets/site-survey-merged.html",
 const wrap = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.jsx", import.meta.url), "utf8");
 const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
 
-test("Plan is renamed to Floor Plan, and its ✓ tracks built geometry OR submission", () => {
-  assert.ok(sp.includes('label: "Floor Plan"'), "rail label is 'Floor Plan'");
-  assert.ok(!/label: "Plan"/.test(sp), "no stale 'Plan' label");
-  assert.ok(sp.includes("done: sig.hasPlan || surveySubmitted"), "Floor Plan done = geometry OR submitted");
+test("rebuild: 3-step rail Base · Plan · Submit; Plan ✓ tracks geometry OR cameras OR submission", () => {
+  assert.ok(sp.includes('label: "Base"') && sp.includes('label: "Plan"') && sp.includes('label: "Submit"'), "3-step rail labels");
+  assert.ok(!/label: "Cameras"/.test(sp) && !/label: "Views"/.test(sp), "Cameras + Views are no longer separate gating rail steps");
+  assert.ok(sp.includes("done: sig.hasPlan || camsPlaced > 0 || surveySubmitted"), "Plan done = geometry OR cameras OR submitted");
   assert.ok(/surveySubmitted = false/.test(sp), "surveySubmitted prop on SystemPlanner");
   assert.ok(gw.includes("surveySubmitted={!!acceptances.submit_site_survey}"), "gateway passes submission state");
 });
@@ -31,20 +31,20 @@ test("staff: floor carousel header on top, contextual nav footer below the canva
   assert.ok(!sp.includes('role="tablist"'), "the 5-tab rail tablist is removed");
 });
 
-test("contextual nav footer: Back/Next progression + a state-derived Review CTA (canonical submit/continue)", () => {
-  // guided navigation reuses goRail; Views drops out of the Next flow when optional+untouched
-  assert.ok(sp.includes('const navOrder = ["background", "plan", "cameras", ...(viewsInFlow ? ["views"] : []), "review"];'), "Next skips optional Views");
+test("contextual nav footer: linear 3-step Back/Next + a state-derived Submit CTA", () => {
+  // guided navigation reuses goRail; the linear flow is exactly Base → Plan → Submit (Cameras/Views folded in)
+  assert.ok(sp.includes('const navOrder = ["background", "plan", "review"];'), "linear 3-step order");
   assert.ok(sp.includes("const nextStep = navOrder[navIdx + 1] || null;") && sp.includes("const prevStep = navOrder[navIdx - 1] || null;"), "prev/next derived from the canonical order");
-  // the forward CTA NAMES the next step itself (e.g. "Create Floor Plan →") — no separate "Next · X" hint, no generic "Next" label
+  // the forward CTA NAMES the next step itself — no separate "Next · X" hint, no generic "Next" label
   assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg"), "the forward CTA label is the next step's prompt, not a generic Next");
   assert.ok(!sp.includes('syp-nav-hint">Next ·'), "the redundant 'Next · <step>' hint is gone");
-  assert.ok(sp.includes("Submit Site Survey") && sp.includes("Re-submit Site Survey") && sp.includes("Continue to Proposal"), "Review CTA = Submit / Re-submit / Continue");
+  assert.ok(/label: "Submit"/.test(sp) && /label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Submit / Re-submit / Continue");
   assert.ok(sp.includes('onSubmitTool && onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
   assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");
   // gateway passes the canonical wiring
   assert.ok(gw.includes("surveyOk={surveyOk}") && gw.includes("onSubmitTool=") && gw.includes("onContinue={() => browse(\"proposal\")}"), "gateway wires surveyOk/onSubmitTool/onContinue");
-  // the detailed submit bars live in the Review pane now (not always-below); customer keeps the standalone approve surface
-  assert.ok(/syp-review[\s\S]{0,600}\{footer\}/.test(sp), "submit bars (footer) moved into the Review pane");
+  // the detailed submit bars live in the Submit pane now (not always-below); customer keeps the standalone approve surface
+  assert.ok(/syp-review[\s\S]{0,1600}\{footer\}/.test(sp), "submit bars (footer) moved into the Submit pane");
   assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");
 });
 
