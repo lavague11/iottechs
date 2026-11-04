@@ -4,6 +4,7 @@ import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
+import { subscribeSyncStatus } from "./tool-sync";
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
@@ -301,6 +302,7 @@ export default function SystemPlanner({
   return (
     <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
+      {!customer && <SyncBadge />}
 
       {customer ? (
         /* CUSTOMER — no staff rail. A floor/view pager (when there's more than one) + a full-width
@@ -475,6 +477,22 @@ export default function SystemPlanner({
 
 // Views entry — shown instead of a second build screen when the mockup was never started. The system
 // already knows the cameras, so this just offers Start (open the mockup on those cameras) or Skip for now.
+// SYNC STATUS — offline-first indicator. Every change is written to the device first (localStorage,
+// survives reload); this badge shows "Offline — will sync" when there's no signal and a queued edit,
+// "Saving…" while a change is in flight, and nothing once everything is on the server.
+function SyncBadge() {
+  const [st, setSt] = useState({ online: true, pending: 0 });
+  useEffect(() => subscribeSyncStatus(setSt), []);
+  if (st.online && st.pending === 0) return null;   // all synced → no chrome
+  const offline = !st.online && st.pending > 0;
+  return (
+    <div className={`syp-sync${offline ? " off" : ""}`} role="status" aria-live="polite" title={offline ? "Saved on this device — will upload when you're back online" : "Saving your changes"}>
+      <span className="syp-sync-dot" aria-hidden="true" />
+      <span>{offline ? "Offline — will sync" : "Saving…"}</span>
+    </div>
+  );
+}
+
 // SUBMIT SUMMARY — the real Step-3 summary: per-floor plan thumbnail, camera count, and a flag for
 // cameras still missing a photo. Thumbnails open the Plan; the missing-photo flag opens Camera Photos.
 function SubmitSummary({ floors = [], roster = [], onGoPlan, onGoPhotos }) {
@@ -665,6 +683,12 @@ const CSS = `
    join them. */
 .syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:0;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
 .syp-floorbar .syp-fb-nav{display:inline-flex;align-items:center;gap:10px}
+/* Offline-first sync badge — top-right of the planner, above the canvas. */
+.syp{position:relative}
+.syp-sync{position:absolute;top:6px;right:8px;z-index:30;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;box-shadow:0 2px 8px rgba(16,20,24,.25)}
+.syp-sync.off{background:#8a3a28}
+.syp-sync-dot{width:7px;height:7px;border-radius:50%;background:#fff;opacity:.9;animation:sypSyncPulse 1.1s ease-in-out infinite}
+@keyframes sypSyncPulse{0%,100%{opacity:.35}50%{opacity:1}}
 /* Map / Photos view toggle — pinned left of the centered floor selector. */
 .syp-floorbar .syp-fb-viewtog{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:inline-flex;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px;gap:2px}
 .syp-floorbar .syp-fb-viewtog button{appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.01em;color:var(--dv-meta,#787D84);background:transparent;border:0;border-radius:100px;padding:5px 12px;transition:background .15s,color .15s}
