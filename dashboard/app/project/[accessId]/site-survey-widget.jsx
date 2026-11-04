@@ -41,7 +41,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // a previously-built survey opens straight into the editor instead of flashing the Build gate on reload
   // (the server `hasData` prop lags behind the tool-meta poll).
   const [localHasData, setLocalHasData] = useState(false);
-  const showEditor = readOnly || hasData || localHasData || built;
+  // Inside the System Planner (noRoster) the tool opens STRAIGHT into the editor — an empty floor lands on
+  // the Satellite / Upload / Draw chooser, no "Build" gate to click through. The standalone widget keeps the
+  // gate (so an empty survey isn't a big blank eyesore on a page that's just browsing).
+  const showEditor = readOnly || hasData || localHasData || built || noRoster;
   const [floorCount, setFloorCount] = useState(null);
   const [items, setItems] = useState([]);
   const [fs, setFs] = useState(false);

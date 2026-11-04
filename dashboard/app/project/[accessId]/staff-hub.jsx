@@ -112,8 +112,14 @@ export default function StaffHub({
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
-/* Survey / planner tool fills the whole overlay height (match the deck), instead of a fixed ~382px slab. */
-.cpv-ovl-body .ss-tool-body{display:flex;flex-direction:column}
+/* Survey / planner tool fills the whole overlay height (match the deck), instead of a fixed ~382px slab.
+   The System Planner must own a real height first, or the survey frame's flex:1 collapses to 1px (the
+   canvas vanishes): make .syp fill the overlay and its active plan pane flex to fill between the floor
+   bar and the nav footer. */
+.cpv-ovl-body .syp{height:100%;min-height:0}
+.cpv-ovl-body .syp-plan{flex:1 1 0;min-height:0;display:flex;flex-direction:column}
+.cpv-ovl-body .syp-plan>.ss-tool-col{flex:1 1 0;min-height:0;display:flex!important;flex-direction:column;height:auto}
+.cpv-ovl-body .ss-tool-col>.ss-tool-body{flex:1 1 0;min-height:0;display:flex!important;flex-direction:column}
 .cpv-ovl-body .ss-tool-body>.ss-embed{flex:1 1 0;min-height:0;height:auto;display:flex;flex-direction:column}
 .cpv-ovl-body .ss-tool-body .ss-embed-frame{flex:1 1 0;min-height:0;height:auto!important}
 /* Overlay bar — consistent with the hub header: tool name LEFT, project name CENTERED, X RIGHT. */

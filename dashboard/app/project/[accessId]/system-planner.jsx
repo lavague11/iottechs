@@ -250,6 +250,11 @@ export default function SystemPlanner({
   const navIdx = Math.max(0, navOrder.indexOf(railStep === "views" && !viewsInFlow ? "cameras" : railStep));
   const prevStep = navOrder[navIdx - 1] || null;
   const nextStep = navOrder[navIdx + 1] || null;
+  // Don't surface a Next CTA that can't fire yet — e.g. "Create Floor Plan" while this floor still has no
+  // background (you must pick Satellite/Upload/Draw first). Keeps the empty chooser a clean first screen
+  // instead of showing a dead button.
+  const nextStepMeta = steps.find((s) => s.key === nextStep);
+  const nextEnabled = !nextStep || !nextStepMeta || nextStepMeta.enabled;
   const NEXT_PROMPT = { background: "Background", plan: "Create Floor Plan", cameras: "Place Cameras", views: "Add Camera Views", review: "Review & Submit" };
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).
@@ -387,7 +392,7 @@ export default function SystemPlanner({
             ) : (<>
               {/* The CTA names the next step itself (e.g. "Create Floor Plan →") — no separate
                   "Next · X" hint; one button, zero redundancy. Back (left) still steps backward. */}
-              {nextStep ? (
+              {nextStep && nextEnabled ? (
                 <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
               ) : reviewCta ? (
                 <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
