@@ -65,7 +65,7 @@ test("satellite — a pending capture wins over the default geocode in initMap (
 });
 
 test("satellite — a loaded capture also blocks the initial recenter + the invalidate-on-zoom (preview.show sticks)", () => {
-  assert.ok(sat.includes("if(!(isInitial && (aerialApplied || loadedCapture))){ map.setCenter(loc); map.setZoom(20); }"), "the initial geocode never recenters over a loaded capture");
+  assert.ok(sat.includes("if(!(isInitial && (aerialApplied || loadedCapture))){ map.setCenter(loc); map.setZoom(20);"), "the initial geocode never recenters over a loaded capture");
   assert.ok(sat.includes("function invalidateCapture(){ if(loadedCapture) return;"), "invalidateCapture is a no-op for a loaded capture (a stray zoom_changed can't drop it)");
 });
 

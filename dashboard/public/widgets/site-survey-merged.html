@@ -333,6 +333,10 @@
   .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s ease}
   /* labels stay out of the way — revealed on hover, or while a camera is selected / being aimed (the label is the aim handle) */
   .devNode:hover .icLabel,.devNode.sel .icLabel,.devNode.aim .icLabel{opacity:1}
+  /* Always-visible short number badge (top-right of the marker); the full name shows on hover/select. */
+  .devNode .devNum{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:var(--ink,#101418);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(16,17,18,.4);z-index:6;pointer-events:none;transition:opacity .12s}
+  .devNode:hover .devNum,.devNode.sel .devNum{opacity:0}
+  .devNode.drag .devNum{display:none!important}
   .devNode.aim .icLabel{pointer-events:auto;cursor:grab}
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* View photo — a real shot of what the camera sees, attached per device */
@@ -881,7 +885,7 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html"+(PID?"?project="+encodeURIComponent(PID):"?_=1")+(EMB?"&embed=1":"");
+    var SAT_SRC="satellite-capture.html?v=20261104-auto"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
     function drawSrc(){ return "draw-floorplan.html?v=20261016-dock"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
@@ -1851,6 +1855,7 @@
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
+        '<div class="devNum" aria-hidden="true"></div>'+
         '<div class="viewBadge" title="View photo"></div>';
       (document.getElementById("planWorld")||document.getElementById("scene")).appendChild(el);   // devices ride the plan-world transform, aligned to the aerial
       dragMove(el,d); aimDrag(el.querySelector(".icLabel"),d); ringDrag(el.querySelector(".ringGrip"),d);
@@ -1877,6 +1882,9 @@
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag);   // the map emphasizes WHERE (location name "Dining 1"); falls back to the identity name/tag when no location is resolved
       lab.title=lab.textContent;
+      // Short NUMBER always on the map (labels used to collide); the full name rides the hover label.
+      var num=el.querySelector(".devNum");
+      if(num){ var m=(lab.textContent||"").match(/(\d+)\s*$/); num.textContent = m ? m[1] : String(devices.indexOf(d)+1); }
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
       if(d.cone){ var wrap=el.querySelector(".fovWrap"), svg=el.querySelector(".coneSvg"), path=el.querySelector(".coneP"), grad=el.querySelector("#cg"+d.id), line=el.querySelector(".coneLine");
         wrap.style.left=cen+"px"; wrap.style.top=cen+"px"; wrap.style.transform="rotate("+d.aim+"deg)";

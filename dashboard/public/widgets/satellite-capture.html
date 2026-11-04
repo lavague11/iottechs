@@ -371,6 +371,7 @@
 
   /* ---------- restore a saved aerial transform (rotation + center + zoom) ---------- */
   var pendingAerial=null, aerialApplied=false;   // aerialApplied: a restored transform won — the initial address geocode must not recenter over it
+  var autoLeveledOnce=false;   // REBUILD: auto-level + frame fires once, on the first fresh landing (not on restores/edits)
   function applyAerial(a){
     if(!a) return;
     if(!map){ pendingAerial=a; return; }   // maps not loaded yet → applied at the end of initMap instead of the default search
@@ -471,7 +472,12 @@
       // useless centroid ("New Jersey, USA"). Don't strand the user there — fall back to the test
       // property. A precise street address is always honored; typed searches are never overridden.
       if(isInitial && q!==DEMO && /administrative_area_level_1|administrative_area_level_2|\bcountry\b/.test(t) && !/street_address|premise|route|point_of_interest|establishment/.test(t)){ search(DEMO,true); return; }
-      var loc=r.geometry.location; if(!(isInitial && (aerialApplied || loadedCapture))){ map.setCenter(loc); map.setZoom(20); }   // a loaded/parent capture also blocks the initial recenter (its zoom_changed would otherwise invalidate the shown capture)
+      var loc=r.geometry.location; if(!(isInitial && (aerialApplied || loadedCapture))){ map.setCenter(loc); map.setZoom(20);
+        // REBUILD: zero-click — on first landing on the project address, auto-level + auto-frame the
+        // property (road along the bottom, building framed with neighbors). Runs ONCE, only on a fresh
+        // capture (never over a restored/edited aerial). Fully client-side (no enhance, no billing).
+        if(isInitial && !autoLeveledOnce){ autoLeveledOnce=true; setTimeout(function(){ try{ autoLevel(); }catch(e){} }, 900); }
+      }
       if(marker) marker.setMap(null); marker=new google.maps.Marker({map:map,position:loc});
       var cur=($("q").value||"").trim(), fa=r.formatted_address||"";
       if(fa && (cur.indexOf(",")<0 || fa.length>cur.length)) $("q").value=fa; }); }

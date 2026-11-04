@@ -321,10 +321,11 @@ export default function SystemPlanner({
             )}
           </div>
         )
-      ) : (
+      ) : paneMode === "review" ? null : (
         /* STAFF — one continuous frame: a FULL-WIDTH floor carousel header on top (where am I),
            the canvas in the middle, the contextual nav footer below. Arrows + tap-to-manage + a
-           header-only swipe change floors; canvas gestures stay with the editor. */
+           header-only swipe change floors; canvas gestures stay with the editor. Hidden on Submit —
+           that step summarizes ALL floors, so a single-floor selector there is misleading. */
         <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
           <div className="syp-fb-nav">
             <button className="syp-fb-arrow" aria-label="Previous floor" disabled={curFloor <= 0} onClick={() => goFloor(curFloor - 1)}>
@@ -388,19 +389,14 @@ export default function SystemPlanner({
             </button>
           ) : <span />}
           <div className="syp-nav-actions">
-            {bgTool === "draw" ? (
-              /* Drawing the structure IS the Floor Plan step — the dock's Done finishes it, so show quiet
-                 context here and suppress a competing Next CTA (no "Done vs Next" confusion). */
-              <span className="syp-nav-hint">Floor Plan · Structure — tap <b>Done</b> when finished</span>
-            ) : (<>
-              {/* The CTA names the next step itself (e.g. "Create Floor Plan →") — no separate
-                  "Next · X" hint; one button, zero redundancy. Back (left) still steps backward. */}
-              {nextStep && nextEnabled ? (
-                <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
-              ) : reviewCta ? (
-                <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
-              ) : null}
-            </>)}
+            {/* ONE forward control. No in-canvas "Done" and no "tap Done" hint — the map/tools autosave, and
+                the footer Next commits the active tool before advancing (goRail drives the survey step).
+                The CTA names the next step itself; Back (left) steps backward. */}
+            {nextStep && nextEnabled ? (
+              <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+            ) : reviewCta ? (
+              <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+            ) : null}
             <div className="syp-nav-morewrap">
               <button className="syp-nav-more" aria-label="More" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
