@@ -32,7 +32,9 @@ export default function SystemPlanner({
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
   // (iotSurveyCmd {cmd:"step"}); Views is the mockup pane; Review is the status surface. Both iframes stay
   // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
-  const [railStep, setRailStep] = useState(initialStep);
+  // MERGE: a project with no survey yet opens straight to Photos (the merged System Preview) — a
+  // preview-only job never has to touch the floor plan. A project that already has a survey opens on Map.
+  const [railStep, setRailStep] = useState(() => (initialStep === "plan" && !hasSurvey && !customer) ? "views" : initialStep);
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
@@ -330,6 +332,12 @@ export default function SystemPlanner({
            header-only swipe change floors; canvas gestures stay with the editor. Hidden on Submit —
            that step summarizes ALL floors, so a single-floor selector there is misleading. */
         <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
+          {/* Map / Photos toggle — the merged System Preview. Map = the floor plan; Photos = the camera
+              photos + phone mockup (works with no map at all). Left of the floor selector. */}
+          <div className="syp-fb-viewtog" role="group" aria-label="View">
+            <button type="button" className={railStep !== "views" ? "on" : ""} onClick={() => goRail("plan")}>Map</button>
+            <button type="button" className={railStep === "views" ? "on" : ""} onClick={() => goRail("views")}>Photos</button>
+          </div>
           <div className="syp-fb-nav">
             <button className="syp-fb-arrow" aria-label="Previous floor" disabled={curFloor <= 0} onClick={() => goFloor(curFloor - 1)}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
@@ -657,6 +665,11 @@ const CSS = `
    join them. */
 .syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:0;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
 .syp-floorbar .syp-fb-nav{display:inline-flex;align-items:center;gap:10px}
+/* Map / Photos view toggle — pinned left of the centered floor selector. */
+.syp-floorbar .syp-fb-viewtog{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:inline-flex;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px;gap:2px}
+.syp-floorbar .syp-fb-viewtog button{appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.01em;color:var(--dv-meta,#787D84);background:transparent;border:0;border-radius:100px;padding:5px 12px;transition:background .15s,color .15s}
+.syp-floorbar .syp-fb-viewtog button.on{background:var(--dv-ink,#101418);color:#fff}
+@media (max-width:640px){ .syp-floorbar .syp-fb-viewtog button{padding:5px 9px;font-size:.74rem} }
 .syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
 .syp-floorbar .syp-fb-arrow:hover:not(:disabled){background:#fff;border-color:var(--dv-ink,#101418)}
 .syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}

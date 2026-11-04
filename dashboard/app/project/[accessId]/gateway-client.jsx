@@ -3163,7 +3163,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             );
             const viewsNode = (
               <div>
-                <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                {/* Photos view (merged System Preview) — opens straight to the phone grid (no Build splash);
+                    works with no map at all, so a preview-only job never touches the floor plan. */}
+                <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                   customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
               </div>
             );
@@ -3268,8 +3270,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const hubSections = [
         // Customer-facing, in order. Closeout unlocks after the proposal is signed; Completion after QC sign-off.
         { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
-        { key: "survey", title: "Site Survey", group: "customer", sub: sHasSurvey ? "Walkthrough captured." : "Capture the property.", action: sHasSurvey ? "Edit" : "Create" },
-        { key: "mockup", title: "System Preview", group: "customer", sub: sHasMockup ? "Mockup ready." : "Build the mockup.", action: sHasMockup ? "Edit" : "Create" },
+        // Site Survey is the single entry for both the floor plan (Map) and the camera photos/preview
+        // (Photos) — System Preview merged in (toggle inside the tool). A preview-only job never needs a map.
+        { key: "survey", title: "Site Survey", group: "customer", sub: (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.", action: (sHasSurvey || sHasMockup) ? "Edit" : "Create" },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         { key: "install", title: "Installation", group: "internal", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: installDone ? "Completed" : hubAppt ? "Reschedule" : "Schedule", done: installDone },

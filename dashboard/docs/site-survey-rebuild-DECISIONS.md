@@ -37,7 +37,22 @@ Rule: where the spec was ambiguous, the sensible choice was made and recorded he
 5. **Footer Next from the capture tool → saves + advances one tap** — ✅ DONE + verified live (Base → "Floor Plan" committed the aerial and landed on the Plan map).
 6. **No screen shows two primary buttons / two ways** — ✅ Largely DONE (removed: Build gate, dead "Create Floor Plan" CTA, Views Start/Skip splash, the in-canvas satellite Done). Draw tool's own dock Done remains (deferred with §7).
 
+## Merge: System Preview → Site Survey
+
+- **System Preview card removed** from the project page; Site Survey is the only entry. Its copy becomes "Map & photos."
+- **Map / Photos toggle** added top-left of the planner bar. Map = floor plan; Photos = the camera photos + phone mockup. Reuses the existing survey (plan) + mockup (views) panes — same camera data underneath (cameras flow survey↔mockup by cid; nothing duplicated).
+- **Photos opens straight to the phone grid** (no Build splash) via `startBuilt`, and **works with no map** (the mockup renders standalone).
+- **A project with no survey opens straight to Photos** (preview-only jobs never touch the floor plan); a project that already has a survey opens on Map.
+- The `?view=mockup` route still resolves but no card points at it (Photos is the entry).
+
+## Offline-first saving
+
+- The tools already write localStorage first (device-persistent, survives reload) and the autosync retries failed pushes every 5s (implicit queue). Added: an explicit **online/offline indicator** + flush-on-reconnect.
+
 ## Deferred / partial (couldn't fully land in this pass — flagged honestly)
+
+- **Unplaced-cameras tray + fully unified camera record (merge)**: a camera added in Photos with no map becoming an "unplaced" survey device, shown in a Map tray to drag into place, is a multi-file data-model change (survey2-model + the mockup + the survey widget). In this pass the mockup's standalone camera slots back a photos-only job and the proposal PDF still pulls the mockup photos; the explicit unplaced→placed tray drag is the remaining deep piece.
+- **Full IndexedDB migration**: the device-first store is still localStorage (≈5 MB cap). Moving the multi-MB photo blobs to IndexedDB for capacity is a larger change; the offline indicator + retry queue ship on the current localStorage store.
 
 - **Enhance polish (§3)**: Remove-enhancement button, before/after slider pinned at 50% (currently an auto-scanner), "edit enhanced vs revert" prompt. The version-stack + compare infra exists; these are UX deltas on a billing-sensitive flow left for a focused, careful pass.
 - **Draw tool (§7)**: one naming field that flips above when near the bottom; the "structure editor only mounts after refresh" stale-state bug. (½-snap-default and the Structure/Room/Area/Opening/Eraser order already shipped — confirmed present.)
