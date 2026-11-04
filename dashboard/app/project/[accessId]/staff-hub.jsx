@@ -29,7 +29,7 @@ export default function StaffHub({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [contactOpen, setContactOpen] = useState(true);
+  const [contactOpen, setContactOpen] = useState(false);   // collapsed on open — click the bar to expand the contact details
   const [menuOpen, setMenuOpen] = useState(false);
   const [group, setGroup] = useState(defaultGroup);   // Project-tools filter: Customer-facing vs Internal (techs default to Internal)
   const [logOpen, setLogOpen] = useState(false);      // Job Log collapsed by default, like the deck
@@ -59,6 +59,9 @@ export default function StaffHub({
   // Tools that render their own prominent header set `ownHeader` — we drop the overlay's title text for
   // them (keeping the project id + X) so there's no duplicate heading.
   const activeTitle = activeSection?.ownHeader ? "" : (TITLES[activeView] || activeSection?.title || "Details");
+  // The project/business name — shown centered in BOTH the hub header and every overlay bar, so the bar
+  // reads consistently throughout (tool on the left, the project in the middle) instead of just "Tool · id".
+  const projName = contact?.businessName || project?.contact_name || project?.customer || "Project";
 
   const open = (view, extra = {}) => {
     const sp = new URLSearchParams(params.toString());
@@ -106,9 +109,13 @@ export default function StaffHub({
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
-.cpv-ovl-bar{box-shadow:0 1px 0 rgba(16,20,24,.03)}
-.cpv-ovl-title{font-size:15px}
-.cpv-ovl-ctx{margin-left:8px;font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace}
+/* Overlay bar — consistent with the hub header: tool name LEFT, project name CENTERED, X RIGHT. */
+.cpv-ovl-bar{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;box-shadow:0 1px 0 rgba(16,20,24,.03)}
+.cpv-ovl-tool{justify-self:start;min-width:0;font-weight:700;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cpv-ovl-proj{justify-self:center;min-width:0;display:inline-flex;align-items:baseline;gap:7px}
+.cpv-ovl-projname{min-width:0;font-weight:800;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cpv-ovl-ctx{font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace;flex:0 0 auto}
+.cpv-ovl-x{justify-self:end}
 /* Redesign — full-width desktop, centered clickable title, progress under contact, grouped tools, balance last. */
 .cpv-main{max-width:1040px}
 .cpv-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
@@ -185,7 +192,7 @@ export default function StaffHub({
         role={contact ? "button" : undefined} aria-expanded={contact ? contactOpen : undefined} aria-label={contact ? (contactOpen ? "Hide contact details" : "Show contact details") : undefined}>
         <a className="cpv-mark cpv-mark-link" href={dashboardHref || "/dashboard"} onClick={(e) => e.stopPropagation()} aria-label="Dashboard">IOT TECHS</a>
         <span className="cpv-htitle">
-          <span className="cpv-htitle-name">{contact?.businessName || project?.contact_name || project?.customer || "Project"}</span>
+          <span className="cpv-htitle-name">{projName}</span>
           <span className="cpv-htitle-id">· {String(accessId)}</span>
         </span>
         {/* Portal dropdown — stops propagation so it doesn't toggle the bar. */}
@@ -401,8 +408,9 @@ export default function StaffHub({
       {activeView && (
         <div className={`cpv-ovl v-${activeView}`} role="dialog" aria-modal="true">
           <div className="cpv-ovl-bar">
-            <span style={{ display: "inline-flex", alignItems: "baseline", minWidth: 0 }}>
-              <span className="cpv-ovl-title">{activeTitle}</span>
+            <span className="cpv-ovl-tool">{activeTitle}</span>
+            <span className="cpv-ovl-proj">
+              <span className="cpv-ovl-projname">{projName}</span>
               <span className="cpv-ovl-ctx">{String(accessId).slice(-4)}</span>
             </span>
             <button className="cpv-ovl-x" onClick={close} aria-label="Close">
