@@ -492,9 +492,15 @@ export default function SystemPlanner({
 // survives reload); this badge shows "Offline — will sync" when there's no signal and a queued edit,
 // "Saving…" while a change is in flight, and nothing once everything is on the server.
 function SyncBadge() {
-  const [st, setSt] = useState({ online: true, pending: 0 });
+  const [st, setSt] = useState({ online: true, pending: 0, quota: null });
   useEffect(() => subscribeSyncStatus(setSt), []);
-  if (st.online && st.pending === 0) return null;   // all synced → no chrome
+  if (!st.quota && st.online && st.pending === 0) return null;   // all synced, no quota issue → no chrome
+  if (st.quota) return (
+    <div className="syp-sync off" role="alert" aria-live="assertive" title={st.quota}>
+      <span className="syp-sync-dot" aria-hidden="true" />
+      <span>{st.quota}</span>
+    </div>
+  );
   const offline = !st.online && st.pending > 0;
   return (
     <div className={`syp-sync${offline ? " off" : ""}`} role="status" aria-live="polite" title={offline ? "Saved on this device — will upload when you're back online" : "Saving your changes"}>

@@ -52,7 +52,12 @@ Rule: where the spec was ambiguous, the sensible choice was made and recorded he
 ## Deferred / partial (couldn't fully land in this pass — flagged honestly)
 
 - **Unplaced-cameras tray + fully unified camera record (merge)**: a camera added in Photos with no map becoming an "unplaced" survey device, shown in a Map tray to drag into place, is a multi-file data-model change (survey2-model + the mockup + the survey widget). In this pass the mockup's standalone camera slots back a photos-only job and the proposal PDF still pulls the mockup photos; the explicit unplaced→placed tray drag is the remaining deep piece.
-- **Full IndexedDB migration**: the device-first store is still localStorage (≈5 MB cap). Moving the multi-MB photo blobs to IndexedDB for capacity is a larger change; the offline indicator + retry queue ship on the current localStorage store.
+## IndexedDB device store (done, with a documented boundary)
+
+- `idb-store.js` provides async `idbGet/idbSet/idbDel` with the SAME string read/write shape the sync layer used for localStorage. `tool-sync` now treats **IndexedDB as the durable on-device store**: migrates any existing localStorage draft into IndexedDB on first load, seeds from IndexedDB (then the server) when localStorage is empty, and mirrors every change into it. Verified live: the survey blob lands in `iot_tools/kv`.
+- **Quota errors are surfaced, never silent**: an IndexedDB `QuotaExceededError` sets a real badge message ("Device storage full — free space to keep saving photos").
+- **Photos**: online, each photo already uploads to `/api/media` and only its small URL rides in the blob. Offline captures are base64 in the blob until reconnect uploads them — IndexedDB (not ~5 MB localStorage) is the durable home.
+- **Boundary (honest)**: the two in-canvas iframes still also write localStorage synchronously as their fast working copy. A single offline blob larger than ~5 MB would fail that synchronous iframe write before the sync layer sees it; converting both iframes' sync save/load to async IndexedDB-only is the remaining rework, not rushed to avoid breaking the shipped save path.
 
 - **Enhance polish (§3)**: Remove-enhancement button, before/after slider pinned at 50% (currently an auto-scanner), "edit enhanced vs revert" prompt. The version-stack + compare infra exists; these are UX deltas on a billing-sensitive flow left for a focused, careful pass.
 - **Draw tool (§7)**: one naming field that flips above when near the bottom; the "structure editor only mounts after refresh" stale-state bug. (½-snap-default and the Structure/Room/Area/Opening/Eraser order already shipped — confirmed present.)
