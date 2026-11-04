@@ -27,7 +27,7 @@ const EXPECTED_TYPES = new Set([
   "iotMockupFullscreen", "iotMockupPhoto", "iotMockupRenamed", "iotMockupSelect", "iotOutlineLoad", "iotOutlineReady",
   "iotOutlineSave", "iotPlanLoad", "iotPlanReady", "iotPlanSave", "iotSurvey",
   "iotSurvey2Submit", "iotSurvey2Unsubmit", "iotSurveyCmd", "iotSurveyComment", "iotSurveyContext",
-  "iotSurveyDevices", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyReqFocus", "iotSurveySelect",
+  "iotSurveyDevices", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyNavGo", "iotSurveyReqFocus", "iotSurveySelect",
   "iotSurveyStep", "iotSurveySubmitState", "iotSurveyZoom", "iotZonePolys", "iotZonesMigrated",
 ]);
 

@@ -295,6 +295,21 @@
   /* bottom-right ••• drop-up: the ••• button with its menu above it */
   #planMore{position:absolute;right:14px;bottom:14px;z-index:9;display:none;flex-direction:column;align-items:flex-end;gap:8px}
   body.ro #planMore, body.frozen #planMore{display:none!important}
+  /* ONE BAR (Cameras): bottom dock — undo/redo left, Back + Review & Submit right. Same canvas-bottom slot
+     as the satellite/draw docks. z above the floating controls; hidden unless body.cambar (never when locked). */
+  #camBar{position:absolute;left:0;right:0;bottom:0;z-index:16;display:none;align-items:center;gap:8px;padding:9px 14px;min-height:57px;box-sizing:border-box;background:#fff;border-top:1px solid var(--line)}
+  body.cambar #camBar{display:flex}
+  body.ro #camBar, body.frozen #camBar, body.aligning #camBar{display:none!important}
+  body.cambar .utils, body.cambar #planMore{display:none!important}   /* folded into the dock */
+  #camBar .cb-sp{flex:1 1 auto}
+  #camBar .cb-tools,#camBar .cb-nav{display:inline-flex;align-items:center;gap:6px}
+  #camBar .cb-btn{appearance:none;cursor:pointer;font:600 13px system-ui,sans-serif;display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 13px;border-radius:10px;border:1px solid transparent;background:transparent;color:var(--ink)}
+  #camBar .cb-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  #camBar .cb-btn:hover{background:var(--soft)}
+  #camBar .cb-ico{width:40px;padding:0;justify-content:center}
+  #camBar .cb-back{color:var(--muted)} #camBar .cb-back:hover{color:var(--ink);background:var(--soft)}
+  #camBar .cb-next{background:var(--ink);color:#fff;border-color:var(--ink);padding:0 18px} #camBar .cb-next:hover{background:#000}
+  #camBar .cb-btn:disabled{opacity:.4;cursor:default} #camBar .cb-btn:disabled:hover{background:transparent}
   #bgMore{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:9px;color:var(--ink);cursor:pointer;box-shadow:0 2px 12px rgba(16,17,18,.16);backdrop-filter:blur(6px);padding:0}
   #bgMore:hover{border-color:var(--gold)}
   #bgMore svg{width:18px;height:18px;fill:currentColor;stroke:none}
@@ -750,6 +765,20 @@
         <div class="ut-head"><span id="utCount">0</span> to place — drag onto the plan</div>
         <div class="ut-chips" id="utChips"></div>
       </div>
+      <!-- ONE BAR (Cameras): the in-canvas dock for the Cameras step — undo/redo on the LEFT, Back + Review &
+           Submit on the RIGHT, at the SAME canvas-bottom position as the satellite/draw docks. Back/Next relay
+           to the planner (iotSurveyNavGo); it owns the 4-step order. Shown only when body.cambar is set. -->
+      <div id="camBar">
+        <div class="cb-tools">
+          <button class="cb-btn cb-ico" id="cbUndo" title="Undo" aria-label="Undo"><svg viewBox="0 0 24 24"><path d="M9 14l-4-4 4-4"/><path d="M5 10h11a4 4 0 010 8h-1"/></svg></button>
+          <button class="cb-btn cb-ico" id="cbRedo" title="Redo" aria-label="Redo" style="display:none"><svg viewBox="0 0 24 24"><path d="M15 14l4-4-4-4"/><path d="M19 10H8a4 4 0 000 8h1"/></svg></button>
+        </div>
+        <span class="cb-sp"></span>
+        <div class="cb-nav">
+          <button class="cb-btn cb-back" id="cbBack" title="Back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg><span>Back</span></button>
+          <button class="cb-btn cb-next" id="cbNext">Review &amp; Submit <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+        </div>
+      </div>
     </div>
 
     <div class="side">
@@ -904,8 +933,8 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html?v=20261104-auto3"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
-    function drawSrc(){ return "draw-floorplan.html?v=20261016-dock"
+    var SAT_SRC="satellite-capture.html?v=20261104-onebar"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
+    function drawSrc(){ return "draw-floorplan.html?v=20261104-onebar"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
@@ -1148,6 +1177,9 @@
     // standalone Enhance button on the plan. (pendingCtxSwap for a hybrid floor is still set from that flow.)
     // Cancel from the satellite's focused outline-only mode → close the tool back to this floor (unchanged).
     window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotCaptureCancel" || !ev.source || ev.source!==satFrame.contentWindow) return; exitBg(false); });
+    // ONE BAR: the nested build tool's dock Back / next-step (iotSurveyNavGo) → relay UP to the planner,
+    // which owns the 4-step order and drives this survey's step back down. (satFrame is the only speaker.)
+    window.addEventListener("message", function(ev){ var m=ev.data; if(!m || m.type!=="iotSurveyNavGo" || !ev.source || ev.source!==satFrame.contentWindow) return; if(window.parent!==window){ try{ parent.postMessage({type:"iotSurveyNavGo", dir:m.dir}, "*"); }catch(e){} } });
     // The satellite tool signals its map is interactive → drop the loading veil (the draw tool uses iotPlanReady).
     window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotBgReady" || !ev.source || ev.source!==satFrame.contentWindow) return; hideBgLoading(); });
     // Back on the strip leaves the tool: to the three-source chooser (nothing yet) or the saved plan (bg exists).
@@ -1185,7 +1217,13 @@
       if(floors[curFloor]){ if(pendingBgSource==="draw"){ floors[curFloor].planSvg=validPlanSvg(ev.data.planSvg); floors[curFloor].bgCtx=(pendingBgSource==="draw" && ev.data.bgCtx===true); } else clearCtx(floors[curFloor]); }
       // A ctx-framed bg spans the context crop, not the draw tool's tight bbox+6% — so its real scale is the ctx feet (what pxPerFt/coverage must use), not planFeet.
       var fc=floors[curFloor], bgScale=(fc && fc.bgCtx && fc.ctx && +fc.ctx.ftW>0 && +fc.ctx.ftH>0) ? {ftW:+fc.ctx.ftW, ftH:+fc.ctx.ftH} : ev.data.scale;
+      var wasSat=(pendingBgSource==="satellite");
       applyBackground(ev.data.dataUrl, false, ev.data.vector, bgScale, ev.data.aerial);
+      // ONE BAR / Base→Layout: a FRESH satellite base (aerial, no structure yet) lands you straight in the
+      // Layout draw tool — so Setup-without-a-tool always means Cameras, and the rail advances Base→Layout
+      // with no bare-map gap. A re-capture of a floor that already has a plan (canBuild false) does NOT reopen
+      // the editor. Deferred a tick so applyBackground's state (bgHasImage / the aerial) has settled first.
+      if(wasSat){ setTimeout(function(){ try{ var f=floors[curFloor]; if(f && canBuild(f) && !bgToolOpen) contextualEdit(1); }catch(e){} }, 90); }
     });
     // Draw-tool geometry lives on the floor record as `plan` (so it reaches the server with the survey). The
     // tool asks for it on load (iotPlanReady → iotPlanLoad) and hands every edit back (iotPlanSave). Always
@@ -1450,6 +1488,15 @@
     function updateRedoBtn(){ var b=document.getElementById("redoBtn"); if(b) b.style.display=(redoStk.length && !frozen()) ? "" : "none"; }   // Redo only appears when there's something to redo
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", function(){ if(frozen()||!devices.length) return; var d=devices[devices.length-1]; redoStk.push(Object.assign({},d)); removeDevice(d.id); updateRedoBtn(); });
     var redoBtn=document.getElementById("redoBtn"); if(redoBtn) redoBtn.addEventListener("click", function(){ if(frozen()||!redoStk.length) return; var sd=redoStk.pop(); reAdd(sd); renderPanel(); updateCount(); reconcileLocations(); queueSave(); updateRedoBtn(); });
+    // ONE BAR (Cameras dock): undo/redo proxy the floating buttons (same handlers); Back / Review & Submit
+    // relay to the planner. updateCamBtns keeps the dock's undo enabled + redo visibility in sync.
+    function updateCamBtns(){ var u=document.getElementById("cbUndo"), r=document.getElementById("cbRedo");
+      if(u) u.disabled = frozen() || !devices.length;
+      if(r) r.style.display = (redoStk.length && !frozen()) ? "" : "none"; }
+    var cbUndo=document.getElementById("cbUndo"); if(cbUndo) cbUndo.addEventListener("click", function(){ var b=document.getElementById("undoBtn"); if(b) b.click(); updateCamBtns(); });
+    var cbRedo=document.getElementById("cbRedo"); if(cbRedo) cbRedo.addEventListener("click", function(){ var b=document.getElementById("redoBtn"); if(b) b.click(); updateCamBtns(); });
+    var cbBack=document.getElementById("cbBack"); if(cbBack) cbBack.addEventListener("click", function(){ if(window.parent!==window){ try{ parent.postMessage({type:"iotSurveyNavGo", dir:"back"}, "*"); }catch(e){} } });
+    var cbNext=document.getElementById("cbNext"); if(cbNext) cbNext.addEventListener("click", function(){ if(window.parent!==window){ try{ parent.postMessage({type:"iotSurveyNavGo", dir:"next"}, "*"); }catch(e){} } });
     // collapse / expand the SURVEY panel
     function applySideCollapsed(){ document.body.classList.toggle("side-collapsed", sideCollapsed); }
     document.getElementById("sideTgl").addEventListener("click", function(){ sideCollapsed=true; applySideCollapsed(); queueSave(); });
@@ -3024,7 +3071,14 @@
       var camCount=(floors||[]).reduce(function(n,f){ return n+((f&&f.devices)||[]).filter(function(d){ return d&&d.k==="cam"; }).length; }, 0);
       // bgTool: which build tool is open ("draw" = Structure editor, "satellite" = aerial) or null. The host
       // maps a live draw tool to the Floor Plan step so the nav CTA isn't "Create Floor Plan" while you ARE.
-      parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep, bgTool:bgToolOpen||null,
+      // dock: the in-canvas bar currently showing — "satellite" | "draw" | "cameras" (the map with devices) |
+      // null (chooser / locked). ONE BAR: the host hides its footer whenever a dock is up, and the dock
+      // carries Back + the next-step button. "cameras" = Setup step, no build tool, editable. Layout always
+      // opens the draw tool, so Setup-without-a-tool is unambiguously the Cameras step.
+      var dock = bgToolOpen ? bgToolOpen : ((curStep===1 && !frozen() && !RO) ? "cameras" : null);
+      document.body.classList.toggle("cambar", dock==="cameras");
+      updateCamBtns();
+      parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep, bgTool:bgToolOpen||null, dock:dock,
         bgReady:!!bgHasImage, hasPlan:!!(hybridCapable(lf) || (lf.plan && (lf.plan.cells||lf.plan.rooms))), camCount:camCount }, "*");
     }catch(e){} }
     // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup

@@ -49,7 +49,9 @@ export default function SystemPlanner({
   const [curFloor, setCurFloor] = useState(0);
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
   const [bgTool, setBgTool] = useState(null);     // "draw" | "satellite" | null — which build tool is open inside the survey (from iotSurveyStep)
+  const [dockState, setDockState] = useState(null); // "satellite" | "draw" | "cameras" | null — the in-canvas bar the survey is showing (ONE BAR: footer hides whenever a dock is up)
   const rootRef = useRef(null);
+  const navRef = useRef({});   // latest Back/Next actions for the one-bar in-canvas nav (message handler reads this)
   // Devices roster: expanded by default (desktop unchanged); collapsed on a phone after mount so the list
   // doesn't tower below the canvas. A one-line "Devices (N)" summary toggles it. Default true → no desktop flash.
   const [devOpen, setDevOpen] = useState(true);
@@ -131,6 +133,9 @@ export default function SystemPlanner({
         try { const fr = rootRef.current && rootRef.current.querySelector(`iframe[title="${title}"]`);
           if (fr && fr.contentWindow) fr.contentWindow.postMessage(msg, "*"); } catch { /* iframe not ready */ }
       };
+      // One-bar nav: an in-canvas bar (satellite dock / draw dock / map bar) asked to advance or go back.
+      // The planner owns the 4-step order, so it resolves dir → the real next/prev step (latest via navRef).
+      if (m.type === "iotSurveyNavGo") { if (m.dir === "back") navRef.current.goBack?.(); else navRef.current.goNext?.(); return; }
       if (m.type === "iotSurveySelect" && m.cid) { setSelectedCid(m.cid); post("CCTV Mockup", { type: "iotMockupCmd", cmd: "focus", cid: m.cid }); }
       else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
       // The devices roster is lifted into the shell (shown on both tabs) — mirror the survey's live roster.
@@ -144,9 +149,17 @@ export default function SystemPlanner({
       else if (m.type === "iotSurveyStep") {
         setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });
         setBgTool(m.bgTool || null);
-        // The Structure (draw) tool IS the Floor Plan step — reflect that so the rail/nav don't say
-        // "Create Floor Plan" while you're drawing it. Otherwise follow the Background→Setup auto-advance.
-        setRailStep((cur) => (m.bgTool === "draw" ? "layout" : m.step === 0 ? "background" : cur === "background" ? "layout" : cur));
+        setDockState(m.dock || null);
+        // ONE BAR: the rail mirrors the dock the survey is actually showing — satellite→Base, draw→Layout,
+        // cameras (the map)→Cameras — so the planner's footer-hide and the dock agree exactly. Views/Review
+        // are shell-only (no survey dock), so a dock echo never yanks the rail off them.
+        setRailStep((cur) => {
+          if (cur === "views" || cur === "review") return cur;
+          if (m.dock === "satellite") return "background";
+          if (m.dock === "draw") return "layout";
+          if (m.dock === "cameras") return "cameras";
+          return cur === "background" ? "layout" : cur;   // no dock (chooser) → keep the old Background→Layout nudge
+        });
       }
       // A photo attached in the mockup wrote the survey2 blob server-side but can't touch the live survey
       // iframe. Relay it (by stable cid) so the survey updates its device, re-emits iotSurveyDevices, and
@@ -279,6 +292,19 @@ export default function SystemPlanner({
   })();
   void mkStale; void mkSubCurrent; void mkApproved;   // retained reads (mockup state) — no longer gate Submit
   const [navMenuOpen, setNavMenuOpen] = useState(false);
+  const [topMenuOpen, setTopMenuOpen] = useState(false);   // the floor-bar ••• Go-to (reachable when the footer is hidden)
+
+  // ONE BAR (§Round 3): an in-canvas dock (satellite / draw / the Cameras map dock) carries Back + the
+  // next-step button on its right, so the planner footer is HIDDEN on those steps — no second stacked bar.
+  // The footer stays the single bar only where there is no dock: the empty chooser, Camera Photos, Submit.
+  // Driven by the survey's own `dock` echo so the two never disagree; only in the plan pane (not views/review).
+  const inCanvasBar = paneMode === "plan" && !!dockState;
+  // The in-canvas docks post iotSurveyNavGo{dir}; the planner resolves it to the real next/prev step here.
+  navRef.current.goNext = () => {
+    if (nextStep && nextEnabled) goRail(nextStep);
+    else if (reviewCta && reviewCta.act && !reviewCta.muted) reviewCta.act();
+  };
+  navRef.current.goBack = () => { if (prevStep) goRail(prevStep); };
 
   // CUSTOMER head: no staff rail — just a floor/view pager + a full-width Walkthrough. The pager steps
   // through the submitted floors (driving the survey pane's floor with the existing, RO-safe `floor` cmd)
@@ -354,6 +380,39 @@ export default function SystemPlanner({
               ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
               : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
           </button>
+          {/* ••• Go-to — relocated here from the footer so steps / Camera Photos / Walkthrough stay reachable
+              when the footer is hidden (an in-canvas dock is carrying Back + the next-step button). */}
+          <div className="syp-fb-morewrap">
+            <button className="syp-fb-fs" title="More" aria-label="More" aria-haspopup="menu" aria-expanded={topMenuOpen} onClick={() => setTopMenuOpen((o) => !o)}>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+            </button>
+            {topMenuOpen && (
+              <>
+                <div className="syp-nav-backdrop" onClick={() => setTopMenuOpen(false)} />
+                <div className="syp-nav-menu syp-nav-menu--top" role="menu">
+                  <div className="syp-nav-menu-h">Go to</div>
+                  {steps.map((s) => (
+                    <button key={s.key} className={`syp-nav-mi${railStep === s.key ? " on" : ""}`} role="menuitem" disabled={!s.enabled}
+                      onClick={() => { if (s.enabled) { goRail(s.key); setTopMenuOpen(false); } }}>
+                      <span className="syp-nav-mi-dot">{s.done ? "✓" : ""}</span>{s.label}
+                    </button>
+                  ))}
+                  <button className={`syp-nav-mi${railStep === "views" ? " on" : ""}`} role="menuitem" disabled={!sig.bgReady}
+                    onClick={() => { if (sig.bgReady) { goRail("views"); setTopMenuOpen(false); } }}>
+                    <span className="syp-nav-mi-dot">{hasViews ? "✓" : ""}</span>Camera Photos
+                  </button>
+                  {canWalk && (
+                    <>
+                      <div className="syp-nav-sep" />
+                      <button className="syp-nav-mi" role="menuitem" onClick={() => { setWalkOpen(true); setTopMenuOpen(false); }}>
+                        <span className="syp-nav-mi-dot"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></span>Walkthrough
+                      </button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -401,8 +460,9 @@ export default function SystemPlanner({
 
       {/* STAFF contextual nav footer — the bottom of the one frame. Guided Back / Next · prompt / CTA
           (Submit / Re-submit / Awaiting / Continue), with a ••• Go-to menu so staff still jump to any
-          mode. Replaces the always-on 5-tab rail; the workflow state is unchanged underneath. */}
-      {!customer && (
+          mode. Replaces the always-on 5-tab rail; the workflow state is unchanged underneath. ONE BAR:
+          hidden whenever an in-canvas dock carries the nav (satellite / draw / Cameras map dock). */}
+      {!customer && !inCanvasBar && (
         <div className="syp-nav">
           {prevStep ? (
             <button className="syp-nav-back" onClick={() => goRail(prevStep)}>
@@ -719,6 +779,10 @@ const CSS = `
 .syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}
 .syp-floorbar .syp-fb-fs{position:absolute;right:12px;top:50%;transform:translateY(-50%);appearance:none;cursor:pointer;width:34px;height:34px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
 .syp-floorbar .syp-fb-fs:hover{border-color:var(--dv-ink,#101418)}
+/* ••• Go-to lives just left of Full screen; its menu drops DOWN from the top bar. */
+.syp-floorbar .syp-fb-morewrap{position:absolute;right:52px;top:50%;transform:translateY(-50%)}
+.syp-floorbar .syp-fb-morewrap .syp-fb-fs{position:static;transform:none}
+.syp-nav-menu.syp-nav-menu--top{top:calc(100% + 8px);bottom:auto}
 /* the canvas joins the header seamlessly (square its top corners, no doubled border) */
 .syp--staff .syp-plan .ss-embed-frame{border-top-left-radius:0;border-top-right-radius:0;border-top:none}
 .syp-head--staff{justify-content:flex-start;padding:0 2px 10px;flex-wrap:nowrap}

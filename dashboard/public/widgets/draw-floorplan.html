@@ -131,6 +131,8 @@
   .tb.ico.on:hover{background:var(--soft)}
   .tb.use{background:var(--ink);color:#fff;border-color:var(--ink);padding:0 18px;flex:none}
   .tb.use:hover{background:#000}
+  .tnav{display:inline-flex;align-items:center;gap:6px;flex:none}   /* right cluster: Back + next-step */
+  .tb.back{color:var(--muted)} .tb.back:hover{color:var(--ink)}
   .tb:disabled{opacity:.4;cursor:default}
   .tb.busy{opacity:.5;pointer-events:none}
   .morewrap{position:relative;display:inline-flex}
@@ -214,11 +216,10 @@
     </div>
   </div>
 
-  <!-- Toolbar is a real bottom FOOTER now (out of the canvas) so it never covers the plan. -->
+  <!-- Toolbar is a real bottom FOOTER now (out of the canvas) so it never covers the plan. ONE BAR
+       (Round 3): drawing tools (mode / add / grid / •••) on the LEFT, Back + the next-step button on
+       the RIGHT. Back + Next relay to the planner via iotSurveyNavGo (the planner owns the 4-step order). -->
   <div class="tbar" id="tbar">
-      <!-- Back out of the Structure tool (geometry already autosaves) — replaces the separate "‹ Background"
-           strip the host used to show, so the planner has one dock, not two stacked rows. -->
-      <button class="tb ico back" id="tBack" title="Back" aria-label="Back to floor"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
       <!-- ONE compact drawing-mode selector (drop-up) — "What am I drawing?": Structure / Room / Area / Opening. Keeps the dock narrow. -->
       <div class="morewrap" id="modeWrap">
         <button class="segToggle" id="modeSel" aria-haspopup="true" aria-expanded="false" title="Drawing mode" aria-label="Drawing mode">
@@ -241,7 +242,6 @@
         <button class="tb ico" id="tAerial" title="Aerial" aria-label="Aerial backdrop" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg></button>
         <select id="zoneTypeSel" title="Area type" aria-label="Area type" style="display:none;height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:600 13px var(--sans);padding:0 8px;cursor:pointer"></select>
       </span>
-      <span class="tctx" id="tCtx" aria-hidden="true"></span>
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
         <div class="moremenu" id="moreMenu">
@@ -256,7 +256,13 @@
           <button id="mDelete" class="danger"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="mDeleteTxt">Delete structure</span></button>
         </div>
       </div>
-      <button class="tb use" id="tDone">Done</button>
+      <span class="tctx" id="tCtx" aria-hidden="true"></span>
+      <!-- RIGHT: step nav — Back (to Base) + the next step (Place Cameras). Both relay to the planner
+           via iotSurveyNavGo; the planner owns the 4-step order (geometry already autosaves). -->
+      <span class="tnav">
+        <button class="tb back" id="tBack" title="Back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg><span>Back</span></button>
+        <button class="tb use" id="tDone">Place Cameras <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+      </span>
     </div>
 
 <script src="room-taxonomy.js?v=20260921-rooms"></script>
@@ -1329,7 +1335,9 @@
     a.title=er?"Erase":"Add"; a.setAttribute("aria-label",er?"Erase (tap to add)":"Add (tap to erase)"); a.classList.add("on"); a.classList.toggle("erasing",er); }
   $("tAdd").addEventListener("click", function(){ structOp = structOp==="erase" ? "add" : "erase"; syncPaintBtn(); cv.style.cursor = structOp==="erase" ? "cell" : "crosshair"; });
   $("tErase").addEventListener("click", function(){ structOp="erase"; syncPaintBtn(); cv.style.cursor="cell"; });   // hidden, but kept harmless
-  $("tBack").addEventListener("click", function(){ try{ parent.postMessage({type:"iotCaptureCancel"}, "*"); }catch(e){} });   // back out of the Structure tool (host → exitBg; geometry already autosaved)
+  // ONE BAR: Back = the 4-step Back (→ Base). Relay to the planner; it drives the survey step (which closes
+  // the draw tool and reopens the background). Geometry already autosaved, so no commit needed here.
+  $("tBack").addEventListener("click", function(){ try{ parent.postMessage({type:"iotSurveyNavGo", dir:"back"}, "*"); }catch(e){} });
   // ONE snap toggle — tap flips ½ ↔ 1 (persists for the session).
   function applySnapUI(){ var half=snap===0.5, b=$("tSnap"), lbl=half?"Snap: half grid":"Snap: full grid";
     b.textContent = half ? "½" : "1"; b.title = lbl; b.setAttribute("aria-label", lbl); }
@@ -1454,15 +1462,20 @@
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
     return { ftW:+pxToFeet(bb.w+2*m).toFixed(2), ftH:+pxToFeet(bb.h+2*m).toFixed(2) }; }
   $("tDone").addEventListener("click", function(){ if(busy||planState!=="loaded") return;
-    if(!hasSketch()){ msg("Block out the structure, then rooms — or use the wand first."); setTimeout(function(){msg("");},2200); return; }
-    closeLabel(); clearTimeout(_planT); _planT=null; writeLS(); postPlan();   // always: the floor record holds the final geometry BEFORE the result lands
-    var scale=planFeet();
-    // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
-    // at any zoom in the survey (no rasterization on the display path).
-    if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL, scale:scale}, "*"); }catch(e){} }
-    else { var vb=ctxVB();   // outlined floor → the bg is the OPAQUE plan framed on the ctx plate (flagged bgCtx) so Plan/customer/PDF surfaces align with the aerial; plain hand-drawn keeps the tight bbox bg
-      if(vb){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(vb), vector:true, scale:scale, planSvg:planLayerSVG(), bgCtx:true}, "*"); }catch(e){} }
-      else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } } });
+    // ONE BAR: "Place Cameras" is the Next control — it always advances (structure is optional; cameras can
+    // sit on the aerial / blank grid). When there IS a sketch, commit it first so it renders on the map;
+    // with nothing drawn, just advance (the host closes the draw tool and focuses devices). No blocking nudge.
+    if(hasSketch()){
+      closeLabel(); clearTimeout(_planT); _planT=null; writeLS(); postPlan();   // the floor record holds the final geometry BEFORE the result lands
+      var scale=planFeet();
+      // Enhanced (AI) plans are raster PNGs; a hand-drawn plan is handed back as VECTOR SVG so it stays crisp
+      // at any zoom in the survey (no rasterization on the display path).
+      if(enhancedURL){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:enhancedURL, scale:scale}, "*"); }catch(e){} }
+      else { var vb=ctxVB();   // outlined floor → the bg is the OPAQUE plan framed on the ctx plate (flagged bgCtx) so Plan/customer/PDF surfaces align with the aerial; plain hand-drawn keeps the tight bbox bg
+        if(vb){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(vb), vector:true, scale:scale, planSvg:planLayerSVG(), bgCtx:true}, "*"); }catch(e){} }
+        else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } }
+    }
+    try{ parent.postMessage({type:"iotSurveyNavGo", dir:"next"}, "*"); }catch(e){} });
     // planSvg (Phase 4 layer) rides the vector hand-off only — an AI-enhanced result carries none, so the survey stores null (never a stale layer).
 
   // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the

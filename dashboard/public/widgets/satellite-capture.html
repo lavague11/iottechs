@@ -214,8 +214,9 @@
   .tb.use{background:var(--ink);color:#fff}
   .tb.use:hover{background:#000}
   .tb.back{position:absolute;left:10px;min-width:40px}   /* pinned left; the rest of the dock stays centred */
-  /* REBUILD: no in-canvas Done when embedded — the project footer's Next commits the capture (one primary). */
-  body.embed #tDone{display:none!important}
+  /* ONE BAR (Round 3): the planner footer is hidden while this dock is up, so the dock carries the primary
+     commit on the RIGHT (relabelled "Floor Plan" — the next step). Tools stay centred; Back pinned left. */
+  body.embed #tDone{position:absolute;right:10px;min-width:40px;gap:6px}
   .tsep{width:1px;height:28px;background:var(--line);margin:0 4px}
   /* Rotate popover opens ABOVE the footer (drop-up), centred. */
   .pop{position:absolute;z-index:13;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);display:none;align-items:center;gap:10px;max-width:calc(100vw - 20px);
@@ -318,7 +319,10 @@
 <script>
   var API_KEY=null, map=null, geocoder=null, marker=null;
   var PID=new URLSearchParams(location.search).get("project")||"";
-  if(new URLSearchParams(location.search).get("embed")==="1") document.body.classList.add("embed");
+  if(new URLSearchParams(location.search).get("embed")==="1"){ document.body.classList.add("embed");
+    // ONE BAR: the dock's primary names the next step (Floor Plan) + a forward chevron, since the planner
+    // footer is hidden while this dock is up. Its click handler (commit → the map lands the base) is unchanged.
+    try{ var _td=document.getElementById("tDone"); if(_td) _td.innerHTML='Floor Plan <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>'; }catch(e){} }
   // Build Floor Plan entry (distinct src): outline THIS aerial only — hide the live-capture chrome up front (before the
   // image arrives) + auto-enter trace. The parent reloads a clean frame when switching into/out of this mode.
   var outlineOnly=(new URLSearchParams(location.search).get("buildplan")==="1");

@@ -29,7 +29,12 @@ test("rail drives the survey's internal step via postMessage (Background→0, Pl
 
 test("the shell follows the survey's step echo (iotSurveyStep) for the live indicator + Done→Plan auto-advance", () => {
   assert.ok(shell.includes('else if (m.type === "iotSurveyStep")'), "shell handles the survey step echo");
-  assert.ok(shell.includes('setRailStep((cur) => (m.bgTool === "draw" ? "layout" : m.step === 0 ? "background" : cur === "background" ? "layout" : cur));'), "draw tool → Layout; else follows Background↔Setup");
+  // Round 3 (ONE BAR): the rail mirrors the survey's own `dock` echo — satellite→Base, draw→Layout,
+  // cameras→Cameras — so the footer-hide and the in-canvas dock can never disagree; Views/Review are kept.
+  assert.ok(shell.includes('setDockState(m.dock || null);'), "the shell tracks which in-canvas dock the survey shows");
+  assert.ok(shell.includes('if (m.dock === "satellite") return "background";') && shell.includes('if (m.dock === "draw") return "layout";') && shell.includes('if (m.dock === "cameras") return "cameras";'), "the rail follows the dock echo");
+  assert.ok(shell.includes('if (cur === "views" || cur === "review") return cur;'), "a dock echo never yanks the rail off Views/Review");
+  assert.ok(shell.includes('const inCanvasBar = paneMode === "plan" && !!dockState;'), "the footer hides whenever a dock is up in the plan pane");
   assert.ok(shell.includes("setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });"), "completion signals come from the echo");
 });
 
