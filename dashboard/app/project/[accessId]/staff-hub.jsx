@@ -117,7 +117,7 @@ export default function StaffHub({
 .cpv-ovl-ctx{font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace;flex:0 0 auto}
 .cpv-ovl-x{justify-self:end}
 /* Redesign — full-width desktop, centered clickable title, progress under contact, grouped tools, balance last. */
-.cpv-main{max-width:1040px}
+.cpv-main{max-width:1040px;padding-bottom:8px}   /* no dead gap before the Log; the balance/payments bubble owns its own spacing */
 .cpv-head{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
 .cpv-htitle{justify-self:center;display:inline-flex;align-items:center;gap:7px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink);padding:6px 12px;border-radius:999px;max-width:100%;min-width:0}
 .cpv-htitle:hover{background:var(--line-soft)}

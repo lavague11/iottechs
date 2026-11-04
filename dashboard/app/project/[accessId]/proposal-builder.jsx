@@ -911,7 +911,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             {canOverrideSign && (
               <button type="button" className="prop-sig-act prop-sig-override" disabled={sigBusy} onClick={doOverrideSign}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3a9 9 0 1 0 9 9"/></svg>
-                <span className="prop-sig-override-wrap"><b>{sigBusy ? "Working…" : "Override signature"}</b><small>Progress &amp; schedule now — signature still required.</small></span>
+                <span className="prop-sig-override-wrap"><span>{sigBusy ? "Working…" : "Override signature"}</span><small>Progress &amp; schedule now — signature still required.</small></span>
               </button>
             )}
           </div>
