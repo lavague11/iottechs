@@ -3210,7 +3210,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const CTA = {
         // A sent, unsigned proposal: office staff get "Request Signature" (opens the proposal with the staff
         // Request-Signature modal via ?reqsign); everyone else just opens the proposal.
-        AWAITING_SIGNATURE: officeRole ? { label: "Request Signature", view: "proposal", reqsign: true } : { label: "Open Proposal", view: "proposal" },
+        AWAITING_SIGNATURE: officeRole ? { label: "Request Signature", inlineSign: true } : { label: "Open Proposal", view: "proposal" },
         CHANGES_REQUESTED:  { label: "Open Proposal", view: "proposal" },
         SEND_PROPOSAL:      { label: "Open Proposal", view: "proposal" },
         CREATE_PROPOSAL:    { label: "Open Proposal", view: "proposal" },
@@ -3261,6 +3261,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             log={deckLog}
             defaultGroup={["tech", "vendor"].includes(cView) ? "internal" : "customer"}
             primaryCta={projState ? (CTA[projState] || null) : null}
+            role={cView}
+            signOptionId={proposalData?.selected_option || proposalData?.payload?.options?.[0]?.id || ""}
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
             dashboardHref={DECK_DASH_HOME[view] || "/dashboard"}

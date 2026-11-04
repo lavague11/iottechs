@@ -11,6 +11,7 @@ const email = read("../lib/email.js");
 const actions = read("../app/project/[accessId]/proposal-actions.js");
 const custView = read("../app/project/[accessId]/proposal-customer-view.jsx");
 const builder = read("../app/project/[accessId]/proposal-builder.jsx");
+const sheet = read("../app/project/[accessId]/request-signature-sheet.jsx");
 
 test("email: projectLink carries ?sign and emailSignatureRequest deep-links to the signer with a gold CTA", () => {
   assert.ok(/function projectLink\(accessId, open, sign\)/.test(email), "projectLink takes a sign param");
@@ -37,9 +38,11 @@ test("customer view: ?sign= is captured once, stripped, gated on signability, th
   assert.ok(/const signable = .*p\.status\)/.test(custView) && custView.includes("setEsignFor(match.id)"), "opens the signer only when signable");
 });
 
-test("builder: Request Signature is gold, gated on a sent proposal, and the sheet shares a link or emails", () => {
-  assert.ok(builder.includes("requestSignatureEmailAction") && builder.includes("prop-head-sign"), "gold Request Signature button wired");
+test("builder: Request Signature is gold, gated on a sent proposal; the sheet shares a link or emails", () => {
+  assert.ok(builder.includes("prop-head-sign") && builder.includes("RequestSignatureSheet"), "gold Request Signature button opens the share sheet");
   assert.ok(/\["sent", "changes_requested"\]\.includes\(status\)/.test(builder), "shown only while awaiting a signature");
-  assert.ok(builder.includes("navigator.share") && builder.includes("open=proposal&sign="), "Share Signing Link uses the direct ?sign= link");
-  assert.ok(builder.includes("if (sigBusy) return;"), "email is guarded against duplicate taps");
+  // The share sheet lives in its own component now (so the hub can open it directly too).
+  assert.ok(sheet.includes("requestSignatureEmailAction"), "the sheet can email the request");
+  assert.ok(sheet.includes("navigator.share") && sheet.includes("open=proposal&sign="), "Share Signing Link uses the direct ?sign= link");
+  assert.ok(sheet.includes("if (busy) return;"), "email is guarded against duplicate taps");
 });

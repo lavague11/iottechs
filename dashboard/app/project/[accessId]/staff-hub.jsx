@@ -11,6 +11,7 @@ import { useEffect, useRef, useState } from "react";
 import { PORTAL_CSS } from "./customer-portal";
 import ProjectContactCard from "./project-contact-card";
 import { getPaymentsForLogAction } from "./proposal-actions";
+import RequestSignatureSheet from "./request-signature-sheet";
 
 const fmtPayDate = (s) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return ""; try { return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return `${m[2]}/${m[3]}/${m[1]}`; } };
 const payKindLabel = (k) => ({ deposit: "Deposit", final: "Final payment", partial: "Partial payment", other: "Payment" }[k] || "Payment");
@@ -25,6 +26,7 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
   sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
+  role = "", signOptionId = "",
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -37,6 +39,7 @@ export default function StaffHub({
   const [payments, setPayments] = useState([]);       // recorded payments (shown under the balance)
   const [payDetail, setPayDetail] = useState(null);   // one payment opened for full detail
   const [lightbox, setLightbox] = useState(null);     // a payment proof photo opened full-size
+  const [reqSignOpen, setReqSignOpen] = useState(false); // staff Request-Signature share sheet (opens here, not the proposal page)
 
   // Pull the payment ledger so recorded payments show under the balance (date · method · amount),
   // each openable for its full detail + any proof photos. Only when there's a contract to pay against.
@@ -255,7 +258,7 @@ export default function StaffHub({
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-status">{status.label}</div>
-            {primaryCta && <button className="cpv-cta" onClick={() => open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
+            {primaryCta && <button className="cpv-cta" onClick={() => primaryCta.inlineSign ? setReqSignOpen(true) : open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
           </section>
         ) : null}
 
@@ -390,6 +393,11 @@ export default function StaffHub({
           <div className="cpv-lightbox" onMouseDown={() => setLightbox(null)} role="dialog" aria-modal="true" aria-label="Payment photo">
             <img src={lightbox} alt="Payment proof" />
           </div>
+        )}
+
+        {reqSignOpen && (
+          <RequestSignatureSheet accessId={accessId} optionId={signOptionId} role={role}
+            onClose={() => setReqSignOpen(false)} onDone={() => { setReqSignOpen(false); onRefresh?.(); }} />
         )}
 
       </main>
