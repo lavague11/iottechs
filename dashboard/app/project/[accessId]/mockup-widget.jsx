@@ -54,7 +54,7 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
 
   // ?v cache-buster — bump when public/widgets/cctv-mockup.html changes so browsers don't run a stale
   // cached iframe (iOS Safari caches iframe HTML hard; a page reload won't re-fetch it).
-  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20261104-4`;
+  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20261104-5`;
 
   // Seed this browser's localStorage from the server backup before the iframe reads it, then
   // mirror every local change back up (see tool-sync.js).
@@ -187,9 +187,9 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
                   : <><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>Upload</>}
               </button>
 
-              {/* Download — save each camera's photo as-is (one file per filled camera). */}
+              {/* Download — the composited phone-grid view (one PNG per page). */}
               {stat?.filled > 0 && (
-                <button className="mk-btn" title="Download photos" onClick={() => cmd({ cmd: "download" })}>
+                <button className="mk-btn" title="Download mockup" onClick={() => cmd({ cmd: "download" })}>
                   <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14" /></svg>
                   Download
                 </button>

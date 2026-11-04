@@ -837,11 +837,13 @@ rebuildCards();
     else if(m.cmd==='setCount'){ if(SURVEY_DRIVEN)return; S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
     else if(m.cmd==='upload'){ var u=document.getElementById('uploadBtn'); if(u)u.click(); }
     else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
-    else if(m.cmd==='download'){ try{ var any=false;
-        for(var di=0; di<S.count; di++){ if(S.slots[di]&&S.slots[di].url){ any=true;
-          (function(ii,url){ setTimeout(function(){ fetch(url).then(function(r){return r.blob();})
-            .then(function(b){ dl(b,(nameOf(ii)||('CAM '+(ii+1)))+'.jpg'); }).catch(function(){}); }, ii*400); })(di,S.slots[di].url); } }
-        setStatus(any?'Downloading photos…':'No photos to download'); }catch(_e){} }
+    else if(m.cmd==='download'){ try{
+        if(filledCount()<1){ setStatus('No photos to download'); }
+        else { var np=mockups();   // composited phone-grid view — one PNG per page (clean render: no X / hints)
+          for(var pp=0; pp<np; pp++){ (function(page){ setTimeout(function(){
+            try{ exCanvas(page).toBlob(function(b){ if(b) dl(b,'Mockup'+(np>1?(' '+(page+1)):'')+'.png'); },'image/png'); }catch(_e){}
+          }, pp*350); })(pp); }
+          setStatus('Downloading mockup…'); } }catch(_e){} }
     else if(m.cmd==='cameras'){ restoreDone.then(function(){ applyCameras(m.cameras); }); }
     else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0;
       if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
