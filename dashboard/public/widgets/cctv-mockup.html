@@ -596,9 +596,12 @@ async function loadImageFile(f){
 function loadImageURL(u){return new Promise(res=>{const img=new Image();img.onload=()=>res({img,url:u});
   img.onerror=()=>res(undefined);img.src=u;});}
 function loadInto(i,f){loadImageFile(f).then(p=>{if(!p)return;S.slots[i]=p;if(i>=S.count){S.count=i+1;syncCount();}pushPhotoToSurvey(i,p.url,S.names[i]);refreshAll();});}
+// Upload (button): fill from the first empty slot — but route through placeFiles so the grid HOPS to
+// the landing page + highlights the tile, exactly like drop/paste. Without the hop a photo that lands
+// on another page reads as "uploaded but nothing happened" (the office couldn't see it).
 function bulkAdd(list){const files=[...list].filter(okImg);if(!files.length)return;
-  Promise.all(files.map(loadImageFile)).then(ps=>{ps.forEach(p=>{if(!p)return;
-    let i=0;while(i<S.count&&S.slots[i])i++;if(i>=S.count){S.count=i+1;syncCount();}S.slots[i]=p;pushPhotoToSurvey(i,p.url,S.names[i]);});refreshAll();});}
+  let start=0;while(start<S.count&&S.slots[start])start++;   // first empty slot (append past the end if the grid is full)
+  placeFiles(start,files);}
 const fileInput=document.getElementById('file');
 document.getElementById('uploadBtn').onclick=()=>fileInput.click();
 fileInput.onchange=e=>bulkAdd(e.target.files);

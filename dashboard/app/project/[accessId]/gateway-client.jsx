@@ -3139,14 +3139,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
               <ProposalVersionLog accessId={lp.access_id} />
             </div></AccordionProvider>);
-          case "survey":
-          case "mockup": {
-            // Both the Site Survey and the System Preview (mockup) cards open the SAME System Planner the
-            // deck mounts — so the hub behaves identically: the floor selector rides ON TOP (the planner
-            // owns it), one fullscreen button, the devices roster, and the Plan·Cameras·Views·Review rail.
-            // The inner widgets take `noRoster` → they emit planner=1, hiding their own in-canvas floor/
-            // Background strip + fullscreen so the planner's chrome is the only chrome. The two cards differ
-            // only by which rail step they open on (survey → Plan, mockup → Views). Mirrors the deck mount.
+          case "survey": {
+            // The SAME System Planner the deck mounts — so the hub survey behaves identically: the floor
+            // selector rides ON TOP (the planner owns it), one fullscreen button, the devices roster, and
+            // the Plan·Cameras·Views·Review rail. The inner widgets take `noRoster` → they emit planner=1,
+            // hiding their own in-canvas floor/Background strip + fullscreen so the planner's chrome is the
+            // only chrome. Nodes + props mirror the deck's Consulting mount exactly.
             const svMetaEff = { ...(toolMeta?.survey || {}), has: (toolMeta?.survey?.has) || surveyHasLocal };
             const mkMetaEff = { ...(toolMeta?.mockup || {}), has: (toolMeta?.mockup?.has) || mockupHasLocal };
             const onApprove = (a) => setAcceptances(a);
@@ -3192,7 +3190,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ) : null;
             return (
               <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
-                initialStep={key === "mockup" ? "views" : "plan"}
                 planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
                 hasSurvey={svMetaEff.has} hasViews={mkMetaEff.has} hasCams={(toolMeta?.survey?.cameras || 0) > 0}
                 mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}
@@ -3204,6 +3201,18 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
                 devReadOnly={!!previewRole} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
             );
+          }
+          case "mockup": {
+            // Camera Views opens STRAIGHT to the phone grid — no "Start Views / Skip" strip, no "Build"
+            // gate, no helper copy (the office opened the tool on purpose). `startBuilt` shows the phone
+            // immediately; wrapping in .ss-tool-body makes the grid fill the overlay (same CSS the survey
+            // uses). The widget's own bar owns Upload/Layout/Reset/Fullscreen.
+            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
+              <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
+                <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={(toolMeta?.mockup?.has) || mockupHasLocal} />
+              </div>
+            </div>);
           }
           case "closeout": {
             const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}
@@ -5213,6 +5222,11 @@ const PV_CSS = `
 .pvx .mk-count input:focus{border-color:var(--gold)}
 .pvx .mk-fromsurvey{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 11px;border:1px solid var(--gold);border-radius:8px;background:rgba(201,169,110,.1);color:var(--gold-deep,#8a6d2f);font-size:.72rem;font-weight:700;letter-spacing:.02em;white-space:nowrap}
 .pvx .mk-btn{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:transparent;color:var(--ink);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s,color .12s}
+.pvx .mk-btn:disabled{opacity:.6;cursor:default}
+.pvx .mk-uploading{position:absolute;inset:0;z-index:6;display:flex;align-items:center;justify-content:center;gap:10px;background:rgba(251,251,250,.72);backdrop-filter:blur(1.5px);color:var(--ink);font-size:.86rem;font-weight:700;letter-spacing:.01em;border-radius:12px}
+.pvx .mk-spin{width:18px;height:18px;border-radius:50%;border:2.4px solid rgba(16,17,18,.18);border-top-color:#C9A96E;animation:mkSpin .7s linear infinite;flex:none}
+.pvx .mk-spin-sm{width:13px;height:13px;border-width:2px}
+@keyframes mkSpin{to{transform:rotate(360deg)}}
 .pvx .mk-danger{border-color:#e0b0a8;background:#fdf0ef;color:#a8442f}
 .pvx .mk-danger:hover{background:#a8442f;border-color:#a8442f;color:#fff}
 .pvx .mk-btn:hover{background:rgba(16,17,18,.05);border-color:var(--line);color:var(--ink)}

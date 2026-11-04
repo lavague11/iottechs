@@ -11,14 +11,14 @@ import { mockupHasData } from "../../../lib/tool-data";
 // themed controls (Upload · Layout · Cameras · paging) in the host bar and drives the
 // iframe over postMessage. It auto-saves to localStorage per-project; ?ro=1 renders the
 // read-only customer grid.
-export default function MockupWidget({ accessId, view, customerView, customerName, noApproval, onHasData, embedded = false, hasData = false }) {
+export default function MockupWidget({ accessId, view, customerName, noApproval, onHasData, embedded = false, hasData = false, customerView, startBuilt = false }) {
   // Edit lock: only Admin / Manager / Sales rep build the mockup. Every other role
   // (Customer, Technician, Vendor, …) — and the admin "customer view" preview — is read-only.
   const readOnly = !["admin", "manager", "sales"].includes(view) || customerView;
   // The empty phone is a big UI eyesore when the mockup is being skipped. Gate it behind a Build
   // button: staff see "Build" until they opt in (or the mockup already has photos); a read-only
   // customer only ever sees a mockup that already has content, so the phone shows straight away.
-  const [built, setBuilt] = useState(false);
+  const [built, setBuilt] = useState(!!startBuilt);
   // Real mockup content in THIS browser's seeded store — so a previously-built mockup opens straight into
   // the phone preview instead of flashing the Build gate on reload (server `hasData` lags the meta poll).
   const [localHasData, setLocalHasData] = useState(false);
@@ -31,6 +31,8 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   const [commentAnchor, setCommentAnchor] = useState(null);  // a read-only customer tapped this camera → comment toast
   const [cameras, setCameras] = useState(null);   // survey camera roster (single source of truth)
   const [frameReady, setFrameReady] = useState(false);
+  const [uploading, setUploading] = useState(false);   // spinner while picked photos convert (HEIC) + land in the grid
+  const upTimer = useRef(null);
   const surveyDriven = !!(cameras && cameras.length);
   const frameRef = useRef(null);
   const fileRef  = useRef(null);   // the picker lives HERE (parent doc) so the click is a real user gesture
@@ -41,13 +43,18 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   // HEIC + fills the slots). File objects survive postMessage to the same-origin iframe.
   function onPick(e) {
     const files = [...(e.target.files || [])];
-    if (files.length) frameRef.current?.contentWindow?.postMessage({ type: "iotMockupCmd", cmd: "addFiles", files }, "*");
+    if (files.length) {
+      setUploading(true);   // show the spinner until the iframe posts back the updated grid (cleared in onMsg)
+      try { clearTimeout(upTimer.current); } catch { /* none */ }
+      upTimer.current = setTimeout(() => setUploading(false), 20000);   // safety: never spin forever
+      frameRef.current?.contentWindow?.postMessage({ type: "iotMockupCmd", cmd: "addFiles", files }, "*");
+    }
     e.target.value = "";   // let the same file(s) be re-picked later
   }
 
   // ?v cache-buster — bump when public/widgets/cctv-mockup.html changes so browsers don't run a stale
   // cached iframe (iOS Safari caches iframe HTML hard; a page reload won't re-fetch it).
-  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20260918-1`;
+  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20261104-1`;
 
   // Seed this browser's localStorage from the server backup before the iframe reads it, then
   // mirror every local change back up (see tool-sync.js).
@@ -89,6 +96,10 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
           height: e.data.height, surveyDriven: e.data.surveyDriven,
         });
         if (e.data.items) setItems(e.data.items);
+        // A picked photo has now converted + landed in the grid — the iframe re-posted its stats, so
+        // drop the upload spinner.
+        setUploading(false);
+        try { clearTimeout(upTimer.current); } catch { /* none */ }
         // Report content up so the office's Submit enables the instant a photo lands (no waiting
         // on the server tool-meta poll) — mirrors the survey widget's onHasData.
         if (typeof e.data.filled === "number") onHasData?.(e.data.filled > 0);
@@ -131,7 +142,13 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
   const curView = stat?.view ?? 4;
 
   return (
-    <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`}>
+    <div className={`ss-embed${fs ? " ss-embed-fs" : ""}`} style={{ position: "relative" }}>
+      {uploading && (
+        <div className="mk-uploading" role="status" aria-live="polite">
+          <span className="mk-spin" aria-hidden="true" />
+          <span>Uploading…</span>
+        </div>
+      )}
       <div className="ss-embed-bar">
         <span className="ss-embed-tag">
           {/* Inside the System Planner (embedded) the header already names the mode + owns the camera
@@ -164,9 +181,10 @@ export default function MockupWidget({ accessId, view, customerView, customerNam
 
               {/* Upload — real file input in THIS document (opens reliably on iPhone), multiple + HEIC */}
               <input ref={fileRef} type="file" accept="image/*,.heic,.heif,.HEIC,.HEIF" multiple capture={undefined} style={{ display: "none" }} onChange={onPick} />
-              <button className="mk-btn" onClick={() => fileRef.current?.click()}>
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-                Upload
+              <button className="mk-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
+                {uploading
+                  ? <><span className="mk-spin mk-spin-sm" aria-hidden="true" />Uploading…</>
+                  : <><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>Upload</>}
               </button>
 
               {/* Reset — clears every photo + name (keeps count/layout). Two-step confirm. */}
