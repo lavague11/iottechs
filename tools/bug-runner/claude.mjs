@@ -8,7 +8,16 @@ import { runSpawn } from "./proc.mjs";
 const SETTINGS = {
   permissions: {
     allow: ["Read", "Grep", "Glob", "Edit", "Write", "MultiEdit", "Bash(npm test:*)", "Bash(npm run build:*)", "Bash(node --check:*)"],
-    deny: ["Bash(git:*)", "Bash(git)", "WebFetch", "WebSearch"],
+    // Deny beats allow. Besides Git + the web, never let the fix rewrite what the runner later EXECUTES:
+    // package.json/lockfile feed `npm test` / `npm run build`; .husky runs on our own git commit/push;
+    // .github rides to the real repo. The runner ALSO refuses any run that touched these (defence in depth).
+    deny: [
+      "Bash(git:*)", "Bash(git)", "WebFetch", "WebSearch",
+      "Edit(**/package.json)", "Write(**/package.json)", "MultiEdit(**/package.json)",
+      "Edit(**/package-lock.json)", "Write(**/package-lock.json)", "MultiEdit(**/package-lock.json)",
+      "Edit(**/.husky/**)", "Write(**/.husky/**)", "MultiEdit(**/.husky/**)",
+      "Edit(**/.github/**)", "Write(**/.github/**)", "MultiEdit(**/.github/**)",
+    ],
   },
 };
 

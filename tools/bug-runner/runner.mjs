@@ -55,6 +55,13 @@ function readState() { try { return JSON.parse(fs.readFileSync(STATE_FILE, "utf8
 function writeState(s) { fs.writeFileSync(STATE_FILE, JSON.stringify(s)); }
 function clearState() { try { fs.rmSync(STATE_FILE); } catch {} }
 
+// ---- security: files the runner must NEVER auto-execute, commit, or trust ---------------------------
+// package.json/lockfiles feed `npm test` / `npm run build`; .husky runs on our own git commit/push;
+// .github rides to the real repo on push. A fix that changes any of them is refused — the run fails and
+// the worktree is kept for a human to inspect the diff by hand (nothing is executed, committed, or pushed).
+const SENSITIVE_RX = /(^|\/)(package\.json|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$|(^|\/)\.husky\/|(^|\/)\.github\//;
+const sensitiveChanged = (files) => (files || []).filter((f) => SENSITIVE_RX.test(f));
+
 // ---- validation gate: targeted → full npm test → npm run build ------------------------------------
 function npm(args, cwd, timeout) {
   const r = runSync("npm", args, { cwd, timeout });
@@ -115,11 +122,14 @@ async function processBug(api, bug) {
     stopHeartbeat();
 
     if (!cl.ok) {
-      // Claude crashed / timed out → failed. Push any partial work for inspection; keep the worktree.
+      // Claude crashed / timed out → failed. Push any partial work for inspection — UNLESS it touched
+      // build/hook/CI files (committing could run a rewritten git hook); then just keep the worktree.
       const files = hasChanges(wt) ? changedFiles(wt) : [];
-      let sha = null; try { if (files.length) sha = commitAndPush(wt, branch, `wip(bug-${bug.id}): incomplete — Claude did not finish`); } catch {}
-      await api.result(bug.id, { outcome: "failed", summary: cl.summary, error: cl.timedOut ? "Claude timed out" : "Claude exited abnormally", filesChanged: files, branch: files.length ? branch : null, commitSha: sha, validation: { claude: "fail" } });
-      log(`Bug #${bug.id}: FAILED (Claude). Worktree kept for inspection: ${wt}`);
+      const bad = sensitiveChanged(files);
+      let sha = null; try { if (files.length && !bad.length) sha = commitAndPush(wt, branch, `wip(bug-${bug.id}): incomplete — Claude did not finish`); } catch {}
+      const why = cl.timedOut ? "Claude timed out" : "Claude exited abnormally";
+      await api.result(bug.id, { outcome: "failed", summary: cl.summary, error: why + (bad.length ? ` — and touched sensitive files (NOT committed): ${bad.join(", ")}` : ""), filesChanged: files, branch: (files.length && !bad.length) ? branch : null, commitSha: sha, validation: { claude: "fail", ...(bad.length ? { security: "blocked" } : {}) } });
+      log(`Bug #${bug.id}: FAILED (Claude${bad.length ? ", sensitive files not committed" : ""}). Worktree kept: ${wt}`);
       clearState();
       return;
     }
@@ -132,6 +142,16 @@ async function processBug(api, bug) {
       return;
     }
     const files = changedFiles(wt);
+    // SECURITY GATE (before we run OR commit anything): a fix that touched build/hook/CI files is refused.
+    // Keep the worktree for a human; do NOT validate (npm runs package.json) and do NOT commit (a changed
+    // .husky hook would execute on commit). This forces the queue to stop for review.
+    const bad = sensitiveChanged(files);
+    if (bad.length) {
+      await api.result(bug.id, { outcome: "failed", summary: cl.summary, error: `Refused — the fix changed build/CI/hook files the runner won't run automatically. Review by hand:\n${bad.join("\n")}`, filesChanged: files, validation: { security: "blocked" } });
+      log(`Bug #${bug.id}: BLOCKED (sensitive files: ${bad.join(", ")}). Worktree kept, nothing executed: ${wt}`);
+      clearState();
+      return;
+    }
     const dep = depChanged(wt);
     log(`Bug #${bug.id}: validating (${files.length} files${dep ? ", DEPS CHANGED" : ""})…`);
     const val = validate(base, files);
