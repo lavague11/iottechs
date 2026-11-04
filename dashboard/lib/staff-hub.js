@@ -34,3 +34,24 @@ export function threeStepPhases(currentPhaseKey) {
   const phases = SIMPLE_STEPS.map((s, i) => ({ key: s.key, label: s.label, unlocked: i <= curIdx }));
   return { phases, currentKey };
 }
+
+// Milestone-anchored overall progress for the 3-step rail (bug #83), one source of truth for both the
+// percentage readout AND the segment fills so they can never disagree. Anchors from the owner:
+//   • proposal SENT  → Consulting complete ........ 33%  (first of three segments full)
+//   • signed + install appointment scheduled → ... 50%  (halfway through the Install segment)
+//   • install work complete → .................... 66%  (Install segment full)
+//   • QC / closeout complete → ................... 100% — but 90% while a balance is still owed
+// Before a proposal is sent we ramp gently through Consulting as the survey/mockup come together.
+export function simpleProgressPct(f = {}) {
+  if (f.qcDone || f.completed) return f.balanceOwed ? 90 : 100;
+  if (f.installDone) return 66;
+  if (f.signed && f.scheduled) return 50;
+  if (f.signed) return 45;
+  if (f.scheduled) return 40;
+  if (f.proposalSent) return 33;
+  let c = 0;                                   // still in Consulting — partial credit as artifacts land
+  if (f.surveyDone) c += 12;
+  if (f.mockupDone) c += 10;
+  if (f.proposalStarted) c += 6;
+  return Math.min(30, c);
+}

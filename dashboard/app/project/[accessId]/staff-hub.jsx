@@ -223,9 +223,14 @@ export default function StaffHub({
           <section className="cpv-prog" aria-label="Project progress">
             <div className="cpv-track">
               {phases.map((p, i) => {
-                const cur = p.key === currentPhaseKey;
-                const done = p.unlocked && !cur;
-                const fill = done ? 100 : cur ? 50 : 0;
+                // Fill flows across the segments from the overall percent, so the bar lines up exactly with
+                // the readout (bug #83). Falls back to the stage pointer only if no percent was supplied.
+                const span = 100 / phases.length;
+                const fill = progressPct == null
+                  ? (p.unlocked && p.key !== currentPhaseKey ? 100 : p.key === currentPhaseKey ? 50 : 0)
+                  : Math.max(0, Math.min(100, (progressPct - i * span) / span * 100));
+                const done = fill >= 100;
+                const cur = fill > 0 && fill < 100;
                 return (
                   <div key={p.key} className={`cpv-seg${done ? " done" : ""}${cur ? " cur" : ""}`}>
                     <div className="cpv-bar"><i style={{ width: fill + "%" }} /></div>

@@ -47,7 +47,7 @@ import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
 import StaffHub from "./staff-hub";
 import ProposalVersionLog from "./proposal-version-log";
-import { threeStepPhases } from "../../../lib/staff-hub";
+import { threeStepPhases, simpleProgressPct } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -2896,6 +2896,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       closed_not_completed: !!lp.closed_at && !sFacts.completion_docs,
     };
     const projState = acceptLoaded ? resolveProjectStatus(resolverFacts, projectStage) : null;
+    // Milestone progress for the Simple-view rail (hub + customer portal) — bug #83. ONE source for both
+    // the percentage readout and the segment fills, so they always agree.
+    const _simpleFin = staffFinance || customerFinance;
+    const simplePct = simpleProgressPct({
+      proposalSent:    !!resolverFacts.proposal_status,
+      signed:          !!resolverFacts.proposal_signed,
+      scheduled:       !!(pickAppt("install") || sFacts.install_confirmed),
+      installDone:     !!sFacts.install_done,
+      qcDone:          !!custFacts.qc_customer_signed,
+      completed:       projCompleted,
+      balanceOwed:     !!(_simpleFin && _simpleFin.hasContract && !_simpleFin.paidInFull),
+      surveyDone:      !!custFacts.survey_done,
+      mockupDone:      !!custFacts.mockup_done,
+      proposalStarted: !!proposalData?.payload,
+    });
     const dateSuffix = projState === "INSTALL_SCHEDULED" && realInstallDate ? ` · ${fmtDate(realInstallDate)}` : "";
     let statusChip = null;
     if (projState && isCustomerView) {
@@ -3081,7 +3096,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           appt={portalAppt}
           phases={threeStepPhases(masterToPhaseKey(projectStage)).phases}
           currentPhaseKey={threeStepPhases(masterToPhaseKey(projectStage)).currentKey}
-          progressPct={custProgressPct}
+          progressPct={simplePct}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
           renderOverlay={renderPortalOverlay}
@@ -3239,7 +3254,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             appt={hubAppt}
             phases={simple3.phases}
             currentPhaseKey={simple3.currentKey}
-            progressPct={custProgressPct}
+            progressPct={simplePct}
             sections={hubSections}
             actions={hubActions}
             contact={deckCustomer}
