@@ -251,7 +251,10 @@ export default function SystemPlanner({
   // Don't surface a Next CTA that can't fire yet — e.g. the Plan step while this floor still has no
   // background (you must pick Satellite/Upload/Draw first). Keeps the empty chooser a clean first screen.
   const nextStepMeta = steps.find((s) => s.key === nextStep);
-  const nextEnabled = !nextStep || !nextStepMeta || nextStepMeta.enabled;
+  // Next is enabled when the next step is reachable — OR when the satellite capture tool is open, so a
+  // single footer Next commits the capture (its Done) and lands on the Plan map (the must-fix: footer
+  // navigation is never ignored while a build tool waits on its own Done).
+  const nextEnabled = (!nextStep || !nextStepMeta || nextStepMeta.enabled) || bgTool === "satellite";
   const NEXT_PROMPT = { plan: "Floor Plan", review: "Review & Submit" };
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).

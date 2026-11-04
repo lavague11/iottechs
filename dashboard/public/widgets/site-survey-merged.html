@@ -885,7 +885,7 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html?v=20261104-auto"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
+    var SAT_SRC="satellite-capture.html?v=20261104-auto3"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
     function drawSrc(){ return "draw-floorplan.html?v=20261016-dock"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
@@ -2210,7 +2210,14 @@
       if(RO) return;
       // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
       // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
-      if(m.cmd==="step"){ if(typeof m.step==="number") goStep(m.step);
+      if(m.cmd==="step"){
+        // REBUILD must-fix: a footer Next while a build tool is OPEN commits it first (auto-save), then
+        // advances — never ignored. The satellite capture commits via its Done path (iotCaptureCommit →
+        // satellite-capture-result lands the background on the map). The draw tool autosaves geometry, so
+        // we just close it and advance.
+        if(bgToolOpen==="satellite"){ try{ satFrame.contentWindow.postMessage({type:"iotCaptureCommit"}, "*"); }catch(e){} return; }
+        if(bgToolOpen==="draw" && m.step===0){ exitBg(true); }   // leaving the structure tool back to Base: commit + close
+        if(typeof m.step==="number") goStep(m.step);
         if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: open the device panel, no editor
         else if(typeof m.step==="number") contextualEdit(m.step);               // Background/Floor Plan: land on the step → open its editor
         return; }

@@ -36,7 +36,9 @@ test("the shell follows the survey's step echo (iotSurveyStep) for the live indi
 test("the survey widget emits iotSurveyStep from goStep and handles the step command", () => {
   assert.ok(survey.includes("emitSurveyStep();    // tell the host rail"), "goStep emits the step echo");
   assert.ok(survey.includes('parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep,'), "the echo carries step + signals");
-  assert.ok(/if\(m\.cmd==="step"\)\{ if\(typeof m\.step==="number"\) goStep\(m\.step\);/.test(survey), "the survey handles iotSurveyCmd {cmd:'step'} by reusing goStep");
+  assert.ok(survey.includes('if(m.cmd==="step"){') && survey.includes('if(typeof m.step==="number") goStep(m.step);'), "the survey handles iotSurveyCmd {cmd:'step'} by reusing goStep");
+  // must-fix: a footer Next while a build tool is open commits it first (satellite → iotCaptureCommit; draw autosaves)
+  assert.ok(survey.includes('if(bgToolOpen==="satellite"){ try{ satFrame.contentWindow.postMessage({type:"iotCaptureCommit"}'), "footer Next commits an open satellite capture before advancing");
   assert.ok(survey.includes('if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }'), "the Cameras focus opens the device panel");
 });
 

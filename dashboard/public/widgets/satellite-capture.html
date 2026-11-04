@@ -214,6 +214,8 @@
   .tb.use{background:var(--ink);color:#fff}
   .tb.use:hover{background:#000}
   .tb.back{position:absolute;left:10px;min-width:40px}   /* pinned left; the rest of the dock stays centred */
+  /* REBUILD: no in-canvas Done when embedded — the project footer's Next commits the capture (one primary). */
+  body.embed #tDone{display:none!important}
   .tsep{width:1px;height:28px;background:var(--line);margin:0 4px}
   /* Rotate popover opens ABOVE the footer (drop-up), centred. */
   .pop{position:absolute;z-index:13;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);display:none;align-items:center;gap:10px;max-width:calc(100vw - 20px);
@@ -403,6 +405,12 @@
   window.addEventListener("message", function(e){
     var d=e&&e.data; if(!d||d.type!=="iotAerialRestore") return;
     applyAerial(d.aerial);
+  });
+  // REBUILD must-fix: the parent's footer Next asks the capture tool to COMMIT (same as pressing Done) so
+  // navigation never gets stranded waiting on the tool's own Done. Idempotent: commits + hands the image up.
+  window.addEventListener("message", function(e){
+    var d=e&&e.data; if(!d||d.type!=="iotCaptureCommit") return;
+    commitUI(); ensureCaptured().then(function(ok){ if(ok) usePreview(); });
   });
   // A parent-supplied capture (Edit background reopens THIS floor's stored aerial here) is a STATIC image, not the live
   // map. Level/Crop drive the live map — but their handlers call backToLive() first, so they re-enter the live map ON
