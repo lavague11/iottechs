@@ -839,11 +839,17 @@ rebuildCards();
     else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
     else if(m.cmd==='download'){ try{
         if(filledCount()<1){ setStatus('No photos to download'); }
-        else { var np=mockups();   // composited phone-grid view — one PNG per page (clean render: no X / hints)
-          for(var pp=0; pp<np; pp++){ (function(page){ setTimeout(function(){
-            try{ exCanvas(page).toBlob(function(b){ if(b) dl(b,'Mockup'+(np>1?(' '+(page+1)):'')+'.png'); },'image/png'); }catch(_e){}
-          }, pp*350); })(pp); }
-          setStatus('Downloading mockup…'); } }catch(_e){} }
+        else {
+          // ONE composited image, all cameras on a single screen — temporarily fit the grid to the
+          // camera count (9 → 3×3) so nothing paginates and there are no empty "No Camera" fillers.
+          // exCanvas renders to an OFFSCREEN canvas, so the visible phone is untouched; restore after.
+          var savedView=S.view, savedPage=S.page, n=S.count;
+          S.view = n<=1?1 : n<=4?4 : n<=9?9 : 16; S.page=0;
+          var oc = exCanvas(0);
+          S.view=savedView; S.page=savedPage;
+          oc.toBlob(function(b){ if(b) dl(b,'Mockup.png'); },'image/png');
+          setStatus('Downloading mockup…');
+        } }catch(_e){} }
     else if(m.cmd==='cameras'){ restoreDone.then(function(){ applyCameras(m.cameras); }); }
     else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0;
       if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
