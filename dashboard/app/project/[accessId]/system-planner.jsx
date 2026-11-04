@@ -27,7 +27,7 @@ export default function SystemPlanner({
   // contextual nav footer (staff): canonical submit/approve/continue wiring from the gateway
   surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null,
   svMeta = null, mkMeta = null, acceptances = null,
-  initialStep = "plan",   // which rail step to open on ("plan" | "views" | "review") — the hub's System Preview card lands on "views"
+  initialStep = "layout",   // which rail step to open on ("layout" | "cameras" | "views" | "review")
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
@@ -35,7 +35,7 @@ export default function SystemPlanner({
   // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
   // MERGE: a project with no survey yet opens straight to Photos (the merged System Preview) — a
   // preview-only job never has to touch the floor plan. A project that already has a survey opens on Map.
-  const [railStep, setRailStep] = useState(() => (initialStep === "plan" && !hasSurvey && !customer) ? "views" : initialStep);
+  const [railStep, setRailStep] = useState(() => (initialStep === "layout" && !hasSurvey && !customer) ? "views" : initialStep);
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
@@ -146,7 +146,7 @@ export default function SystemPlanner({
         setBgTool(m.bgTool || null);
         // The Structure (draw) tool IS the Floor Plan step — reflect that so the rail/nav don't say
         // "Create Floor Plan" while you're drawing it. Otherwise follow the Background→Setup auto-advance.
-        setRailStep((cur) => (m.bgTool === "draw" ? "plan" : m.step === 0 ? "background" : cur === "background" ? "plan" : cur));
+        setRailStep((cur) => (m.bgTool === "draw" ? "layout" : m.step === 0 ? "background" : cur === "background" ? "layout" : cur));
       }
       // A photo attached in the mockup wrote the survey2 blob server-side but can't touch the live survey
       // iframe. Relay it (by stable cid) so the survey updates its device, re-emits iotSurveyDevices, and
@@ -215,9 +215,9 @@ export default function SystemPlanner({
   const goRail = (step) => {
     setRailStep(step);
     if (step === "background") surveyCmd({ cmd: "step", step: 0 });
-    else if (step === "plan") surveyCmd({ cmd: "step", step: 1 });
-    else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });
-    // views / review: shell state only — both iframes stay mounted
+    else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });     // Layout toolset — draw structure / rooms / areas
+    else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });    // Cameras toolset — place + aim cameras
+    // views / review: shell state only — both iframes stay mounted (no map reload between Layout ↔ Cameras)
   };
   // Floor-plan highlight: when the AI resolves a device (coverage answer, or a device-bound flag/feedback),
   // it dispatches `iot-highlight-device`. Surface the survey pane on devices and tell the widget to switch to
@@ -234,31 +234,29 @@ export default function SystemPlanner({
   }, [accessId]);   // eslint-disable-line react-hooks/exhaustive-deps -- goRail/surveyCmd use refs + stable setters
 
   const camsPlaced = sig.camCount || camCount;
-  // REBUILD: 5 steps → 3. Base (pick a background) · Plan (one live map: structure + areas + cameras +
-  // photos) · Submit (summary + lock). Cameras folded into Plan; Views is no longer a gating step (the
-  // phone-mockup photo surface is reachable from the ••• Go-to menu as "Camera Photos").
+  // REBUILD → Round 2: FOUR steps. Base (pick a background) · Layout (draw structure/rooms/areas) ·
+  // Cameras (place + aim) · Submit (summary + lock). Layout and Cameras are the SAME live map — the rail
+  // only swaps the toolset, no reload. Views (Camera Photos) stays reachable via the ••• Go-to menu.
   const steps = [
     { key: "background", label: "Base", done: sig.bgReady, enabled: true },
-    // Plan is "done" when a structure was drawn OR cameras were placed OR the survey was submitted.
-    { key: "plan", label: "Plan", done: sig.hasPlan || camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady },
+    { key: "layout", label: "Layout", done: sig.hasPlan || surveySubmitted, enabled: sig.bgReady },
+    { key: "cameras", label: "Cameras", done: camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady },
     { key: "review", label: "Submit", done: false, enabled: sig.bgReady },
   ];
 
-  // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next, three steps. The canonical workflow still lives in
-  // railStep/goRail; this only derives next/prev + CTA. "views" (Camera Photos) stays reachable via the
-  // ••• Go-to menu but is OUT of the linear Base→Plan→Submit flow.
-  const navOrder = ["background", "plan", "review"];
-  const navIdx = Math.max(0, navOrder.indexOf(["cameras", "views"].includes(railStep) ? "plan" : railStep));
+  // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next, ONE step at a time (no skips). "views" (Camera
+  // Photos) sits on the Cameras rung for nav purposes but is OUT of the linear Base→Layout→Cameras→Submit.
+  const navOrder = ["background", "layout", "cameras", "review"];
+  const navIdx = Math.max(0, navOrder.indexOf(railStep === "views" ? "cameras" : railStep));
   const prevStep = navOrder[navIdx - 1] || null;
   const nextStep = navOrder[navIdx + 1] || null;
-  // Don't surface a Next CTA that can't fire yet — e.g. the Plan step while this floor still has no
-  // background (you must pick Satellite/Upload/Draw first). Keeps the empty chooser a clean first screen.
+  // Don't surface a Next CTA that can't fire yet — e.g. Layout while this floor still has no background.
   const nextStepMeta = steps.find((s) => s.key === nextStep);
   // Next is enabled when the next step is reachable — OR when the satellite capture tool is open, so a
-  // single footer Next commits the capture (its Done) and lands on the Plan map (the must-fix: footer
+  // single footer Next commits the capture (its Done) and lands on the Layout map (the must-fix: footer
   // navigation is never ignored while a build tool waits on its own Done).
   const nextEnabled = (!nextStep || !nextStepMeta || nextStepMeta.enabled) || bgTool === "satellite";
-  const NEXT_PROMPT = { plan: "Floor Plan", review: "Review & Submit" };
+  const NEXT_PROMPT = { layout: "Floor Plan", cameras: "Place Cameras", review: "Review & Submit" };
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).
   const svApproved = toolAccepted(svMeta, acceptances && acceptances.site_survey);
@@ -296,7 +294,7 @@ export default function SystemPlanner({
   const goCust = (idx) => {
     if (idx < 0 || idx >= custStops) return;
     if (showViewsStop && idx === floorCount) { setRailStep("views"); return; }   // the Camera Views stop
-    setRailStep("plan"); setCurFloor(idx); surveyCmd({ cmd: "floor", i: idx });
+    setRailStep("layout"); setCurFloor(idx); surveyCmd({ cmd: "floor", i: idx });
   };
 
   return (
@@ -337,7 +335,7 @@ export default function SystemPlanner({
           {/* Map / Photos toggle — the merged System Preview. Map = the floor plan; Photos = the camera
               photos + phone mockup (works with no map at all). Left of the floor selector. */}
           <div className="syp-fb-viewtog" role="group" aria-label="View">
-            <button type="button" className={railStep !== "views" ? "on" : ""} onClick={() => goRail("plan")}>Map</button>
+            <button type="button" className={railStep !== "views" ? "on" : ""} onClick={() => { if (!["layout", "cameras"].includes(railStep)) goRail("layout"); }}>Map</button>
             <button type="button" className={railStep === "views" ? "on" : ""} onClick={() => goRail("views")}>Photos</button>
           </div>
           <div className="syp-fb-nav">
@@ -396,7 +394,7 @@ export default function SystemPlanner({
           )}
           <div className="syp-review-h">Review &amp; submit</div>
           <div className="syp-review-sub">Check each floor, then submit for the customer to approve.</div>
-          <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("plan")} onGoPhotos={() => goRail("views")} />
+          <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
           {footer}
         </div>
       )}

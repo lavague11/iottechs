@@ -52,7 +52,7 @@ test("gating: Build Floor Plan shows on an aerial floor that is NOT yet a plan, 
   // outside any tool); the legacy drop-up #buildPlanBtn is retired (hidden). The ••• More sheet (Edit/Replace/
   // Rotate · Mode · Versions · Display) shows over ANY real background on every step; Step/Floor live in the shell.
   has('var pmShow=(bgHasImage && !frozen() && !bgToolOpen);', "the ••• shows over any real background, outside any tool, on every step");
-  has('fab.style.display = (canBuild(floors[curFloor]) && !bgToolOpen) ? "flex" : "none"', "the top-left Create-floor-plan FAB shows only when canBuild and outside a tool");
+  has('var fab=document.getElementById("buildPlanFab"); if(fab) fab.style.display = "none";', "Round 2: the top-left Create-floor-plan FAB (layers icon) is removed — Layout is a rail step");
   has('var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display="none";', "the legacy drop-up build entry is retired (hidden)");
   has('pm.style.display = pmShow ? "flex" : "none"', "the ••• (More sheet trigger) shows over any real background");
   // re-evaluated on step/floor change and on submit/unsubmit (frozen flips)

@@ -13,14 +13,14 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
   assert.ok(!shell.includes('className="syp-seg"'), "the old Plans|Views segmented toggle is gone");
   assert.ok(!/>Plans<\/button>/.test(shell) && !/setMode\(/.test(shell), "no Plans/Views tab buttons or mode toggle remain");
   assert.ok(shell.includes('className="syp-nav"'), "the contextual nav footer exists (replaced the 5-tab rail)");
-  // REBUILD: 5 steps → 3. Base · Plan · Submit (Cameras + Views folded into Plan / the ••• Go-to menu).
-  for (const label of ["Base", "Plan", "Submit"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
-  assert.ok(!/label: "Views"/.test(shell) && !/label: "Cameras"/.test(shell), "Cameras + Views are no longer separate rail steps");
+  // Round 2: FOUR steps — Base · Layout · Cameras · Submit (Layout and Cameras are the same live map).
+  for (const label of ["Base", "Layout", "Cameras", "Submit"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
+  assert.ok(!/label: "Views"/.test(shell) && !/label: "Plan"/.test(shell), "no 'Views'/'Plan' rail step (Plan split into Layout + Cameras)");
 });
 
 test("rail drives the survey's internal step via postMessage (Background→0, Plan→1, Cameras→1+devices); Views/Review shell-only", () => {
   assert.ok(shell.includes('if (step === "background") surveyCmd({ cmd: "step", step: 0 });'), "Background → survey step 0");
-  assert.ok(shell.includes('else if (step === "plan") surveyCmd({ cmd: "step", step: 1 });'), "Plan → survey step 1");
+  assert.ok(shell.includes('else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });'), "Layout → survey step 1 (structure toolset)");
   assert.ok(shell.includes('else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });'), "Cameras → survey step 1 + device focus");
   // paneMode keeps both iframes mounted (visibility only); Views flips to the mockup pane
   assert.ok(shell.includes('const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";'), "paneMode derived from railStep");
@@ -29,7 +29,7 @@ test("rail drives the survey's internal step via postMessage (Background→0, Pl
 
 test("the shell follows the survey's step echo (iotSurveyStep) for the live indicator + Done→Plan auto-advance", () => {
   assert.ok(shell.includes('else if (m.type === "iotSurveyStep")'), "shell handles the survey step echo");
-  assert.ok(shell.includes('setRailStep((cur) => (m.bgTool === "draw" ? "plan" : m.step === 0 ? "background" : cur === "background" ? "plan" : cur));'), "draw tool → Floor Plan; else follows Background↔Setup");
+  assert.ok(shell.includes('setRailStep((cur) => (m.bgTool === "draw" ? "layout" : m.step === 0 ? "background" : cur === "background" ? "layout" : cur));'), "draw tool → Layout; else follows Background↔Setup");
   assert.ok(shell.includes("setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });"), "completion signals come from the echo");
 });
 

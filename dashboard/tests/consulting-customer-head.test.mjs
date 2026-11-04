@@ -22,7 +22,7 @@ test("customer branch shows a pager + full-width walkthrough, and NO staff rail"
 });
 
 test("the 3 workflow steps exist for non-customers (Base · Plan · Submit) + Go-to menu", () => {
-  for (const label of ["Base", "Plan", "Submit"]) {
+  for (const label of ["Base", "Layout", "Cameras", "Submit"]) {
     assert.ok(sp.includes(`label: "${label}"`), `workflow has ${label}`);
   }
   assert.ok(sp.includes('className="syp-nav-menu"') && sp.includes(">Go to<"), "the ••• Go-to menu lists the modes");

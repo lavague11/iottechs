@@ -1094,7 +1094,9 @@
       // Create floor plan = the top-left #buildPlanFab (one home). The old bottom-right drop-up entry is retired
       // (stays hidden); Replace/Dim remain in that ••• drop-up.
       var bp=document.getElementById("buildPlanBtn"); if(bp) bp.style.display="none";
-      var fab=document.getElementById("buildPlanFab"); if(fab) fab.style.display = (canBuild(floors[curFloor]) && !bgToolOpen) ? "flex" : "none";
+      // Round 2: the "Floor Plan" FAB (the layers icon next to +) is removed — Layout is a rail step now,
+      // the entry point for drawing the structure. Keep it permanently hidden.
+      var fab=document.getElementById("buildPlanFab"); if(fab) fab.style.display = "none";
       // ••• More is available on EVERY step whenever a real background exists (not just Background) — it's the
       // secondary-control home in both normal and focus mode (never pinned to the canvas beyond this one dot).
       var pmShow=(bgHasImage && !frozen() && !bgToolOpen);
@@ -2293,10 +2295,13 @@
         // satellite-capture-result lands the background on the map). The draw tool autosaves geometry, so
         // we just close it and advance.
         if(bgToolOpen==="satellite"){ try{ satFrame.contentWindow.postMessage({type:"iotCaptureCommit"}, "*"); }catch(e){} return; }
-        if(bgToolOpen==="draw" && m.step===0){ exitBg(true); }   // leaving the structure tool back to Base: commit + close
+        // Going to Cameras (or Base) with the Layout draw dock open: close it FIRST, so the step echo
+        // doesn't report bgTool:"draw" (which would snap the rail back to Layout). Then advance.
+        if(bgToolOpen==="draw" && (m.focus==="devices" || m.step===0)){ exitBg(true); }
         if(typeof m.step==="number") goStep(m.step);
-        if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: open the device panel, no editor
-        else if(typeof m.step==="number") contextualEdit(m.step);               // Background/Floor Plan: land on the step → open its editor
+        if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: device panel open, no draw dock
+        else if(m.focus==="layout" && typeof m.step==="number"){ contextualEdit(m.step); }   // Layout: open the structure/draw editor (walls, rooms, areas)
+        else if(typeof m.step==="number") contextualEdit(m.step);               // Background → its editor
         return; }
       // Floor management from the host's top selector — reuse the SAME canonical floor functions as the
       // in-canvas sheet (parity, no behavior change: add/rename/delete work, duplicate self-guards on
