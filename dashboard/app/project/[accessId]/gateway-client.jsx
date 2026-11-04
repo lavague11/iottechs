@@ -3246,8 +3246,23 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
+              {/* Installation scheduling — merged into the Work Order (was its own card). */}
+              <div className="wo-merge-sec"><h3 className="wo-merge-h">Installation</h3>
+                <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
+                  currentUser={currentUser} project={lp} view={view} apptKind="install"
+                  defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
+              </div>
+              {/* Expenses — merged into the Work Order (was its own card). */}
+              <div className="wo-merge-sec"><h3 className="wo-merge-h">Expenses</h3>
+                <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
+              </div>
+              <style>{`.wo-merge-sec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line,#E4E4DF)}.wo-merge-h{font-size:.8rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#787D84);margin:0 0 10px}`}</style>
             </div>);
-          case "expenses":
+          case "addendum":
+            return (<div style={ovl(760)}>
+              <InstallAddendum accessId={lp.access_id} role={cView} readOnly={viewOnly} customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
+            </div>);
+          case "expenses":   // kept for the quick-action; Expenses also live inside the Work Order now
             return (<div style={ovl(640)}>
               <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
             </div>);
@@ -3273,11 +3288,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Site Survey is the single entry for both the floor plan (Map) and the camera photos/preview
         // (Photos) — System Preview merged in (toggle inside the tool). A preview-only job never needs a map.
         { key: "survey", title: "Site Survey", group: "customer", sub: (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.", action: (sHasSurvey || sHasMockup) ? "Edit" : "Create" },
+        // Addendum — job add-ons / change-orders on top of the signed job (fills the slot System Preview left).
+        { key: "addendum", title: "Addendum", group: "customer", sub: addonCount ? `${addonCount} add-on${addonCount === 1 ? "" : "s"}.` : "Job add-ons.", action: addonCount ? "Edit" : "Add" },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
-        { key: "install", title: "Installation", group: "internal", view: "schedule", sub: installDone ? "Install complete." : hubAppt ? "Scheduled." : "Not scheduled.", action: installDone ? "Completed" : hubAppt ? "Reschedule" : "Schedule", done: installDone },
-        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? "Created." : "Create the work order.", action: workOrders?.length ? "Edit" : "Create", done: !!workOrders?.length, ownHeader: true },
-        { key: "expenses", title: "Expenses", group: "internal", sub: expenses?.length ? `${expenses.length} logged.` : "Log expenses.", action: expenses?.length ? "Edit" : "Add", ownHeader: true },
+        // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
+        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? (installDone ? "Install complete." : hubAppt ? "Scheduled." : "Created.") : "Create the work order.", action: workOrders?.length ? "Edit" : "Create", done: !!workOrders?.length, ownHeader: true },
       ];
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
