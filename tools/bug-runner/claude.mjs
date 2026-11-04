@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runSpawn } from "./proc.mjs";
+import { runSpawn, noGitAuthEnv } from "./proc.mjs";
 
 // Scoped permissions — Claude may read/search/edit/write and run ONLY the tests/build, and is explicitly
 // denied every Git operation (the runner owns the repo lifecycle). This is the file we hand to `claude`.
@@ -29,7 +29,7 @@ export function runClaude({ bin = "claude", prompt, cwd, timeoutMs = 25 * 60 * 1
   const args = ["-p", "--output-format", "json", "--max-turns", String(maxTurns),
     "--permission-mode", "acceptEdits", "--settings", settingsPath];
   return new Promise((resolve) => {
-    const child = runSpawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"] });
+    const child = runSpawn(bin, args, { cwd, stdio: ["pipe", "pipe", "pipe"], env: noGitAuthEnv() });
     let out = "", err = "";
     const killer = setTimeout(() => { try { child.kill("SIGKILL"); } catch {} resolve({ ok: false, timedOut: true, summary: "Claude run exceeded the time limit.", raw: out, stderr: err }); }, timeoutMs);
     child.stdout.on("data", (d) => { out += d; });

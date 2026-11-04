@@ -11,6 +11,18 @@ function wrap(cmd, args) {
   return [cmd, args];
 }
 
+// Env for the UNTRUSTED children (the Claude session + the npm test/build gate): neutralize Git network
+// auth so agent-written test/build code can't `git push` using the machine's cached credentials —
+// no credential helper (ignores the Windows Credential Manager via an empty-value override at highest
+// precedence) and no interactive prompt. Local git reads (rev-parse, etc.) still work. The runner's OWN
+// git in git.mjs runs with the normal env, so its commitAndPush still authenticates. NOTE: this is
+// defence in depth — branch protection on `main` is the actual guarantee, since the automation clone
+// must be able to push its own branches.
+export function noGitAuthEnv(extra = {}) {
+  return { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "credential.helper", GIT_CONFIG_VALUE_0: "", ...extra };
+}
+
 export function runSync(cmd, args, opts = {}) {
   const [c, a] = wrap(cmd, args);
   return spawnSync(c, a, { encoding: "utf8", maxBuffer: 128 * 1024 * 1024, ...opts });

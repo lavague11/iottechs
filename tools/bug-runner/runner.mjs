@@ -5,7 +5,7 @@ import { makeApi } from "./api.mjs";
 import { setupWorktree, depChanged, changedFiles, commitAndPush, removeWorktree, hasChanges, branchFor, repoWebUrl } from "./git.mjs";
 import { downloadEvidence, buildPrompt } from "./envelope.mjs";
 import { runClaude } from "./claude.mjs";
-import { runSync } from "./proc.mjs";
+import { runSync, noGitAuthEnv } from "./proc.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = path.join(HERE, ".runner-state.json");
@@ -64,7 +64,8 @@ const sensitiveChanged = (files) => (files || []).filter((f) => SENSITIVE_RX.tes
 
 // ---- validation gate: targeted → full npm test → npm run build ------------------------------------
 function npm(args, cwd, timeout) {
-  const r = runSync("npm", args, { cwd, timeout });
+  // Run the gate with Git push auth stripped — a malicious test/build script can't push with cached creds.
+  const r = runSync("npm", args, { cwd, timeout, env: noGitAuthEnv() });
   const tail = ((r.stdout || "") + "\n" + (r.stderr || "")).trim().slice(-1500);
   return { ok: r.status === 0 && !r.error, tail };
 }
@@ -85,7 +86,7 @@ function validate(base, files) {
   const targets = targetedFiles(base, files);
   if (targets.length) {
     // node --test on just the targeted files (a fast first gate, more precise than the whole suite).
-    const t = runSync("node", ["--test", ...targets], { cwd: dash, timeout: CFG.testTimeoutMs });
+    const t = runSync("node", ["--test", ...targets], { cwd: dash, timeout: CFG.testTimeoutMs, env: noGitAuthEnv() });
     v.targeted = t.status === 0 ? "pass" : "fail";
     if (v.targeted === "fail") return { ok: false, v, gate: "targeted", tail: ((t.stdout || "") + (t.stderr || "")).slice(-1500) };
   }
