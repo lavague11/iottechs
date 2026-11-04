@@ -112,6 +112,10 @@ export default function StaffHub({
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
+/* Survey / planner tool fills the whole overlay height (match the deck), instead of a fixed ~382px slab. */
+.cpv-ovl-body .ss-tool-body{display:flex;flex-direction:column}
+.cpv-ovl-body .ss-tool-body>.ss-embed{flex:1 1 0;min-height:0;height:auto;display:flex;flex-direction:column}
+.cpv-ovl-body .ss-tool-body .ss-embed-frame{flex:1 1 0;min-height:0;height:auto!important}
 /* Overlay bar — consistent with the hub header: tool name LEFT, project name CENTERED, X RIGHT. */
 .cpv-ovl-bar{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;box-shadow:0 1px 0 rgba(16,20,24,.03)}
 .cpv-ovl-tool{justify-self:start;min-width:0;font-weight:700;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}

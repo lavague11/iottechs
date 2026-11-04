@@ -3145,7 +3145,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             const svMetaEff = { ...(toolMeta?.survey || {}), has: (toolMeta?.survey?.has) || surveyHasLocal };
             return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
               <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                   propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
                   customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has}
                   submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
