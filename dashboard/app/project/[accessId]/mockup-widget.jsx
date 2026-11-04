@@ -54,7 +54,7 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
 
   // ?v cache-buster — bump when public/widgets/cctv-mockup.html changes so browsers don't run a stale
   // cached iframe (iOS Safari caches iframe HTML hard; a page reload won't re-fetch it).
-  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20261104-2`;
+  const src = `/widgets/cctv-mockup.html?embed=1&project=${encodeURIComponent(accessId)}${readOnly ? "&ro=1" : ""}&v=20261104-4`;
 
   // Seed this browser's localStorage from the server backup before the iframe reads it, then
   // mirror every local change back up (see tool-sync.js).
@@ -187,6 +187,14 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
                   : <><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>Upload</>}
               </button>
 
+              {/* Download — save each camera's photo as-is (one file per filled camera). */}
+              {stat?.filled > 0 && (
+                <button className="mk-btn" title="Download photos" onClick={() => cmd({ cmd: "download" })}>
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 4v12M7 11l5 5 5-5M5 20h14" /></svg>
+                  Download
+                </button>
+              )}
+
               {/* Reset — clears every photo + name (keeps count/layout). Two-step confirm. */}
               {confirmReset ? (
                 <>
@@ -224,7 +232,10 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
             )}
           </div>
 
-          {fs ? (
+          {/* Fullscreen — only when STANDALONE. In the project overlay the tool is already full-bleed,
+              so its own fullscreen (and the exit-fullscreen that replaces it) is redundant with the
+              overlay's own close. */}
+          {!embedded && (fs ? (
             <button className="mk-btn mk-ico" title="Exit fullscreen" aria-label="Exit fullscreen" onClick={() => setFs(false)}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
             </button>
@@ -232,7 +243,7 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
             <button className="mk-btn mk-ico" title="Fullscreen" aria-label="Fullscreen" onClick={() => setFs(true)}>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>
             </button>
-          )}
+          ))}
         </div>
       </div>
 
@@ -259,8 +270,9 @@ export default function MockupWidget({ accessId, view, customerName, noApproval,
           hint="Bring up the phone preview to add each camera’s photo. Skip it if this job doesn’t need a mockup." />
       )}
 
-      {/* Paging — host-driven (tool's own nav is hidden in embed mode), shown for both builder and read-only */}
-      {stat?.pages > 1 && (
+      {/* Paging — standalone only. In the project overlay the iframe's own dots ("View 1 of 3") sit
+          right under the phone, so this second bar below would only add a gap. */}
+      {!embedded && stat?.pages > 1 && (
         <div className="mk-pagenav">
           <button className="mk-parrow" disabled={stat.page <= 0} onClick={() => cmd({ cmd: "page", dir: -1 })}>‹</button>
           <span className="mk-pageind">Page {(stat.page ?? 0) + 1} of {stat.pages}</span>

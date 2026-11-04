@@ -3207,11 +3207,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             // gate, no helper copy (the office opened the tool on purpose). `startBuilt` shows the phone
             // immediately; wrapping in .ss-tool-body makes the grid fill the overlay (same CSS the survey
             // uses). The widget's own bar owns Upload/Layout/Reset/Fullscreen.
-            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
-              <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                  customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={(toolMeta?.mockup?.has) || mockupHasLocal} />
-              </div>
+            return (<div className="ss-mk-wrap">
+              <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={(toolMeta?.mockup?.has) || mockupHasLocal} />
             </div>);
           }
           case "closeout": {
@@ -5204,6 +5202,10 @@ const PV_CSS = `
 
 /* ---- Site Survey embed (iframe) ---- */
 .pvx .ss-embed{display:flex;flex-direction:column;gap:8px}
+/* Mockup overlay: bar pinned at top, the phone hugs it at its own content height (no fill → no big
+   gap before the pager). Any slack sits at the very bottom, not between the phone and its dots. */
+.pvx .ss-mk-wrap{height:100%;display:flex;flex-direction:column;min-height:0}
+.pvx .ss-mk-wrap>.ss-embed{min-height:0}
 .pvx .ss-embed-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .pvx .ss-embed-tag{font-size:.78rem;color:var(--muted);font-weight:600}
 .pvx .ss-embed-open{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-soft);color:var(--ink);font-size:.78rem;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none}

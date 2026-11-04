@@ -269,6 +269,10 @@ function camIcon(c,cx,cy,s,col){c.save();c.translate(cx,cy);c.lineJoin='round';c
   c.beginPath();c.arc(0,0.07*s,0.24*s,0,7);c.stroke();
   c.beginPath();c.arc(0,0.07*s,0.11*s,0,7);c.stroke();
   c.beginPath();c.arc(0.42*s,-0.18*s,0.045*s,0,7);c.fillStyle=col;c.fill();c.restore();}
+// The per-tile "remove photo" X — top-right corner. Shared by drawCell (to paint it) and the click
+// handler (to hit-test it) so the drawn button and its tap target never drift apart.
+function rmRect(x,y,w,h){const s=Math.max(16,Math.min(h*0.13,36)),pad=Math.max(7,h*0.05);
+  return{bx:x+w-pad-s/2,by:y+pad+s/2,r:s/2,s};}
 function drawCell(c,x,y,w,h,i,o){o=o||{};
   c.save();c.beginPath();c.rect(x,y,w,h);c.clip();
   if(i>=S.count){ // camera doesn't exist
@@ -292,6 +296,11 @@ function drawCell(c,x,y,w,h,i,o){o=o||{};
   if(o.frameCorner&&Math.abs(x-o.frameCorner.x)<2&&Math.abs(y-o.frameCorner.y)<2){const cl=o.frameCorner.r*0.82;lx=x+Math.max(pad,cl);ly=y+Math.max(pad,cl);}   // clear the rounded screen corner (past ~0.71r) so the dot + name aren't squashed by the arc
   dot(c,lx+cf*0.32,ly+cf*0.55,cf*0.34,ph?'#2fbf5e':'#aab0ba',!!ph);
   osd(c,nameOf(i),lx+cf*0.95,ly+cf*0.85,cf,ph?'#fff':'#1a1a1a','left','bold',ph?'rgba(0,0,0,.82)':'rgba(255,255,255,.55)');
+  // Remove-photo X, top-right — builder only (o.interactive mirrors !read-only).
+  if(ph&&o.interactive){const b=rmRect(x,y,w,h),d=b.r*0.46;
+    c.beginPath();c.arc(b.bx,b.by,b.r,0,Math.PI*2);c.fillStyle='rgba(10,12,18,.58)';c.fill();
+    c.strokeStyle='rgba(255,255,255,.95)';c.lineWidth=Math.max(1.6,b.s*0.1);c.lineCap='round';
+    c.beginPath();c.moveTo(b.bx-d,b.by-d);c.lineTo(b.bx+d,b.by+d);c.moveTo(b.bx+d,b.by-d);c.lineTo(b.bx-d,b.by+d);c.stroke();}
   c.restore();
   if(!ph){c.strokeStyle='#c4c9d2';c.lineWidth=1;c.strokeRect(x+.5,y+.5,w-1,h-1);}   // hairline only on empty tiles; real photos stay seamless
   if(o.hover===i){c.save();c.fillStyle='rgba(201,169,110,.2)';c.fillRect(x,y,w,h);
@@ -423,6 +432,19 @@ var IOT_RO=false; // set by the IOT TECHS embed shim below — read-only mode di
 // count + names come from the survey and can't be edited here (rename a camera in the survey). The
 // office only attaches the mockup/view photo per camera. Empty until a 'cameras' command arrives.
 var SURVEY_DRIVEN=false, SURVEY_CAMS=[];
+// Write a mockup photo back to its survey camera (the single source of truth) + tell the shell so the
+// Devices roster / map / walkthrough update live. Top-level so every caller reaches it: upload, the
+// per-tile remove X, the double-click menu Remove, and the lightbox Remove (previously this lived
+// inside the embed IIFE and threw "not defined" for all of them — the write-back silently failed).
+function pushPhotoToSurvey(i, url, name){
+  if(!SURVEY_DRIVEN) return; var c=SURVEY_CAMS[i]; if(!c || c.floor==null || c.di==null) return;
+  var pid=new URLSearchParams(location.search).get('project'); if(!pid) return;
+  try{ fetch('/api/project-cameras',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+    body:JSON.stringify({ accessId:pid, floor:c.floor, di:c.di, photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }) })
+    .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok&&Array.isArray(j.cameras)) SURVEY_CAMS=j.cameras;
+      try{ parent.postMessage({ type:'iotMockupPhoto', cid:(c.id||c.cid||null), photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }, '*'); }catch(e){}
+    }).catch(function(){}); }catch(_){}
+}
 const nameEdit=document.getElementById('nameEdit'),slotFile=document.getElementById('slotFile');
 function tileAt(e,canvas,page){const rect=canvas.getBoundingClientRect(),sx=canvas.width/rect.width,sy=canvas.height/rect.height;
   const cx=(e.clientX-rect.left)*sx,cy=(e.clientY-rect.top)*sy,a={X:0,Y:0,W:canvas.width,H:canvas.height};
@@ -453,6 +475,8 @@ function bindCanvas(canvas,page){
     // the comment. Delayed so a double-tap (→ fullscreen) cancels it.
     if(IOT_RO){ clearTimeout(clickTimer); clickTimer=setTimeout(()=>{ if(h&&S.slots[h.i]) openLightbox(h.i); else postComment(h?h.i:-1); },240); return; }
     if(!h)return;
+    // Tap the top-right X on a filled tile → remove that photo (no menu, no confirm — one tap, undoable by re-adding).
+    if(S.slots[h.i]){const b=rmRect(h.x,h.y,h.w,h.h); if(Math.hypot(h.cx-b.bx,h.cy-b.by)<=b.r*1.3){clearTimeout(clickTimer);S.slots[h.i]=undefined;pushPhotoToSurvey(h.i,null);refreshAll();return;}}
     // Editing: single-click adds a photo to an EMPTY tile (delayed so a double-click can cancel). A
     // Empty tile: single-click adds a photo. Filled tile: single-click the TOP strip opens the name
     // editor (rename → writes back to the survey); double-click still fills the whole phone (1×1 view).
@@ -806,18 +830,6 @@ rebuildCards();
   }
   // Write a mockup photo edit back to the survey camera (the source of truth) so it shows identically in
   // the survey, the mockup, and the walkthrough — and never drifts. No-op unless survey-driven + signed in.
-  function pushPhotoToSurvey(i, url, name){
-    if(!SURVEY_DRIVEN) return; var c=SURVEY_CAMS[i]; if(!c || c.floor==null || c.di==null) return;
-    var pid=new URLSearchParams(location.search).get('project'); if(!pid) return;
-    try{ fetch('/api/project-cameras',{ method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
-      body:JSON.stringify({ accessId:pid, floor:c.floor, di:c.di, photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }) })
-      .then(function(r){return r.json();}).then(function(j){ if(j&&j.ok&&Array.isArray(j.cameras)) SURVEY_CAMS=j.cameras;
-        // Tell the shell (→ the live survey iframe + the shared Devices roster) that THIS camera's photo
-        // changed, keyed by its stable cid — so the roster/map/walkthrough update instantly, no reload.
-        try{ parent.postMessage({ type:'iotMockupPhoto', cid:(c.id||c.cid||null), photo:url||null, photoName:(name!=null?name:(c.photoName||null)) }, '*'); }catch(e){}
-      }).catch(function(){}); }catch(_){}
-  }
-
   // Host → tool commands from the native toolbar in the React wrapper.
   window.addEventListener('message',function(ev){
     var m=ev.data; if(!m||m.type!=='iotMockupCmd')return;
@@ -825,6 +837,11 @@ rebuildCards();
     else if(m.cmd==='setCount'){ if(SURVEY_DRIVEN)return; S.count=Math.max(1,Math.min(64,+m.n||1)); syncCount(); refreshAll(); }
     else if(m.cmd==='upload'){ var u=document.getElementById('uploadBtn'); if(u)u.click(); }
     else if(m.cmd==='addFiles'){ if(m.files&&m.files.length)bulkAdd(m.files); }
+    else if(m.cmd==='download'){ try{ var any=false;
+        for(var di=0; di<S.count; di++){ if(S.slots[di]&&S.slots[di].url){ any=true;
+          (function(ii,url){ setTimeout(function(){ fetch(url).then(function(r){return r.blob();})
+            .then(function(b){ dl(b,(nameOf(ii)||('CAM '+(ii+1)))+'.jpg'); }).catch(function(){}); }, ii*400); })(di,S.slots[di].url); } }
+        setStatus(any?'Downloading photos…':'No photos to download'); }catch(_e){} }
     else if(m.cmd==='cameras'){ restoreDone.then(function(){ applyCameras(m.cameras); }); }
     else if(m.cmd==='reset'){ S.slots=[]; S.names=[]; S.hidden={}; S.page=0;
       if(SURVEY_DRIVEN){ applyCameras(SURVEY_CAMS); } else { rebuildCards(); touch(); } }
