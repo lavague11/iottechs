@@ -28,7 +28,21 @@ Rule: where the spec was ambiguous, the sensible choice was made and recorded he
 - Grid snap default 0.5.
 - No in-canvas Done; footer navigation commits (auto-saves) the active tool before advancing.
 
+## Acceptance checks — status (verified live where noted)
+
+1. **Empty floor → cards directly, no Back, Next disabled** — ✅ DONE (Build gate removed; Base is step 1 so no Back; Next disabled until a base exists). Verified live (the "What's the base for this floor?" chooser).
+2. **Satellite → project address, pin confirm → leveled + cropped, zero clicks** — ✅ DONE. Auto-level + auto-frame now fires once automatically on the first landing (client-side, no billing). Verified `autoLeveledOnce` fires. (Footprint-based crop is the spec's own "later" item; auto-frame is the quick version.)
+3. **Enhance → Remove enhancement restores original** — ⚠️ PARTIAL. The non-destructive version stack (bgVersions/ctxVersions, pin-on-submit) and before/after compare already exist; a dedicated "Remove enhancement" button + exact-restore UX was NOT added this pass (RED-lane: enhance touches /api/enhance billing — not rushed).
+4. **Crop/Level after enhance → prompt** — ❌ NOT DONE this pass (same RED-lane caution).
+5. **Footer Next from the capture tool → saves + advances one tap** — ✅ DONE + verified live (Base → "Floor Plan" committed the aerial and landed on the Plan map).
+6. **No screen shows two primary buttons / two ways** — ✅ Largely DONE (removed: Build gate, dead "Create Floor Plan" CTA, Views Start/Skip splash, the in-canvas satellite Done). Draw tool's own dock Done remains (deferred with §7).
+
 ## Deferred / partial (couldn't fully land in this pass — flagged honestly)
+
+- **Enhance polish (§3)**: Remove-enhancement button, before/after slider pinned at 50% (currently an auto-scanner), "edit enhanced vs revert" prompt. The version-stack + compare infra exists; these are UX deltas on a billing-sensitive flow left for a focused, careful pass.
+- **Draw tool (§7)**: one naming field that flips above when near the bottom; the "structure editor only mounts after refresh" stale-state bug. (½-snap-default and the Structure/Room/Area/Opening/Eraser order already shipped — confirmed present.)
+- **"Skip survey" as an inline link under the chooser (§1)**: the capability already exists as a project menu action (`skipSurveyAction`); surfacing it as a chooser link needs iframe→host wiring, deferred.
+- **Status pill consistency (§7)**: "Awaiting Survey" after submit lives in the project-status derivation, outside the planner; not touched this pass.
 
 - **Satellite footprint-based auto-crop**: the spec itself calls footprint crop "later"; the ~3-lot pin-centered crop + auto-level on confirm is the target. Where the capture sub-tool already auto-levels/crops, it's wired; a brand-new footprint detector is out of scope for this pass.
 - **Enhance before/after slider at 50% + "edit enhanced vs revert" prompt**: the non-destructive version stack (bgVersions/ctxVersions, pin-on-submit, Remove-enhancement) already exists in the tool; slider/prompt polish is layered on where the hooks exist.
