@@ -3139,31 +3139,71 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
               <ProposalVersionLog accessId={lp.access_id} />
             </div></AccordionProvider>);
-          case "survey": {
-            // EXACTLY the deck's heavy-tool mount — same container and props — so the planner fills the
-            // overlay and behaves identically (no wizard/strip, no need to hit fullscreen).
-            const svMetaEff = { ...(toolMeta?.survey || {}), has: (toolMeta?.survey?.has) || surveyHasLocal };
-            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
-              <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
-                  propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
-                  customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has}
-                  submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
-                  onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { setAcceptances(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
-                  onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) setAcceptances(r.acceptances); }} />
-              </div>
-            </div>);
-          }
+          case "survey":
           case "mockup": {
-            // Same full-size treatment as the survey overlay — the mockup fills the panel (no narrow
-            // centered box / page margins), mounted with the deck's exact prop set so it behaves identically.
+            // Both the Site Survey and the System Preview (mockup) cards open the SAME System Planner the
+            // deck mounts — so the hub behaves identically: the floor selector rides ON TOP (the planner
+            // owns it), one fullscreen button, the devices roster, and the Plan·Cameras·Views·Review rail.
+            // The inner widgets take `noRoster` → they emit planner=1, hiding their own in-canvas floor/
+            // Background strip + fullscreen so the planner's chrome is the only chrome. The two cards differ
+            // only by which rail step they open on (survey → Plan, mockup → Views). Mirrors the deck mount.
+            const svMetaEff = { ...(toolMeta?.survey || {}), has: (toolMeta?.survey?.has) || surveyHasLocal };
             const mkMetaEff = { ...(toolMeta?.mockup || {}), has: (toolMeta?.mockup?.has) || mockupHasLocal };
-            return (<div style={{ height: "100%", display: "flex", flexDirection: "column" }} className="ss-tool-col">
-              <div style={{ flex: 1, minHeight: 0, overflow: "auto" }} className="ss-tool-body">
+            const onApprove = (a) => setAcceptances(a);
+            const heavyCol = { height: "100%", display: "flex", flexDirection: "column" };
+            const surveyNode = (
+              <div style={heavyCol} className="ss-tool-col">
+                <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
+                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                    propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
+                    customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has}
+                    submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
+                    onSubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", true); if (r?.acceptances) { onApprove(r.acceptances); showLiveToast("Awaiting customer approval"); } }}
+                    onUnsubmit={async () => { if (previewRole) return; const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }} />
+                </div>
+              </div>
+            );
+            const viewsNode = (
+              <div>
                 <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
                   customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
               </div>
-            </div>);
+            );
+            const footerNode = (svMetaEff.has || mkMetaEff.has) ? (
+              <div className="syp-submit">
+                <div className="syp-submit-head">Consulting deliverables</div>
+                {svMetaEff.has && (
+                  <div className="syp-submit-row">
+                    <span className="syp-submit-lbl">Site survey</span>
+                    <ToolApproveBar accessId={lp.access_id} stageKey="site_survey" meta={svMetaEff}
+                      acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey}
+                      role={cView} preview={!!previewRole} onChange={onApprove} />
+                  </div>
+                )}
+                {mkMetaEff.has && (
+                  <div className="syp-submit-row">
+                    <span className="syp-submit-lbl">Camera views</span>
+                    <ToolApproveBar accessId={lp.access_id} stageKey="mockup" meta={mkMetaEff}
+                      acceptance={acceptances.mockup} submission={acceptances.submit_mockup}
+                      role={cView} preview={!!previewRole} onChange={onApprove} />
+                  </div>
+                )}
+              </div>
+            ) : null;
+            return (
+              <SystemPlanner accessId={lp.access_id} customerName={lp.contact_name || lp.customer}
+                initialStep={key === "mockup" ? "views" : "plan"}
+                planNode={surveyNode} viewsNode={viewsNode} footer={footerNode}
+                hasSurvey={svMetaEff.has} hasViews={mkMetaEff.has} hasCams={(toolMeta?.survey?.cameras || 0) > 0}
+                mockupSkipped={!!lp.mockup_skipped_at} viewsRequired={!!lp.views_required}
+                onSkipViews={viewOnly ? null : (skip) => skipViewsAction(lp.access_id, skip)}
+                customer={!!previewRole}
+                surveySubmitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}
+                svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
+                onContinue={() => browse("proposal")}
+                onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
+                devReadOnly={!!previewRole} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
+            );
           }
           case "closeout": {
             const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}

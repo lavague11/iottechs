@@ -26,12 +26,13 @@ export default function SystemPlanner({
   // contextual nav footer (staff): canonical submit/approve/continue wiring from the gateway
   surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null,
   svMeta = null, mkMeta = null, acceptances = null,
+  initialStep = "plan",   // which rail step to open on ("plan" | "views" | "review") — the hub's System Preview card lands on "views"
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
   // (iotSurveyCmd {cmd:"step"}); Views is the mockup pane; Review is the status surface. Both iframes stay
   // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
-  const [railStep, setRailStep] = useState("plan");
+  const [railStep, setRailStep] = useState(initialStep);
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
