@@ -112,7 +112,10 @@ export function viewAvailability(ctx = {}, finance = null) {
 // The ordered list of customer cards that ACTUALLY apply — never an empty placeholder. Derived from the SAME
 // viewAvailability resolver the overlays use, so cards and routes stay in lockstep. Returns [{key,view,state}]
 // in lifecycle order; the component owns copy/CTA. (payment is never a card — it's reached from the balance.)
-const CARD_ORDER = ["survey", "mockup", "proposal", "phone", "install", "closeout", "completion"];
+// MERGE: System Preview (mockup) folded into Site Survey — one entry card. The customer reviews the
+// camera photos inside the survey's Walkthrough; `mockup` stays a valid ?view= overlay (deep links) but
+// is no longer its own card.
+const CARD_ORDER = ["survey", "proposal", "phone", "install", "closeout", "completion"];
 export function portalCards(ctx = {}, finance = null) {
   const avail = viewAvailability(ctx, finance);
   const pState = proposalCardState(ctx);

@@ -34,5 +34,5 @@ test("survey updates the device photo by cid (even when frozen — a photo is no
   const frozenGate = survey.indexOf("if(!d) return;", survey.indexOf('m.cmd==="renameCid"'));
   assert.ok(idx > 0 && idx < frozenGate, "the cid-photo case runs before the by-id frozen gate");
   // renderPanel → reportDevicesSoon re-emits iotSurveyDevices → the shared roster + liveCameras refresh
-  assert.ok(survey.includes("renderPanel(); queueSave(); return; }   // renderPanel"), "re-renders + persists, triggering the roster re-emit");
+  assert.ok(survey.includes("renderPanel(); renderUnplacedTray(); queueSave(); return; }   // renderPanel"), "re-renders + persists, triggering the roster re-emit (and the unplaced tray thumb)");
 });

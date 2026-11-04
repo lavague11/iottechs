@@ -369,6 +369,17 @@ export default function SystemPlanner({
       {/* Camera Photos — the phone-mockup photo surface, reachable from the ••• Go-to menu. No longer a
           gating "Views" step with a Start/Skip splash; it just shows the photos tool when opened. */}
       <div className="syp-pane" hidden={paneMode !== "views"}>
+        {/* Photos works with NO map: add a camera here and it's created as an UNPLACED survey device
+            (one shared record). When a base exists later, it appears in the Map tray to drag into place. */}
+        {!customer && !devReadOnly && (
+          <div className="syp-photos-bar">
+            <button type="button" className="syp-addcam" onClick={() => surveyCmd({ cmd: "addCamera", project: accessId })}>
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /><path d="M12 10v6M9 13h6" /></svg>
+              <span>Add camera</span>
+            </button>
+            {camsPlaced > 0 && <span className="syp-photos-ct">{camsPlaced} camera{camsPlaced === 1 ? "" : "s"}</span>}
+          </div>
+        )}
         {viewsNode || <div className="syp-empty">Add each camera&apos;s photo on its device card.</div>}
       </div>
       {/* Submit — a real summary (per-floor plan thumbnail, camera count, cameras missing photos), the
@@ -694,6 +705,11 @@ const CSS = `
 .syp-floorbar .syp-fb-viewtog button{appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.01em;color:var(--dv-meta,#787D84);background:transparent;border:0;border-radius:100px;padding:5px 12px;transition:background .15s,color .15s}
 .syp-floorbar .syp-fb-viewtog button.on{background:var(--dv-ink,#101418);color:#fff}
 @media (max-width:640px){ .syp-floorbar .syp-fb-viewtog button{padding:5px 9px;font-size:.74rem} }
+/* Photos view — Add camera bar (creates an unplaced survey camera). */
+.syp-photos-bar{display:flex;align-items:center;gap:12px;padding:8px 2px 10px}
+.syp-addcam{display:inline-flex;align-items:center;gap:7px;appearance:none;cursor:pointer;font:inherit;font-size:.84rem;font-weight:700;color:#fff;background:var(--dv-ink,#101418);border:1px solid var(--dv-ink,#101418);border-radius:100px;padding:8px 15px}
+.syp-addcam:hover{background:#000}
+.syp-photos-ct{font-size:.8rem;color:var(--dv-meta,#787D84);font-weight:600}
 .syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
 .syp-floorbar .syp-fb-arrow:hover:not(:disabled){background:#fff;border-color:var(--dv-ink,#101418)}
 .syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}

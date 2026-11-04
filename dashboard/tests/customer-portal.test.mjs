@@ -91,9 +91,10 @@ test("portalCards: only applicable cards, in order, never empty placeholders", (
   const early = portalCards({ surveyHasData: true, mockupHasData: false, proposalPublished: false, stage: "site_survey", facts: {} });
   assert.deepEqual(early.map((c) => c.key), ["survey"]);
 
-  // proposal awaiting signature, with survey + mockup
+  // proposal awaiting signature, with survey + mockup. MERGE: System Preview (mockup) is folded into the
+  // Site Survey card — it is no longer its own card (the camera photos live inside the survey walkthrough).
   const prop = portalCards({ surveyHasData: true, mockupHasData: true, proposalPublished: true, proposalStatus: "sent", stage: "proposal", facts: {} });
-  assert.deepEqual(prop.map((c) => c.key), ["survey", "mockup", "proposal"]);
+  assert.deepEqual(prop.map((c) => c.key), ["survey", "proposal"]);
   assert.equal(prop.find((c) => c.key === "proposal").state, "awaiting");
 
   // signed + pre-install → phone setup appears

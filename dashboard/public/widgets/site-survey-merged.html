@@ -337,6 +337,20 @@
   .devNode .devNum{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:var(--ink,#101418);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(16,17,18,.4);z-index:6;pointer-events:none;transition:opacity .12s}
   .devNode:hover .devNum,.devNode.sel .devNum{opacity:0}
   .devNode.drag .devNum{display:none!important}
+  /* UNPLACED-CAMERA TRAY — a strip at the bottom edge of the canvas; chips drag onto the plan to place. */
+  #unplacedTray{position:absolute;left:8px;right:8px;bottom:8px;z-index:14;display:none;flex-direction:column;gap:6px;
+    background:rgba(16,17,18,.86);backdrop-filter:blur(3px);border:1px solid rgba(255,255,255,.14);border-radius:14px;padding:9px 11px;box-shadow:0 8px 28px rgba(0,0,0,.35)}
+  #unplacedTray.on{display:flex}
+  #unplacedTray .ut-head{font-size:11px;font-weight:700;letter-spacing:.03em;color:#cfd4da;text-transform:uppercase}
+  #unplacedTray .ut-chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch}
+  .ut-chip{flex:none;display:flex;align-items:center;gap:7px;padding:5px 10px 5px 5px;background:#fff;border:1px solid rgba(16,17,18,.1);border-radius:100px;cursor:grab;touch-action:none;user-select:none;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+  .ut-chip:active{cursor:grabbing}
+  .ut-chip .ut-thumb{width:30px;height:30px;border-radius:50%;background-size:cover;background-position:center;background-color:#e7e9ee;flex:none;display:flex;align-items:center;justify-content:center;color:#6b7280;overflow:hidden}
+  .ut-chip .ut-thumb svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7}
+  .ut-chip .ut-name{font-size:12.5px;font-weight:700;color:#101418;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+  .ut-ghost{position:fixed;z-index:120;pointer-events:none;width:44px;height:44px;border-radius:50%;background:#fff;border:2px solid var(--gold,#b98a2e);box-shadow:0 6px 20px rgba(0,0,0,.35);background-size:cover;background-position:center;transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;color:var(--gold,#b98a2e)}
+  .ut-ghost svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7}
+  #canvas.ut-dropok #scene{outline:3px dashed rgba(185,138,46,.8);outline-offset:-6px}
   .devNode.aim .icLabel{pointer-events:auto;cursor:grab}
   .devNode.aim.sel .icLabel{background:var(--gold)}
   /* View photo — a real shot of what the camera sees, attached per device */
@@ -730,6 +744,11 @@
                floating Show control. Full screen is top-right; ••• is bottom-right. -->
         </div>
 
+      </div>
+      <!-- UNPLACED TRAY — cameras added in Photos with no map; drag a chip onto the plan to place it. -->
+      <div id="unplacedTray" aria-label="Unplaced cameras">
+        <div class="ut-head"><span id="utCount">0</span> to place — drag onto the plan</div>
+        <div class="ut-chips" id="utChips"></div>
       </div>
     </div>
 
@@ -1260,6 +1279,7 @@
       renderView();            // one path for the layers (capable → aerial/plan/hybrid; else the plain plan bg)
       exitBg(true);           // show the working canvas FIRST…
       fitScene();             // …then size the plate (needs #working visible for its dimensions)
+      renderUnplacedTray();   // a base now exists → surface any cameras added in Photos (unplaced) to drag on
       surveyWiz.querySelectorAll(".steps .s")[0].classList.add("done");
       snapFloor();
       // Persist the committed background as an /api/media URL, not a multi-MB inline blob, so the survey2
@@ -1847,9 +1867,66 @@
       var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); reconcileLocations(); queueSave();
       redoStk.length=0; updateRedoBtn(); }   // a new placement invalidates the redo stack; a new camera resolves its room/zone location on placement
+    // MERGE: add a camera from the Photos view with NO map — a real survey device, just `placed:false`
+    // (one record, one id, one cid, shared by both views). It gets a name/photo in Photos; later, when a
+    // base exists, it shows in the unplaced tray to drag onto the plan. No marker is mounted until placed.
+    function addUnplacedCamera(){ if(frozen()||RO) return null; var it=cat("cam"); if(!it) return null; var g=it.group; devSeq++;
+      var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
+      var nType=floorsBefore(function(sd){return sd.k==="cam";})+devices.filter(function(d){return d.k==="cam";}).length+1;
+      var defRange = pxPerFt()>0 ? (REACH_FT.cam || 40) : RANGE;
+      var d={id:devSeq,k:"cam",cone:!!it.cone,ring:!!it.ring,color:g.color,x:null,y:null,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:mkcid(),placed:false};
+      devices.push(d); renderPanel(); updateCount(); reportDevices(); queueSave(); renderUnplacedTray();
+      return d; }
+    // Render the unplaced-camera tray — shown only when there ARE unplaced cameras AND this floor has a
+    // plan to drop them onto (and it's editable). Each chip carries the camera's name + photo thumbnail.
+    function renderUnplacedTray(){
+      var tray=document.getElementById("unplacedTray"), chips=document.getElementById("utChips"), cnt=document.getElementById("utCount");
+      if(!tray||!chips) return;
+      var unp=(typeof devices!=="undefined"?devices:[]).filter(function(d){ return d.placed===false; });
+      if(!unp.length || !bgHasImage || RO || frozen()){ tray.classList.remove("on"); chips.innerHTML=""; return; }
+      if(cnt) cnt.textContent=unp.length;
+      chips.innerHTML="";
+      unp.forEach(function(d){
+        var chip=document.createElement("div"); chip.className="ut-chip"; chip.setAttribute("data-id",d.id);
+        var thumb=document.createElement("span"); thumb.className="ut-thumb";
+        if(d.photo){ thumb.style.backgroundImage="url("+d.photo+")"; } else { thumb.innerHTML=iconOf(cat(d.k)); }
+        var name=document.createElement("span"); name.className="ut-name"; name.textContent=cap(d.name||"Camera");
+        chip.appendChild(thumb); chip.appendChild(name); chips.appendChild(chip);
+        attachTrayDrag(chip, d);
+      });
+      tray.classList.add("on");
+    }
+    // Pointer-drag a tray chip; dropping it over the plan places the camera (placed:true + coordinates).
+    function attachTrayDrag(chip, d){
+      var ghost=null, canvas=document.getElementById("canvas");
+      function overScene(x,y){ var sc=document.getElementById("scene"); if(!sc) return false; var r=sc.getBoundingClientRect(); return x>=r.left&&x<=r.right&&y>=r.top&&y<=r.bottom; }
+      function move(e){ if(!ghost) return; ghost.style.left=e.clientX+"px"; ghost.style.top=e.clientY+"px"; if(canvas) canvas.classList.toggle("ut-dropok", overScene(e.clientX,e.clientY)); }
+      function up(e){ chip.removeEventListener("pointermove",move); chip.removeEventListener("pointerup",up); chip.removeEventListener("pointercancel",up);
+        if(canvas) canvas.classList.remove("ut-dropok"); if(ghost){ ghost.remove(); ghost=null; }
+        if(overScene(e.clientX,e.clientY)) placeUnplaced(d, e.clientX, e.clientY); }
+      chip.addEventListener("pointerdown", function(e){ if(frozen()||RO) return; e.preventDefault();
+        try{ chip.setPointerCapture(e.pointerId); }catch(_){}
+        ghost=document.createElement("div"); ghost.className="ut-ghost";
+        if(d.photo){ ghost.style.backgroundImage="url("+d.photo+")"; } else { ghost.innerHTML=iconOf(cat(d.k)); }
+        document.body.appendChild(ghost); move(e);
+        chip.addEventListener("pointermove",move); chip.addEventListener("pointerup",up); chip.addEventListener("pointercancel",up);
+      });
+    }
+    // Place an unplaced camera at a drop point: %-coords of the plan world (where markers live), then mount.
+    function placeUnplaced(d, clientX, clientY){
+      if(frozen()||RO) return;
+      var world=document.getElementById("planWorld")||document.getElementById("scene"); if(!world) return;
+      var r=world.getBoundingClientRect(); if(!(r.width>0&&r.height>0)) return;
+      d.x=Math.max(0,Math.min(100,(clientX-r.left)/r.width*100));
+      d.y=Math.max(0,Math.min(100,(clientY-r.top)/r.height*100));
+      d.placed=true;
+      mountDevice(d); renderDevice(d); reconcileLocations(); renderPanel(); updateCount(); reportDevices(); queueSave(); renderUnplacedTray();
+      select(d.id);
+    }
     // Read-only customer tapped a camera marker → tell the host which one so it pops the comment toast.
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
     function mountDevice(d){
+      if(d && d.placed===false) return;   // UNPLACED camera — no map marker; it lives in the unplaced tray until dragged onto the plan
       var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
       el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
@@ -2169,7 +2246,7 @@
           var it=cat(d.k)||{};
           return { id:isCur?d.id:null, cid:d.cid||null, floor:fi, di:di, k:d.k, kind:(it.name||d.k),
                    tag:d.tag||"", name:d.name||"", locName:d.locName||"", placementType:d.placementType||"", cone:!!(isCur?d.cone:it.cone), fov:d.fov||it.fov||0,
-                   color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed,
+                   color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed, placed:(d.placed!==false),
                    photo:d.photo||null, photoName:d.photoName||null, busy:!!d.photoBusy }; }) };
       });
       parent.postMessage({ type:"iotSurveyDevices", project:PID, curFloor:curFloor, ro:RO, floors:payload }, "*");
@@ -2228,6 +2305,8 @@
       if(m.cmd==="duplicateFloor"){ duplicateFloor(curFloor); reportDevices(); return; }
       if(m.cmd==="deleteFloor"){ deleteFloor(curFloor); reportDevices(); return; }
       if(m.cmd==="renameFloor"){ var rf=floors[curFloor]; if(rf && typeof m.name==="string" && m.name.trim()){ rf.name=m.name.trim(); renderFloorTabs(); renderPanel(); queueSave(); reportDevices(); } return; }
+      // MERGE: Photos view "+ Add camera" → an unplaced survey camera (one shared record, placed:false).
+      if(m.cmd==="addCamera"){ addUnplacedCamera(); return; }
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
       // Relay from the host: focus the camera with this cid (System Planner cross-mode selection).
@@ -2270,7 +2349,7 @@
         for(var pi=0;pi<devices.length;pi++){ if(devices[pi].cid===m.cid){ curHit=devices[pi]; break; } }   // current floor → the live array
         if(curHit){ curHit.photo=ph; curHit.photoName=ph?(m.photoName||curHit.name||null):null; renderDevice(curHit); }
         else { for(var pf=0;pf<floors.length;pf++){ var dl=(floors[pf]&&floors[pf].devices)||[]; for(var pj=0;pj<dl.length;pj++){ if(dl[pj].cid===m.cid){ dl[pj].photo=ph; dl[pj].photoName=ph?(m.photoName||dl[pj].name||null):null; break; } } } }   // any other floor → its stored devices (re-emitted in the roster by reportDevices)
-        renderPanel(); queueSave(); return; }   // renderPanel → reportDevicesSoon → the shared Devices roster + liveCameras refresh
+        renderPanel(); renderUnplacedTray(); queueSave(); return; }   // renderPanel → reportDevicesSoon → the shared Devices roster + liveCameras refresh; tray thumb updates too
       if(!d) return;
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
       if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); }
@@ -2280,7 +2359,7 @@
       else if(m.cmd==="clearPhoto"){ d.photo=null; d.photoName=null; renderDevice(d); renderPanel(); queueSave(); }
     });
     function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
-      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); queueSave(); }
+      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); }
     // A hand-typed rename becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
     // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An empty
     // name clears the flag → the auto geometry location takes over again on the next reconcile. (This is an
@@ -2296,7 +2375,7 @@
     function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
     function ensureFloorIds(){ var seen={}; floors.forEach(function(f){ if(!f) return; if(!f.id || seen[f.id]){ f.id=null; f.id=newFloorId(); } seen[f.id]=1; }); }   // backfill + dedupe (a later floor sharing an id gets a fresh one)
     ensureFloorIds();
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null}; }); }
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null,placed:(d.placed!==false)}; }); }
     function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); clearTimeout(sugT); sugT=setTimeout(refreshSugs,350); }   // refreshSugs repaints the suggestion rows only (a move/aim/zone edit can change them)
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -2361,8 +2440,8 @@
     function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
       var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null))};
-      devices.push(d); mountDevice(d); }
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null)),placed:(sd.placed!==false)};
+      devices.push(d); mountDevice(d); }   // mountDevice skips unplaced (placed===false) → they surface in the tray
     // Phase 4.2 view modes. A floor is hybrid-capable only when it has the ctx aerial crop, the transparent plan layer, AND a
     // ctx-framed opaque bg (bgCtx) — so one plate (the ctx extent) holds all three and device %-coords stay valid in every view.
     // Floors outlined in the 4.1-only window (ctx+planSvg, no bgCtx) are NON-capable → single view, unchanged (no ctx-extent overlay on a tight bbox bg).
@@ -2588,7 +2667,7 @@
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
       focusMode=false; updateFocusBtn();   // each floor opens in Full view
-      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations();   // resolve/refresh location names for this floor's cameras against its plan
+      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations(); renderUnplacedTray();   // resolve/refresh location names for this floor's cameras against its plan + surface any unplaced cameras
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
