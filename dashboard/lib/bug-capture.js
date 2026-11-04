@@ -65,21 +65,43 @@ async function snapshotIframes(h2c, vw, vh, scale) {
   return shots;
 }
 
-// Capture the visible viewport of the app → { dataUrl, width, height, viewport }.
+// The app shell (hub/portal, deck tools) often lives in a position:fixed, internally-scrolled container,
+// so document.scrollHeight is only ONE viewport and html2canvas would render just a viewport slice with
+// the header scrolled out of it. Find those shells so the capture can be sized to their FULL content and
+// they can be un-fixed in the clone, letting everything lay out top-to-bottom (bug #82).
+function scrollShells(root, win) {
+  const out = [];
+  let els; try { els = root.querySelectorAll("div,main,section,article"); } catch { return out; }
+  for (const el of els) {
+    let cs; try { cs = win.getComputedStyle(el); } catch { continue; }
+    const scrolls = /(auto|scroll)/.test(cs.overflowY) || /(auto|scroll)/.test(cs.overflow);
+    if ((cs.position === "fixed" || cs.position === "absolute") && scrolls && el.scrollHeight > el.clientHeight + 4) out.push(el);
+  }
+  return out;
+}
+
+// Capture the full page of the app → { dataUrl, width, height, viewport }.
 export async function captureViewport() {
   const h2c = await loadH2C();
   await settleViewport();
   try { if (document.fonts?.ready) await Promise.race([document.fonts.ready, new Promise((r) => setTimeout(r, 600))]); } catch { /* fonts optional */ }
 
-  const vv = window.visualViewport;
   const dpr = window.devicePixelRatio || 1;
-  const scale = Math.min(dpr, 2);                 // Retina-sharp, capped so large iOS canvases don't crash
-  const vw = Math.round((vv?.width) || document.documentElement.clientWidth || window.innerWidth);
-  const vh = Math.round((vv?.height) || window.innerHeight);
-  const sx = Math.round((window.scrollX || 0) + (vv?.offsetLeft || 0));
-  const sy = Math.round((window.scrollY || 0) + (vv?.offsetTop || 0));
+  const de = document.documentElement;
+  // FULL-PAGE capture — the whole document top-to-bottom, so the header (which project this is) and all
+  // content below are always in frame regardless of scroll. (Previously cropped to the scroll offset,
+  // which dropped the top header the moment the page was scrolled — bug #82.)
+  // Fixed, internally-scrolled shells don't add to document scrollHeight — measure THEM too, and mark them
+  // so the clone can un-fix them (markers are stripped from the live DOM in `finally`).
+  const shells = scrollShells(document, window);
+  shells.forEach((el) => el.setAttribute("data-bugcap-shell", "1"));
+  const fullW = Math.max(de.clientWidth || 0, de.scrollWidth || 0, document.body?.scrollWidth || 0, window.innerWidth || 0, ...shells.map((s) => s.scrollWidth || 0));
+  const fullH = Math.max(de.scrollHeight || 0, document.body?.scrollHeight || 0, window.innerHeight || 0, ...shells.map((s) => s.scrollHeight || 0));
+  // Keep the rendered canvas within browser limits: on a very tall page dial the scale DOWN rather than
+  // crashing on an over-large canvas (html2canvas caps out well before an unbounded page would).
+  const scale = Math.max(0.5, Math.min(Math.min(dpr, 2), 12000 / Math.max(fullW, fullH, 1)));
 
-  const frameShots = await snapshotIframes(h2c, vw, vh, scale);   // render embedded tools before the page capture
+  const frameShots = await snapshotIframes(h2c, fullW, fullH, scale);   // render embedded tools before the page capture
 
   let canvas;
   try {
@@ -88,13 +110,19 @@ export async function captureViewport() {
       scale,
       useCORS: true,           // render same-origin + CORS-enabled images; never send credentials
       logging: false,
-      x: sx, y: sy,            // crop to the current scroll offset — capture where the user actually is
-      width: vw, height: vh,
+      width: fullW, height: fullH,   // whole document — no scroll-offset crop
       scrollX: 0, scrollY: 0,
-      windowWidth: document.documentElement.clientWidth,
-      windowHeight: window.innerHeight,
+      windowWidth: fullW,
+      windowHeight: fullH,
       ignoreElements: (el) => el?.nodeType === 1 && typeof el.hasAttribute === "function" && el.hasAttribute("data-bug-capture-ignore"),
       onclone: (clonedDoc) => {
+        // Un-fix the app shell so its FULL content lays out in normal flow and is captured top-to-bottom
+        // (header included), instead of a single fixed-viewport slice.
+        for (const el of clonedDoc.querySelectorAll("[data-bugcap-shell]")) {
+          const s = el.style;
+          s.position = "static"; s.inset = "auto"; s.top = s.left = s.right = s.bottom = "auto";
+          s.height = "auto"; s.maxHeight = "none"; s.overflow = "visible";
+        }
         // Replace each blank iframe clone with its pre-rendered snapshot, in the same layout slot.
         for (const s of frameShots) {
           const node = clonedDoc.querySelector(`[data-bugcap-frame="${s.token}"]`);
@@ -108,13 +136,14 @@ export async function captureViewport() {
       },
     });
   } finally {
-    // Never leave the marker attribute on the live DOM, capture succeed or fail.
+    // Never leave the marker attributes on the live DOM, capture succeed or fail.
+    for (const el of shells) el.removeAttribute("data-bugcap-shell");
     for (const s of frameShots) { const el = document.querySelector(`[data-bugcap-frame="${s.token}"]`); if (el) el.removeAttribute("data-bugcap-frame"); }
   }
   return {
     dataUrl: canvas.toDataURL("image/png"),
     width: canvas.width, height: canvas.height,
-    viewport: { w: vw, h: vh, dpr, route: location.pathname },
+    viewport: { w: fullW, h: fullH, dpr, route: location.pathname },
   };
 }
 
