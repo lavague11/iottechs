@@ -1,9 +1,30 @@
 // SEO engine foundations: the fact store never leaks an unverified claim, the publish gate refuses an
 // unsafe page, JSON-LD is built only from public facts, and the slug/priority helpers behave.
-import { test } from "node:test";
+import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { allFacts, publicFacts, publishGate, priorityTier, normalizeSlug, QUALITY_THRESHOLD } from "../lib/seo.js";
-import { organizationLd, localBusinessLd, serviceLd, faqLd, breadcrumbLd } from "../lib/seo/ld.js";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+// Hermetic: point the DB at a throwaway temp dir (never the dev DB) BEFORE any lib that opens the DB
+// loads, so the suite behaves identically from a clean clone. Everything is imported in before(), after
+// DB_DIR is set, and we seed the one project the case-study/search tests need instead of assuming it.
+process.env.DB_DIR = mkdtempSync(path.join(tmpdir(), "seo-"));
+process.env.TZ = "America/New_York";
+
+let allFacts, publicFacts, publishGate, priorityTier, normalizeSlug, QUALITY_THRESHOLD, provisionalQuality, projectExists, searchProjects;
+let organizationLd, localBusinessLd, serviceLd, faqLd, breadcrumbLd;
+let buildPagePrompt, normalizeDraft, buildFactCheckPrompt, normalizeFactCheck;
+let crazyId;
+
+before(async () => {
+  ({ allFacts, publicFacts, publishGate, priorityTier, normalizeSlug, QUALITY_THRESHOLD, provisionalQuality, projectExists, searchProjects } = await import("../lib/seo.js"));
+  ({ organizationLd, localBusinessLd, serviceLd, faqLd, breadcrumbLd } = await import("../lib/seo/ld.js"));
+  ({ buildPagePrompt, normalizeDraft, buildFactCheckPrompt, normalizeFactCheck } = await import("../lib/seo/generate.js"));
+  const db = await import("../lib/db.js");
+  const r = db.createLeadProject("Crazy Cars", "crazycars@example.com", "2015550042", "2503 Jay Pl", "cctv", "Crazy Cars");
+  crazyId = r.accessId || r.access_id || r;
+});
 
 test("fact store seeds safe identity facts and withholds unverified claims", () => {
   const byKey = Object.fromEntries(allFacts().map((f) => [f.key, f]));
@@ -75,8 +96,6 @@ test("helpers: priority tiers + slug normalization", () => {
 });
 
 // --- AI drafting: prompt contract + output normalization (no API calls) ---
-import { buildPagePrompt, normalizeDraft } from "../lib/seo/generate.js";
-import { provisionalQuality } from "../lib/seo.js";
 
 test("generation prompt encodes fact-safety, the banned phrases, and the JSON contract", () => {
   const { system, user } = buildPagePrompt({
@@ -117,7 +136,6 @@ test("provisionalQuality rewards a real draft and tanks placeholder text", () =>
 });
 
 // --- AI fact-check: grounding-audit prompt + verdict normalization ---
-import { buildFactCheckPrompt, normalizeFactCheck } from "../lib/seo/generate.js";
 
 test("fact-check prompt audits grounding: flags unsupported claims, allows general guidance", () => {
   const { system, user } = buildFactCheckPrompt({
@@ -140,20 +158,18 @@ test("normalizeFactCheck: clean only with zero flags; otherwise review", () => {
 });
 
 // --- case study requires a real linked project ---
-import { projectExists } from "../lib/seo.js";
 test("projectExists gates case-study drafting to real projects", () => {
-  assert.equal(projectExists("ASC0042"), true, "a seeded project exists");
+  assert.equal(projectExists(crazyId), true, "a seeded project exists");
   assert.equal(projectExists("ZZ-not-a-project"), false);
   assert.equal(projectExists(""), false);
   assert.equal(projectExists(null), false);
 });
 
-import { searchProjects } from "../lib/seo.js";
 test("searchProjects finds a project by name or id, needs ≥2 chars", () => {
   assert.equal(searchProjects("a").length, 0, "too short");
   const byName = searchProjects("crazy");
-  assert.ok(byName.some((p) => p.access_id === "ASC0042"), "finds Crazy Cars by name");
-  const byId = searchProjects("ASC0042");
-  assert.equal(byId[0].access_id, "ASC0042", "exact id ranks first");
+  assert.ok(byName.some((p) => p.access_id === crazyId), "finds Crazy Cars by name");
+  const byId = searchProjects(crazyId);
+  assert.equal(byId[0].access_id, crazyId, "exact id ranks first");
   assert.ok(typeof byName[0].name === "string" && "address" in byName[0], "returns name + address");
 });
