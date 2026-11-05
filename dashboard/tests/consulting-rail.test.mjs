@@ -14,7 +14,7 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
   assert.ok(!/>Plans<\/button>/.test(shell) && !/setMode\(/.test(shell), "no Plans/Views tab buttons or mode toggle remain");
   assert.ok(shell.includes('className="syp-nav"'), "the contextual nav footer exists (replaced the 5-tab rail)");
   // Round 2: FOUR steps — Base · Layout · Cameras · Submit (Layout and Cameras are the same live map).
-  for (const label of ["Background", "Layout", "Placement", "Submit"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
+  for (const label of ["Background", "Layout", "Placement", "Approval"]) assert.ok(shell.includes(`label: "${label}"`), `workflow has the ${label} step`);
   assert.ok(!/label: "Views"/.test(shell) && !/label: "Plan"/.test(shell), "no 'Views'/'Plan' rail step (Plan split into Layout + Cameras)");
 });
 

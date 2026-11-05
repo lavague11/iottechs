@@ -10,7 +10,7 @@ const wrap = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.
 const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
 
 test("rebuild: 4-step rail Base · Layout · Cameras · Submit; steps track geometry/cameras/submission", () => {
-  assert.ok(sp.includes('label: "Background"') && sp.includes('label: "Layout"') && sp.includes('label: "Placement"') && sp.includes('label: "Submit"'), "4-step rail labels (Background · Layout · Placement · Submit)");
+  assert.ok(sp.includes('label: "Background"') && sp.includes('label: "Layout"') && sp.includes('label: "Placement"') && sp.includes('label: "Approval"'), "4-step rail labels (Background · Layout · Placement · Approval)");
   assert.ok(!/label: "Views"/.test(sp) && !/label: "Plan"/.test(sp), "no 'Views'/'Plan' rail step (Plan split into Layout + Cameras)");
   assert.ok(sp.includes('done: sig.hasPlan || surveySubmitted') && sp.includes('done: camsPlaced > 0 || surveySubmitted'), "Layout done = geometry/submitted; Cameras done = cameras/submitted");
   assert.ok(/surveySubmitted = false/.test(sp), "surveySubmitted prop on SystemPlanner");
@@ -43,7 +43,7 @@ test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a 
   // disabled Next shows a short hint instead of a silent no-op
   assert.ok(sp.includes("{nextHint || NEXT_PROMPT[nextStep]}"), "a gated Next shows its hint, never a silent click");
   // Submit CTA (label just 'Submit', not Re-submit) drives the canonical submit / continue
-  assert.ok(/label: "Submit"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Submit / Awaiting / Continue (no Re-submit label)");
+  assert.ok(/label: "Approval"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Approval / Awaiting / Continue (no Re-submit label)");
   assert.ok(sp.includes('await onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
   assert.ok(/if \(onClose\) \{ try \{ onClose\(\)/.test(sp), "Submit closes the tool out after submitting (back to the hub)");
   assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");

@@ -21,8 +21,8 @@ test("customer branch shows a pager + full-width walkthrough, and NO staff rail"
   assert.ok(!branch.includes('role="tablist"'), "the staff rail is NOT in the customer branch");
 });
 
-test("the workflow steps exist for non-customers (Background · Layout · Placement · Submit) + Survey Navigation popover", () => {
-  for (const label of ["Background", "Layout", "Placement", "Submit"]) {
+test("the workflow steps exist for non-customers (Background · Layout · Placement · Approval) + Survey Navigation popover", () => {
+  for (const label of ["Background", "Layout", "Placement", "Approval"]) {
     assert.ok(sp.includes(`label: "${label}"`), `workflow has ${label}`);
   }
   // The ••• Go-to is the Survey Navigation popover (Add-Service-modal styling); "views" is listed as "Camera Angles".

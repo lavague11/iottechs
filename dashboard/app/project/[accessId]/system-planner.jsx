@@ -269,7 +269,7 @@ export default function SystemPlanner({
       icon: <><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></> },
     { key: "views", label: "Camera Angles", color: "#8673A6", done: hasViews, enabled: sig.bgReady,
       icon: <><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /></> },
-    { key: "review", label: "Submit", color: "#3E7D5A", done: false, enabled: sig.bgReady, span: true,
+    { key: "review", label: "Approval", color: "#3E7D5A", done: false, enabled: sig.bgReady, span: true,
       icon: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></> },
   ];
   // ONE popover design (the Survey Navigation panel), used by BOTH the top-bar ••• (drops down) and the
@@ -325,8 +325,8 @@ export default function SystemPlanner({
   const navIdx = Math.max(0, navOrder.indexOf(railStep));
   const prevStep = navOrder[navIdx - 1] || null;
   const nextStep = navOrder[navIdx + 1] || null;
-  const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Submit" };
-  const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Submit" };
+  const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
+  const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
   // NAV-FIX §4: Next is never a silent no-op. It's enabled only when the step's prerequisite is met; otherwise
   // it shows disabled with a short hint. Background→Layout commits the open capture first (see the Next handler).
   const nextGate = (() => {
@@ -374,9 +374,9 @@ export default function SystemPlanner({
   const reviewCta = (() => {
     if (svMeta && svMeta.has && !svApproved) {
       if (svSubCurrent) return { label: "Awaiting customer approval", pending: true };
-      if (!surveyComplete) return { label: "Complete every floor", muted: true };
+      // No gating — staff send for approval whenever they want; gaps are warnings, never blockers.
       // Submit, then close the tool out (back to the hub) — the gateway shows a "Submitted" toast.
-      return { label: "Submit", primary: true, act: async () => {
+      return { label: "Approval", primary: true, act: async () => {
         if (onSubmitTool) { try { await onSubmitTool("site_survey"); } catch { /* best-effort */ } }
         if (onClose) { try { onClose(); } catch { /* host owns the overlay */ } }
       } };
@@ -490,17 +490,22 @@ export default function SystemPlanner({
           submitted-lock banner, then the one Submit CTA (the footer approve bars). */}
       {!customer && paneMode === "review" && (
         <div className="syp-review">
-          {/* NAV-FIX §8: deliverable status is a small badge next to the title (not a separate card). */}
-          <div className="syp-review-h">Review &amp; submit
-            {svSubCurrent ? <span className="syp-review-badge awaiting">Awaiting approval</span>
-              : surveyComplete ? <span className="syp-review-badge ready">Ready</span>
-              : <span className="syp-review-badge gap">Incomplete</span>}
+          {/* Status badge. Warn-only: once submitted, a gap that appears AFTER (a photo removed, a camera
+              or floor added) flips the badge to "Needs attention" — the record isn't changed, just flagged. */}
+          <div className="syp-review-h">Review
+            {svSubCurrent
+              ? <span className="syp-review-badge awaiting">Awaiting approval</span>
+              : (svStale && !surveyComplete)
+                ? <span className="syp-review-badge warn">Needs attention</span>
+                : surveyComplete
+                  ? <span className="syp-review-badge ready">Ready</span>
+                  : <span className="syp-review-badge gap">Incomplete</span>}
           </div>
           {surveyComplete ? (
-            <div className="syp-review-sub">Everything looks complete — submit for the customer to approve.</div>
+            <div className="syp-review-sub">Everything looks complete — ready to send for approval.</div>
           ) : (
             <div className="syp-gaps">
-              <div className="syp-gaps-h">Finish these before submitting</div>
+              <div className="syp-gaps-h">{svStale ? "Incomplete since you submitted" : "Open items"}</div>
               {surveyGaps.map((g, i) => (
                 <button key={i} type="button" className="syp-gap" onClick={() => { setCurFloor(g.floor); surveyCmd({ cmd: "floor", i: g.floor }); goRail(g.step); }}>
                   <span className="syp-gap-floor">{g.name}</span>
@@ -776,6 +781,7 @@ const CSS = `
 .syp-review-badge.ready{color:#2f6f4e;background:rgba(62,125,90,.1);border-color:rgba(62,125,90,.3)}
 .syp-review-badge.gap{color:#8a5a28;background:rgba(176,141,76,.12);border-color:rgba(176,141,76,.32)}
 .syp-review-badge.awaiting{color:#8a5a28;background:rgba(176,141,76,.12);border-color:rgba(176,141,76,.32)}
+.syp-review-badge.warn{color:#9a3f1a;background:rgba(176,90,40,.12);border-color:rgba(176,90,40,.38)}
 /* §8: the "finish these" gap list — each row jumps to the floor + step that fixes it */
 .syp-gaps{margin-top:10px;border:1px solid rgba(176,141,76,.3);border-radius:12px;overflow:hidden}
 .syp-gaps-h{font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a5a28;background:rgba(176,141,76,.08);padding:8px 12px}
