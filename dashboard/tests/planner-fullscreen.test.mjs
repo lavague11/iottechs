@@ -26,7 +26,7 @@ test("planner fullscreen is a CSS overlay, not the Fullscreen API", () => {
 
 test("the root carries the fullscreen class + a ⛶ toggle; the overlay CSS escapes the transformed slide", () => {
   assert.ok(sp.includes('${fsOn ? " syp--fs" : ""}'), "root gets .syp--fs when fullscreen");
-  assert.ok(sp.includes('onClick={fsOn ? exitFs : enterFs}'), "a single ⛶/exit toggle");
+  assert.ok(sp.includes('(fsOn ? exitFs : enterFs)()'), "a single enter/exit fullscreen toggle (now a Full screen item in the ••• Go-to menu)");
   assert.ok(/\.syp\.syp--fs\{position:fixed;inset:0/.test(sp), "overlay is a fixed, viewport-filling layer");
   assert.ok(/height:100dvh/.test(sp), "100dvh for mobile fullscreen");
   assert.ok(/\.dv-slide\.syp-fs-host\{transform:none!important/.test(sp), "the host slide's transform is neutralized so the overlay escapes it");

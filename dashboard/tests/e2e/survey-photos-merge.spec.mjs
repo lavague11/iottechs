@@ -34,19 +34,20 @@ test("merge: no System Preview card, and the survey has a Map/Photos toggle with
   // Open the survey → the Map/Photos toggle is present.
   await page.goto(`/project/${PROJECT}?view=survey`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(3500);
+  // Map/Photos is ONE toggle button that shows the current view; tapping flips to the other.
   const toggle = page.locator(".syp-fb-viewtog");
   await expect(toggle).toBeVisible({ timeout: 15000 });
-  await expect(toggle.getByRole("button", { name: "Map", exact: true })).toBeVisible();
-  await expect(toggle.getByRole("button", { name: "Photos", exact: true })).toBeVisible();
+  await expect(toggle).toHaveText(/Map/);
 
   // Flip to Photos → the phone mockup grid loads (the merged System Preview, straight to the grid).
-  await toggle.getByRole("button", { name: "Photos", exact: true }).click();
+  await toggle.click();
   await page.waitForTimeout(2500);
+  await expect(toggle).toHaveText(/Photos/);
   const mock = page.frameLocator('iframe[src*="cctv-mockup"]');
   await expect(mock.locator("text=/CAM 1/i").first()).toBeVisible({ timeout: 12000 });
 
   // And back to Map.
-  await toggle.getByRole("button", { name: "Map", exact: true }).click();
+  await toggle.click();
   await page.waitForTimeout(1500);
-  await expect(toggle.getByRole("button", { name: "Map", exact: true })).toHaveClass(/on/);
+  await expect(toggle).toHaveText(/Map/);
 });

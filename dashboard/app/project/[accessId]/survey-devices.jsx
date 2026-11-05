@@ -6,7 +6,7 @@ import { useState, useRef, useCallback } from "react";
 // postMessage (`iotSurveyCmd`): rename, FOV, delete, view photo, select-on-map, and Rapid Capture. The
 // current floor's devices are fully editable; other floors list read-only (tap to jump there). Photos
 // upload to /api/media (HEIC-safe) then attach to the device. Customers never see this (office tool).
-export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd }) {
+export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd, onAddCamera }) {
   const [open, setOpen] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -105,7 +105,8 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
   }
 
   if (readOnly) return null;                        // office/field tool — customers see cameras in the survey view
-  if (!total) return null;                          // render only when there's something to manage
+  if (!total && !onAddCamera) return null;          // nothing to manage and no way to add → render nothing
+  // (with onAddCamera we keep rendering the header even at 0 devices, so the first camera can be added here)
 
   const inCapture = capture >= 0 && capture < cams.length;
 
@@ -116,7 +117,17 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
       <button className="sd-head" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
         <svg className={`sd-chev${open ? " on" : ""}`} viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4"><path d="M9 6l6 6-6 6" /></svg>
         <span className="sd-title">Devices</span>
-        <span className="sd-count">{total} device{total !== 1 ? "s" : ""}</span>
+        {total > 0 && <span className="sd-count">{total} device{total !== 1 ? "s" : ""}</span>}
+        {/* Add camera — moved here from the Photos bar; creates an unplaced survey camera (one home for the account). */}
+        {!locked && onAddCamera && (
+          <span className="sd-addcam" role="button" tabIndex={0}
+            title="Add a camera to this survey"
+            onClick={(e) => { e.stopPropagation(); setOpen(true); onAddCamera(); }}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); setOpen(true); onAddCamera(); } }}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.2" /><path d="M12 10.5v5M9.5 13h5" /></svg>
+            Add camera
+          </span>
+        )}
         {locked && <span className="sd-locked" title="Unsubmit the survey to edit"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>Submitted</span>}
         {!locked && cams.some((d) => d.photo) && (
           <span className={`sd-ai-all${aiAll ? " busy" : ""}`} role="button" tabIndex={0}
@@ -149,6 +160,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
 
       {open && (
         <div className="sd-body">
+          {!total && <div className="sd-empty">No cameras yet — tap <b>Add camera</b> to start.</div>}
           {floors.map((f, fi) => {
             const isCur = fi === curFloor;
             if (!f.devices?.length) return null;
@@ -258,7 +270,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
 
       <style>{`
         .sd-wrap{margin-top:12px;border:1px solid var(--line,#e6e2d9);border-radius:12px;background:var(--bg-soft,#faf8f4)}
-        .sd-head{display:flex;align-items:center;gap:10px;width:100%;padding:11px 14px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink,#1a1a1a);text-align:left}
+        .sd-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;width:100%;padding:11px 14px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink,#1a1a1a);text-align:left}
         .sd-chev{flex:none;transition:transform .15s;color:var(--muted,#6f7686)}.sd-chev.on{transform:rotate(90deg)}
         .sd-title{font-size:.82rem;font-weight:800;letter-spacing:.02em}
         .sd-count{font-size:.72rem;color:var(--muted,#6f7686);font-weight:600}
@@ -268,6 +280,12 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-ai-all:hover{background:rgba(201,169,110,.12)}
         .sd-ai-all.busy{opacity:.7;cursor:default}
         .sd-ai-all + .sd-cap{margin-left:0}
+        /* Add camera — the primary action for the roster (filled dark pill); first of the right-aligned chips. */
+        .sd-addcam{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:.74rem;font-weight:700;color:#fff;background:var(--ink,#1a1a1a);border:1px solid var(--ink,#1a1a1a);border-radius:8px;padding:5px 11px;cursor:pointer}
+        .sd-addcam:hover{background:#000}
+        .sd-addcam + .sd-ai-all, .sd-addcam + .sd-cap{margin-left:0}
+        .sd-empty{font-size:.8rem;color:var(--muted,#6f7686);padding:4px 2px 6px}
+        .sd-empty b{color:var(--ink,#1a1a1a);font-weight:700}
         .sd-spin{animation:sd-spin .7s linear infinite;transform-origin:center}
         @keyframes sd-spin{to{transform:rotate(360deg)}}
         .sd-capbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line,#e6e2d9);background:rgba(201,169,110,.08)}

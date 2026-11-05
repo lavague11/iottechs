@@ -358,12 +358,14 @@ export default function SystemPlanner({
            header-only swipe change floors; canvas gestures stay with the editor. Hidden on Submit —
            that step summarizes ALL floors, so a single-floor selector there is misleading. */
         <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
-          {/* Map / Photos toggle — the merged System Preview. Map = the floor plan; Photos = the camera
-              photos + phone mockup (works with no map at all). Left of the floor selector. */}
-          <div className="syp-fb-viewtog" role="group" aria-label="View">
-            <button type="button" className={railStep !== "views" ? "on" : ""} onClick={() => { if (!["layout", "cameras"].includes(railStep)) goRail("layout"); }}>Map</button>
-            <button type="button" className={railStep === "views" ? "on" : ""} onClick={() => goRail("views")}>Photos</button>
-          </div>
+          {/* Map / Photos — ONE toggle: shows the current view, tap flips to the other. Left of the floor
+              selector. Map = the floor plan; Photos = the camera photos + phone mockup (works with no map). */}
+          <button type="button" className="syp-fb-viewtog"
+            aria-label={railStep === "views" ? "Switch to Map" : "Switch to Photos"}
+            onClick={() => (railStep === "views" ? goRail("layout") : goRail("views"))}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg>
+            <span>{railStep === "views" ? "Photos" : "Map"}</span>
+          </button>
           <div className="syp-fb-nav">
             <button className="syp-fb-arrow" aria-label="Previous floor" disabled={curFloor <= 0} onClick={() => goFloor(curFloor - 1)}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
@@ -374,14 +376,8 @@ export default function SystemPlanner({
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
             </button>
           </div>
-          {/* Fullscreen the whole planner (header + canvas + tools + footer); only the project chrome hides. */}
-          <button className="syp-fb-fs" title={fsOn ? "Exit full screen" : "Full screen"} aria-label={fsOn ? "Exit full screen" : "Full screen"} onClick={fsOn ? exitFs : enterFs}>
-            {fsOn
-              ? <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
-              : <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
-          </button>
-          {/* ••• Go-to — relocated here from the footer so steps / Camera Photos / Walkthrough stay reachable
-              when the footer is hidden (an in-canvas dock is carrying Back + the next-step button). */}
+          {/* ••• Go-to — steps / Camera Photos / Full screen / Walkthrough. Full screen moved in here so the
+              top-right isn't crowded (it used to overlap the view toggle on a phone). */}
           <div className="syp-fb-morewrap">
             <button className="syp-fb-fs" title="More" aria-label="More" aria-haspopup="menu" aria-expanded={topMenuOpen} onClick={() => setTopMenuOpen((o) => !o)}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
@@ -400,6 +396,14 @@ export default function SystemPlanner({
                   <button className={`syp-nav-mi${railStep === "views" ? " on" : ""}`} role="menuitem" disabled={!sig.bgReady}
                     onClick={() => { if (sig.bgReady) { goRail("views"); setTopMenuOpen(false); } }}>
                     <span className="syp-nav-mi-dot">{hasViews ? "✓" : ""}</span>Camera Photos
+                  </button>
+                  <div className="syp-nav-sep" />
+                  <button className="syp-nav-mi" role="menuitem" onClick={() => { (fsOn ? exitFs : enterFs)(); setTopMenuOpen(false); }}>
+                    <span className="syp-nav-mi-dot">
+                      {fsOn
+                        ? <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
+                        : <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
+                    </span>{fsOn ? "Exit full screen" : "Full screen"}
                   </button>
                   {canWalk && (
                     <>
@@ -426,17 +430,8 @@ export default function SystemPlanner({
       {/* Camera Photos — the phone-mockup photo surface, reachable from the ••• Go-to menu. No longer a
           gating "Views" step with a Start/Skip splash; it just shows the photos tool when opened. */}
       <div className="syp-pane" hidden={paneMode !== "views"}>
-        {/* Photos works with NO map: add a camera here and it's created as an UNPLACED survey device
-            (one shared record). When a base exists later, it appears in the Map tray to drag into place. */}
-        {!customer && !devReadOnly && (
-          <div className="syp-photos-bar">
-            <button type="button" className="syp-addcam" onClick={() => surveyCmd({ cmd: "addCamera", project: accessId })}>
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /><path d="M12 10v6M9 13h6" /></svg>
-              <span>Add camera</span>
-            </button>
-            {camsPlaced > 0 && <span className="syp-photos-ct">{camsPlaced} camera{camsPlaced === 1 ? "" : "s"}</span>}
-          </div>
-        )}
+        {/* Add camera moved under Devices (one home for the camera account); the "+ Add camera" there creates
+            an UNPLACED survey camera that appears in the Map tray to drag into place once a base exists. */}
         {viewsNode || <div className="syp-empty">Add each camera&apos;s photo on its device card.</div>}
       </div>
       {/* Submit — a real summary (per-floor plan thumbnail, camera count, cameras missing photos), the
@@ -527,7 +522,7 @@ export default function SystemPlanner({
               <span>Devices{devCount ? ` (${devCount})` : ""}</span>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             </button>
-            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} />}
+            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} onAddCamera={() => surveyCmd({ cmd: "addCamera", project: accessId })} />}
           </div>
         );
       })()}
@@ -756,31 +751,29 @@ const CSS = `
 /* STAFF — one continuous frame: full-width floor carousel header → canvas → nav footer, aligned to
    the same width with no gaps. The header rounds the top, the footer the bottom, the canvas squares to
    join them. */
-.syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:0;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
-.syp-floorbar .syp-fb-nav{display:inline-flex;align-items:center;gap:10px}
+/* Flex row: [view toggle] [floor nav — flex, centered] [•••]. Flex (not centered-with-absolute-edges) so the
+   three groups always share the width and never overlap on a phone. */
+.syp-floorbar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
+.syp-floorbar .syp-fb-nav{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:10px}
 /* Offline-first sync badge — top-right of the planner, above the canvas. */
 .syp{position:relative}
 .syp-sync{position:absolute;top:6px;right:8px;z-index:30;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;box-shadow:0 2px 8px rgba(16,20,24,.25)}
 .syp-sync.off{background:#8a3a28}
 .syp-sync-dot{width:7px;height:7px;border-radius:50%;background:#fff;opacity:.9;animation:sypSyncPulse 1.1s ease-in-out infinite}
 @keyframes sypSyncPulse{0%,100%{opacity:.35}50%{opacity:1}}
-/* Map / Photos view toggle — pinned left of the centered floor selector. */
-.syp-floorbar .syp-fb-viewtog{position:absolute;left:12px;top:50%;transform:translateY(-50%);display:inline-flex;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:2px;gap:2px}
-.syp-floorbar .syp-fb-viewtog button{appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.01em;color:var(--dv-meta,#787D84);background:transparent;border:0;border-radius:100px;padding:5px 12px;transition:background .15s,color .15s}
-.syp-floorbar .syp-fb-viewtog button.on{background:var(--dv-ink,#101418);color:#fff}
-@media (max-width:640px){ .syp-floorbar .syp-fb-viewtog button{padding:5px 9px;font-size:.74rem} }
-/* Photos view — Add camera bar (creates an unplaced survey camera). */
-.syp-photos-bar{display:flex;align-items:center;gap:12px;padding:8px 2px 10px}
-.syp-addcam{display:inline-flex;align-items:center;gap:7px;appearance:none;cursor:pointer;font:inherit;font-size:.84rem;font-weight:700;color:#fff;background:var(--dv-ink,#101418);border:1px solid var(--dv-ink,#101418);border-radius:100px;padding:8px 15px}
-.syp-addcam:hover{background:#000}
-.syp-photos-ct{font-size:.8rem;color:var(--dv-meta,#787D84);font-weight:600}
+/* Map / Photos — ONE toggle button, pinned left of the centered floor selector. Shows the current view +
+   a swap glyph; tapping flips to the other. (Was two buttons that overlapped the right controls on a phone.) */
+.syp-floorbar .syp-fb-viewtog{flex:none;display:inline-flex;align-items:center;gap:6px;appearance:none;cursor:pointer;font:inherit;font-size:.78rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:6px 13px;transition:border-color .15s}
+.syp-floorbar .syp-fb-viewtog:hover{border-color:var(--dv-ink,#101418)}
+.syp-floorbar .syp-fb-viewtog svg{color:var(--dv-meta,#787D84);flex:none}
+@media (max-width:640px){ .syp-floorbar .syp-fb-viewtog{padding:6px 11px;font-size:.76rem} }
 .syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
 .syp-floorbar .syp-fb-arrow:hover:not(:disabled){background:#fff;border-color:var(--dv-ink,#101418)}
 .syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}
-.syp-floorbar .syp-fb-fs{position:absolute;right:12px;top:50%;transform:translateY(-50%);appearance:none;cursor:pointer;width:34px;height:34px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
+.syp-floorbar .syp-fb-fs{appearance:none;cursor:pointer;width:34px;height:34px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
 .syp-floorbar .syp-fb-fs:hover{border-color:var(--dv-ink,#101418)}
-/* ••• Go-to lives just left of Full screen; its menu drops DOWN from the top bar. */
-.syp-floorbar .syp-fb-morewrap{position:absolute;right:52px;top:50%;transform:translateY(-50%)}
+/* ••• Go-to — right-edge control (Full screen now lives inside its menu). position:relative so its drop-down anchors here. */
+.syp-floorbar .syp-fb-morewrap{position:relative;flex:none}
 .syp-floorbar .syp-fb-morewrap .syp-fb-fs{position:static;transform:none}
 .syp-nav-menu.syp-nav-menu--top{top:calc(100% + 8px);bottom:auto}
 /* the canvas joins the header seamlessly (square its top corners, no doubled border) */
@@ -809,10 +802,15 @@ const CSS = `
 .syp-nav-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 4px}
 /* Floor selector dropdown — compact pill + menu (switch/add/rename/duplicate/delete). Button bg rules
    are scoped under .syp-fsel so they beat the deck's .dv-shell button reset. */
-.syp-fsel{position:relative;display:inline-block}
-.syp-fsel .syp-fsel-btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;font:inherit;font-size:.92rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:9px 22px;min-width:220px;transition:background .15s,border-color .15s}
+.syp-fsel{position:relative;display:inline-block;min-width:0}
+.syp-fsel .syp-fsel-btn{appearance:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;max-width:100%;font:inherit;font-size:.92rem;font-weight:700;letter-spacing:.01em;color:var(--dv-ink,#101418);background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:9px 22px;min-width:220px;transition:background .15s,border-color .15s}
 .syp-fsel .syp-fsel-btn:hover{background:#fff;border-color:var(--dv-ink,#101418)}
 .syp-fsel-name{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+/* On a phone the selector shrinks (no 220px floor) so it fits between the toggle and ••• — the name truncates. */
+@media (max-width:640px){
+  .syp-fsel .syp-fsel-btn{min-width:0;padding:9px 14px;font-size:.86rem}
+  .syp-fsel-name{max-width:none;min-width:0}
+}
 .syp-fsel-menu{position:absolute;top:calc(100% + 6px);left:0;z-index:40;min-width:224px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.14);padding:6px;display:flex;flex-direction:column;gap:1px}
 .syp-fsel .syp-fsel-opt{appearance:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font:inherit;font-size:.88rem;font-weight:600;color:var(--dv-ink,#101418);background:transparent;border:0;border-radius:8px;padding:8px 10px;text-align:left}
 .syp-fsel .syp-fsel-opt:hover{background:var(--dv-raise,#F2F2EF)}

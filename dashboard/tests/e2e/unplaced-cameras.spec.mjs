@@ -25,8 +25,10 @@ async function signIn(page) {
 
 const surveyFrame = (page) => page.frames().find((f) => (f.url() || "").includes("site-survey-merged"));
 const camsOf = async (page) => { const f = surveyFrame(page); return f ? f.evaluate(() => (window.devices || []).filter((d) => d.k === "cam").map((d) => ({ cid: d.cid, name: d.name, placed: d.placed !== false, x: d.x }))) : []; };
-async function clickView(page, name) { await page.locator(".syp-fb-viewtog button", { hasText: name }).click(); await page.waitForTimeout(1200); }
-async function addCamera(page) { await page.locator(".syp-addcam").click(); await page.waitForTimeout(500); }
+// Map/Photos is now ONE toggle button showing the current view; tap flips. Click only when not already on `name`.
+async function clickView(page, name) { const t = page.locator(".syp-fb-viewtog"); const cur = (await t.innerText()).trim(); if (cur !== name) { await t.click(); await page.waitForTimeout(1200); } }
+// Add camera moved under Devices (the .sd-addcam chip in the roster header).
+async function addCamera(page) { await page.locator(".sd-addcam").first().click(); await page.waitForTimeout(500); }
 
 test("unplaced camera: created in Photos (placed:false), survives reload, id stable across flip, drags onto the map", async ({ page }) => {
   await signIn(page);
