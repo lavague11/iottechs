@@ -821,7 +821,7 @@ const CSS = `
    three groups always share the width and never overlap on a phone. */
 .syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
 .syp-floorbar .syp-fb-nav{min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:4px}
-.syp-floorbar .syp-fb-arrow-sp{width:34px;height:34px;flex:none}
+.syp-floorbar .syp-fb-arrow-sp{width:30px;height:30px;flex:none}
 /* plain-text floor switcher (look&feel): no pill/bg/border on the button — just the name + ▾. */
 .syp-floorbar .syp-fsel.plain .syp-fsel-btn{background:transparent;border-color:transparent;min-width:0;padding:8px 10px;font-size:.98rem}
 .syp-floorbar .syp-fsel.plain .syp-fsel-btn:hover{background:var(--dv-raise,#F6F6F4);border-color:transparent}
@@ -837,8 +837,9 @@ const CSS = `
 .syp-floorbar .syp-fb-viewtog:hover{border-color:var(--dv-ink,#101418)}
 .syp-floorbar .syp-fb-viewtog svg{color:var(--dv-meta,#787D84);flex:none}
 @media (max-width:640px){ .syp-floorbar .syp-fb-viewtog{padding:6px 11px;font-size:.76rem} }
-.syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:34px;height:34px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s}
-.syp-floorbar .syp-fb-arrow:hover:not(:disabled){background:#fff;border-color:var(--dv-ink,#101418)}
+/* Plain (no pill/border/bg) arrows + add, matching the plain floor name — subtle muted icon, light hover. */
+.syp-floorbar .syp-fb-arrow{appearance:none;cursor:pointer;width:30px;height:30px;flex:none;border-radius:100px;border:0;background:transparent;color:var(--dv-meta,#9AA0A6);display:inline-flex;align-items:center;justify-content:center;transition:color .15s,background .15s}
+.syp-floorbar .syp-fb-arrow:hover:not(:disabled){color:var(--dv-ink,#101418);background:var(--dv-raise,#F4F4F2)}
 .syp-floorbar .syp-fb-arrow:disabled{opacity:.26;cursor:default}
 .syp-floorbar .syp-fb-fs{appearance:none;cursor:pointer;width:34px;height:34px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:background .15s,border-color .15s}
 .syp-floorbar .syp-fb-fs:hover{border-color:var(--dv-ink,#101418)}
