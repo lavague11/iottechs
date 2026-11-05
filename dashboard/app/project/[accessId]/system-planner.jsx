@@ -25,7 +25,7 @@ export default function SystemPlanner({
   devReadOnly = false, devLocked = false, customer = false,
   surveySubmitted = false,
   // contextual nav footer (staff): canonical submit/approve/continue wiring from the gateway
-  surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null,
+  surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null, onClose = null,
   svMeta = null, mkMeta = null, acceptances = null,
   initialStep = "layout",   // which rail step to open on ("layout" | "cameras" | "views" | "review")
 }) {
@@ -373,9 +373,13 @@ export default function SystemPlanner({
   // just "Submit" (never Re-submit). Mockup/Camera-Views submission is dropped from the flow.
   const reviewCta = (() => {
     if (svMeta && svMeta.has && !svApproved) {
-      if (svSubCurrent) return { label: "Awaiting customer approval", muted: true };
+      if (svSubCurrent) return { label: "Awaiting customer approval", pending: true };
       if (!surveyComplete) return { label: "Complete every floor", muted: true };
-      return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
+      // Submit, then close the tool out (back to the hub) — the gateway shows a "Submitted" toast.
+      return { label: "Submit", primary: true, act: async () => {
+        if (onSubmitTool) { try { await onSubmitTool("site_survey"); } catch { /* best-effort */ } }
+        if (onClose) { try { onClose(); } catch { /* host owns the overlay */ } }
+      } };
     }
     if (surveyOk) return { label: "Continue to Proposal →", primary: true, act: () => onContinue && onContinue() };
     return null;
@@ -486,14 +490,6 @@ export default function SystemPlanner({
           submitted-lock banner, then the one Submit CTA (the footer approve bars). */}
       {!customer && paneMode === "review" && (
         <div className="syp-review">
-          {surveySubmitted && (
-            <div className="syp-lockbanner" role="status">
-              <span className="syp-lockbanner-ico" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
-              </span>
-              <span className="syp-lockbanner-t"><b>Submitted — locked.</b> The floor plan and cameras are locked for the customer to approve. Photos stay editable. Use <b>Unsubmit</b> to change the plan.</span>
-            </div>
-          )}
           {/* NAV-FIX §8: deliverable status is a small badge next to the title (not a separate card). */}
           <div className="syp-review-h">Review &amp; submit
             {svSubCurrent ? <span className="syp-review-badge awaiting">Awaiting approval</span>
@@ -545,7 +541,7 @@ export default function SystemPlanner({
                   <button type="button" className="syp-nav-unsub" onClick={() => onUnsubmitTool("site_survey")}>Unsubmit</button>
                 )}
                 {reviewCta ? (
-                  <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+                  <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}${reviewCta.pending ? " pending" : ""}`} disabled={reviewCta.muted || reviewCta.pending || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
                 ) : <span />}
               </>
             ) : nextStep ? (
@@ -742,9 +738,6 @@ const CSS = `
   .syp-vstart{padding:20px 14px}
 }
 /* Submitted-lock banner + Submit summary (Step 3) */
-.syp-lockbanner{display:flex;align-items:flex-start;gap:9px;padding:10px 12px;margin-bottom:12px;border:1px solid rgba(196,85,61,.3);background:rgba(196,85,61,.08);border-radius:12px;color:#8a3a28}
-.syp-lockbanner-ico{flex:none;margin-top:1px}
-.syp-lockbanner-t{font-size:.82rem;line-height:1.4}
 .syp-summary{display:flex;flex-direction:column;gap:10px;margin:12px 0 14px}
 .syp-summary-empty{font-size:.84rem;color:var(--dv-meta,#787D84);margin:10px 0}
 .syp-sum-floor{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-bg,#fff)}
@@ -782,7 +775,7 @@ const CSS = `
 .syp-review-badge{font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF)}
 .syp-review-badge.ready{color:#2f6f4e;background:rgba(62,125,90,.1);border-color:rgba(62,125,90,.3)}
 .syp-review-badge.gap{color:#8a5a28;background:rgba(176,141,76,.12);border-color:rgba(176,141,76,.32)}
-.syp-review-badge.awaiting{color:var(--dv-meta,#787D84);background:var(--dv-raise,#F6F6F4)}
+.syp-review-badge.awaiting{color:#8a5a28;background:rgba(176,141,76,.12);border-color:rgba(176,141,76,.32)}
 /* §8: the "finish these" gap list — each row jumps to the floor + step that fixes it */
 .syp-gaps{margin-top:10px;border:1px solid rgba(176,141,76,.3);border-radius:12px;overflow:hidden}
 .syp-gaps-h{font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a5a28;background:rgba(176,141,76,.08);padding:8px 12px}
@@ -867,6 +860,8 @@ const CSS = `
 .syp-nav .syp-nav-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.88rem;font-weight:800;letter-spacing:.01em;padding:10px 18px;border-radius:100px;border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff;transition:background .15s;white-space:nowrap}
 .syp-nav .syp-nav-cta:hover:not(:disabled){background:#000}
 .syp-nav .syp-nav-cta.muted{background:transparent;color:var(--dv-meta,#787D84);border-color:var(--dv-line,#E4E4DF);cursor:default;font-weight:700}
+/* Pending = submitted, awaiting the customer. A quiet amber pill (never the dark primary) so the state reads at a glance. */
+.syp-nav .syp-nav-cta.pending,.syp-nav .syp-nav-cta.pending:disabled{background:rgba(176,141,76,.12);color:#8a5a28;border-color:rgba(176,141,76,.4);cursor:default;font-weight:800;opacity:1}
 .syp-nav-morewrap{position:relative;display:inline-block}
 .syp-nav .syp-nav-more{appearance:none;cursor:pointer;width:38px;height:38px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s}
 .syp-nav .syp-nav-more:hover{border-color:var(--dv-ink,#101418)}

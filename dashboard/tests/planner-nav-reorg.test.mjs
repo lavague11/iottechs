@@ -44,7 +44,8 @@ test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a 
   assert.ok(sp.includes("{nextHint || NEXT_PROMPT[nextStep]}"), "a gated Next shows its hint, never a silent click");
   // Submit CTA (label just 'Submit', not Re-submit) drives the canonical submit / continue
   assert.ok(/label: "Submit"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Submit / Awaiting / Continue (no Re-submit label)");
-  assert.ok(sp.includes('onSubmitTool && onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
+  assert.ok(sp.includes('await onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
+  assert.ok(/if \(onClose\) \{ try \{ onClose\(\)/.test(sp), "Submit closes the tool out after submitting (back to the hub)");
   assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");
   assert.ok(gw.includes("surveyOk={surveyOk}") && gw.includes("onSubmitTool=") && gw.includes("onContinue={() => browse(\"proposal\")}"), "gateway wires surveyOk/onSubmitTool/onContinue");
   assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");

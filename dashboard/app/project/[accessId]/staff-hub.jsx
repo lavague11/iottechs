@@ -443,7 +443,7 @@ export default function StaffHub({
           <div className="cpv-ovl-body">
             {activeView === "install"
               ? <InstallDetail appt={appt} />
-              : (renderOverlay ? renderOverlay(activeView) : null)}
+              : (renderOverlay ? renderOverlay(activeView, close) : null)}
           </div>
         </div>
       )}

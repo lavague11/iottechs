@@ -2423,7 +2423,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             surveySubmitted={!!acceptances.submit_site_survey}
             surveyOk={surveyOk} svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
             onContinue={() => browse("proposal")}
-            onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
+            onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } }}
             onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
@@ -3128,7 +3128,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const hubAppt = staffAppt || pickUpcomingAny();
       const simple3 = threeStepPhases(masterToPhaseKey(projectStage));   // Simple view = 3 steps: Consulting · Install · Completion
 
-      const renderStaffOverlay = (key) => {
+      const renderStaffOverlay = (key, onCloseOverlay) => {
         switch (key) {
           case "proposal":
             return (<AccordionProvider><div style={ovl(900)}>
@@ -3201,7 +3201,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 surveySubmitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}
                 svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
                 onContinue={() => browse("proposal")}
-                onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
+                onClose={onCloseOverlay}
+                onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } }}
                 onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
                 devReadOnly={!!previewRole} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
             );
