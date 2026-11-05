@@ -73,24 +73,38 @@ test("canBuild: an aerial-not-yet-plan floor qualifies; a plain or already-built
 });
 
 test("Create Floor Plan goes STRAIGHT to the Structure editor IN PLACE — no outline gate: full-image base + full-frame ctx, no reframe", () => {
-  const start = survey.indexOf('getElementById("buildPlanBtn").addEventListener');
-  const h = survey.slice(start, start + 2600);
+  // The mechanics now live in the reusable buildPlanOver(f, lcBg) (shared by the aerial build AND the Upload
+  // flow); the click handler keeps the guards and delegates. Check each where it lives.
+  const hStart = survey.indexOf('getElementById("buildPlanBtn").addEventListener');
+  const h = survey.slice(hStart, hStart + 400);
   assert.ok(h.includes("if(frozen()) return;"), "guards frozen");
   assert.ok(h.includes("if(!canBuild(f)) return;"), "guards the gate again at click time");
-  assert.ok(h.includes("snapFloor();"), "snaps the floor's live edits onto its record before opening the tool");
-  assert.ok(!/createFloor\(/.test(h), "NEVER derives/clones a floor — it builds on the current floor");
-  assert.ok(!/renderFloorTabs\(\)/.test(h), "no new floor → no floor-tab re-render in the handler");
   assert.ok(h.includes('var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;'), "the image is this floor's ctx.src || bg");
+  assert.ok(h.includes("buildPlanOver(f, lcBg)"), "the handler delegates to the shared builder");
+  const oStart = survey.indexOf("function buildPlanOver(");
+  assert.ok(oStart > 0, "the shared builder exists");
+  const o = survey.slice(oStart, oStart + 2400);
+  assert.ok(o.includes("snapFloor();"), "snaps the floor's live edits onto its record before opening the tool");
+  assert.ok(!/createFloor\(/.test(o), "NEVER derives/clones a floor — it builds on the current floor");
+  assert.ok(!/renderFloorTabs\(\)/.test(o), "no new floor → no floor-tab re-render in the builder");
   // the gate is gone: the PRIMARY path no longer opens the satellite outline-only mode — it enters the editor directly
-  assert.ok(!h.includes('type:"iotLoadCapture", outlineOnly:true'), "the primary path does NOT force the outline-only satellite (gate removed)");
-  assert.ok(h.includes("new Image()"), "measures the aerial to get its aspect for the full-image bounds");
-  assert.ok(h.includes("rect:{x:0,y:0,w:1,h:1}, full:true"), "synthesizes a FULL-FRAME ctx (whole image, no bbox+margin crop → no reframe/zoom-out)");
-  assert.ok(h.includes("enterDraw({ pts:[[0,0],[1,0],[1,1],[0,1]], aspect:ar, base:true, pad:0"), "hands off the four image-corner bounds as the base, pad:0 so the image fills the canvas");
-  assert.ok(h.includes("f.ctx=cx;"), "stores the full-frame ctx on THIS floor before entering the editor");
-  assert.ok(/uploadBackground\(f\.ctx\.src/.test(h), "mirrors the outline path's inline-blob → /api/media upload");
-  // a measurement failure (never for a real data:/ /api/media aerial) falls back to the old outline tool so the feature is never dead
-  assert.ok(h.includes("img.onerror=function(){ openOutlineFallback(f, lcBg); };"), "image-measure failure falls back to the outline tool");
+  assert.ok(!o.includes('type:"iotLoadCapture", outlineOnly:true'), "the builder does NOT force the outline-only satellite (gate removed)");
+  assert.ok(o.includes("new Image()"), "measures the image to get its aspect for the full-image bounds");
+  assert.ok(o.includes("rect:{x:0,y:0,w:1,h:1}, full:true"), "synthesizes a FULL-FRAME ctx (whole image, no bbox+margin crop → no reframe/zoom-out)");
+  assert.ok(o.includes("enterDraw({ pts:[[0,0],[1,0],[1,1],[0,1]], aspect:ar, base:true, pad:0"), "hands off the four image-corner bounds as the base, pad:0 so the image fills the canvas");
+  assert.ok(o.includes("f.ctx=cx;"), "stores the full-frame ctx on THIS floor before entering the editor");
+  assert.ok(/uploadBackground\(f\.ctx\.src/.test(o), "mirrors the outline path's inline-blob → /api/media upload");
+  // a measurement failure (never for a real data:/ /api/media image) falls back to the old outline tool so the feature is never dead
+  assert.ok(o.includes("img.onerror=function(){ openOutlineFallback(f, lcBg); };"), "image-measure failure falls back to the outline tool");
   assert.ok(survey.includes("function openOutlineFallback(f, lcBg)"), "the outline tool survives as a guarded fallback (legacy + error path)");
+});
+
+test("Upload lands on Layout too — the upload routes through buildPlanOver (Structure editor over the image)", () => {
+  const start = survey.indexOf('getElementById("upIn").addEventListener');
+  const h = survey.slice(start, start + 1100);
+  assert.ok(h.includes("applyBackground(src)"), "the uploaded image still lands as the floor background");
+  assert.ok(h.includes("buildPlanOver(g, (g.bg)||src)"), "then opens the Structure editor over it (lands on Layout)");
+  assert.ok(h.includes("!hybridCapable(g)"), "a re-upload onto an existing plan does not rebuild");
 });
 
 test("Use Outline still routes to enterDraw on the CURRENT floor (in-place handoff, unchanged)", () => {

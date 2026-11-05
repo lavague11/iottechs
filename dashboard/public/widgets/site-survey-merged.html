@@ -1148,9 +1148,11 @@
       var lcMsg={ type:"iotLoadCapture", outlineOnly:true, src:lcBg, ftW:(f.scale&&f.scale.ftW)||0, ftH:(f.scale&&f.scale.ftH)||0, aerial:f.aerial||null }, lcPost=function(){ try{ satFrame.contentWindow.postMessage(lcMsg,"*"); }catch(e){} };
       satFrame.addEventListener("load", function h(){ satFrame.removeEventListener("load",h); lcPost(); }); lcPost();
     }
-    document.getElementById("buildPlanBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
-      var f=floors[curFloor]; if(!canBuild(f)) return;
-      var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;   // need an aerial image
+    // Open the Structure editor OVER a base image (aerial or an uploaded floor plan): measure it, synthesize a
+    // full-frame ctx, and hand the four image corners to the draw tool as the working-area base. Reused by the
+    // Create-Floor-Plan build (aerial) AND the Upload flow (so an upload lands on Layout, not just the map).
+    function buildPlanOver(f, lcBg){
+      if(!f || !lcBg) return;
       snapFloor();                               // freeze the floor's live edits onto its record before opening the tool
       var ftW=(f.scale&&+f.scale.ftW>0)?+f.scale.ftW:0, ftH=(f.scale&&+f.scale.ftH>0)?+f.scale.ftH:0;
       var northDeg=(f.aerial&&Number.isFinite(+f.aerial.northDeg))?+f.aerial.northDeg:null;
@@ -1158,18 +1160,23 @@
       img.onload=function(){
         var ar=(img.naturalWidth>0&&img.naturalHeight>0)?(img.naturalWidth/img.naturalHeight):1;
         var cx=validCtx({ src:lcBg, rect:{x:0,y:0,w:1,h:1}, full:true, ftW:ftW, ftH:ftH, northDeg:northDeg });
-        if(!cx){ openOutlineFallback(f, lcBg); return; }   // bad src (never for a data:/ /api/media aerial) → safe fallback
+        if(!cx){ openOutlineFallback(f, lcBg); return; }   // bad src (never for a data:/ /api/media image) → safe fallback
         f.ctx=cx; f.outlineDraft=null; recordCtxVersion(f, "original");
-        // Mirror the outline path's ctx upload: swap the inline aerial blob for an /api/media URL so a few floors don't blow the localStorage budget.
+        // Mirror the outline path's ctx upload: swap the inline blob for an /api/media URL so a few floors don't blow the localStorage budget.
         if(typeof f.ctx.src==="string" && f.ctx.src.indexOf("data:")===0) uploadBackground(f.ctx.src, function(url){ if(url && f.ctx){ f.ctx.src=url; flushNow(); } });
         flushNow();
         // Full-image base: the 4 image corners are the working-area outline; base:true → the editor fills Site cells
         // (grid extent) and lands in Structure for the user to draw the building. pad:0 → fills the canvas (no zoom-out).
-        // metersPerUnit (y-unit = full image height = ftH feet) keeps the editor's real-scale readout honest.
+        // metersPerUnit (y-unit = full image height = ftH feet) keeps the editor's real-scale readout honest (0 when unscaled).
         enterDraw({ pts:[[0,0],[1,0],[1,1],[0,1]], aspect:ar, base:true, pad:0, metersPerUnit:(ftH>0?ftH*0.3048:0) });
       };
       img.onerror=function(){ openOutlineFallback(f, lcBg); };
       img.src=lcBg;
+    }
+    document.getElementById("buildPlanBtn").addEventListener("click", function(){ if(frozen()) return; closeBgMenu();
+      var f=floors[curFloor]; if(!canBuild(f)) return;
+      var lcBg=(f&&((f.ctx&&f.ctx.src)||f.bg))||""; if(!lcBg) return;   // need an aerial image
+      buildPlanOver(f, lcBg);
     });
     // Top-left Create-Floor-Plan FAB — one home for the build action; relays to the single build handler (DRY).
     (function(){ var fab=document.getElementById("buildPlanFab"); if(fab) fab.addEventListener("click", function(){ var b=document.getElementById("buildPlanBtn"); if(b) b.click(); }); })();
@@ -2993,7 +3000,12 @@
     document.getElementById("upIn").addEventListener("change", function(e){
       var f=e.target.files[0]; if(!f) return;
       pendingBgSource="upload";
-      var r=new FileReader(); r.onload=function(ev){ clearCtx(floors[curFloor]); applyBackground(ev.target.result); }; r.readAsDataURL(f); e.target.value="";
+      var r=new FileReader(); r.onload=function(ev){ var src=ev.target.result; clearCtx(floors[curFloor]); applyBackground(src);
+        // ONE BAR / Upload → Layout: like a satellite base, an upload lands in the Structure editor so you can
+        // trace walls/rooms over the image (it becomes the floor's ctx backdrop). Deferred a tick so applyBackground
+        // has settled. A re-upload onto a floor that already has a plan (hybridCapable) does NOT rebuild.
+        setTimeout(function(){ try{ var g=floors[curFloor]; if(g && !bgToolOpen && !hybridCapable(g)) buildPlanOver(g, (g.bg)||src); }catch(e){} }, 60);
+      }; r.readAsDataURL(f); e.target.value="";
     });
     // Draw one → inline floor-plan tool: sketch labeled rooms → wand enhances into a real plan → Done.
     document.getElementById("doorDraw").addEventListener("click", enterDraw);
