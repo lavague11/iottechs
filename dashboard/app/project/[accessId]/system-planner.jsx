@@ -317,17 +317,33 @@ export default function SystemPlanner({
 
   // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next, ONE step at a time (no skips). "views" (Camera
   // Photos) sits on the Cameras rung for nav purposes but is OUT of the linear Base→Layout→Cameras→Submit.
-  const navOrder = ["background", "layout", "cameras", "review"];
-  const navIdx = Math.max(0, navOrder.indexOf(railStep === "views" ? "cameras" : railStep));
+  // NAV-FIX §3/§4: the linear order is Background → Layout → Placement → Camera Angles → Submit. "views"
+  // (Camera Angles) is now a first-class step in the flow, not an out-of-band extra. Back/Next move exactly
+  // one step; Next names the NEXT step; the center button shows the CURRENT step.
+  const navOrder = ["background", "layout", "cameras", "views", "review"];
+  const navIdx = Math.max(0, navOrder.indexOf(railStep));
   const prevStep = navOrder[navIdx - 1] || null;
   const nextStep = navOrder[navIdx + 1] || null;
-  // Don't surface a Next CTA that can't fire yet — e.g. Layout while this floor still has no background.
-  const nextStepMeta = steps.find((s) => s.key === nextStep);
-  // Next is enabled when the next step is reachable — OR when the satellite capture tool is open, so a
-  // single footer Next commits the capture (its Done) and lands on the Layout map (the must-fix: footer
-  // navigation is never ignored while a build tool waits on its own Done).
-  const nextEnabled = (!nextStep || !nextStepMeta || nextStepMeta.enabled) || bgTool === "satellite";
-  const NEXT_PROMPT = { layout: "Floor Plan", cameras: "Place Cameras", review: "Review & Submit" };
+  const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Submit" };
+  const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Submit" };
+  // NAV-FIX §4: Next is never a silent no-op. It's enabled only when the step's prerequisite is met; otherwise
+  // it shows disabled with a short hint. Background→Layout commits the open capture first (see the Next handler).
+  const nextGate = (() => {
+    if (!nextStep) return { ok: false, hint: "" };
+    if (surveySubmitted) return { ok: true, hint: "" };
+    if (railStep === "background") {
+      if (bgTool === "satellite" || bgTool === "draw" || sig.bgReady) return { ok: true, hint: "" };
+      return { ok: false, hint: "Choose a background" };
+    }
+    if (railStep === "layout") {
+      if (sig.hasPlan) return { ok: true, hint: "" };
+      return { ok: false, hint: "Draw the structure first" };
+    }
+    if (!sig.bgReady) return { ok: false, hint: "Set a background first" };
+    return { ok: true, hint: "" };
+  })();
+  const nextEnabled = nextGate.ok;
+  const nextHint = nextGate.hint;
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).
   const svApproved = toolAccepted(svMeta, acceptances && acceptances.site_survey);
@@ -341,7 +357,7 @@ export default function SystemPlanner({
   // flow — the mkStale/mkSubCurrent reads remain available but no longer gate the CTA.
   const reviewCta = (() => {
     if (svMeta && svMeta.has && !svApproved) {
-      if (svStale) return { label: "Re-submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
+      if (svStale) return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
       if (svSubCurrent) return { label: "Awaiting customer approval", muted: true };
       return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
     }
@@ -410,37 +426,28 @@ export default function SystemPlanner({
             )}
           </div>
         )
-      ) : paneMode === "review" ? null : (
-        /* STAFF — one continuous frame: a FULL-WIDTH floor carousel header on top (where am I),
-           the canvas in the middle, the contextual nav footer below. Arrows + tap-to-manage + a
-           header-only swipe change floors; canvas gestures stay with the editor. Hidden on Submit —
-           that step summarizes ALL floors, so a single-floor selector there is misleading. */
+      ) : (
+        /* NAV-FIX §1/look&feel: ONE top floor bar on every step (including Submit). No Map/Photos toggle and
+           no ••• — Survey Navigation lives only in the bottom bar's center button. The switcher is plain text
+           with ‹ › arrows: the left arrow hides on Floor 1, the right arrow becomes + on the last floor. */
         <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
-          {/* Map / Photos — ONE toggle: shows the current view, tap flips to the other. Left of the floor
-              selector. Map = the floor plan; Photos = the camera photos + phone mockup (works with no map). */}
-          <button type="button" className="syp-fb-viewtog"
-            aria-label={railStep === "views" ? "Switch to Map" : "Switch to Photos"}
-            onClick={() => (railStep === "views" ? goRail("layout") : goRail("views"))}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3L4 7l4 4" /><path d="M4 7h16" /><path d="M16 21l4-4-4-4" /><path d="M20 17H4" /></svg>
-            <span>{railStep === "views" ? "Photos" : "Map"}</span>
-          </button>
           <div className="syp-fb-nav">
-            <button className="syp-fb-arrow" aria-label="Previous floor" disabled={curFloor <= 0} onClick={() => goFloor(curFloor - 1)}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
-            </button>
-            <FloorSelect floors={roster} curFloor={curFloor}
+            {curFloor > 0 ? (
+              <button className="syp-fb-arrow" aria-label="Previous floor" onClick={() => goFloor(curFloor - 1)}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+              </button>
+            ) : <span className="syp-fb-arrow-sp" aria-hidden="true" />}
+            <FloorSelect floors={roster} curFloor={curFloor} plain
               onSwitch={goFloor} onAdd={addFloor} onRename={renameFloor} onDuplicate={duplicateFloor} onDelete={deleteFloor} />
-            <button className="syp-fb-arrow" aria-label="Next floor" disabled={curFloor >= floorCount - 1} onClick={() => goFloor(curFloor + 1)}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
-            </button>
-          </div>
-          {/* ••• Go-to — steps / Camera Photos / Full screen / Walkthrough. Full screen moved in here so the
-              top-right isn't crowded (it used to overlap the view toggle on a phone). */}
-          <div className="syp-fb-morewrap">
-            <button className="syp-fb-fs" title="More" aria-label="More" aria-haspopup="menu" aria-expanded={topMenuOpen} onClick={() => setTopMenuOpen((o) => !o)}>
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-            </button>
-            {renderNavPop(topMenuOpen, setTopMenuOpen, "down")}
+            {curFloor >= floorCount - 1 ? (
+              <button className="syp-fb-arrow syp-fb-add" aria-label="Add floor" title="Add floor" onClick={addFloor}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+              </button>
+            ) : (
+              <button className="syp-fb-arrow" aria-label="Next floor" onClick={() => goFloor(curFloor + 1)}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -474,38 +481,40 @@ export default function SystemPlanner({
           <div className="syp-review-h">Review &amp; submit</div>
           <div className="syp-review-sub">Check each floor, then submit for the customer to approve.</div>
           <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
-          {footer}
+          {/* The Submit action lives in the universal bottom bar (center "Submit ▾") — no inline approve bar. */}
         </div>
       )}
 
-      {/* STAFF contextual nav footer — the bottom of the one frame. Guided Back / Next · prompt / CTA
-          (Submit / Re-submit / Awaiting / Continue), with a ••• Go-to menu so staff still jump to any
-          mode. Replaces the always-on 5-tab rail; the workflow state is unchanged underneath. ONE BAR:
-          hidden whenever an in-canvas dock carries the nav (satellite / draw / Cameras map dock). */}
-      {!customer && !inCanvasBar && (
+      {/* NAV-FIX §1: the ONE shared bottom bar, on EVERY step (incl. Submit). Left = Back (one step back,
+          hidden on the first/Background-chooser screen) · Center = "Current step ▾" opening Survey Navigation
+          upward · Right = Next (next step name) or, on Submit, the Submit action. Nothing else in the bar. */}
+      {!customer && (
         <div className="syp-nav">
           {prevStep ? (
             <button className="syp-nav-back" onClick={() => goRail(prevStep)}>
               <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
               <span>Back</span>
             </button>
-          ) : <span />}
-          <div className="syp-nav-actions">
-            {/* ONE forward control. No in-canvas "Done" and no "tap Done" hint — the map/tools autosave, and
-                the footer Next commits the active tool before advancing (goRail drives the survey step).
-                The CTA names the next step itself; Back (left) steps backward. */}
-            {nextStep && nextEnabled ? (
-              <button className="syp-nav-cta primary" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
-            ) : reviewCta ? (
-              <button className={`syp-nav-cta${reviewCta.muted ? " muted" : " primary"}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
-            ) : null}
-            <div className="syp-nav-morewrap">
-              <button className="syp-nav-more" aria-label="More" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-              </button>
-              {/* Same Survey Navigation popover as the top ••• — drops UP from the footer. */}
-              {renderNavPop(navMenuOpen, setNavMenuOpen, "up")}
-            </div>
+          ) : <span className="syp-nav-side" />}
+          <div className="syp-nav-centerwrap">
+            <button type="button" className="syp-nav-center" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
+              <span>{STEP_LABEL[railStep] || "Survey"}</span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg>
+            </button>
+            {renderNavPop(navMenuOpen, setNavMenuOpen, "up-center")}
+          </div>
+          <div className="syp-nav-side syp-nav-side--right">
+            {railStep === "review" ? (
+              reviewCta ? (
+                <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+              ) : <span />
+            ) : nextStep ? (
+              nextEnabled ? (
+                <button className="syp-nav-cta" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+              ) : (
+                <button className="syp-nav-cta muted" disabled>{nextHint || NEXT_PROMPT[nextStep]}</button>
+              )
+            ) : <span />}
           </div>
         </div>
       )}
@@ -605,7 +614,7 @@ function SubmitSummary({ floors = [], roster = [], onGoPlan, onGoPhotos }) {
 // rename/duplicate/delete), so floor logic lives once in the widget. Compact closed; the open menu
 // lists floors (✓ current) then Add/Rename/Duplicate/Delete acting on the current floor. Rename and
 // Delete resolve inline (no native dialogs), matching the vault-dark system.
-function FloorSelect({ floors = [], curFloor = 0, onSwitch, onAdd, onRename, onDuplicate, onDelete }) {
+function FloorSelect({ floors = [], curFloor = 0, plain = false, onSwitch, onAdd, onRename, onDuplicate, onDelete }) {
   const [open, setOpen] = useState(false);
   const [menuMode, setMenuMode] = useState("list");   // "list" | "rename" | "confirm"
   const [draft, setDraft] = useState("");
@@ -623,7 +632,7 @@ function FloorSelect({ floors = [], curFloor = 0, onSwitch, onAdd, onRename, onD
   const startRename = () => { setDraft(curName); setMenuMode("rename"); };
   const commitRename = () => { const n = draft.trim(); if (n && n !== curName) onRename && onRename(n); close(); };
   return (
-    <div className="syp-fsel" ref={ref}>
+    <div className={`syp-fsel${plain ? " plain" : ""}`} ref={ref}>
       <button className="syp-fsel-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         <span className="syp-fsel-name">{curName}</span>
         <svg viewBox="0 0 10 6" width="9" height="9" fill="currentColor" aria-hidden="true" style={{ opacity: .6, transform: open ? "rotate(180deg)" : "none", transition: "transform .16s" }}><path d="M0 0l5 6 5-6z" /></svg>
@@ -753,8 +762,12 @@ const CSS = `
    join them. */
 /* Flex row: [view toggle] [floor nav — flex, centered] [•••]. Flex (not centered-with-absolute-edges) so the
    three groups always share the width and never overlap on a phone. */
-.syp-floorbar{position:relative;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 12px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
-.syp-floorbar .syp-fb-nav{flex:1 1 auto;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.syp-floorbar{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px 12px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-bottom:none;border-radius:14px 14px 0 0;touch-action:pan-y;user-select:none}
+.syp-floorbar .syp-fb-nav{min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:4px}
+.syp-floorbar .syp-fb-arrow-sp{width:34px;height:34px;flex:none}
+/* plain-text floor switcher (look&feel): no pill/bg/border on the button — just the name + ▾. */
+.syp-floorbar .syp-fsel.plain .syp-fsel-btn{background:transparent;border-color:transparent;min-width:0;padding:8px 10px;font-size:.98rem}
+.syp-floorbar .syp-fsel.plain .syp-fsel-btn:hover{background:var(--dv-raise,#F6F6F4);border-color:transparent}
 /* Offline-first sync badge — top-right of the planner, above the canvas. */
 .syp{position:relative}
 .syp-sync{position:absolute;top:6px;right:8px;z-index:30;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;box-shadow:0 2px 8px rgba(16,20,24,.25)}
@@ -780,13 +793,21 @@ const CSS = `
 .syp--staff .syp-plan .ss-embed-frame{border-top-left-radius:0;border-top-right-radius:0;border-top:none}
 .syp-head--staff{justify-content:flex-start;padding:0 2px 10px;flex-wrap:nowrap}
 /* STAFF contextual nav footer — the bottom of the one frame. Guided Back / Next·prompt / CTA, + ••• Go-to. */
-.syp-nav{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;background:var(--dv-raise,#F2F2EF);border:1px solid var(--dv-line,#E4E4DF);border-top:none;border-radius:0 0 14px 14px;min-height:58px}
-.syp-nav .syp-nav-back{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.86rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:0;padding:8px 10px;border-radius:100px}
+/* NAV-FIX §1: the shared bottom bar — Back (left) · Current step ▾ (center) · Next/Submit (right). Pure
+   white, thin top border. The two sides flex:1 so the center button is truly centered on every step. */
+.syp-nav{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-top:none;border-radius:0 0 14px 14px;min-height:58px}
+.syp-nav > .syp-nav-back,.syp-nav > .syp-nav-side{flex:1 1 0;min-width:0}
+.syp-nav .syp-nav-back{display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;appearance:none;cursor:pointer;font:inherit;font-size:.86rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:0;padding:8px 4px;border-radius:100px}
 .syp-nav .syp-nav-back:hover{color:var(--dv-ink,#101418)}
-.syp-nav-actions{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.syp-nav-side{display:inline-flex;align-items:center}
+.syp-nav-side--right{justify-content:flex-end}
+.syp-nav-centerwrap{position:relative;flex:0 0 auto;display:inline-flex}
+.syp-nav-center{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.92rem;font-weight:800;letter-spacing:.01em;color:var(--dv-ink,#101418);background:transparent;border:0;padding:8px 12px;border-radius:100px;white-space:nowrap}
+.syp-nav-center:hover{background:var(--dv-raise,#F6F6F4)}
+.syp-nav-center svg{color:var(--dv-meta,#787D84);flex:none}
 .syp-nav-hint{font-size:.82rem;font-weight:600;letter-spacing:.01em;color:var(--dv-meta,#787D84);white-space:nowrap}
-.syp-nav .syp-nav-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.88rem;font-weight:800;letter-spacing:.01em;padding:10px 18px;border-radius:100px;border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff;transition:background .15s}
-.syp-nav .syp-nav-cta.primary:hover{background:#000}
+.syp-nav .syp-nav-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.88rem;font-weight:800;letter-spacing:.01em;padding:10px 18px;border-radius:100px;border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff;transition:background .15s;white-space:nowrap}
+.syp-nav .syp-nav-cta:hover:not(:disabled){background:#000}
 .syp-nav .syp-nav-cta.muted{background:transparent;color:var(--dv-meta,#787D84);border-color:var(--dv-line,#E4E4DF);cursor:default;font-weight:700}
 .syp-nav-morewrap{position:relative;display:inline-block}
 .syp-nav .syp-nav-more{appearance:none;cursor:pointer;width:38px;height:38px;flex:none;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;color:var(--dv-ink,#101418);display:inline-flex;align-items:center;justify-content:center;transition:border-color .15s}
@@ -806,6 +827,7 @@ const CSS = `
 .syp-navpop{position:absolute;right:0;z-index:1201;width:440px;max-width:calc(100vw - 20px);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.24);overflow:hidden}
 .syp-navpop--down{top:calc(100% + 8px);bottom:auto}
 .syp-navpop--up{bottom:calc(100% + 8px);top:auto}
+.syp-navpop--up-center{bottom:calc(100% + 10px);top:auto;left:50%;right:auto;transform:translateX(-50%)}
 .syp-navpop-head{display:flex;align-items:center;gap:9px;padding:15px 16px 9px}
 .syp-navpop-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
 .syp-navpop-x{margin-left:auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:8px}

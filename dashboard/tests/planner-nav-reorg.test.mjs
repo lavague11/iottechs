@@ -31,20 +31,22 @@ test("staff: floor carousel header on top, contextual nav footer below the canva
   assert.ok(!sp.includes('role="tablist"'), "the 5-tab rail tablist is removed");
 });
 
-test("contextual nav footer: linear 4-step Back/Next (no skips) + a state-derived Submit CTA", () => {
-  // guided navigation reuses goRail; the linear flow is exactly Base → Layout → Cameras → Submit
-  assert.ok(sp.includes('const navOrder = ["background", "layout", "cameras", "review"];'), "linear 4-step order, one at a time (no skips)");
+test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a state-derived Submit CTA", () => {
+  // NAV-FIX: the linear flow is Background → Layout → Placement → Camera Angles → Submit (views is in-flow).
+  assert.ok(sp.includes('const navOrder = ["background", "layout", "cameras", "views", "review"];'), "linear 5-step order, one at a time (no skips)");
   assert.ok(sp.includes("const nextStep = navOrder[navIdx + 1] || null;") && sp.includes("const prevStep = navOrder[navIdx - 1] || null;"), "prev/next derived from the canonical order");
-  // the forward CTA NAMES the next step itself — no separate "Next · X" hint, no generic "Next" label
-  assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg"), "the forward CTA label is the next step's prompt, not a generic Next");
-  assert.ok(!sp.includes('syp-nav-hint">Next ·'), "the redundant 'Next · <step>' hint is gone");
-  assert.ok(/label: "Submit"/.test(sp) && /label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Submit / Re-submit / Continue");
+  // the forward control NAMES the next step itself
+  assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg"), "the Next label is the next step's prompt");
+  // the center button shows the CURRENT step and opens Survey Navigation upward
+  assert.ok(sp.includes('className="syp-nav-center"') && sp.includes("{STEP_LABEL[railStep]"), "center button shows the current step name");
+  assert.ok(sp.includes('renderNavPop(navMenuOpen, setNavMenuOpen, "up-center")'), "center opens the Survey Navigation popover upward");
+  // disabled Next shows a short hint instead of a silent no-op
+  assert.ok(sp.includes("{nextHint || NEXT_PROMPT[nextStep]}"), "a gated Next shows its hint, never a silent click");
+  // Submit CTA (label just 'Submit', not Re-submit) drives the canonical submit / continue
+  assert.ok(/label: "Submit"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Submit / Awaiting / Continue (no Re-submit label)");
   assert.ok(sp.includes('onSubmitTool && onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
   assert.ok(sp.includes("onContinue && onContinue()"), "approved → Continue reuses onContinue");
-  // gateway passes the canonical wiring
   assert.ok(gw.includes("surveyOk={surveyOk}") && gw.includes("onSubmitTool=") && gw.includes("onContinue={() => browse(\"proposal\")}"), "gateway wires surveyOk/onSubmitTool/onContinue");
-  // the detailed submit bars live in the Submit pane now (not always-below); customer keeps the standalone approve surface
-  assert.ok(/syp-review[\s\S]{0,1600}\{footer\}/.test(sp), "submit bars (footer) moved into the Submit pane");
   assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");
 });
 
