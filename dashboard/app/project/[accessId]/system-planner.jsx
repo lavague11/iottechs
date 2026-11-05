@@ -33,9 +33,9 @@ export default function SystemPlanner({
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
   // (iotSurveyCmd {cmd:"step"}); Views is the mockup pane; Review is the status surface. Both iframes stay
   // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
-  // MERGE: a project with no survey yet opens straight to Photos (the merged System Preview) — a
-  // preview-only job never has to touch the floor plan. A project that already has a survey opens on Map.
-  const [railStep, setRailStep] = useState(() => (initialStep === "layout" && !hasSurvey && !customer) ? "views" : initialStep);
+  // NAV-FIX §7: on load/refresh, staff always open in a MAP step (never Photos / Camera Angles). Default to
+  // the given step unless it's "views" — then open Layout (Map). The customer branch keeps its own entry.
+  const [railStep, setRailStep] = useState(() => customer ? (initialStep || "layout") : (initialStep && initialStep !== "views" ? initialStep : "layout"));
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
@@ -67,7 +67,8 @@ export default function SystemPlanner({
   // Floor management — the top selector drives the survey iframe's canonical floor functions by cmd
   // (switch/add/rename/duplicate/delete). Floor logic lives once, in the widget; the shell only asks.
   const goFloor = (i) => { if (i === curFloor) return; setCurFloor(i); surveyCmd({ cmd: "floor", i }); };
-  const addFloor = () => surveyCmd({ cmd: "addFloor" });
+  // NAV-FIX §8: adding a floor after submit UNLOCKS the survey (so the new floor is editable), then adds it.
+  const addFloor = () => { if (surveySubmitted && onUnsubmitTool) { try { Promise.resolve(onUnsubmitTool("site_survey")).catch(() => {}); } catch { /* best-effort unlock */ } } surveyCmd({ cmd: "addFloor" }); };
   const duplicateFloor = () => surveyCmd({ cmd: "duplicateFloor" });
   const renameFloor = (name) => { const n = String(name || "").trim(); if (n) surveyCmd({ cmd: "renameFloor", name: n }); };
   const deleteFloor = () => surveyCmd({ cmd: "deleteFloor" });
@@ -352,13 +353,28 @@ export default function SystemPlanner({
   const mkApproved = toolAccepted(mkMeta, acceptances && acceptances.mockup);
   const mkSubCurrent = toolAccepted(mkMeta, acceptances && acceptances.submit_mockup);
   const mkStale = !!(acceptances && acceptances.submit_mockup) && !mkSubCurrent;
-  // REBUILD: ONE Submit button, gated on the SURVEY only. Photos are no longer a submit blocker (they
-  // stay editable after submit; only geometry locks). Mockup/Camera-Views submission is dropped from the
-  // flow — the mkStale/mkSubCurrent reads remain available but no longer gate the CTA.
+  // NAV-FIX §8: Submit is blocked until every floor is complete. A real gap is: a floor with no background,
+  // or a PLACED camera with no photo. A floor with no cameras is fine (never flagged). Each gap links to the
+  // step that fixes it. (Cameras stay a system-wide account; this only checks per-floor completeness.)
+  const surveyGaps = (() => {
+    const gaps = [];
+    (floors || []).forEach((f, i) => {
+      const name = f.name || `Floor ${i + 1}`;
+      const hasBase = !!(f.bg || (f.ctx && f.ctx.src) || f.aerial || f.bgSource);
+      if (!hasBase) { gaps.push({ floor: i, name, label: "Needs a background", step: "background" }); return; }
+      const cams = (f.cams || (f.devices || []).filter((d) => d.k === "cam")).filter((d) => d.placed !== false);
+      const noPhoto = cams.filter((c) => !c.photo).length;
+      if (noPhoto > 0) gaps.push({ floor: i, name, label: `${noPhoto} camera${noPhoto > 1 ? "s" : ""} need a photo`, step: "views" });
+    });
+    return gaps;
+  })();
+  const surveyComplete = surveyGaps.length === 0;
+  // REBUILD: ONE Submit button, gated on the SURVEY. Blocked (muted) while there are gaps; Submit label is
+  // just "Submit" (never Re-submit). Mockup/Camera-Views submission is dropped from the flow.
   const reviewCta = (() => {
     if (svMeta && svMeta.has && !svApproved) {
-      if (svStale) return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
       if (svSubCurrent) return { label: "Awaiting customer approval", muted: true };
+      if (!surveyComplete) return { label: "Complete every floor", muted: true };
       return { label: "Submit", primary: true, act: () => onSubmitTool && onSubmitTool("site_survey") };
     }
     if (surveyOk) return { label: "Continue to Proposal →", primary: true, act: () => onContinue && onContinue() };
@@ -478,8 +494,26 @@ export default function SystemPlanner({
               <span className="syp-lockbanner-t"><b>Submitted — locked.</b> The floor plan and cameras are locked for the customer to approve. Photos stay editable. Use <b>Unsubmit</b> to change the plan.</span>
             </div>
           )}
-          <div className="syp-review-h">Review &amp; submit</div>
-          <div className="syp-review-sub">Check each floor, then submit for the customer to approve.</div>
+          {/* NAV-FIX §8: deliverable status is a small badge next to the title (not a separate card). */}
+          <div className="syp-review-h">Review &amp; submit
+            {svSubCurrent ? <span className="syp-review-badge awaiting">Awaiting approval</span>
+              : surveyComplete ? <span className="syp-review-badge ready">Ready</span>
+              : <span className="syp-review-badge gap">Incomplete</span>}
+          </div>
+          {surveyComplete ? (
+            <div className="syp-review-sub">Everything looks complete — submit for the customer to approve.</div>
+          ) : (
+            <div className="syp-gaps">
+              <div className="syp-gaps-h">Finish these before submitting</div>
+              {surveyGaps.map((g, i) => (
+                <button key={i} type="button" className="syp-gap" onClick={() => { setCurFloor(g.floor); surveyCmd({ cmd: "floor", i: g.floor }); goRail(g.step); }}>
+                  <span className="syp-gap-floor">{g.name}</span>
+                  <span className="syp-gap-label">{g.label}</span>
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+                </button>
+              ))}
+            </div>
+          )}
           <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
           {/* The Submit action lives in the universal bottom bar (center "Submit ▾") — no inline approve bar. */}
         </div>
@@ -505,9 +539,15 @@ export default function SystemPlanner({
           </div>
           <div className="syp-nav-side syp-nav-side--right">
             {railStep === "review" ? (
-              reviewCta ? (
-                <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
-              ) : <span />
+              <>
+                {/* §8: Unsubmit sits next to "Awaiting customer approval" when the survey is locked. */}
+                {surveySubmitted && onUnsubmitTool && (
+                  <button type="button" className="syp-nav-unsub" onClick={() => onUnsubmitTool("site_survey")}>Unsubmit</button>
+                )}
+                {reviewCta ? (
+                  <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}`} disabled={reviewCta.muted || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
+                ) : <span />}
+              </>
             ) : nextStep ? (
               nextEnabled ? (
                 <button className="syp-nav-cta" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
@@ -522,7 +562,7 @@ export default function SystemPlanner({
       {/* The DEVICES roster — the camera account. Shared across BOTH tabs (not tied to the survey map),
           so cameras can be named/photographed from either mode. Office-only (customers see cameras in
           the views). */}
-      {!devReadOnly && (() => {
+      {!devReadOnly && paneMode !== "review" && (() => {
         const devCount = (roster || []).reduce((n, f) => n + (f && Array.isArray(f.devices) ? f.devices.length : 0), 0);
         return (
           <div className={`syp-devwrap${devOpen ? " open" : ""}`}>
@@ -735,9 +775,26 @@ const CSS = `
   .syp-devwrap.open .syp-devtog svg{transform:rotate(180deg)}
   .syp-devtog svg{transition:transform .18s}
 }
-.syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:var(--dv-raise,#FBFBFA);padding:16px 18px;margin-bottom:12px}
-.syp-review-h{font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
+.syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;padding:16px 18px;margin-bottom:12px}
+.syp-review-h{display:flex;align-items:center;gap:10px;font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-review-sub{margin-top:3px;font-size:.82rem;color:var(--dv-meta,#787D84)}
+/* §8: deliverable status badge next to the title */
+.syp-review-badge{font-size:.66rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 9px;border-radius:100px;border:1px solid var(--dv-line,#E4E4DF)}
+.syp-review-badge.ready{color:#2f6f4e;background:rgba(62,125,90,.1);border-color:rgba(62,125,90,.3)}
+.syp-review-badge.gap{color:#8a5a28;background:rgba(176,141,76,.12);border-color:rgba(176,141,76,.32)}
+.syp-review-badge.awaiting{color:var(--dv-meta,#787D84);background:var(--dv-raise,#F6F6F4)}
+/* §8: the "finish these" gap list — each row jumps to the floor + step that fixes it */
+.syp-gaps{margin-top:10px;border:1px solid rgba(176,141,76,.3);border-radius:12px;overflow:hidden}
+.syp-gaps-h{font-size:.72rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#8a5a28;background:rgba(176,141,76,.08);padding:8px 12px}
+.syp-gap{display:flex;align-items:center;gap:10px;width:100%;appearance:none;cursor:pointer;font:inherit;text-align:left;background:#fff;border:0;border-top:1px solid var(--dv-line,#E4E4DF);padding:10px 12px;color:var(--dv-ink,#101418)}
+.syp-gap:first-of-type{border-top:0}
+.syp-gap:hover{background:var(--dv-raise,#F6F6F4)}
+.syp-gap-floor{font-size:.82rem;font-weight:800;flex:none;min-width:64px}
+.syp-gap-label{flex:1;font-size:.82rem;font-weight:600;color:var(--dv-meta,#787D84)}
+.syp-gap svg{color:var(--dv-meta,#787D84);flex:none}
+/* §8: Unsubmit next to the submit CTA */
+.syp-nav-unsub{appearance:none;cursor:pointer;font:inherit;font-size:.84rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:9px 15px;margin-right:8px}
+.syp-nav-unsub:hover{color:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418)}
 .syp-head-actions{display:inline-flex;align-items:center;gap:8px}
 .syp-ico,.syp-play{appearance:none;cursor:pointer;width:38px;height:38px;border-radius:100px;display:inline-flex;align-items:center;justify-content:center;transition:background .18s,border-color .18s}
 .syp-ico{border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418)}

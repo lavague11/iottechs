@@ -269,7 +269,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
       )}
 
       <style>{`
-        .sd-wrap{margin-top:12px;border:1px solid var(--line,#e6e2d9);border-radius:12px;background:var(--bg-soft,#faf8f4)}
+        .sd-wrap{margin-top:12px;border:1px solid var(--line,#e6e2d9);border-radius:12px;background:#fff}
         .sd-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;width:100%;padding:11px 14px;background:none;border:0;cursor:pointer;font-family:inherit;color:var(--ink,#1a1a1a);text-align:left}
         .sd-chev{flex:none;transition:transform .15s;color:var(--muted,#6f7686)}.sd-chev.on{transform:rotate(90deg)}
         .sd-title{font-size:.82rem;font-weight:800;letter-spacing:.02em}

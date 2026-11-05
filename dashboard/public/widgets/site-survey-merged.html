@@ -3078,7 +3078,9 @@
     // indicator follows goStep (incl. the Background→Setup auto-advance after Done) without the shell
     // guessing. hasPlan = a real structure exists; camCount drives the Cameras/Views steps.
     function emitSurveyStep(){ try{ var lf=floors[curFloor]||{};
-      var camCount=(floors||[]).reduce(function(n,f){ return n+((f&&f.devices)||[]).filter(function(d){ return d&&d.k==="cam"; }).length; }, 0);
+      // NAV-FIX §5: Placement ticks PER FLOOR — count only THIS floor's PLACED cameras (not every floor's),
+      // so Floor 1's cameras never tick Placement on Floor 2. `devices` is the live current-floor array.
+      var camCount=(devices||[]).filter(function(d){ return d&&d.k==="cam"&&d.placed!==false; }).length;
       // bgTool: which build tool is open ("draw" = Structure editor, "satellite" = aerial) or null. The host
       // maps a live draw tool to the Floor Plan step so the nav CTA isn't "Create Floor Plan" while you ARE.
       // dock: the in-canvas bar currently showing — "satellite" | "draw" | "cameras" (the map with devices) |

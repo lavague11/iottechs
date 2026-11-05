@@ -2424,6 +2424,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             surveyOk={surveyOk} svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
             onContinue={() => browse("proposal")}
             onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
+            onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }
@@ -3201,6 +3202,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
                 onContinue={() => browse("proposal")}
                 onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Awaiting customer approval"); } catch {} } }}
+                onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
                 devReadOnly={!!previewRole} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
             );
           }
