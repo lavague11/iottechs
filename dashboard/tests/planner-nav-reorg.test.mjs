@@ -10,7 +10,7 @@ const wrap = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.
 const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
 
 test("rebuild: 4-step rail Base · Layout · Cameras · Submit; steps track geometry/cameras/submission", () => {
-  assert.ok(sp.includes('label: "Base"') && sp.includes('label: "Layout"') && sp.includes('label: "Cameras"') && sp.includes('label: "Submit"'), "4-step rail labels");
+  assert.ok(sp.includes('label: "Background"') && sp.includes('label: "Layout"') && sp.includes('label: "Placement"') && sp.includes('label: "Submit"'), "4-step rail labels (Background · Layout · Placement · Submit)");
   assert.ok(!/label: "Views"/.test(sp) && !/label: "Plan"/.test(sp), "no 'Views'/'Plan' rail step (Plan split into Layout + Cameras)");
   assert.ok(sp.includes('done: sig.hasPlan || surveySubmitted') && sp.includes('done: camsPlaced > 0 || surveySubmitted'), "Layout done = geometry/submitted; Cameras done = cameras/submitted");
   assert.ok(/surveySubmitted = false/.test(sp), "surveySubmitted prop on SystemPlanner");

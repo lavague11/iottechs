@@ -251,11 +251,69 @@ export default function SystemPlanner({
   // Cameras (place + aim) · Submit (summary + lock). Layout and Cameras are the SAME live map — the rail
   // only swaps the toolset, no reload. Views (Camera Photos) stays reachable via the ••• Go-to menu.
   const steps = [
-    { key: "background", label: "Base", done: sig.bgReady, enabled: true },
+    { key: "background", label: "Background", done: sig.bgReady, enabled: true },
     { key: "layout", label: "Layout", done: sig.hasPlan || surveySubmitted, enabled: sig.bgReady },
-    { key: "cameras", label: "Cameras", done: camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady },
+    { key: "cameras", label: "Placement", done: camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady },
     { key: "review", label: "Submit", done: false, enabled: sig.bgReady },
   ];
+  // Survey Navigation popover (the top-right ••• ) — Add-Service-modal styling: 2-col icon tiles in the
+  // linear order Background · Layout · Placement · Camera Angles · Submit (Camera Angles = the views pane).
+  // Each carries a tinted icon + current/completed state; Full screen + Walkthrough move to a Tools section.
+  const NAV_ITEMS = [
+    { key: "background", label: "Background", color: "#5E7CA3", done: sig.bgReady, enabled: true,
+      icon: <><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z" /><path d="M9 3v15M15 6v15" /></> },
+    { key: "layout", label: "Layout", color: "#B08D4C", done: sig.hasPlan || surveySubmitted, enabled: sig.bgReady,
+      icon: <><path d="M12 2 2 7l10 5 10-5-10-5z" /><path d="M2 12l10 5 10-5" /><path d="M2 17l10 5 10-5" /></> },
+    { key: "cameras", label: "Placement", color: "#4E8C6A", done: camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady,
+      icon: <><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></> },
+    { key: "views", label: "Camera Angles", color: "#8673A6", done: hasViews, enabled: sig.bgReady,
+      icon: <><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /></> },
+    { key: "review", label: "Submit", color: "#3E7D5A", done: false, enabled: sig.bgReady, span: true,
+      icon: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></> },
+  ];
+  // ONE popover design (the Survey Navigation panel), used by BOTH the top-bar ••• (drops down) and the
+  // footer ••• (drops up). Visual language matches the Add Service modal; nav logic (goRail) is unchanged.
+  const renderNavPop = (isOpen, setOpen, placement) => isOpen ? (
+    <>
+      <div className="syp-navpop-backdrop" onClick={() => setOpen(false)} />
+      <div className={`syp-navpop syp-navpop--${placement}`} role="dialog" aria-label="Survey navigation">
+        <div className="syp-navpop-head">
+          <span className="syp-navpop-title">Survey Navigation</span>
+          <button type="button" className="syp-navpop-x" aria-label="Close" onClick={() => setOpen(false)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+        </div>
+        <div className="syp-navpop-grid">
+          {NAV_ITEMS.map((it) => (
+            <button key={it.key} type="button" disabled={!it.enabled}
+              className={`syp-navpop-tile${railStep === it.key ? " cur" : ""}${it.span ? " span" : ""}`}
+              onClick={() => { if (it.enabled) { goRail(it.key); setOpen(false); } }}>
+              <span className="syp-navpop-ic" style={{ color: it.color, background: `${it.color}22` }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
+              </span>
+              <span className="syp-navpop-name">{it.label}</span>
+              {it.done && <span className="syp-navpop-check" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg></span>}
+            </button>
+          ))}
+        </div>
+        <div className="syp-navpop-sec">Tools</div>
+        <div className="syp-navpop-tools">
+          <button type="button" className="syp-navpop-tool" onClick={() => { (fsOn ? exitFs : enterFs)(); setOpen(false); }}>
+            <span className="syp-navpop-tool-ic">
+              {fsOn
+                ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
+                : <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
+            </span>{fsOn ? "Exit full screen" : "Full screen"}
+          </button>
+          {canWalk && (
+            <button type="button" className="syp-navpop-tool" onClick={() => { setWalkOpen(true); setOpen(false); }}>
+              <span className="syp-navpop-tool-ic"><svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></span>Walkthrough
+            </button>
+          )}
+        </div>
+      </div>
+    </>
+  ) : null;
 
   // CONTEXTUAL NAV FOOTER (staff) — guided Back / Next, ONE step at a time (no skips). "views" (Camera
   // Photos) sits on the Cameras rung for nav purposes but is OUT of the linear Base→Layout→Cameras→Submit.
@@ -382,40 +440,7 @@ export default function SystemPlanner({
             <button className="syp-fb-fs" title="More" aria-label="More" aria-haspopup="menu" aria-expanded={topMenuOpen} onClick={() => setTopMenuOpen((o) => !o)}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
             </button>
-            {topMenuOpen && (
-              <>
-                <div className="syp-nav-backdrop" onClick={() => setTopMenuOpen(false)} />
-                <div className="syp-nav-menu syp-nav-menu--top" role="menu">
-                  <div className="syp-nav-menu-h">Go to</div>
-                  {steps.map((s) => (
-                    <button key={s.key} className={`syp-nav-mi${railStep === s.key ? " on" : ""}`} role="menuitem" disabled={!s.enabled}
-                      onClick={() => { if (s.enabled) { goRail(s.key); setTopMenuOpen(false); } }}>
-                      <span className="syp-nav-mi-dot">{s.done ? "✓" : ""}</span>{s.label}
-                    </button>
-                  ))}
-                  <button className={`syp-nav-mi${railStep === "views" ? " on" : ""}`} role="menuitem" disabled={!sig.bgReady}
-                    onClick={() => { if (sig.bgReady) { goRail("views"); setTopMenuOpen(false); } }}>
-                    <span className="syp-nav-mi-dot">{hasViews ? "✓" : ""}</span>Camera Photos
-                  </button>
-                  <div className="syp-nav-sep" />
-                  <button className="syp-nav-mi" role="menuitem" onClick={() => { (fsOn ? exitFs : enterFs)(); setTopMenuOpen(false); }}>
-                    <span className="syp-nav-mi-dot">
-                      {fsOn
-                        ? <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3v4a2 2 0 0 1-2 2H3M21 9h-4a2 2 0 0 1-2-2V3M3 15h4a2 2 0 0 1 2 2v4M15 21v-4a2 2 0 0 1 2-2h4" /></svg>
-                        : <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3" /></svg>}
-                    </span>{fsOn ? "Exit full screen" : "Full screen"}
-                  </button>
-                  {canWalk && (
-                    <>
-                      <div className="syp-nav-sep" />
-                      <button className="syp-nav-mi" role="menuitem" onClick={() => { setWalkOpen(true); setTopMenuOpen(false); }}>
-                        <span className="syp-nav-mi-dot"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></span>Walkthrough
-                      </button>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
+            {renderNavPop(topMenuOpen, setTopMenuOpen, "down")}
           </div>
         </div>
       )}
@@ -478,33 +503,8 @@ export default function SystemPlanner({
               <button className="syp-nav-more" aria-label="More" aria-haspopup="menu" aria-expanded={navMenuOpen} onClick={() => setNavMenuOpen((o) => !o)}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
               </button>
-              {navMenuOpen && (
-                <>
-                  <div className="syp-nav-backdrop" onClick={() => setNavMenuOpen(false)} />
-                  <div className="syp-nav-menu" role="menu">
-                    <div className="syp-nav-menu-h">Go to</div>
-                    {steps.map((s) => (
-                      <button key={s.key} className={`syp-nav-mi${railStep === s.key ? " on" : ""}`} role="menuitem" disabled={!s.enabled}
-                        onClick={() => { if (s.enabled) { goRail(s.key); setNavMenuOpen(false); } }}>
-                        <span className="syp-nav-mi-dot">{s.done ? "✓" : ""}</span>{s.label}
-                      </button>
-                    ))}
-                    {/* Camera Photos — the phone-mockup photo surface, out of the linear Base→Plan→Submit flow. */}
-                    <button className={`syp-nav-mi${railStep === "views" ? " on" : ""}`} role="menuitem" disabled={!sig.bgReady}
-                      onClick={() => { if (sig.bgReady) { goRail("views"); setNavMenuOpen(false); } }}>
-                      <span className="syp-nav-mi-dot">{hasViews ? "✓" : ""}</span>Camera Photos
-                    </button>
-                    {canWalk && (
-                      <>
-                        <div className="syp-nav-sep" />
-                        <button className="syp-nav-mi" role="menuitem" onClick={() => { setWalkOpen(true); setNavMenuOpen(false); }}>
-                          <span className="syp-nav-mi-dot"><svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg></span>Walkthrough
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
+              {/* Same Survey Navigation popover as the top ••• — drops UP from the footer. */}
+              {renderNavPop(navMenuOpen, setNavMenuOpen, "up")}
             </div>
           </div>
         </div>
@@ -800,6 +800,32 @@ const CSS = `
 .syp-nav .syp-nav-mi:disabled{opacity:.34;cursor:default}
 .syp-nav-mi-dot{width:14px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dv-gold,#b98a2e);font-size:11px}
 .syp-nav-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 4px}
+/* SURVEY NAVIGATION popover — the Add-Service-modal design language (white/paper surface, soft border,
+   big shadow, rounded, 2-col icon tiles). Used by both the top ••• (drops down) and the footer ••• (up). */
+.syp-navpop-backdrop{position:fixed;inset:0;z-index:1200}
+.syp-navpop{position:absolute;right:0;z-index:1201;width:440px;max-width:calc(100vw - 20px);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;box-shadow:0 18px 48px rgba(16,20,24,.24);overflow:hidden}
+.syp-navpop--down{top:calc(100% + 8px);bottom:auto}
+.syp-navpop--up{bottom:calc(100% + 8px);top:auto}
+.syp-navpop-head{display:flex;align-items:center;gap:9px;padding:15px 16px 9px}
+.syp-navpop-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
+.syp-navpop-x{margin-left:auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:8px}
+.syp-navpop-x:hover{background:rgba(16,20,24,.05);color:var(--dv-ink,#101418)}
+.syp-navpop-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:2px 14px 8px}
+.syp-navpop-tile{display:flex;align-items:center;gap:12px;width:100%;min-height:54px;padding:9px 12px;border:1px solid transparent;border-radius:12px;background:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .13s,border-color .13s}
+.syp-navpop-tile:hover:not(:disabled){background:var(--dv-raise,#FBFBFA);border-color:var(--dv-line,#E4E4DF)}
+.syp-navpop-tile.cur{background:var(--dv-raise,#FBFBFA);border-color:var(--dv-ink,#101418)}
+.syp-navpop-tile.span{grid-column:1 / -1}
+.syp-navpop-tile:disabled{opacity:.42;cursor:default}
+.syp-navpop-ic{flex:0 0 auto;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
+.syp-navpop-name{flex:1;min-width:0;font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418)}
+.syp-navpop-tile.cur .syp-navpop-name{font-weight:800}
+.syp-navpop-check{flex:0 0 auto;display:inline-flex;align-items:center;color:var(--dv-gold-text,#8A6A1F)}
+.syp-navpop-sec{font-size:.66rem;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--dv-meta,#787D84);padding:9px 18px 4px;border-top:1px solid var(--dv-line,#E4E4DF);margin-top:2px}
+.syp-navpop-tools{display:flex;flex-direction:column;padding:2px 10px 12px;gap:2px}
+.syp-navpop-tool{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border:1px solid transparent;border-radius:10px;background:none;cursor:pointer;font-family:inherit;font-size:.86rem;font-weight:600;color:var(--dv-ink,#101418);text-align:left}
+.syp-navpop-tool:hover{background:var(--dv-raise,#FBFBFA);border-color:var(--dv-line,#E4E4DF)}
+.syp-navpop-tool-ic{flex:0 0 auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px;background:rgba(16,20,24,.05);color:var(--dv-meta,#787D84)}
+@media (max-width:560px){.syp-navpop{width:min(440px,calc(100vw - 20px))}.syp-navpop-grid{grid-template-columns:1fr 1fr}}
 /* Floor selector dropdown — compact pill + menu (switch/add/rename/duplicate/delete). Button bg rules
    are scoped under .syp-fsel so they beat the deck's .dv-shell button reset. */
 .syp-fsel{position:relative;display:inline-block;min-width:0}

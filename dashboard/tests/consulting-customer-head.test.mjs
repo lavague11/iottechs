@@ -21,12 +21,13 @@ test("customer branch shows a pager + full-width walkthrough, and NO staff rail"
   assert.ok(!branch.includes('role="tablist"'), "the staff rail is NOT in the customer branch");
 });
 
-test("the 3 workflow steps exist for non-customers (Base · Plan · Submit) + Go-to menu", () => {
-  for (const label of ["Base", "Layout", "Cameras", "Submit"]) {
+test("the workflow steps exist for non-customers (Background · Layout · Placement · Submit) + Survey Navigation popover", () => {
+  for (const label of ["Background", "Layout", "Placement", "Submit"]) {
     assert.ok(sp.includes(`label: "${label}"`), `workflow has ${label}`);
   }
-  assert.ok(sp.includes('className="syp-nav-menu"') && sp.includes(">Go to<"), "the ••• Go-to menu lists the modes");
-  assert.ok(sp.includes("Camera Photos"), "Camera Photos is reachable from the Go-to menu (Views folded in)");
+  // The ••• Go-to is the Survey Navigation popover (Add-Service-modal styling); "views" is listed as "Camera Angles".
+  assert.ok(sp.includes('className="syp-navpop') && sp.includes("Survey Navigation"), "the ••• opens the Survey Navigation popover");
+  assert.ok(sp.includes('label: "Camera Angles"'), "Camera Angles (the views pane) is reachable from the popover");
 });
 
 test("pager walks floors then Camera Views, driving the survey floor cmd", () => {
