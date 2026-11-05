@@ -9,8 +9,8 @@ const survey = readFileSync(new URL("../public/widgets/site-survey-merged.html",
 const draw = readFileSync(new URL("../public/widgets/draw-floorplan.html", import.meta.url), "utf8");
 
 test("survey hands the floor's aerial to the draw tool on iotPlanReady (ctx.src)", () => {
-  assert.ok(survey.includes('type:"iotDrawBackdrop", fid:fid, src:(fl&&fl.ctx&&fl.ctx.src)||null'),
-    "iotDrawBackdrop posted with the floor's ctx.src");
+  assert.ok(survey.includes('type:"iotDrawBackdrop", fid:fid, src:(fl&&((fl.ctx&&fl.ctx.src)||fl.bg))||null'),
+    "iotDrawBackdrop posted with the floor's ctx.src, falling back to the plain bg aerial so Layout is never blank");
   // posted from inside the iotPlanReady branch (right after iotPlanLoad)
   const i = survey.indexOf('m.type==="iotPlanReady"');
   const j = survey.indexOf("iotDrawBackdrop");

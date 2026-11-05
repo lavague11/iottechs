@@ -931,7 +931,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html?v=20261105-navfix"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
-    function drawSrc(){ return "draw-floorplan.html?v=20261105-navfix"
+    function drawSrc(){ return "draw-floorplan.html?v=20261105-navfix3"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
@@ -1239,7 +1239,10 @@
       var fid=String(m.fid||""), fl=fid ? floors.find(function(f){ return f && f.id===fid; }) : null;
       if(m.type==="iotPlanReady"){ hideBgLoading(); try{ satFrame.contentWindow.postMessage({type:"iotPlanLoad", fid:fid, plan:(fl&&fl.plan)||null}, "*"); }catch(e){} postFloorRoster();   // structure editor up → drop the loading veil, then load the plan + roster
         // Phase 2 (grid-first): hand the draw tool this floor's enhanced/leveled aerial so Building cells are painted ON the roof — the tool positions it through its own seed transform (ctxVB), behind the grid + cells.
-        try{ satFrame.contentWindow.postMessage({type:"iotDrawBackdrop", fid:fid, src:(fl&&fl.ctx&&fl.ctx.src)||null}, "*"); }catch(e){}
+        // NAV-FIX: the aerial backdrop is the floor's ctx image — but fall back to the plain bg aerial so
+        // Layout always shows the background to trace over (a satellite floor may hold the aerial in f.bg
+        // with no ctx yet; without the fallback the draw tool opened on a blank grid).
+        try{ satFrame.contentWindow.postMessage({type:"iotDrawBackdrop", fid:fid, src:(fl&&((fl.ctx&&fl.ctx.src)||fl.bg))||null}, "*"); }catch(e){}
         // Phase 3c: hand over the legacy polygon boundary + zones (plate-%) so the tool can migrate them to cells.
         try{ satFrame.contentWindow.postMessage({type:"iotZonePolys", fid:fid, boundary:(fl&&fl.boundary)||null, zones:(fl&&fl.zones)||[]}, "*"); }catch(e){}
         return; }

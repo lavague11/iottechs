@@ -1531,7 +1531,9 @@
     if(any){ setMode("zone"); pushHist(); redraw(); try{ parent.postMessage({type:"iotZonesMigrated", project:PID, fid:FID}, "*"); }catch(e){} } return any; }
   function updateImportZonesBtn(){ var b=$("mImportZones"); if(b) b.style.display = importableZones() ? "flex" : "none"; }
 
-  try{ if(localStorage.getItem("iot_struct_snap")==="1") snap=1; }catch(e){}   // remembered snap (default ½)
+  // NAV-FIX: Layout always opens on HALF-grid (owner request). We no longer restore a remembered full-grid
+  // snap — ½ is the firm default; the ½/full toggle still switches it for the current session.
+  snap=0.5;
   applySnapUI();
   fitCanvas();                                       // size the canvas first → W()/H() valid for migration + trace seed
   // Geometry resolves ONCE (host plan / legacy import / standalone), THEN the trace seed applies on top, then
@@ -1552,7 +1554,9 @@
     applyPlan(plan);
     // Everything after the (optional) seed choice — runs exactly once, on whatever geometry resulted (seeded, or the loaded plan on No / no seed).
     function finish(){
-      if(_seeded){ snap=1; applySnapUI(); }           // seed is box-aligned → continue editing on the full-box grid
+      // NAV-FIX: Layout always defaults to HALF-grid drawing (even on a seeded satellite base — owner request).
+      // The user can switch to full-grid via the ½/full snap toggle; we no longer force it on a seed.
+      applySnapUI();
       reconcileRooms();                              // migrate legacy rect rooms + clip every room to the structure
       hist=[snapshot()]; hi=0;                       // baseline history on the reconciled (or seeded) state
       setMode(_seeded ? "structure" : (cells.size ? "room" : "structure"));   // seeded → land in Structure to refine the shell
