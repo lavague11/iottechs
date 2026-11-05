@@ -396,7 +396,7 @@
   function baseView(){ var bvk=1, bvx=0, bvy=0;
     if(_bdImg && _seed && +_seed.sc>0){
       var a=+_seed.aspect||1, sc=+_seed.sc, bw=a*sc, bh=sc;
-      if(bw>0&&bh>0){ var W0=W(), H0=H(), k=Math.min(W0/bw, H0/bh);
+      if(bw>0&&bh>0){ var W0=W(), H0=H(), k=Math.max(W0/bw, H0/bh);   // NAV-FIX: COVER (fill the canvas), not contain — the aerial reaches the frame edges so Layout has no blank grid borders (cells stay aligned: same fit)
         if(k>0&&isFinite(k)){ bvk=k; bvx=(W0-bw*k)/2-(+_seed.offx||0)*k; bvy=(H0-bh*k)/2-(+_seed.offy||0)*k; } } }
     return { vk:bvk, vx:bvx, vy:bvy }; }
   // USER zoom/pan — a purely visual magnify on top of the base so you can draw rooms precisely. _uz=1 is
