@@ -23,6 +23,9 @@ function resendKey() {
 }
 
 export function emailEnabled() {
+  // Hard kill-switch for demo seeds and test runs: EMAIL_DISABLED=1 (set in the demo .env) or the
+  // test runner force email OFF regardless of whether a Resend key is present in the vault/env.
+  if (process.env.EMAIL_DISABLED === "1" || process.env.NODE_ENV === "test") return false;
   return !!resendKey();
 }
 
