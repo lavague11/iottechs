@@ -147,6 +147,7 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
   const [fileName, setFileName] = useState(initial?.fileName || "");
   const [cand, setCand] = useState(initial?.candidate || null);
   const [cost, setCost] = useState(initial?.candidate ? (initial.cost ?? null) : null);
+  const [engine, setEngine] = useState(null);   // "claude" | "openai" | "none" | null — which AI read the PDF
   const [err, setErr] = useState(null);
   useEffect(() => { if (initial?.mediaId && !initial.candidate) retry(); /* eslint-disable-next-line */ }, []);
   async function upload(file) {
@@ -156,7 +157,7 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
       const fd = new FormData(); fd.append("file", file); fd.append("project", accessId);
       const r = await fetch("/api/proposal-import", { method: "POST", body: fd }).then((x) => x.json());
       if (!r?.ok) throw new Error(r?.error || "upload failed");
-      setMediaId(r.mediaId);
+      setMediaId(r.mediaId); setEngine(r.engine ?? null);
       if (!r.candidate) { setErr(r.error || "Couldn't read the document."); setCand({ items: [], uncertain: [] }); setPhase("review"); return; }
       setCand(r.candidate); setCost(r.usage?.cost ?? null); setPhase("review");
     } catch (e) { setErr(String(e.message || e)); setPhase("upload"); }
@@ -165,6 +166,7 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
     if (!mediaId) return;
     setPhase("extracting"); setErr(null);
     const r = await fetch("/api/proposal-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId, project: accessId }) }).then((x) => x.json()).catch(() => null);
+    setEngine(r?.engine ?? null);
     if (r?.candidate) { setCand(r.candidate); setCost(r.usage?.cost ?? null); } else setErr(r?.error || "Couldn't read the document.");
     setPhase("review");
   }
@@ -200,7 +202,12 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
         <div className={`rp-review${mediaId ? " rp-import2col" : ""}`}>
           <div className="rp-import-left">
             <div className="rp-pv-head">
-              <div><b>Import review</b><div className="rp-row-sub">{fileName}{cand.customer ? ` · ${cand.customer}` : ""}{cand.date ? ` · ${cand.date}` : ""}</div></div>
+              <div>
+                <div className="rp-pv-title"><b>Import review</b>
+                  {engine && (() => { const E = { claude: ["Claude", "eng-claude"], openai: ["OpenAI", "eng-openai"], none: ["No AI key", "eng-none"] }[engine]; return E ? <span className={`rp-eng ${E[1]}`} title={engine === "none" ? "Add ANTHROPIC_API_KEY in Development ▸ API Keys" : "Engine that read this PDF"}>AI engine: {E[0]}</span> : null; })()}
+                </div>
+                <div className="rp-row-sub">{fileName}{cand.customer ? ` · ${cand.customer}` : ""}{cand.date ? ` · ${cand.date}` : ""}</div>
+              </div>
               <div className="rp-pv-meta">{cand.systems?.length ? `${cand.systems.length} system${cand.systems.length > 1 ? "s" : ""} · ` : ""}{cand.items.length} line items{cost != null && <><br />API cost ${Number(cost).toFixed(4)}</>}</div>
             </div>
             {!rec.ok && <div className="rp-warn">Totals need review — lines sum to {money(rec.lines)}{rec.total != null ? `, document says ${money(rec.total)}` : ""}.</div>}
@@ -411,6 +418,12 @@ export const RP_CSS = `
 .rp-pr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-chip{height:28px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;border-radius:100px;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums}
 .rp-chip.on{background:var(--dv-ink,#101418);color:#fff;border-color:var(--dv-ink,#101418)}
+/* AI engine indicator — which model read the PDF (none = no key in the vault). */
+.rp-pv-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rp-eng{font-size:.62rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:100px;border:1px solid}
+.rp-eng.eng-claude{color:#6b4ea8;background:rgba(124,92,196,.1);border-color:rgba(124,92,196,.32)}
+.rp-eng.eng-openai{color:#2f6f4e;background:rgba(62,125,90,.1);border-color:rgba(62,125,90,.3)}
+.rp-eng.eng-none{color:#b45309;background:#fdf0e6;border-color:#f0cfae}
 /* Import review — systems grouped on the left, the original PDF on the right. */
 .rp-import2col{flex-direction:row;align-items:stretch;gap:16px}
 .rp-import-left{flex:1 1 55%;min-width:0;display:flex;flex-direction:column;gap:12px;overflow:auto}

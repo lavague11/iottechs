@@ -52,4 +52,11 @@ test("extraction route: Claude primary + native PDF, customer-only prompt, cost 
   assert.ok(/CUSTOMER ONLY/.test(route) && route.includes("NEVER return IOT TECHS"), "ignores IOT TECHS / La Vague, customer only");
   assert.ok(route.includes('"systems"') && route.includes("Detect EACH separate camera system"), "systems-aware prompt");
   assert.ok(route.includes("usage?.cost") && route.includes("Proposal import parsed") && route.includes("logProjectEvent"), "logs API cost per import");
+  assert.ok(route.includes('engine: "none"') && route.includes("engine: eng.name"), "route reports the engine (claude/openai/none)");
+});
+
+test("review screen shows the AI engine indicator (Claude / OpenAI / No AI key)", () => {
+  const ui = readFileSync(new URL("../app/project/[accessId]/proposal-start.jsx", import.meta.url), "utf8");
+  assert.ok(ui.includes("AI engine:") && ui.includes('claude: ["Claude"') && ui.includes('openai: ["OpenAI"') && ui.includes('none: ["No AI key"'), "badge covers all three engines");
+  assert.ok(ui.includes("setEngine(r.engine") || ui.includes("setEngine(r?.engine"), "engine captured from the response");
 });

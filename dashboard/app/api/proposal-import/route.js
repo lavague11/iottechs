@@ -156,7 +156,7 @@ export async function POST(req) {
     insertMedia({ id: mediaId, projectAccessId: project, kind: "proposal-import", mime, bytes: buf, w: null, h: null, createdBy: user.name || user.role });
     bytes = buf;
   }
-  if (!eng) return Response.json({ ok: true, mediaId, candidate: null, error: "No AI key set — add ANTHROPIC_API_KEY (or OPENAI_API_KEY) in Development ▸ API Keys, or start manually." });
+  if (!eng) return Response.json({ ok: true, mediaId, candidate: null, engine: "none", model: null, error: "No AI key set — add ANTHROPIC_API_KEY (or OPENAI_API_KEY) in Development ▸ API Keys, or start manually." });
   try {
     const { candidate, usage } = eng.name === "openai" ? await extractOpenAI(bytes, mime, eng.key, eng.model) : await extractClaude(bytes, mime, eng.key, eng.model);
     const cost = Math.round((usage?.cost || 0) * 10000) / 10000;   // $ to 4dp
@@ -164,6 +164,6 @@ export async function POST(req) {
     try { logProjectEvent(project, { kind: "ai", label: `Proposal import parsed · ${eng.name === "claude" ? "Claude" : "OpenAI"} ${eng.model} · ${(usage?.inTok || 0) + (usage?.outTok || 0)} tok · $${cost.toFixed(4)}`, actor: user.name || user.role }); } catch { /* non-fatal */ }
     return Response.json({ ok: true, mediaId, candidate, engine: eng.name, model: eng.model, usage: { ...usage, cost } });
   } catch (e) {
-    return Response.json({ ok: true, mediaId, candidate: null, error: `Couldn't read the document (${e?.message || e}).` });
+    return Response.json({ ok: true, mediaId, candidate: null, engine: eng.name, model: eng.model, error: `Couldn't read the document (${e?.message || e}).` });
   }
 }
