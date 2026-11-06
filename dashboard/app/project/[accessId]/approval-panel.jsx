@@ -7,6 +7,8 @@ import PaymentOptions from "./payment-options";
 import ProposalSignModal from "./proposal-sign-modal";
 import RecordPaymentModal from "./record-payment-modal";
 import { downloadInvoicePdf } from "../../../lib/invoice-pdf";
+import SendScheduler from "./send-scheduler";
+import { sendInvoiceAction, scheduleInvoiceEmailAction } from "./proposal-actions";
 import { useAccordionItem } from "./flow-accordion";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -88,6 +90,12 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
   const [delPayId, setDelPayId] = useState(null);   // payment pending delete-confirm
   const [voidSigOpen, setVoidSigOpen] = useState(false);
   const [payModalOpen, setPayModalOpen] = useState(false);   // on-demand Record Payment modal (staff)
+  const [invSchedOpen, setInvSchedOpen] = useState(false);   // Send-invoice scheduler (staff)
+  const [invBusy, setInvBusy] = useState(false);
+  const [invToast, setInvToast] = useState(null);
+  const showInvToast = (m) => { setInvToast(m); setTimeout(() => setInvToast(null), 2800); };
+  async function doSendInvoice() { setInvBusy(true); const r = await sendInvoiceAction(accessId).catch(() => null); setInvBusy(false); setInvSchedOpen(false); showInvToast(r?.error ? r.error : r?.sent ? "Invoice emailed" : (r?.note || "Invoice recorded")); }
+  async function doScheduleInvoice(iso) { setInvBusy(true); const r = await scheduleInvoiceEmailAction(accessId, iso).catch(() => null); setInvBusy(false); setInvSchedOpen(false); showInvToast(r?.error ? r.error : "Invoice scheduled"); }
   const [localOpen, setLocalOpen] = useState(true);   // whole-panel collapse (tool-card style chevron)
   // Accordion: inside the proposal phase this panel shares one-open-at-a-time with the proposal
   // document — accepting+signing the proposal hands the open slot to this deposit panel.
@@ -517,10 +525,16 @@ export default function ApprovalPanel({ fileBase = null, accessId, role, custome
           );
         })()}
 
-        {/* Download the invoice — charges, payments received, and balance due */}
+        {/* Download the invoice — charges, payments received, and balance due. Staff can also email it. */}
         <div className="apv-inv-row">
           <button type="button" className="apv-inv-btn" onClick={downloadInvoice}>⭳ Download invoice</button>
+          {isStaff && <button type="button" className="apv-inv-btn" disabled={invBusy} onClick={() => setInvSchedOpen(true)}>{invBusy ? "Working…" : "✉ Send invoice"}</button>}
+          {invToast && <span className="apv-inv-toast" role="status">{invToast}</span>}
         </div>
+        {invSchedOpen && (
+          <SendScheduler open title="Send invoice" subtitle={`${customerName || accessId} — invoice with a Pay button`}
+            busy={invBusy} onSendNow={doSendInvoice} onSchedule={doScheduleInvoice} onClose={() => setInvSchedOpen(false)} />
+        )}
 
         {/* History */}
         {payments.length > 0 ? (
