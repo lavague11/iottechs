@@ -98,20 +98,31 @@ export function summarizeProposalRow(row) {
 export function importCandidateToPayload(candidate, opts = {}) {
   const c = candidate || {};
   const serviceKey = PROPOSAL_SERVICES.some((s) => s.key === opts.serviceKey) ? opts.serviceKey : "custom";
-  const items = (c.items || []).filter((it) => String(it?.name || "").trim()).map((it) => {
+  const mkItems = (arr) => (arr || []).filter((it) => String(it?.name || "").trim()).map((it) => {
     const out = { id: newItemId(), name: String(it.name).trim().slice(0, 120), qty: Math.max(0, Math.min(9999, +it.qty || 1)), price: r2(Math.max(0, Math.min(1000000, +it.unit_price || 0))) };
     if (it.description) out.description = String(it.description).slice(0, 400);
     return out;
   });
-  const bySection = new Map();
-  for (const it of items) { const k = "all"; if (!bySection.has(k)) bySection.set(k, []); bySection.get(k).push(it); }
-  const payload = {
-    options: [{ id: "A", name: "Option A", services: [{ key: serviceKey, label: serviceLabel(serviceKey), items, note: [c.notes, c.exclusions ? `Exclusions: ${c.exclusions}` : null, c.warranty ? `Warranty: ${c.warranty}` : null].filter(Boolean).join("\n").slice(0, 2000) }], note: "", includeMockup: false, includeSurvey: false }],
+  // One SECTION (service) per detected system, in order — so the builder shows System 1 / 2 / 3 as
+  // editable sections. No systems → the legacy single section with all items.
+  let services;
+  if (Array.isArray(c.systems) && c.systems.length) {
+    services = c.systems.map((s, i) => {
+      const meta = [s.cameras ? `${s.cameras} cameras` : null, s.nvr ? `NVR ${s.nvr}` : null, s.storage ? `Storage ${s.storage}` : null].filter(Boolean).join(" · ");
+      const note = [s.coverage, meta || null].filter(Boolean).join("\n").slice(0, 2000);
+      return { key: serviceKey, label: String(s.name || `System ${i + 1}`).slice(0, 120), items: mkItems(s.items), note };
+    }).filter((s) => s.items.length);
+  }
+  if (!services || !services.length) {
+    services = [{ key: serviceKey, label: serviceLabel(serviceKey), items: mkItems(c.items),
+      note: [c.notes, c.exclusions ? `Exclusions: ${c.exclusions}` : null, c.warranty ? `Warranty: ${c.warranty}` : null].filter(Boolean).join("\n").slice(0, 2000) }];
+  }
+  return {
+    options: [{ id: "A", name: "Option A", services, note: "", includeMockup: false, includeSurvey: false }],
     discount: +c.discount > 0 ? { type: "flat", value: r2(c.discount) } : { type: "flat", value: 0 },
     pcp_credit: { type: "flat", value: 0 },
     payment_plan: guessPlan(c.payment_terms),
   };
-  return payload;
 }
 function guessPlan(terms) {
   const t = String(terms || "").toLowerCase();
@@ -142,7 +153,7 @@ export function parseMoney(v) {
 // the document didn't carry stays null / goes on the uncertain list).
 export function normalizeCandidate(raw) {
   const c = raw && typeof raw === "object" ? raw : {};
-  const items = (Array.isArray(c.items) ? c.items : []).map((it) => {
+  const normItem = (it) => {
     const qty = it?.qty != null && String(it.qty).trim() !== "" ? +String(it.qty).replace(/[^\d.]/g, "") : null;
     const unit = parseMoney(it?.unit_price);
     const tot = parseMoney(it?.total);
@@ -151,10 +162,26 @@ export function normalizeCandidate(raw) {
     const u = unit != null ? unit : (q && tot != null ? r2(tot / q) : null);
     const low = it?.confidence === "low" || u == null || q == null;
     return { name: String(it?.name || "").trim(), description: it?.description ? String(it.description) : "", qty: q ?? 1, unit_price: u, total: tot ?? (q != null && u != null ? r2(q * u) : null), section: it?.section || null, confidence: low ? "low" : "high" };
-  }).filter((it) => it.name);
+  };
+  // Systems (grouped): normalize each + its camera count / NVR / storage / total, then FLATTEN to items[]
+  // (section = system name) so reconcileTotals and the legacy flat path keep working unchanged.
+  const systems = (Array.isArray(c.systems) ? c.systems : []).map((s) => {
+    const items = (Array.isArray(s?.items) ? s.items : []).map(normItem).filter((it) => it.name);
+    const cam = s?.cameras != null ? (+String(s.cameras).replace(/[^\d]/g, "") || null) : null;
+    return {
+      name: String(s?.name || "").trim() || "System",
+      coverage: s?.coverage ? String(s.coverage) : null,
+      cameras: cam, nvr: s?.nvr ? String(s.nvr) : null, storage: s?.storage ? String(s.storage) : null,
+      total: parseMoney(s?.total), items,
+    };
+  }).filter((s) => s.items.length || s.name !== "System");
+  const items = systems.length
+    ? systems.flatMap((s) => s.items.map((it) => ({ ...it, section: s.name })))
+    : (Array.isArray(c.items) ? c.items : []).map(normItem).filter((it) => it.name);
   return {
-    customer: c.customer || null, date: c.date || null, proposal_number: c.proposal_number || null,
-    items, subtotal: parseMoney(c.subtotal), tax: parseMoney(c.tax), total: parseMoney(c.total), discount: parseMoney(c.discount),
+    customer: c.customer || null, customer_address: c.customer_address || null, customer_phone: c.customer_phone || null, customer_email: c.customer_email || null,
+    date: c.date || null, proposal_number: c.proposal_number || null,
+    systems, items, subtotal: parseMoney(c.subtotal), tax: parseMoney(c.tax), total: parseMoney(c.total), discount: parseMoney(c.discount),
     payment_terms: c.payment_terms || null, notes: c.notes || null, exclusions: c.exclusions || null, warranty: c.warranty || null,
     uncertain: Array.isArray(c.uncertain) ? c.uncertain.map(String) : [],
   };

@@ -146,6 +146,7 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
   const [mediaId, setMediaId] = useState(initial?.mediaId || null);
   const [fileName, setFileName] = useState(initial?.fileName || "");
   const [cand, setCand] = useState(initial?.candidate || null);
+  const [cost, setCost] = useState(initial?.candidate ? (initial.cost ?? null) : null);
   const [err, setErr] = useState(null);
   useEffect(() => { if (initial?.mediaId && !initial.candidate) retry(); /* eslint-disable-next-line */ }, []);
   async function upload(file) {
@@ -157,14 +158,14 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
       if (!r?.ok) throw new Error(r?.error || "upload failed");
       setMediaId(r.mediaId);
       if (!r.candidate) { setErr(r.error || "Couldn't read the document."); setCand({ items: [], uncertain: [] }); setPhase("review"); return; }
-      setCand(r.candidate); setPhase("review");
+      setCand(r.candidate); setCost(r.usage?.cost ?? null); setPhase("review");
     } catch (e) { setErr(String(e.message || e)); setPhase("upload"); }
   }
   async function retry() {
     if (!mediaId) return;
     setPhase("extracting"); setErr(null);
     const r = await fetch("/api/proposal-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mediaId, project: accessId }) }).then((x) => x.json()).catch(() => null);
-    if (r?.candidate) setCand(r.candidate); else setErr(r?.error || "Couldn't read the document.");
+    if (r?.candidate) { setCand(r.candidate); setCost(r.usage?.cost ?? null); } else setErr(r?.error || "Couldn't read the document.");
     setPhase("review");
   }
   async function create() {
@@ -176,6 +177,12 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
   const setItem = (i, patch) => setCand((c) => ({ ...c, items: c.items.map((it, k) => (k === i ? { ...it, ...patch, confidence: "high" } : it)) }));
   const delItem = (i) => setCand((c) => ({ ...c, items: c.items.filter((_, k) => k !== i) }));
   const addItem = () => setCand((c) => ({ ...c, items: [...c.items, { name: "", qty: 1, unit_price: 0, total: 0, confidence: "high" }] }));
+  // Systems edits keep the flattened items[] in sync (section = system name) so totals + create stay correct.
+  const reflow = (c, systems) => ({ ...c, systems, items: systems.flatMap((s) => s.items.map((it) => ({ ...it, section: s.name }))) });
+  const setSys = (si, patch) => setCand((c) => reflow(c, c.systems.map((s, k) => (k === si ? { ...s, ...patch } : s))));
+  const setSysItem = (si, ii, patch) => setCand((c) => reflow(c, c.systems.map((s, k) => (k === si ? { ...s, items: s.items.map((it, j) => (j === ii ? { ...it, ...patch, confidence: "high" } : it)) } : s))));
+  const delSysItem = (si, ii) => setCand((c) => reflow(c, c.systems.map((s, k) => (k === si ? { ...s, items: s.items.filter((_, j) => j !== ii) } : s))));
+  const addSysItem = (si) => setCand((c) => reflow(c, c.systems.map((s, k) => (k === si ? { ...s, items: [...s.items, { name: "", qty: 1, unit_price: 0, total: 0, confidence: "high" }] } : s))));
   const rec = cand ? reconcileTotals(cand) : null;
   const uncertain = new Set((cand?.uncertain || []).map((s) => String(s).toLowerCase()));
   return (
@@ -190,35 +197,73 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
       )}
       {(phase === "extracting" || phase === "creating") && <div className="rp-empty">{phase === "extracting" ? "Extracting proposal…" : "Creating draft…"}</div>}
       {phase === "review" && cand && (
-        <div className="rp-review">
-          <div className="rp-pv-head">
-            <div><b>Import review</b><div className="rp-row-sub">{fileName}{cand.customer ? ` · ${cand.customer}` : ""}{cand.date ? ` · ${cand.date}` : ""}</div></div>
-            <div className="rp-pv-meta">{cand.items.length} line items<br />{rec.subtotal != null ? `Subtotal ${money(rec.subtotal)}` : ""}{rec.tax ? ` · Tax ${money(rec.tax)}` : ""}{rec.total != null ? ` · Total ${money(rec.total)}` : ""}</div>
-          </div>
-          {!rec.ok && <div className="rp-warn">Totals need review — lines sum to {money(rec.lines)}{rec.total != null ? `, document says ${money(rec.total)}` : ""}.</div>}
-          <div className="rp-table">
-            <div className="rp-tr rp-th"><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span /></div>
-            {cand.items.map((it, i) => {
-              const low = it.confidence === "low" || uncertain.has(String(it.name).toLowerCase());
+        <div className={`rp-review${mediaId ? " rp-import2col" : ""}`}>
+          <div className="rp-import-left">
+            <div className="rp-pv-head">
+              <div><b>Import review</b><div className="rp-row-sub">{fileName}{cand.customer ? ` · ${cand.customer}` : ""}{cand.date ? ` · ${cand.date}` : ""}</div></div>
+              <div className="rp-pv-meta">{cand.systems?.length ? `${cand.systems.length} system${cand.systems.length > 1 ? "s" : ""} · ` : ""}{cand.items.length} line items{cost != null && <><br />API cost ${Number(cost).toFixed(4)}</>}</div>
+            </div>
+            {!rec.ok && <div className="rp-warn">Totals need review — lines sum to {money(rec.lines)}{rec.total != null ? `, document says ${money(rec.total)}` : ""}.</div>}
+
+            {cand.systems?.length ? cand.systems.map((sys, si) => {
+              const sysTotal = sys.items.reduce((s, it) => s + (+it.qty || 0) * (+it.unit_price || 0), 0);
               return (
-                <div key={i} className={`rp-tr${low ? " low" : ""}`}>
-                  <input className="rp-in" value={it.name} placeholder="Item" onChange={(e) => setItem(i, { name: e.target.value })} />
-                  <input className="rp-in n" type="number" min="0" value={it.qty ?? ""} onChange={(e) => setItem(i, { qty: +e.target.value })} />
-                  <input className="rp-in n" type="number" min="0" step="0.01" value={it.unit_price ?? ""} placeholder="?" onChange={(e) => setItem(i, { unit_price: +e.target.value })} />
-                  <span className="rp-tot">{it.unit_price != null ? money((+it.qty || 0) * (+it.unit_price || 0)) : <em>Review</em>}</span>
-                  <button type="button" className="rp-x sm" onClick={() => delItem(i)} aria-label="Remove"><X /></button>
+                <div key={si} className="rp-sys">
+                  <div className="rp-sys-hd">
+                    <input className="rp-sys-name" value={sys.name} onChange={(e) => setSys(si, { name: e.target.value })} />
+                    <span className="rp-sys-meta">{[sys.cameras ? `${sys.cameras} cam` : null, sys.nvr, sys.storage].filter(Boolean).join(" · ")}</span>
+                    <span className="rp-sys-tot">{money(sysTotal)}</span>
+                  </div>
+                  <div className="rp-table">
+                    <div className="rp-tr rp-th"><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span /></div>
+                    {sys.items.map((it, ii) => {
+                      const low = it.confidence === "low" || uncertain.has(String(it.name).toLowerCase());
+                      return (
+                        <div key={ii} className={`rp-tr${low ? " low" : ""}`}>
+                          <input className="rp-in" value={it.name} placeholder="Item" onChange={(e) => setSysItem(si, ii, { name: e.target.value })} />
+                          <input className="rp-in n" type="number" min="0" value={it.qty ?? ""} onChange={(e) => setSysItem(si, ii, { qty: +e.target.value })} />
+                          <input className="rp-in n" type="number" min="0" step="0.01" value={it.unit_price ?? ""} placeholder="?" onChange={(e) => setSysItem(si, ii, { unit_price: +e.target.value })} />
+                          <span className="rp-tot">{it.unit_price != null ? money((+it.qty || 0) * (+it.unit_price || 0)) : <em>Review</em>}</span>
+                          <button type="button" className="rp-x sm" onClick={() => delSysItem(si, ii)} aria-label="Remove"><X /></button>
+                        </div>
+                      );
+                    })}
+                    <button type="button" className="rp-add" onClick={() => addSysItem(si)}>+ Add</button>
+                  </div>
                 </div>
               );
-            })}
-            <button type="button" className="rp-add" onClick={addItem}>+ Add</button>
+            }) : (
+              <div className="rp-table">
+                <div className="rp-tr rp-th"><span>Item</span><span>Qty</span><span>Price</span><span>Total</span><span /></div>
+                {cand.items.map((it, i) => {
+                  const low = it.confidence === "low" || uncertain.has(String(it.name).toLowerCase());
+                  return (
+                    <div key={i} className={`rp-tr${low ? " low" : ""}`}>
+                      <input className="rp-in" value={it.name} placeholder="Item" onChange={(e) => setItem(i, { name: e.target.value })} />
+                      <input className="rp-in n" type="number" min="0" value={it.qty ?? ""} onChange={(e) => setItem(i, { qty: +e.target.value })} />
+                      <input className="rp-in n" type="number" min="0" step="0.01" value={it.unit_price ?? ""} placeholder="?" onChange={(e) => setItem(i, { unit_price: +e.target.value })} />
+                      <span className="rp-tot">{it.unit_price != null ? money((+it.qty || 0) * (+it.unit_price || 0)) : <em>Review</em>}</span>
+                      <button type="button" className="rp-x sm" onClick={() => delItem(i)} aria-label="Remove"><X /></button>
+                    </div>
+                  );
+                })}
+                <button type="button" className="rp-add" onClick={addItem}>+ Add</button>
+              </div>
+            )}
+
+            {(cand.payment_terms || cand.notes) && <div className="rp-note">{[cand.payment_terms, cand.notes].filter(Boolean).join(" · ")}</div>}
+            <div className="rp-note">Only the customer&rsquo;s details are imported — IOT TECHS / La Vague info is ignored. The current project keeps its own customer, address and property. The original file stays attached as the source.</div>
+            <div className="rp-actions">
+              {mediaId && <button type="button" className="rp-btn" onClick={retry}>Retry extraction</button>}
+              <span style={{ flex: 1 }} />
+              <button type="button" className="rp-btn primary" disabled={!cand.items.some((it) => String(it.name).trim())} onClick={create}>Create Draft</button>
+            </div>
           </div>
-          {(cand.payment_terms || cand.notes) && <div className="rp-note">{[cand.payment_terms, cand.notes].filter(Boolean).join(" · ")}</div>}
-          <div className="rp-note">The current project keeps its own customer, address and property type. The original file stays attached as the source.</div>
-          <div className="rp-actions">
-            {mediaId && <button type="button" className="rp-btn" onClick={retry}>Retry extraction</button>}
-            <span style={{ flex: 1 }} />
-            <button type="button" className="rp-btn primary" disabled={!cand.items.some((it) => String(it.name).trim())} onClick={create}>Create Draft</button>
-          </div>
+          {mediaId && (
+            <div className="rp-import-pdf">
+              <embed src={`/api/media/${mediaId}`} type="application/pdf" className="rp-pdf-embed" />
+            </div>
+          )}
         </div>
       )}
     </Sheet>
@@ -366,6 +411,18 @@ export const RP_CSS = `
 .rp-pr-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rp-chip{height:28px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;border-radius:100px;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums}
 .rp-chip.on{background:var(--dv-ink,#101418);color:#fff;border-color:var(--dv-ink,#101418)}
+/* Import review — systems grouped on the left, the original PDF on the right. */
+.rp-import2col{flex-direction:row;align-items:stretch;gap:16px}
+.rp-import-left{flex:1 1 55%;min-width:0;display:flex;flex-direction:column;gap:12px;overflow:auto}
+.rp-import-pdf{flex:1 1 45%;min-width:0;border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;overflow:hidden;background:var(--dv-paper,#F4F4F2)}
+.rp-pdf-embed{width:100%;height:100%;min-height:520px;border:0;display:block}
+.rp-sys{border:1px solid var(--dv-line,#E4E4DF);border-radius:10px;padding:10px 12px;background:var(--dv-raise,#FBFBFA)}
+.rp-sys-hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.rp-sys-name{flex:1 1 200px;min-width:0;height:32px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;padding:0 9px;font-size:.86rem;font-weight:700;font-family:inherit;outline:none;color:var(--dv-ink,#101418)}
+.rp-sys-name:focus{border-color:var(--dv-gold,#C9A96E)}
+.rp-sys-meta{font-size:.72rem;color:var(--dv-meta,#787D84);font-weight:600}
+.rp-sys-tot{margin-left:auto;font-size:.9rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--dv-ink,#101418)}
+@media (max-width:900px){ .rp-import2col{flex-direction:column} .rp-import-pdf{min-height:360px} }
 @media (max-width:767px){
   .rp-veil{align-items:flex-end}
   .rp-sheet,.rp-sheet.wide{width:100%;height:min(92vh,100%);border-radius:16px 16px 0 0;box-shadow:0 -8px 32px -12px rgba(0,0,0,.35)}
