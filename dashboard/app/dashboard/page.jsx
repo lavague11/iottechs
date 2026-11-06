@@ -56,10 +56,24 @@ export default async function DashboardPage() {
   });
   const needsAttention = ac.items.slice(0, 5);
 
+  // ---- New Leads — fresh inquiries surfaced as their OWN lane (the Action Center deliberately doesn't
+  // include inquiry-stage, so leads had no prominent home and got lost). Newest first; the row opens the
+  // project, where the next action is "Open Site Survey" (schedule the survey). ----
+  const daysSince = (s) => { if (!s) return null; const d = new Date(String(s).replace(" ", "T")); return isNaN(d) ? null : Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000)); };
+  const inquiryJobs = jobs.filter((j) => j.stage === "inquiry" && !j.lost_at);
+  const newLeads = inquiryJobs
+    .slice()
+    .sort((a, b) => String(b.created_at || b.date || "").localeCompare(String(a.created_at || a.date || "")))
+    .slice(0, 6)
+    .map((j) => ({
+      access_id: j.access_id, customer: j.customer, service: j.service || j.service_code,
+      age: daysSince(j.created_at || j.date), href: `/project/${j.access_id}`,
+    }));
+
   const kpis = {
     needsAttention: ac.count, awaitingSignature,
     activeCount: activeProjects.length, scheduledCount,
-    receivablesTotal, overdueCount,
+    receivablesTotal, overdueCount, newLeadCount: inquiryJobs.length,
   };
 
   // ---- Today / Upcoming (from each project's scheduling blob) ----
@@ -96,6 +110,7 @@ export default async function DashboardPage() {
       alerts={alerts}
       kpis={kpis}
       recentProjects={recentProjects}
+      newLeads={newLeads}
       needsAttention={needsAttention}
       today={today}
       upcoming={upcoming}

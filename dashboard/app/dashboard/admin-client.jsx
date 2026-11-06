@@ -47,7 +47,7 @@ function dayLabel(iso) {
   return dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-export default function AdminClient({ user, alerts, kpis, recentProjects, needsAttention, today, upcoming, activity }) {
+export default function AdminClient({ user, alerts, kpis, recentProjects, newLeads = [], needsAttention, today, upcoming, activity }) {
   const [now, setNow]     = useState("");
   const [greet, setGreet] = useState("Welcome");
   const first = (user.name || "Admin").trim().split(/\s+/)[0];
@@ -116,6 +116,27 @@ export default function AdminClient({ user, alerts, kpis, recentProjects, needsA
             </Link>
           ))}
         </div>
+
+        {/* New Leads — fresh inquiries get their own unmissable lane (not buried in Needs Attention). */}
+        {newLeads && newLeads.length > 0 && (
+          <div className="panel mb">
+            <div className="panel-head">
+              <h3>New Leads <span className="na-count">{kpis.newLeadCount}</span></h3>
+              <Link className="more" href="/projects?filter=inquiries">View all →</Link>
+            </div>
+            {newLeads.map((l, i) => (
+              <Link className="na-row" key={l.access_id || i} href={l.href}>
+                <span className="na-dot sev-md" />
+                <div className="na-body">
+                  <div className="na-label">{l.customer}</div>
+                  <div className="na-reason">{l.service ? `${l.service} · ` : ""}Schedule the survey</div>
+                </div>
+                {l.age != null && <span className="na-age">{ageLabel(l.age)}</span>}
+                <span className="na-arr">→</span>
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* Needs Attention — top 5 of the canonical Action Center */}
         <div className="panel mb">
