@@ -40,6 +40,20 @@ test("signed-contract alert → admin + Maya, with the amount and the signed PDF
   assert.ok(/emailContractSigned[\s\S]*const att = await signedPdfAttachment\(accessId\)/.test(email), "attaches the signed PDF");
 });
 
+test("receipt + add-on PDFs are generated server-side and attached", async () => {
+  assert.ok(email.includes("async function receiptPdfAttachment") && email.includes("buildReceiptPdfBytes"), "receipt attachment builder");
+  assert.ok(email.includes("const att = await receiptPdfAttachment(accessId, { amount: amt, kind, method, paidAt })"), "payment-received email attaches the receipt");
+  assert.ok(email.includes("async function addendumPdfAttachment") && email.includes("buildAddendumPdfBytes"), "add-on attachment builder");
+  assert.ok(email.includes("const att = await addendumPdfAttachment(accessId, addendumId, { newBalance })"), "add-on approval email attaches the change order");
+  // The generators are plain jsPDF (no extensionless imports) — exercise them for real.
+  const { buildReceiptPdfBytes } = await import("../lib/receipt-pdf.js");
+  const { buildAddendumPdfBytes } = await import("../lib/addendum-pdf.js");
+  const rcpt = buildReceiptPdfBytes({ customerName: "Test Co", projectId: "ASC0001" }, { amount: 500, kind: "deposit", method: "Zelle", paidAt: "2026-11-06", balanceAfter: 1900, total: 2400 });
+  assert.ok(Buffer.isBuffer(rcpt) && rcpt.slice(0, 5).toString() === "%PDF-" && rcpt.length > 1000, "receipt is a real PDF");
+  const adn = buildAddendumPdfBytes({ customerName: "Test Co", projectId: "ASC0001" }, { title: "Add-on", at: "2026-11-06", items: [{ name: "camera", qty: 2, price: 300, techPay: 120 }], discount: 0 }, { newBalance: 2500 });
+  assert.ok(Buffer.isBuffer(adn) && adn.slice(0, 5).toString() === "%PDF-" && adn.length > 1000, "change order is a real PDF (customer prices only — payout never rendered)");
+});
+
 test("the other customer sends (review, add-on, ADT, appointment) also BCC the office", () => {
   assert.ok(email.includes('bcc: await customerCopyBcc(to) });') , "review + add-on sends BCC");
   assert.ok(email.includes("bcc: await customerCopyBcc(app.email)"), "ADT quote BCCs");

@@ -225,6 +225,39 @@ async function proposalPdfAttachment(accessId, optKey) {
   } catch (e) { console.error(`[email:proposal-pdf] ${e?.message || e}`); return null; }
 }
 
+// The payment RECEIPT PDF for the "payment received" email. Figures come from the live financial state so
+// the receipt matches the balance the customer sees. Never throws into the caller.
+async function receiptPdfAttachment(accessId, { amount, kind, method, paidAt } = {}) {
+  try {
+    if (!(Number(amount) > 0)) return null;
+    const { getJobByAccessId, getProjectFinancialState } = await import("./db.js");
+    const { buildReceiptPdfBytes } = await import("./receipt-pdf.js");
+    const p = getJobByAccessId(accessId);
+    const fin = getProjectFinancialState(accessId);
+    const bytes = buildReceiptPdfBytes(
+      { customerName: customerLabelOf(p), projectId: accessId },
+      { amount, kind, method, paidAt, balanceAfter: fin ? +fin.balance || 0 : null, total: fin ? +fin.total || null : null },
+    );
+    return { filename: attachmentName("Receipt", { customer: customerLabelOf(p), docNo: accessId }),
+      content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" };
+  } catch (e) { console.error(`[email:receipt-pdf] ${e?.message || e}`); return null; }
+}
+
+// The add-on (change-order) PDF for the add-on approval email — customer prices only, no tech payout.
+async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) {
+  try {
+    const { getJobByAccessId, getToolData } = await import("./db.js");
+    const { buildAddendumPdfBytes } = await import("./addendum-pdf.js");
+    let add = null;
+    try { add = (JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []).find((a) => a && a.id === addendumId); } catch { /* no add-on */ }
+    if (!add) return null;
+    const p = getJobByAccessId(accessId);
+    const bytes = buildAddendumPdfBytes({ customerName: customerLabelOf(p), projectId: accessId }, add, { newBalance });
+    return { filename: attachmentName("Change Order", { customer: customerLabelOf(p), docNo: accessId }),
+      content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" };
+  } catch (e) { console.error(`[email:addendum-pdf] ${e?.message || e}`); return null; }
+}
+
 // The stored SIGNED proposal PDF (flattened + certified) for the signed-contract notification. Null if
 // nothing is signed yet.
 async function signedPdfAttachment(accessId) {
@@ -361,6 +394,7 @@ export async function emailPaymentReceived(accessId, { amount, kind, method, pai
     const when = /^\d{4}-\d{2}-\d{2}$/.test(String(paidAt || ""))
       ? new Date(`${paidAt}T00:00:00`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
       : null;
+    const att = await receiptPdfAttachment(accessId, { amount: amt, kind, method, paidAt });
     return await sendCustomerEmail(accessId, {
       subject: `Payment received — ${money}`,
       heading: "We’ve recorded your payment",
@@ -369,11 +403,12 @@ export async function emailPaymentReceived(accessId, { amount, kind, method, pai
         `Amount: ${money}`,
         method ? `Method: ${method}` : null,
         when ? `Date: ${when}` : null,
-        "You can see your up-to-date balance any time on your project page.",
+        "Your receipt is attached. You can see your up-to-date balance any time on your project page.",
       ].filter(Boolean),
       ctaLabel: "View Balance",
       open: "payment",
       footNote: "This is a confirmation that your payment was recorded. Reply to this email with any questions.",
+      attachments: att ? [att] : undefined,
     });
   } catch (e) {
     console.error(`[email:payment] ${e?.message || e}`);
@@ -568,7 +603,8 @@ export async function emailAddendumApproval(accessId, addendumId) {
       ctaUrl: approveUrl,
       footNote: "This secure link opens your add-on to approve and sign. Questions? Just reply to this email.",
     };
-    return await sendEmail({ to, subject: "Approve an add-on to your project", html: renderEmail(payload), text: plainText(payload), bcc: await customerCopyBcc(to) });
+    const att = await addendumPdfAttachment(accessId, addendumId, { newBalance });
+    return await sendEmail({ to, subject: "Approve an add-on to your project", html: renderEmail(payload), text: plainText(payload), bcc: await customerCopyBcc(to), attachments: att ? [att] : undefined });
   } catch (e) {
     console.error(`[email:addendum] ${e?.message || e}`);
     return { ok: false, error: "exception" };
