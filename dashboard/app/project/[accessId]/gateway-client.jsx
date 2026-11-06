@@ -3274,15 +3274,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       };
 
       const as = projState ? (ADMIN_STATUS[projState] || ADMIN_STATUS.INTAKE) : null;
+      // Fix #5 — every lifecycle state surfaces ONE correct next action. Routes use the hub's own overlay
+      // views (survey/proposal/schedule/workorder/closeout/completion) or an action callback (payment →
+      // the Record Payment modal). Labels mirror the canonical STATE_ACTION primaries (project-status.js).
       const CTA = {
+        INTAKE:             { label: "Open Site Survey", view: "survey" },
+        BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
+        AWAITING_SURVEY_APPROVAL: { label: "Open Site Survey", view: "survey" },
+        CREATE_PROPOSAL:    { label: "Open Proposal", view: "proposal" },
+        SEND_PROPOSAL:      { label: "Open Proposal", view: "proposal" },
         // A sent, unsigned proposal: office staff get "Request Signature" (opens the proposal with the staff
         // Request-Signature modal via ?reqsign); everyone else just opens the proposal.
         AWAITING_SIGNATURE: officeRole ? { label: "Request Signature", inlineSign: true } : { label: "Open Proposal", view: "proposal" },
         CHANGES_REQUESTED:  { label: "Open Proposal", view: "proposal" },
-        SEND_PROPOSAL:      { label: "Open Proposal", view: "proposal" },
-        CREATE_PROPOSAL:    { label: "Open Proposal", view: "proposal" },
-        AWAITING_SURVEY_APPROVAL: { label: "Open Site Survey", view: "survey" },
-        BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
+        AWAITING_DEPOSIT:   { label: "Record Deposit", action: "payment" },
+        READY_TO_SCHEDULE:  { label: "Schedule Install", view: "schedule" },
+        INSTALL_SCHEDULED:  { label: "View Schedule", view: "schedule" },
+        INSTALL_IN_PROGRESS:{ label: "Open Work Order", view: "workorder" },
+        AWAITING_FINAL_PAYMENT: { label: "Record Final Payment", action: "payment" },
+        // COMPLETE / CLOSED_NOT_COMPLETED: nothing to do — no primary action.
       };
       // Card verb reflects state: Create (never started) · Edit (started/submitted) · Completed (signed/done).
       const hubSections = [
@@ -3330,6 +3340,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             log={deckLog}
             defaultGroup={["tech", "vendor"].includes(cView) ? "internal" : "customer"}
             primaryCta={projState ? (CTA[projState] || null) : null}
+            onPrimaryAction={(a) => { if (a === "payment") setHubPayOpen(true); }}
             role={cView}
             signOptionId={proposalData?.selected_option || proposalData?.payload?.options?.[0]?.id || ""}
             renderOverlay={renderStaffOverlay}

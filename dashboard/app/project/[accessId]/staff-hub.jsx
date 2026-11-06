@@ -25,7 +25,7 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
-  sections = [], actions = [], primaryCta = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
+  sections = [], actions = [], primaryCta = null, onPrimaryAction = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
   role = "", signOptionId = "",
 }) {
   const router = useRouter();
@@ -268,7 +268,7 @@ export default function StaffHub({
         ) : status?.label ? (
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-status">{status.label}</div>
-            {primaryCta && <button className="cpv-cta" onClick={() => primaryCta.inlineSign ? setReqSignOpen(true) : open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
+            {primaryCta && <button className="cpv-cta" onClick={() => primaryCta.inlineSign ? setReqSignOpen(true) : primaryCta.action ? onPrimaryAction?.(primaryCta.action) : open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
           </section>
         ) : null}
 
