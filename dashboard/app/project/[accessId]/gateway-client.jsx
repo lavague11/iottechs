@@ -3343,6 +3343,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             onPrimaryAction={(a) => { if (a === "payment") setHubPayOpen(true); }}
             role={cView}
             signOptionId={proposalData?.selected_option || proposalData?.payload?.options?.[0]?.id || ""}
+            onStageJump={(stepKey) => { const m = { consulting: "site_survey", install: "install", completion: "completion" }; if (m[stepKey]) doMove(m[stepKey]); }}
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
             dashboardHref={DECK_DASH_HOME[view] || "/dashboard"}

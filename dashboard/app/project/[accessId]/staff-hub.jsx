@@ -13,6 +13,7 @@ import ProjectContactCard from "./project-contact-card";
 import { getPaymentsForLogAction, getSignatureScheduleAction, requestSignatureEmailAction, cancelSignatureEmailAction } from "./proposal-actions";
 import { friendlyWhen } from "../../../lib/send-schedule";
 import RequestSignatureSheet from "./request-signature-sheet";
+import { useContextMenu, ContextMenu } from "../../components/context-menu";
 
 const fmtPayDate = (s) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return ""; try { return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return `${m[2]}/${m[3]}/${m[1]}`; } };
 const payKindLabel = (k) => ({ deposit: "Deposit", final: "Final payment", partial: "Partial payment", other: "Payment" }[k] || "Payment");
@@ -27,7 +28,7 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
   sections = [], actions = [], primaryCta = null, onPrimaryAction = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
-  role = "", signOptionId = "",
+  role = "", signOptionId = "", onStageJump = null,
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -43,6 +44,17 @@ export default function StaffHub({
   const [reqSignOpen, setReqSignOpen] = useState(false); // staff Request-Signature share sheet (opens here, not the proposal page)
   const [sigSched, setSigSched] = useState(null);        // scheduled signature email { scheduledSendAt } | null
   const [sigBusy, setSigBusy] = useState(false);
+  // Right-click / long-press a stage step (Consulting · Install · Completion) to jump the project there.
+  // Admin/manager only; moving BACKWARD confirms; the gateway maps the step → master stage and logs it.
+  const stageMenu = useContextMenu();
+  const canMoveStage = ["admin", "manager"].includes(role) && typeof onStageJump === "function";
+  const STEP_ORDER = ["consulting", "install", "completion"];
+  const doStageJump = (p) => {
+    const ci = STEP_ORDER.indexOf(currentPhaseKey), ti = STEP_ORDER.indexOf(p.key);
+    if (ti < 0) return;
+    if (ti < ci && !window.confirm(`Move this project back to ${p.label}? Earlier steps will show as current again.`)) return;
+    onStageJump?.(p.key);
+  };
 
   // Pull the payment ledger so recorded payments show under the balance (date · method · amount),
   // each openable for its full detail + any proof photos. Only when there's a contract to pay against.
@@ -138,6 +150,7 @@ export default function StaffHub({
 .cpv-sig-sched-acts button{border:0;background:none;color:#8a6d2f;font:700 12.5px/1 inherit;cursor:pointer;padding:0}
 .cpv-sig-sched-acts button:hover{text-decoration:underline}
 .cpv-sig-sched-acts .cpv-sig-cancel{color:#b23b3b}
+.cpv-seg.movable{cursor:context-menu}
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
@@ -277,7 +290,9 @@ export default function StaffHub({
                 const done = fill >= 100;
                 const cur = fill > 0 && fill < 100;
                 return (
-                  <div key={p.key} className={`cpv-seg${done ? " done" : ""}${cur ? " cur" : ""}`}>
+                  <div key={p.key} className={`cpv-seg${done ? " done" : ""}${cur ? " cur" : ""}${canMoveStage ? " movable" : ""}`}
+                    {...(canMoveStage ? stageMenu.triggerProps : {})}
+                    title={canMoveStage ? "Right-click to move stage" : undefined}>
                     <div className="cpv-bar"><i style={{ width: fill + "%" }} /></div>
                     <div className="cpv-lab"><b>{done ? "✓" : i + 1}</b><span className="cpv-nm">{p.label}</span></div>
                   </div>
@@ -285,6 +300,10 @@ export default function StaffHub({
               })}
             </div>
             {progressPct != null && <div className="cpv-readout">{progressPct}%</div>}
+            {canMoveStage && (
+              <ContextMenu open={stageMenu.open} point={stageMenu.point} onClose={stageMenu.close} title="Move stage"
+                items={phases.map((p) => ({ label: `Move to ${p.label}`, checked: p.key === currentPhaseKey, onClick: () => doStageJump(p) }))} />
+            )}
           </section>
         )}
 
