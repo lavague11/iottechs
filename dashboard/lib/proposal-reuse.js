@@ -179,7 +179,7 @@ export function normalizeCandidate(raw) {
     ? systems.flatMap((s) => s.items.map((it) => ({ ...it, section: s.name })))
     : (Array.isArray(c.items) ? c.items : []).map(normItem).filter((it) => it.name);
   return {
-    customer: c.customer || null, customer_address: c.customer_address || null, customer_phone: c.customer_phone || null, customer_email: c.customer_email || null,
+    customer: c.customer || null, customer_contact: c.customer_contact || null, customer_address: c.customer_address || null, customer_phone: c.customer_phone || null, customer_email: c.customer_email || null,
     date: c.date || null, proposal_number: c.proposal_number || null,
     systems, items, subtotal: parseMoney(c.subtotal), tax: parseMoney(c.tax), total: parseMoney(c.total), discount: parseMoney(c.discount),
     payment_terms: c.payment_terms || null, notes: c.notes || null, exclusions: c.exclusions || null, warranty: c.warranty || null,

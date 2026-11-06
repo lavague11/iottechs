@@ -256,6 +256,36 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
   // clears it when the user actually edits the text (ref → immune to onChange/onPlace firing order).
   const verifiedRef = useRef("");
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  // Import auto-fill: the moment a PDF is picked, read it (extract-only, no project yet) and fill the
+  // EMPTY form fields from the customer's details — so the office never retypes what's in the PDF. The
+  // candidate is kept and reused on Create (no second AI call).
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState(null);   // { candidate, engine, cost } | null
+  async function onImportFile(file) {
+    setImportFile(file || null); setExtracted(null);
+    if (!file) return;
+    setExtracting(true); setErr("");
+    try {
+      const fd = new FormData(); fd.append("file", file);   // NO project → extract-only
+      const r = await fetch("/api/proposal-import", { method: "POST", body: fd }).then((x) => x.json()).catch(() => null);
+      if (r?.candidate) {
+        setExtracted({ candidate: r.candidate, engine: r.engine || null, cost: r.usage?.cost ?? null });
+        const c = r.candidate;
+        const emptyAddr = !f.address.trim();
+        setF((p) => ({
+          ...p,
+          company: p.company || c.customer || "",
+          name: p.name || c.customer_contact || "",
+          email: p.email || c.customer_email || "",
+          phone: p.phone || c.customer_phone || "",
+          address: p.address || c.customer_address || "",
+          propertyType: propertyAfterCompany(p.propertyType, propTouched, p.company || c.customer || ""),
+        }));
+        if (emptyAddr && c.customer_address) { setAddrVerified(true); setAddrWarned(false); verifiedRef.current = c.customer_address; }
+      } else if (r?.error) { setErr(r.error); }
+    } catch { setErr("Couldn't read the PDF."); }
+    setExtracting(false);
+  }
 
 
   async function submit(e, allowDuplicate = false) {
@@ -289,12 +319,15 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
       if (!j.ok && j.duplicate) { setDup({ duplicate: j.duplicate, canOverride: !!j.canOverride }); setBusy(false); return; }
       if (!j.ok) { setErr(j.error || "Could not create the project."); setBusy(false); return; }
       if (startFrom === "import" && importFile) {
-        // Project exists — now attach + extract the document and land straight on Import Review.
+        // Project exists — attach the document. If we already read it on select (extracted), reuse that
+        // candidate so there's no second AI call; otherwise the route extracts now. Land straight on review.
         const fd = new FormData(); fd.append("file", importFile); fd.append("project", j.accessId);
+        if (extracted?.candidate) { fd.append("candidate", JSON.stringify(extracted.candidate)); fd.append("engine", extracted.engine || ""); fd.append("cost", String(extracted.cost ?? 0)); }
         const up = await fetch("/api/proposal-import", { method: "POST", body: fd }).then((x) => x.json()).catch(() => null);
         if (up?.ok && up.mediaId) {
-          try { sessionStorage.setItem(`iot_import_${up.mediaId}`, JSON.stringify({ candidate: up.candidate || null, fileName: importFile.name, engine: up.engine || null, cost: up.usage?.cost ?? null })); } catch {}
-          onClose(); r.push(`/project/${j.accessId}?deck=1&stage=proposal&import=${up.mediaId}`);
+          const cand = up.candidate || extracted?.candidate || null;
+          try { sessionStorage.setItem(`iot_import_${up.mediaId}`, JSON.stringify({ candidate: cand, fileName: importFile.name, engine: up.engine || extracted?.engine || null, cost: up.usage?.cost ?? extracted?.cost ?? null })); } catch {}
+          onClose(); r.push(`/project/${j.accessId}?deck=1&stage=proposal&open=proposal&import=${up.mediaId}`);
           return;
         }
         setDone({ ...j, importError: up?.error || "Couldn't read the document — start it from the project." });
@@ -377,7 +410,7 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
               {(clientMode === "new" || editClient) && (
                 <>
                   <div className="np-row2">
-                    <div className="np-f"><label>Contact</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required /></div>
+                    <div className="np-f"><label>Contact</label><input className="apx-input" value={f.name} onChange={(e) => set("name", e.target.value)} required={startFrom !== "import"} /></div>
                     <div className="np-f"><label>Company</label><AddressAutocomplete types={["establishment"]} className="apx-input" value={f.company} onChange={setCompany} onPlace={(p) => { setF((f) => ({ ...f, company: p.name || f.company, address: p.address || f.address, propertyType: propertyAfterCompany(f.propertyType, propTouched, p.name || f.company) })); if (p.address) { verifiedRef.current = p.address; setAddrVerified(true); setAddrWarned(false); } }} placeholder="Business name" /></div>
                   </div>
                   <div className="np-row2">
@@ -436,11 +469,18 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
                     )}
                     {startFrom === "import" && (
                       <label className="np-ghost np-src">
-                        {importFile ? importFile.name : "Choose file"}
-                        <input type="file" accept="application/pdf,image/*" hidden onChange={(e) => setImportFile(e.target.files?.[0] || null)} />
+                        {extracting ? "Reading proposal…" : importFile ? importFile.name : "Choose file"}
+                        <input type="file" accept="application/pdf,image/*" hidden onChange={(e) => onImportFile(e.target.files?.[0] || null)} />
                       </label>
                     )}
                   </div>
+                  {startFrom === "import" && extracted?.candidate && (
+                    <div className="np-import-note">
+                      ✓ Read by {extracted.engine === "claude" ? "Claude" : extracted.engine === "openai" ? "OpenAI" : "AI"}
+                      {extracted.candidate.systems?.length ? ` · ${extracted.candidate.systems.length} systems` : ""}
+                      {extracted.cost != null ? ` · $${Number(extracted.cost).toFixed(4)}` : ""} — fields below auto-filled from the PDF.
+                    </div>
+                  )}
                 </div>
               )}
               <div className="np-f"><label>Notes</label><textarea className="apx-input" rows={2} value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What does the customer need?" /></div>
@@ -1128,6 +1168,7 @@ const CSS = `
 .apx .np-err{font-size:.85rem;color:var(--red);background:var(--red-soft);padding:8px 12px;border-radius:8px}
 .apx .np-src{display:flex;align-items:center;gap:4px;min-width:0;padding:10px 14px;font-size:.84rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .apx .np-src b{font-family:Menlo,Consolas,monospace;font-size:.78rem}
+.apx .np-import-note{margin-top:7px;font-size:.78rem;font-weight:600;color:#2f6f4e;background:rgba(62,125,90,.08);border:1px solid rgba(62,125,90,.25);border-radius:9px;padding:8px 11px;line-height:1.35}
 .apx .np-cres{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:6px;background:#fff}
 .apx .np-crow{display:flex;justify-content:space-between;align-items:center;gap:10px;width:100%;padding:9px 12px;border:none;border-top:1px solid var(--line);background:#fff;text-align:left;font-family:inherit;cursor:pointer;min-width:0}
 .apx .np-crow:first-child{border-top:none}.apx .np-crow:hover{background:var(--bg-soft,#f4f2ec)}

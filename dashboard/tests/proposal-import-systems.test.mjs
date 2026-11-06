@@ -71,3 +71,20 @@ test("the ?import= review opens even when the builder has a default draft", () =
   assert.ok(b.includes("initialImport?.mediaId && importHandoff") && b.includes("<ImportSheet"), "opens on the import media id regardless of servicesEmpty");
   assert.ok(b.includes("initialImport={null}"), "ProposalStart no longer also opens the handoff (no double sheet)");
 });
+
+test("extract-on-select: route supports extract-only (no project) + reusing a pre-extracted candidate", () => {
+  assert.ok(route.includes("EXTRACT-ONLY") && route.includes("if (!project)") && route.includes("extractOnly: true"), "extract-only path returns a candidate without storing media");
+  assert.ok(route.includes('form.get("candidate")') && route.includes("read at upload"), "a pre-extracted candidate is reused (no 2nd AI call)");
+  assert.ok(route.includes('"customer_contact"'), "prompt extracts a customer contact person");
+});
+
+test("New Project modal auto-fills the form from the PDF on select", () => {
+  const shell = readFileSync(new URL("../app/components/admin-shell.jsx", import.meta.url), "utf8");
+  assert.ok(shell.includes("async function onImportFile") && shell.includes('fd.append("file", file)') && !/onImportFile[\s\S]{0,200}append\("project"/.test(shell), "reads the PDF with no project (extract-only) on select");
+  for (const field of ["c.customer", "c.customer_contact", "c.customer_email", "c.customer_phone", "c.customer_address"]) {
+    assert.ok(shell.includes(field), `auto-fills from ${field}`);
+  }
+  assert.ok(shell.includes("p.company || c.customer"), "only fills EMPTY fields (never clobbers typed/picked values)");
+  assert.ok(shell.includes('fd.append("candidate", JSON.stringify(extracted.candidate))'), "Create reuses the extracted candidate (no double extraction)");
+  assert.ok(shell.includes('required={startFrom !== "import"}'), "Contact is optional when importing");
+});

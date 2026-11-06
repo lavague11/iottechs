@@ -31,7 +31,8 @@ const PROMPT = `You are reading a low-voltage contractor's PROPOSAL / QUOTE / ES
 Return ONLY a JSON object. No preamble, no markdown fences.
 
 {
-  "customer": "the CUSTOMER / recipient this proposal is FOR (the 'Prepared For' party or project site), or null",
+  "customer": "the CUSTOMER / recipient business or site name this proposal is FOR (the 'Prepared For' party), or null",
+  "customer_contact": "a specific CONTACT PERSON's name for the customer, if one is printed (not a business name), else null",
   "customer_address": "the customer's project / service address, or null",
   "customer_phone": "a phone that is clearly the customer's (NOT the contractor's), or null",
   "customer_email": "an email that is clearly the customer's (NOT the contractor's), or null",
@@ -141,7 +142,6 @@ export async function POST(req) {
     let form; try { form = await req.formData(); } catch { return Response.json({ ok: false, error: "expected multipart form-data" }, { status: 400 }); }
     const file = form.get("file"); project = String(form.get("project") || "");
     if (!file || typeof file === "string" || typeof file.arrayBuffer !== "function") return Response.json({ ok: false, error: "no file" }, { status: 400 });
-    if (!getJobByAccessId(project)) return Response.json({ ok: false, error: "project not found" }, { status: 404 });
     const buf = Buffer.from(await file.arrayBuffer());
     if (!buf.length) return Response.json({ ok: false, error: "empty file" }, { status: 400 });
     if (buf.length > MAX_BYTES) return Response.json({ ok: false, error: "file too large" }, { status: 413 });
@@ -151,10 +151,34 @@ export async function POST(req) {
       if (buf.slice(0, 5).toString() === "%PDF-") mime = PDF;
       else return Response.json({ ok: false, error: "PDF or image only" }, { status: 415 });
     }
+    // EXTRACT-ONLY (no project yet): the New Project modal reads a picked PDF before the project exists, to
+    // auto-fill the form. Nothing is stored and nothing is logged — just the candidate for the form.
+    if (!project) {
+      if (!eng) return Response.json({ ok: true, candidate: null, engine: "none", model: null, error: "No AI key set — add ANTHROPIC_API_KEY (or OPENAI_API_KEY) in Development ▸ API Keys." });
+      try {
+        const { candidate, usage } = eng.name === "openai" ? await extractOpenAI(buf, mime, eng.key, eng.model) : await extractClaude(buf, mime, eng.key, eng.model);
+        const cost = Math.round((usage?.cost || 0) * 10000) / 10000;
+        return Response.json({ ok: true, candidate, engine: eng.name, model: eng.model, usage: { ...usage, cost }, extractOnly: true });
+      } catch (e) {
+        return Response.json({ ok: true, candidate: null, engine: eng.name, model: eng.model, error: `Couldn't read the document (${e?.message || e}).` });
+      }
+    }
+    if (!getJobByAccessId(project)) return Response.json({ ok: false, error: "project not found" }, { status: 404 });
     // Keep the ORIGINAL as the import's source attachment (kind "proposal-import"), whatever happens next.
     mediaId = crypto.randomBytes(16).toString("hex");
     insertMedia({ id: mediaId, projectAccessId: project, kind: "proposal-import", mime, bytes: buf, w: null, h: null, createdBy: user.name || user.role });
     bytes = buf;
+    // PRE-EXTRACTED: the modal already extracted on file-select (to auto-fill), so reuse that candidate —
+    // store the media but skip a second AI call (no duplicate cost).
+    const pre = form.get("candidate");
+    if (pre) {
+      let candidate = null; try { candidate = normalizeCandidate(JSON.parse(String(pre))); } catch {}
+      if (candidate) {
+        const engName = String(form.get("engine") || "");
+        try { logProjectEvent(project, { kind: "ai", label: `Proposal import attached · ${engName === "claude" ? "Claude" : engName === "openai" ? "OpenAI" : "AI"} (read at upload) · $${Number(form.get("cost") || 0).toFixed(4)}`, actor: user.name || user.role }); } catch { /* non-fatal */ }
+        return Response.json({ ok: true, mediaId, candidate, engine: engName || null, model: null, usage: { cost: +form.get("cost") || 0 } });
+      }
+    }
   }
   if (!eng) return Response.json({ ok: true, mediaId, candidate: null, engine: "none", model: null, error: "No AI key set — add ANTHROPIC_API_KEY (or OPENAI_API_KEY) in Development ▸ API Keys, or start manually." });
   try {
