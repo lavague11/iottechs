@@ -10,7 +10,9 @@ import { STATUS, STATUS_TONE } from "../../../lib/spec";
 import { updateCustomerAction, customerProjectsAction } from "../../components/crm-actions";
 import { createServiceCallAction } from "../../service-calls/actions";
 import { addCustomerNoteAction } from "./actions";
+import ProjectCardMenu from "../../components/project-card-menu";
 
+const STAGE_GROUP = { inquiry: "site_survey", site_survey: "site_survey", proposal: "site_survey", approval_deposit: "site_survey", schedule: "install", install: "install", qc: "install", payment: "completion", completion: "completion" };
 const money = (n) => "$" + (Math.round(+n || 0)).toLocaleString();
 const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).slice(0, 10) + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return String(d).slice(0, 10); } };
 const fmtWhen = (d) => { if (!d) return ""; const s = String(d).replace("T", " "); try { return new Date(s.replace(" ", "T")).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return s.slice(0, 16); } };
@@ -179,7 +181,11 @@ export default function CustomerHubClient({ user, alerts, hub }) {
               <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--muted)", fontSize: ".88rem" }}>No projects.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 }}>
-                {visibleJobs.map((j) => <ProjectCard key={j.access_id} job={j} onOpen={() => router.push(`/project/${j.access_id}`)} />)}
+                {visibleJobs.map((j) => (
+                  <ProjectCardMenu key={j.access_id} role={user?.role} project={{ access_id: j.access_id, customer: hub?.customer?.name || j.customer, stage: j.stage, stageGroup: STAGE_GROUP[j.stage], contact_phone: hub?.customer?.phone, contact_email: hub?.customer?.email, archived: j.archived }}>
+                    <div style={{ display: "contents" }}><ProjectCard job={j} onOpen={() => router.push(`/project/${j.access_id}`)} /></div>
+                  </ProjectCardMenu>
+                ))}
               </div>
             )}
           </div>
