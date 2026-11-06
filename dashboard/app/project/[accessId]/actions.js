@@ -675,6 +675,57 @@ export async function logAddendumAction(accessId, { verb, title, amount }) {
   return { ok: true };
 }
 
+// ---- Addendum approval email (Part B) — Send now / Schedule / cancel. Office only. ----
+// Patches ONE add-on in the blob server-side (trusted raw write, so the email-tracking fields survive).
+async function _patchAddendum(accessId, addendumId, patch) {
+  const { getToolData, saveToolData } = await import("../../../lib/db");
+  let d = {}; try { d = JSON.parse(getToolData(accessId, "addendum")?.data || "{}"); } catch { d = {}; }
+  const list = Array.isArray(d.addendums) ? d.addendums : [];
+  const a = list.find((x) => x && x.id === addendumId);
+  if (!a) return null;
+  Object.assign(a, patch);
+  saveToolData(accessId, "addendum", JSON.stringify({ ...d, addendums: list }), "system");
+  return a;
+}
+const _officeName = (tok) => tok?.name || tok?.contact_name || tok?.role || "Office";
+
+export async function sendAddendumApprovalAction(accessId, addendumId) {
+  const tok = await getSessionTok();
+  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return { error: "Unauthorized." };
+  const { emailAddendumApproval } = await import("../../../lib/email");
+  const r = await emailAddendumApproval(accessId, addendumId).catch(() => null);
+  const emailed = !!(r && (r.ok || r.id));
+  await _patchAddendum(accessId, addendumId, { emailSentAt: new Date().toISOString(), scheduledSendAt: undefined });
+  if (emailed) logProjectEvent(accessId, { kind: "email", label: "Add-on approval email sent to the customer", actor: _officeName(tok) });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  const skip = r?.skipped;
+  return { ok: true, emailed, note: emailed ? "" : (skip === "demo-project" ? "Demo/test project — email not sent." : skip === "no-email" ? "No customer email on file." : "Email isn't configured yet (needs RESEND_API_KEY).") };
+}
+
+export async function scheduleAddendumApprovalAction(accessId, addendumId, sendAtISO) {
+  const tok = await getSessionTok();
+  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return { error: "Unauthorized." };
+  const when = new Date(sendAtISO);
+  if (isNaN(when.getTime())) return { error: "Pick a valid date and time." };
+  const a = await _patchAddendum(accessId, addendumId, { scheduledSendAt: when.toISOString(), emailSentAt: undefined });
+  if (!a) return { error: "Add-on not found." };
+  logProjectEvent(accessId, { kind: "request", label: `Add-on approval email scheduled · ${when.toLocaleString("en-US")}`.slice(0, 300), actor: _officeName(tok) });
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true, scheduledSendAt: when.toISOString() };
+}
+
+export async function cancelAddendumScheduleAction(accessId, addendumId) {
+  const tok = await getSessionTok();
+  if (!tok || !["admin", "manager", "sales"].includes(tok.role)) return { error: "Unauthorized." };
+  const a = await _patchAddendum(accessId, addendumId, { scheduledSendAt: undefined });
+  if (!a) return { error: "Add-on not found." };
+  const { revalidatePath } = await import("next/cache");
+  revalidatePath(`/project/${accessId}`);
+  return { ok: true };
+}
+
 export async function addAssignmentAction(accessId, { userId, userName, userEmail, role, override }) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";

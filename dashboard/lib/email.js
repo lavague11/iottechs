@@ -443,6 +443,48 @@ export async function emailReviewRequest(accessId) {
   }
 }
 
+// Addendum approval request — emailed to the customer for a specific pending job-site add-on. Shows the
+// add-on details + the NEW balance if approved + an "Approve" magic link (no PIN — see /api/addendum-approve).
+// Self-guarding: respects emailEnabled() and NEVER sends for demo/test projects. Only sends a pending,
+// priced add-on (not approved/voided/needs-pricing).
+export async function emailAddendumApproval(accessId, addendumId) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  try {
+    const { getJobByAccessId, getToolData, getProjectFinancialState } = await import("./db.js");
+    const { makeAddendumToken } = await import("./auth.js");
+    const p = getJobByAccessId(accessId);
+    if (!p) return { skipped: "no-project" };
+    const to = p.contact_email;
+    if (!to) return { skipped: "no-email" };
+    if (/@journey-test\.local$/i.test(to) || p.source === "journey-test") return { skipped: "demo-project" };
+    let add = null;
+    try { add = (JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []).find((a) => a && a.id === addendumId); } catch {}
+    if (!add) return { skipped: "no-addendum" };
+    if (add.status !== "pending" || add.needsPricing) return { skipped: "not-pending" };
+
+    const m = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const addTotal = Math.max(0, (add.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+add.discount || 0));
+    const fin = getProjectFinancialState(accessId);
+    const newBalance = (fin ? +fin.balance || 0 : 0) + addTotal;
+    const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];
+    const token = await makeAddendumToken(accessId, addendumId);
+    const approveUrl = `${appUrl()}/api/addendum-approve?t=${encodeURIComponent(token)}`;
+    const itemLines = (add.items || []).map((it) => `• ${it.name}${(+it.qty || 1) > 1 ? ` ×${it.qty}` : ""} — ${m((+it.qty || 0) * (+it.price || 0))}`);
+    const payload = {
+      heading: `A quick approval, ${first}`,
+      intro: `We'd like to add this to your project — "${add.title || "Job-site add-on"}":`,
+      lines: [...itemLines, `Add-on total: ${m(addTotal)}`, `Your new balance if approved: ${m(newBalance)}`, "Tap below to review and approve — no PIN needed."],
+      ctaLabel: "Approve Add-on",
+      ctaUrl: approveUrl,
+      footNote: "This secure link opens your add-on to approve and sign. Questions? Just reply to this email.",
+    };
+    return await sendEmail({ to, subject: "Approve an add-on to your project", html: renderEmail(payload), text: plainText(payload) });
+  } catch (e) {
+    console.error(`[email:addendum] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
 // ---- Appointment invitations ------------------------------------------------
 // A booked survey/install visit emails the customer + assigned team a branded note AND a real
 // calendar (.ics) attachment so it lands in Gmail/Apple Mail as an accept/decline invite. A

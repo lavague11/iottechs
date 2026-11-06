@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 import { titleCase } from "../../../lib/proposal";
 import { saveToolDataAction } from "./proposal-actions";
-import { logAddendumAction } from "./actions";
+import { logAddendumAction, sendAddendumApprovalAction, scheduleAddendumApprovalAction, cancelAddendumScheduleAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { can } from "../../../lib/roles";
 
@@ -35,9 +36,19 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const [editingId, setEditingId] = useState(null);  // office is pricing an existing (tech-submitted) add-on
   const [draft, setDraft] = useState({ title: "", items: [blankItem()], discount: "" });
   const [signId, setSignId] = useState(null);
+  const [signErr, setSignErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(null); // { id, action: 'delete'|'void' }
+  // Part B — approval-email prompt after creating/pricing an add-on (office). `emailPrompt` = the add-on id
+  // being prompted; `schedMode` toggles the date/time picker; `schedAt` is its datetime-local value.
+  const [emailPrompt, setEmailPrompt] = useState(null);
+  const [schedMode, setSchedMode] = useState(false);
+  const [schedAt, setSchedAt] = useState("");
+  const [promptBusy, setPromptBusy] = useState(false);
   const first = useRef(true);
+  // Tomorrow at 9:00 AM (local) as a datetime-local value — the Schedule default.
+  const tomorrow9 = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const openPrompt = (id) => { setSchedMode(false); setSchedAt(tomorrow9()); setEmailPrompt(id); };
 
   // Read the add-on list from the stable API route (not a server action) — on the deploy host the
   // server-action read intermittently 404'd, so the panel rendered nothing and the customer couldn't
@@ -53,6 +64,18 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
 
   // Report how many add-ons exist so the caller can hide the whole step until one is submitted.
   useEffect(() => { onCount?.(addendums.length); }, [addendums.length, onCount]);
+
+  // Part B — the approval MAGIC LINK lands with ?approve=<id>: auto-open the sign modal for that pending
+  // add-on so the customer is "straight to approve" (the no-PIN access was already granted by the route).
+  const sp = useSearchParams();
+  const autoApproved = useRef(false);
+  useEffect(() => {
+    if (autoApproved.current || !isCustomer || readOnly) return;
+    const want = sp?.get("approve");
+    if (!want) return;
+    const a = addendums.find((x) => x.id === want && x.status === "pending" && !x.needsPricing);
+    if (a) { autoApproved.current = true; setSignErr(null); setSignId(want); }
+  }, [sp, addendums, isCustomer, readOnly]);
 
   async function persist(next) {
     setAddendums(next);
@@ -91,6 +114,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
       const upd = next.find((a) => a.id === editingId);
       if (upd) logAddendumAction(accessId, { verb: "priced", title: upd.title, amount: custTotal(upd) }).catch(() => {});
       closeBuilder();
+      if (upd && upd.status === "pending" && !upd.needsPricing) openPrompt(editingId);   // now customer-ready → offer to email
       return;
     }
     // A tech logs the work only — flag it so the office knows to price it (and so it's held back from
@@ -99,6 +123,28 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     persist([...addendums, rec]);
     logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
     closeBuilder();
+    if (!isTech) openPrompt(rec.id);   // office-created + priced → offer to send the approval email
+  }
+  // Part B handlers — Send now / Schedule / Cancel. Update local state optimistically (the server stamps too).
+  async function sendNow(id) {
+    setPromptBusy(true);
+    const r = await sendAddendumApprovalAction(accessId, id).catch(() => null);
+    setPromptBusy(false); setEmailPrompt(null); setSchedMode(false);
+    setAddendums((prev) => prev.map((a) => a.id === id ? { ...a, emailSentAt: new Date().toISOString(), scheduledSendAt: undefined } : a));
+    if (r?.note) setSignErr(r.note);   // reuse the inline notice line for "demo — not sent" etc.
+  }
+  async function scheduleIt(id) {
+    if (!schedAt) return;
+    setPromptBusy(true);
+    const r = await scheduleAddendumApprovalAction(accessId, id, new Date(schedAt).toISOString()).catch(() => null);
+    setPromptBusy(false); setEmailPrompt(null); setSchedMode(false);
+    if (r?.ok) setAddendums((prev) => prev.map((a) => a.id === id ? { ...a, scheduledSendAt: r.scheduledSendAt, emailSentAt: undefined } : a));
+  }
+  async function cancelSched(id) {
+    setBusy(true);
+    await cancelAddendumScheduleAction(accessId, id).catch(() => null);
+    setBusy(false);
+    setAddendums((prev) => prev.map((a) => a.id === id ? { ...a, scheduledSendAt: undefined } : a));
   }
   const removeAddendum = (id) => { const a = addendums.find((x) => x.id === id); persist(addendums.filter((x) => x.id !== id)); if (a) logAddendumAction(accessId, { verb: "removed", title: a.title }).catch(() => {}); };
   // Void an addendum (any status) — it stays on record with the date, but drops out of billing and
@@ -127,8 +173,6 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     if (Array.isArray(j.addendums)) setAddendums(j.addendums);
     setSignId(null);
   }
-  const [signErr, setSignErr] = useState(null);
-
   const pending = addendums.filter((a) => a.status === "pending");
   if (!canBuild && addendums.length === 0) return null; // customer/tech see nothing until one exists
 
@@ -217,6 +261,22 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                 </>
               )}
             </div>
+            {/* Part B — approval-email state for the office: schedule / sent / send-for-later. */}
+            {!isCustomer && !isTech && a.status === "pending" && !a.needsPricing && (
+              <div className="adn-email-row">
+                {a.scheduledSendAt ? (
+                  <>
+                    <span className="adn-email-sched">✦ Email scheduled for {fmtStamp(a.scheduledSendAt)}</span>
+                    <button type="button" className="adn-email-link" disabled={busy} onClick={() => openPrompt(a.id)}>Edit</button>
+                    <button type="button" className="adn-email-link adn-email-cancel" disabled={busy} onClick={() => cancelSched(a.id)}>Cancel</button>
+                  </>
+                ) : a.emailSentAt ? (
+                  <span className="adn-email-sent">✓ Approval email sent · {fmtStamp(a.emailSentAt)}</span>
+                ) : (
+                  <button type="button" className="adn-email-btn" disabled={busy} onClick={() => openPrompt(a.id)}>Send approval email</button>
+                )}
+              </div>
+            )}
           </div>
         );
       })}
@@ -295,6 +355,36 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
       ) : (
         <button type="button" className="adn-newbtn" onClick={() => { setDraft((d) => ({ ...d, title: d.title || defaultTitle() })); setBuilding(true); }}>+ New addendum</button>
       ))}
+
+      {/* Part B — "Send approval email to <customer>?" prompt (Send now / Schedule / Not now). */}
+      {emailPrompt && (() => {
+        const a = addendums.find((x) => x.id === emailPrompt);
+        const who = (customerName || "the customer").trim() || "the customer";
+        return (
+          <div className="adn-promptbg" onClick={() => { if (!promptBusy) { setEmailPrompt(null); setSchedMode(false); } }}>
+            <div className="adn-prompt" onClick={(e) => e.stopPropagation()}>
+              <div className="adn-prompt-h">Send approval email to {who}?</div>
+              {a && <div className="adn-prompt-sub">{a.title} · {money(custTotal(a))}</div>}
+              {!schedMode ? (
+                <div className="adn-prompt-acts">
+                  <button type="button" className="adn-prompt-primary" disabled={promptBusy} onClick={() => sendNow(emailPrompt)}>Send now</button>
+                  <button type="button" className="adn-prompt-ghost" disabled={promptBusy} onClick={() => { setSchedAt(schedAt || tomorrow9()); setSchedMode(true); }}>Schedule</button>
+                  <button type="button" className="adn-prompt-text" disabled={promptBusy} onClick={() => setEmailPrompt(null)}>Not now</button>
+                </div>
+              ) : (
+                <div className="adn-prompt-sched">
+                  <label className="adn-fld"><span className="adn-flbl">Send at</span>
+                    <input type="datetime-local" className="adn-b-title" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} /></label>
+                  <div className="adn-prompt-acts">
+                    <button type="button" className="adn-prompt-primary" disabled={promptBusy || !schedAt} onClick={() => scheduleIt(emailPrompt)}>Schedule email</button>
+                    <button type="button" className="adn-prompt-text" disabled={promptBusy} onClick={() => setSchedMode(false)}>Back</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <ProposalSignModal
         open={!!signId}
@@ -401,4 +491,23 @@ const ADN_CSS = `
 .adn-b-cancel{height:40px;padding:0 12px;border:none;border-radius:9px;background:transparent;color:var(--dv-meta,#787D84);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-b-cancel:hover{color:var(--dv-ink,#101418)}
 .adn-cust-note{margin-top:10px;font-size:.8rem;color:var(--dv-ink-soft,#3A4048);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;font-weight:500}
+/* Part B — approval-email state row + the send prompt. */
+.adn-email-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;padding-top:9px;border-top:1px dashed var(--dv-line,#E4E4DF)}
+.adn-root .adn-email-btn{height:32px;padding:0 14px;border:1px solid var(--dv-gold-text,#8A6A1F);border-radius:8px;background:#fff;color:var(--dv-gold-text,#8A6A1F);font-size:.78rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-email-btn:hover{background:rgba(176,141,76,.08)}
+.adn-email-sched{font-size:.78rem;font-weight:600;color:#8a5a1f}
+.adn-email-sent{font-size:.78rem;font-weight:600;color:var(--dv-green,#2E7D5B)}
+.adn-email-link{height:28px;padding:0 10px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-ink-soft,#3A4048);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-email-cancel{color:var(--dv-red,#C4553D)}
+.adn-promptbg{position:fixed;inset:0;z-index:60;background:rgba(16,20,24,.42);display:flex;align-items:center;justify-content:center;padding:20px}
+.adn-prompt{width:min(420px,94vw);background:#fff;border:1px solid var(--dv-line,#E4E4DF);border-radius:16px;padding:18px;box-shadow:0 18px 50px -14px rgba(0,0,0,.4);font-family:inherit}
+.adn-prompt-h{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
+.adn-prompt-sub{font-size:.82rem;color:var(--dv-meta,#787D84);margin-top:3px}
+.adn-prompt-acts{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:16px}
+.adn-root .adn-prompt-primary{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:700;cursor:pointer;font-family:inherit}
+.adn-root .adn-prompt-primary:disabled{opacity:.5;cursor:default}
+.adn-prompt-ghost{height:40px;padding:0 16px;border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
+.adn-prompt-text{height:40px;padding:0 10px;border:none;background:none;color:var(--dv-meta,#787D84);font-size:.82rem;font-weight:600;cursor:pointer;font-family:inherit;margin-left:auto}
+.adn-prompt-sched{margin-top:14px}
+.adn-prompt-sched .adn-b-title{margin-top:4px}
 `;

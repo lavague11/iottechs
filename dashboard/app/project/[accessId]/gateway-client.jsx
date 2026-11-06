@@ -1584,7 +1584,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   // we clean the URL would null it before DeckView gets a chance to open the tool.
   const openToolParamRef = useRef(searchParams?.get("open") || null);
   const openToolParam = openToolParamRef.current;
-  const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment" };
+  const OPEN_TOOL_NAMES = { proposal: "Proposal", survey: "Site Survey", site_survey: "Site Survey", mockup: "Mockups", deposit: "Approval & Deposit", payment: "Final Payment", addendum: "Addendum" };
   const openToolOnMount = openToolParam ? (OPEN_TOOL_NAMES[openToolParam.toLowerCase()] || null) : null;
   // Imperative "open this deck tool now" signal (e.g. a "Review & Approve" link that jumps to the
   // proposal document). Bumping the nonce tells DeckView to open the named tool.

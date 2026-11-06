@@ -37,4 +37,16 @@ export async function register() {
   };
   setTimeout(sweepReceivables, 120_000);              // first sweep ~2 min after boot
   setInterval(sweepReceivables, 6 * 60 * 60 * 1000);  // then every 6 hours (cheap + idempotent)
+
+  // Scheduled add-on approval emails: send any whose scheduledSendAt has passed, skipping ones no longer
+  // pending (approved/voided/deleted). Idempotent — a sent/cleared add-on drops its schedule.
+  const sweepAddendumEmails = async () => {
+    try {
+      const { sendDueAddendumEmails } = await import("./lib/addendum-emails.js");
+      const r = await sendDueAddendumEmails();
+      if (r?.sent) console.log(`[addendum] sent ${r.sent} scheduled approval email(s)`);
+    } catch (e) { console.error("[addendum] scheduled-email sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepAddendumEmails, 100_000);            // ~1.5 min after boot
+  setInterval(sweepAddendumEmails, 15 * 60 * 1000);    // then every 15 minutes
 }

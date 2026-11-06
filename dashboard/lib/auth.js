@@ -238,3 +238,25 @@ export async function verifyRsvpToken(token) {
     return { accessId: o.a, eventId: o.e };
   } catch { return null; }
 }
+
+// Addendum approval magic-link token — emailed to the customer so they can approve a specific job-site
+// add-on with NO PIN. Signed (project + addendum + issuedAt) and expiring, so an old/forwarded link
+// stops working. Consuming it grants only the same short customer access the PIN would, for that project.
+const ADDENDUM_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+export async function makeAddendumToken(accessId, addendumId) {
+  const payload = b64u(JSON.stringify({ a: String(accessId), d: String(addendumId), t: Date.now() }));
+  const sig = await previewHmac(`adn:${payload}`);
+  return `${payload}.${sig}`;
+}
+export async function verifyAddendumToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  if (sig !== await previewHmac(`adn:${payload}`)) return null;
+  try {
+    const o = JSON.parse(unb64u(payload));
+    if (!o.a || !o.d) return null;
+    if (o.t && Date.now() - Number(o.t) > ADDENDUM_TOKEN_TTL_MS) return null; // expired
+    return { accessId: o.a, addendumId: o.d };
+  } catch { return null; }
+}
