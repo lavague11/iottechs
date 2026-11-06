@@ -293,7 +293,7 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
         const fd = new FormData(); fd.append("file", importFile); fd.append("project", j.accessId);
         const up = await fetch("/api/proposal-import", { method: "POST", body: fd }).then((x) => x.json()).catch(() => null);
         if (up?.ok && up.mediaId) {
-          try { sessionStorage.setItem(`iot_import_${up.mediaId}`, JSON.stringify({ candidate: up.candidate || null, fileName: importFile.name })); } catch {}
+          try { sessionStorage.setItem(`iot_import_${up.mediaId}`, JSON.stringify({ candidate: up.candidate || null, fileName: importFile.name, engine: up.engine || null, cost: up.usage?.cost ?? null })); } catch {}
           onClose(); r.push(`/project/${j.accessId}?deck=1&stage=proposal&import=${up.mediaId}`);
           return;
         }

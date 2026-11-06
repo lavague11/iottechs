@@ -16,7 +16,7 @@ import RequestSignatureSheet from "./request-signature-sheet";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
-import { ProposalStart, PricingReview, UseForAnother } from "./proposal-start";
+import { ProposalStart, ImportSheet, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
 import { applyBulkSub } from "../../../lib/proposal-bulk";
 import { can } from "../../../lib/roles";
@@ -164,10 +164,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const initialImport = useMemo(() => {
     if (!importId || typeof window === "undefined") return null;
     let stash = null; try { stash = JSON.parse(sessionStorage.getItem(`iot_import_${importId}`) || "null"); } catch {}
-    return { mediaId: importId, candidate: stash?.candidate || null, fileName: stash?.fileName || "" };
+    return { mediaId: importId, candidate: stash?.candidate || null, fileName: stash?.fileName || "", engine: stash?.engine || null, cost: stash?.cost ?? null };
   }, [importId]);
   const canReuse = can(role, "proposal.reuse");
   const hasItems = payload.options.some((o) => (o.services || []).some((s) => (s.items || []).length));
+  // The ?import= handoff must open the IMPORT REVIEW no matter what's already in the builder (a freshly
+  // created project can have a default service, so the empty-state ProposalStart below never renders).
+  // So open the sheet at the top level, once, whenever an import media id is present.
+  // Start false so the server + first client render match (initialImport is window-only → SSR sees null);
+  // the effect opens the sheet on the client after hydration, avoiding a hydration mismatch.
+  const [importHandoff, setImportHandoff] = useState(false);
+  useEffect(() => { if (initialImport?.mediaId) setImportHandoff(true); }, [initialImport?.mediaId]);
   function onReuseCreated(r) {
     if (r?.proposal) adopt(r.proposal);
     setReviewDiffs(Array.isArray(r?.review) ? r.review : []);
@@ -922,6 +929,14 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           }}
         />
       ))}
+      {/* IMPORT HANDOFF — New Project → Import Proposal lands with ?import=<mediaId>. Open the review here
+          (top level), independent of the builder's state, so a default draft never swallows it. */}
+      {!readOnly && canReuse && initialImport?.mediaId && importHandoff && (
+        <ImportSheet accessId={accessId} serviceKey={defaultService} initial={initialImport}
+          onClose={() => setImportHandoff(false)}
+          onCreated={(r) => { setImportHandoff(false); onReuseCreated(r); }} />
+      )}
+
       {/* EMPTY STATE — an intentional "build your proposal" start, not a blank builder. Shows only when the
           current option has no services; the pricing engine + payment terms stay hidden until there's content. */}
       {!readOnly && servicesEmpty && (
@@ -934,7 +949,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             {payload.options.length === 1 && <button type="button" className="prop-build-opt" onClick={addOption}>+ Option</button>}
           </div>
           {canReuse && (
-            <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={initialImport} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} compact />
+            /* initialImport is handled by the top-level ImportSheet above (so it opens even with a default
+               draft); here ProposalStart only offers the manual Blank / Previous / Import choices. */
+            <ProposalStart accessId={accessId} serviceKey={defaultService} initialImport={null} onCreated={onReuseCreated} onBlank={() => setStartHidden(true)} compact />
           )}
         </div>
       )}

@@ -147,7 +147,7 @@ export function ImportSheet({ accessId, serviceKey, onClose, onCreated, initial 
   const [fileName, setFileName] = useState(initial?.fileName || "");
   const [cand, setCand] = useState(initial?.candidate || null);
   const [cost, setCost] = useState(initial?.candidate ? (initial.cost ?? null) : null);
-  const [engine, setEngine] = useState(null);   // "claude" | "openai" | "none" | null — which AI read the PDF
+  const [engine, setEngine] = useState(initial?.engine ?? null);   // "claude" | "openai" | "none" | null — which AI read the PDF
   const [err, setErr] = useState(null);
   useEffect(() => { if (initial?.mediaId && !initial.candidate) retry(); /* eslint-disable-next-line */ }, []);
   async function upload(file) {

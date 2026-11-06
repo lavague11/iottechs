@@ -60,3 +60,14 @@ test("review screen shows the AI engine indicator (Claude / OpenAI / No AI key)"
   assert.ok(ui.includes("AI engine:") && ui.includes('claude: ["Claude"') && ui.includes('openai: ["OpenAI"') && ui.includes('none: ["No AI key"'), "badge covers all three engines");
   assert.ok(ui.includes("setEngine(r.engine") || ui.includes("setEngine(r?.engine"), "engine captured from the response");
 });
+
+test("the ?import= review opens even when the builder has a default draft", () => {
+  const b = readFileSync(new URL("../app/project/[accessId]/proposal-builder.jsx", import.meta.url), "utf8");
+  // The ImportSheet is rendered at the TOP level (not inside the servicesEmpty empty-state), so a default
+  // service never swallows the handoff. ProposalStart no longer double-opens it.
+  const topLevel = b.indexOf("IMPORT HANDOFF");
+  const emptyState = b.indexOf("EMPTY STATE");
+  assert.ok(topLevel >= 0 && topLevel < emptyState, "ImportSheet handoff renders before (outside) the empty-state block");
+  assert.ok(b.includes("initialImport?.mediaId && importHandoff") && b.includes("<ImportSheet"), "opens on the import media id regardless of servicesEmpty");
+  assert.ok(b.includes("initialImport={null}"), "ProposalStart no longer also opens the handoff (no double sheet)");
+});
