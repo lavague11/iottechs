@@ -5,8 +5,11 @@ import { useRouter } from "next/navigation";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { ProjectTypeIcon } from "../components/project-type";
+import ProjectCardMenu from "../components/project-card-menu";
 import { adtStatusMeta } from "../../lib/adt";
 import { archiveProjectAction } from "./actions";
+
+const STAGE_GROUP = { inquiry: "site_survey", site_survey: "site_survey", proposal: "site_survey", approval_deposit: "site_survey", schedule: "install", install: "install", qc: "install", payment: "completion", completion: "completion" };
 
 const CLOSED = new Set(["payment", "completion", "adt_completed"]);
 const STAGE_PILL = {
@@ -180,8 +183,8 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
             const isAdt = p.kind === "adt";
             const pill = isAdt ? adtStatusMeta(p.status) : null;
             const [cls, lbl] = isAdt ? [null, null] : (STAGE_PILL[p.stage] || ["s-survey", p.stage]);
-            return (
-              <div key={p.access_id} className="pjx-row" onClick={() => open(p)} role="button" tabIndex={0}
+            const rowEl = (
+              <div className="pjx-row" onClick={() => open(p)} role="button" tabIndex={0}
                 onKeyDown={(e) => { if (e.key === "Enter") open(p); }}>
                 <ProjectTypeIcon project={p} size={38} />
                 <div className="pjx-main">
@@ -213,6 +216,13 @@ export default function ProjectsClient({ user, alerts, projects, initialFilter =
                   <span className="pjx-chev" aria-hidden="true"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg></span>
                 </div>
               </div>
+            );
+            // ADT rows have no project lifecycle — no rich menu. Others get right-click / long-press.
+            return isAdt ? <div key={p.access_id} style={{ display: "contents" }}>{rowEl}</div> : (
+              <ProjectCardMenu key={p.access_id} role={user?.role}
+                project={{ access_id: p.access_id, customer: p.customer, stage: p.stage, stageGroup: STAGE_GROUP[p.stage], contact_phone: p.contact_phone, contact_email: p.contact_email, archived: p.archived }}>
+                {rowEl}
+              </ProjectCardMenu>
             );
           })}
         </div>
