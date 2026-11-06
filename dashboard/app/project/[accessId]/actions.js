@@ -927,6 +927,9 @@ export async function completeProjectAction(accessId, done = true, date = null) 
   const { markProjectCompleted, reopenProjectCompletion } = await import("../../../lib/db");
   const row = done ? markProjectCompleted(accessId, date) : reopenProjectCompletion(accessId);
   if (!row) return { error: "Project not found." };
+  // Fix #1: on completion, send the one-time review request. The helper self-guards (email gating,
+  // paid-in-full only, never demo/test, once per project), so this is safe fire-and-forget.
+  if (done) import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, completed_at: row.completed_at || null };

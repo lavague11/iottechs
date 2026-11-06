@@ -219,6 +219,8 @@ function init() {
   // flags it "missing details" for the office to complete later; clears once a phone is on file.
   if (!cols.includes("needs_details"))   db.exec("ALTER TABLE projects ADD COLUMN needs_details INTEGER DEFAULT 0");
   if (!cols.includes("created_by_name")) db.exec("ALTER TABLE projects ADD COLUMN created_by_name TEXT");
+  // Timestamp the one-time "leave us a review" email so it never double-sends (fix #1: auto review request).
+  if (!cols.includes("review_requested_at")) db.exec("ALTER TABLE projects ADD COLUMN review_requested_at TEXT");
   // Internal / legacy job (no customer sale): the work order skips the customer sign+deposit gate.
   // Set automatically for field-created jobs; also toggleable on any project by admin/manager.
   if (!cols.includes("internal_job"))    db.exec("ALTER TABLE projects ADD COLUMN internal_job INTEGER DEFAULT 0");
@@ -3711,6 +3713,11 @@ export function markProjectCompleted(accessId, date) {
   if (d) db.prepare("UPDATE projects SET completed_at = ? WHERE access_id = ? COLLATE NOCASE").run(d, String(accessId));
   else db.prepare("UPDATE projects SET completed_at = COALESCE(completed_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
   return getJobByAccessId(accessId);
+}
+// Stamp the one-time review-request email (fix #1). Idempotent — keeps the first stamp, so the
+// "leave us a review" email is sent at most once per project.
+export function markReviewRequested(accessId) {
+  db.prepare("UPDATE projects SET review_requested_at = COALESCE(review_requested_at, datetime('now','localtime')) WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
 }
 // Warranty term in months — 6 / 12 / 24 (default 6). Anything else falls back to 6.
 export function setWarrantyMonths(accessId, months) {

@@ -401,6 +401,48 @@ export async function emailSignatureRequest(accessId, optKey) {
   }
 }
 
+// Fix #1 — the one-time "leave us a review" ask, sent when a job is COMPLETE and PAID IN FULL.
+// Self-guarding so it's safe to call from any completion/payment path:
+//   • respects email gating (emailEnabled → Resend key + EMAIL_DISABLED/test kill-switch)
+//   • NEVER sends for demo/test projects (@journey-test.local recipients or source='journey-test')
+//   • sends at most once (projects.review_requested_at), and only once the balance is collected
+// The CTA is an EXTERNAL review link (secret REVIEW_URL), so it's built directly, not via projectLink.
+export async function emailReviewRequest(accessId) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  try {
+    const { getJobByAccessId, getProjectFinancialState, markReviewRequested } = await import("./db.js");
+    const p = getJobByAccessId(accessId);
+    if (!p) return { skipped: "no-project" };
+    const to = p.contact_email;
+    if (!to) return { skipped: "no-email" };
+    if (/@journey-test\.local$/i.test(to) || p.source === "journey-test") return { skipped: "demo-project" };
+    if (p.review_requested_at) return { skipped: "already-sent" };
+    if (!p.completed_at) return { skipped: "not-complete" };            // job must actually be done
+    const fin = getProjectFinancialState(accessId);
+    if (!fin || fin.financialState !== "collected") return { skipped: "balance-due" };  // and paid in full
+
+    const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];
+    const reviewUrl = secretValue("REVIEW_URL") || "https://search.google.com/local/writereview?placeid=ChIJ-IOT-TECHS";
+    const payload = {
+      heading: `Thank you, ${first}!`,
+      intro: "Your system is installed and your project is complete.",
+      lines: [
+        "If everything went well, a quick review would mean the world to us — it's the #1 way other local businesses find a team they can trust.",
+        "It takes less than a minute.",
+      ],
+      ctaLabel: "Leave a Review",
+      ctaUrl: reviewUrl,
+      footNote: "Not happy with something? Just reply to this email and we'll make it right — no review needed.",
+    };
+    const r = await sendEmail({ to, subject: "How did we do?", html: renderEmail(payload), text: plainText(payload) });
+    if (r && (r.ok || r.id)) markReviewRequested(accessId);
+    return r;
+  } catch (e) {
+    console.error(`[email:review] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
 // ---- Appointment invitations ------------------------------------------------
 // A booked survey/install visit emails the customer + assigned team a branded note AND a real
 // calendar (.ics) attachment so it lands in Gmail/Apple Mail as an accept/decline invite. A

@@ -678,6 +678,9 @@ export async function recordPaymentAction(accessId, payment) {
       amount: payment.amount, kind: payment.kind, method: payment.method, paidAt: payment.paidAt,
     }).catch(() => {});
   }
+  // Fix #1: a payment may be the moment a completed job becomes paid-in-full → try the review request
+  // (self-guards on complete + paid-in-full + once + never demo, so premature/duplicate sends can't happen).
+  import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
   // Payment events are DERIVED from the payment records in the Job Log (so existing deposits show too),
   // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
@@ -743,6 +746,8 @@ export async function confirmPaymentAction(accessId, id) {
       amount: confirmed.amount, kind: confirmed.kind, method: confirmed.method, paidAt: confirmed.paid_at,
     }).catch(() => {});
   }
+  // Fix #1: confirming the final payment can tip a completed job to paid-in-full → try the review request.
+  import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
