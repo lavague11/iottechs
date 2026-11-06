@@ -6028,6 +6028,35 @@ export function duplicateProject(accessId, actor) {
   return { ok: true, access_id: newId, from: accessId };
 }
 
+// Likely-DUPLICATE projects: 2+ active projects for the SAME customer at the SAME address (normalized),
+// where they're not all finished — i.e. a job probably entered twice (e.g. two "Fuel Hub Gas Station"
+// leads), not legitimate repeat business (which uses a different address / a completed prior job). Used to
+// flag merge candidates on the dashboard. Read-only. Returns [{ customer, address, projects:[...] }].
+export function findLikelyDuplicateProjects(limit = 8) {
+  const rows = db.prepare(
+    "SELECT access_id, customer, customer_id, address, stage, service_code, created_at FROM projects " +
+    "WHERE ar_archived_at IS NULL AND (lost_at IS NULL OR lost_at='') ORDER BY id DESC"
+  ).all().map(decorate);
+  const norm = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(st|street|ave|avenue|rd|road|blvd|suite|ste|unit|fl|floor)\b/g, "").replace(/\s+/g, " ").trim();
+  const groups = new Map();
+  for (const r of rows) {
+    const addr = norm(r.address);
+    if (!addr) continue;                                   // need an address to claim a duplicate
+    const who = r.customer_id != null ? `c${r.customer_id}` : norm(r.customer);
+    if (!who) continue;
+    const key = `${who}|${addr}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ access_id: r.access_id, customer: r.customer, address: r.address, stage: r.stage, stageLabel: r.stageLabel || r.stage, created_at: r.created_at });
+  }
+  const out = [];
+  for (const g of groups.values()) {
+    if (g.length < 2) continue;
+    if (g.every((p) => p.stage === "completion")) continue;   // all finished → legitimate repeat jobs
+    out.push({ customer: g[0].customer, address: g[0].address, projects: g });
+  }
+  return out.slice(0, limit);
+}
+
 // A "customer" is every project sharing a customer name — archive them all (soft/recoverable).
 export function archiveCustomer(customerName, actor) {
   const rows = db.prepare("SELECT id FROM projects WHERE customer = ?").all(String(customerName));

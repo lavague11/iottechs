@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { getAllJobs, getTickets, listServiceCalls, getReceivables, allScheduleBlobs, getPendingWorkOrders, getPendingExpenses, getPendingRequests, getRecentProjectIdsForUser, getRecentBusinessEvents } from "../../lib/db";
+import { getAllJobs, getTickets, listServiceCalls, getReceivables, allScheduleBlobs, getPendingWorkOrders, getPendingExpenses, getPendingRequests, getRecentProjectIdsForUser, getRecentBusinessEvents, findLikelyDuplicateProjects } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import { buildActionItems } from "../../lib/action-center";
 import AdminClient from "./admin-client";
@@ -104,6 +104,9 @@ export default async function DashboardPage() {
     return { icon, title: e.label || e.kind, customer: e.project_customer || "", href: e.project_access_id ? `/project/${e.project_access_id}` : null, when: e.created_at };
   });
 
+  // Likely duplicate projects (same customer + address, not legit repeat business) — admin/manager only.
+  const duplicates = ["admin", "manager"].includes(user.role) ? (() => { try { return findLikelyDuplicateProjects(6); } catch { return []; } })() : [];
+
   return (
     <AdminClient
       user={user}
@@ -111,6 +114,7 @@ export default async function DashboardPage() {
       kpis={kpis}
       recentProjects={recentProjects}
       newLeads={newLeads}
+      duplicates={duplicates}
       needsAttention={needsAttention}
       today={today}
       upcoming={upcoming}

@@ -24,6 +24,13 @@ test("duplicateProject copies the customer + clones the proposal as a fresh draf
   assert.ok(db.includes('cloneProposal({ sourceProposalId: src.id, destAccessId: newId, actor: actor?.name'), "clones the active proposal (actor passed as a NAME string, not the object)");
 });
 
+test("duplicate flagging is conservative (same customer + address, not legit repeat business)", () => {
+  assert.ok(db.includes("export function findLikelyDuplicateProjects"), "detector exists");
+  assert.ok(db.includes("if (!addr) continue;") && db.includes("`${who}|${addr}`"), "groups by customer + normalized address (address required)");
+  assert.ok(db.includes('g.every((p) => p.stage === "completion")'), "all-finished clusters are repeat business, not duplicates");
+  assert.ok(db.includes("ar_archived_at IS NULL"), "archived/parked projects are excluded");
+});
+
 test("the card-menu server actions are role-gated and non-destructive", () => {
   assert.ok(actions.includes("export async function mergeProjectsAction") && /mergeProjectsAction[\s\S]*\["admin", "manager"\]\.includes\(user\.role\)/.test(actions), "merge is admin/manager only");
   assert.ok(actions.includes("export async function deleteProjectAction") && /deleteProjectAction[\s\S]*user\.role !== "admin"/.test(actions), "delete is admin only");

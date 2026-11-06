@@ -51,7 +51,7 @@ function dayLabel(iso) {
   return dt.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-export default function AdminClient({ user, alerts, kpis, recentProjects, newLeads = [], needsAttention, today, upcoming, activity }) {
+export default function AdminClient({ user, alerts, kpis, recentProjects, newLeads = [], duplicates = [], needsAttention, today, upcoming, activity }) {
   const [now, setNow]     = useState("");
   const [greet, setGreet] = useState("Welcome");
   const first = (user.name || "Admin").trim().split(/\s+/)[0];
@@ -143,6 +143,37 @@ export default function AdminClient({ user, alerts, kpis, recentProjects, newLea
                 </Link>
               </ProjectCardMenu>
             ))}
+          </div>
+        )}
+
+        {/* Possible duplicates — same customer & address; right-click a chip to merge (keeps the older ID). */}
+        {duplicates.length > 0 && (
+          <div className="panel mb">
+            <div className="panel-head"><h3>Possible duplicates <span className="na-count">{duplicates.length}</span></h3></div>
+            {duplicates.map((g, i) => (
+              <div className="dup-group" key={i}>
+                <div className="dup-who">{g.customer}<span className="dup-addr"> · {g.address}</span></div>
+                <div className="dup-chips">
+                  {g.projects.map((p) => (
+                    <ProjectCardMenu key={p.access_id} role={user?.role} project={{ access_id: p.access_id, customer: g.customer, stage: p.stage, stageGroup: STAGE_GROUP[p.stage], archived: p.archived }}>
+                      <Link className="dup-chip" href={`/project/${p.access_id}`}><span className="mono">{p.access_id}</span><span className="dup-chip-st">{p.stageLabel || p.stage}</span></Link>
+                    </ProjectCardMenu>
+                  ))}
+                </div>
+              </div>
+            ))}
+            <div className="dup-hint">Right-click or long-press a project to merge it (the older ID is kept, both proposals preserved).</div>
+            <style>{`
+.dup-group{padding:10px 0;border-top:1px solid var(--line,#eceae4)}
+.dup-group:first-of-type{border-top:0}
+.dup-who{font-size:13px;font-weight:700;color:var(--ink,#1a1a1a)}
+.dup-addr{font-weight:500;color:var(--meta,#8a8a8a)}
+.dup-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.dup-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border:1px solid var(--line,#e4e4df);border-radius:999px;background:var(--raise,#fbfbfa);text-decoration:none;color:var(--ink,#1a1a1a);font-size:12.5px}
+.dup-chip:hover{border-color:#C9A96E}
+.dup-chip-st{color:var(--meta,#8a8a8a);font-size:11px}
+.dup-hint{margin-top:10px;font-size:11.5px;color:var(--meta,#9a9a9a)}
+`}</style>
           </div>
         )}
 
