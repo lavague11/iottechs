@@ -3,6 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
+import ProjectCardMenu from "../components/project-card-menu";
+
+// Master stage → the 3-step group the card menu's "Change stage" checks/compares against.
+const STAGE_GROUP = { inquiry: "site_survey", site_survey: "site_survey", proposal: "site_survey", approval_deposit: "site_survey", schedule: "install", install: "install", qc: "install", payment: "completion", completion: "completion" };
 
 const STAGE_PILL = {
   inquiry:          { cls: "s-survey",   label: "Inquiry" },
@@ -93,14 +97,16 @@ export default function AdminClient({ user, alerts, kpis, recentProjects, newLea
             {recentProjects.map((p) => {
               const pill = STAGE_PILL[p.stage] || { cls: "s-survey", label: p.stageLabel || p.stage };
               return (
-                <Link className="rp-card" key={p.access_id} href={`/project/${p.access_id}`}>
-                  <div className="rp-name">{p.customer}</div>
-                  <div className="rp-id mono">{p.access_id}{p.service ? <span className="rp-svc"> · {p.service}</span> : null}</div>
-                  <div className="rp-foot">
-                    <span className={`stage-pill ${pill.cls}`}>{pill.label}</span>
-                    <span className="rp-next">{p.next}</span>
-                  </div>
-                </Link>
+                <ProjectCardMenu key={p.access_id} role={user?.role} project={{ access_id: p.access_id, customer: p.customer, stage: p.stage, stageGroup: STAGE_GROUP[p.stage], contact_phone: p.contact_phone, contact_email: p.contact_email, archived: p.archived }}>
+                  <Link className="rp-card" href={`/project/${p.access_id}`}>
+                    <div className="rp-name">{p.customer}</div>
+                    <div className="rp-id mono">{p.access_id}{p.service ? <span className="rp-svc"> · {p.service}</span> : null}</div>
+                    <div className="rp-foot">
+                      <span className={`stage-pill ${pill.cls}`}>{pill.label}</span>
+                      <span className="rp-next">{p.next}</span>
+                    </div>
+                  </Link>
+                </ProjectCardMenu>
               );
             })}
           </div>
@@ -125,15 +131,17 @@ export default function AdminClient({ user, alerts, kpis, recentProjects, newLea
               <Link className="more" href="/projects?filter=inquiries">View all →</Link>
             </div>
             {newLeads.map((l, i) => (
-              <Link className="na-row" key={l.access_id || i} href={l.href}>
-                <span className="na-dot sev-md" />
-                <div className="na-body">
-                  <div className="na-label">{l.customer}</div>
-                  <div className="na-reason">{l.service ? `${l.service} · ` : ""}Schedule the survey</div>
-                </div>
-                {l.age != null && <span className="na-age">{ageLabel(l.age)}</span>}
-                <span className="na-arr">→</span>
-              </Link>
+              <ProjectCardMenu key={l.access_id || i} role={user?.role} project={{ access_id: l.access_id, customer: l.customer, stage: "inquiry", stageGroup: "site_survey", contact_phone: l.contact_phone, contact_email: l.contact_email }}>
+                <Link className="na-row" href={l.href}>
+                  <span className="na-dot sev-md" />
+                  <div className="na-body">
+                    <div className="na-label">{l.customer}</div>
+                    <div className="na-reason">{l.service ? `${l.service} · ` : ""}Schedule the survey</div>
+                  </div>
+                  {l.age != null && <span className="na-age">{ageLabel(l.age)}</span>}
+                  <span className="na-arr">→</span>
+                </Link>
+              </ProjectCardMenu>
             ))}
           </div>
         )}

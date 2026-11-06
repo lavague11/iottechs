@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
-import { archiveProject, createTicket, mergeProjects, duplicateProject, setReceivableArchived } from "../../lib/db";
+import { archiveProject, createTicket, mergeProjects, duplicateProject, setReceivableArchived, getJobByAccessId, getProjectsForCustomerId } from "../../lib/db";
 
 // Archive ONE project (soft/recoverable → /archives). Admin/manager only. Records an audit ticket
 // so a single job never disappears without a trace, matching the customer-archive flow.
@@ -56,6 +56,19 @@ export async function duplicateProjectAction(accessId) {
   if (!res.ok) return res;
   revalidatePath("/projects"); revalidatePath("/dashboard");
   return res;
+}
+
+// The other projects this one could merge into — same customer, not itself, not already archived.
+// Admin/manager only (merge is their action). Returns a compact list for the picker.
+export async function listMergeCandidatesAction(accessId) {
+  const user = await getSessionUser();
+  if (!["admin", "manager"].includes(user.role)) return { ok: false, error: "Not allowed." };
+  const p = getJobByAccessId(accessId);
+  if (!p?.customer_id) return { ok: true, candidates: [] };
+  const rows = (getProjectsForCustomerId(p.customer_id) || [])
+    .filter((r) => r.access_id !== p.access_id)
+    .map((r) => ({ access_id: r.access_id, customer: r.customer, address: r.address || "", stage: r.stage, stageLabel: r.stageLabel || r.stage }));
+  return { ok: true, candidates: rows };
 }
 
 // Merge two projects for the same customer/address → the OLDER one survives; proposals (both kept),
