@@ -191,10 +191,15 @@ export async function sendProposalAction(accessId) {
     if (cu?.id) createNotification({ user_id: cu.id, type: "signature", title: "Your proposal is ready to review",
       body: `Review your proposal and sign to get started (${accessId}).`, link: signLink });
   } catch { /* notification is best-effort */ }
-  // The customer EMAIL is no longer pushed automatically on send — staff are asked in the UI whether to
-  // email it (then the client calls emailProposalAction). The in-app notification above still fires.
+  // Fix #4 — ONE "Send for signature": the send ALSO emails the customer a direct signing link
+  // (?open=proposal&sign=<primaryOpt>, deep-linking straight into the signer), so staff no longer
+  // mark-sent and then separately choose an email. Gated/best-effort (never blocks the send); the
+  // "Request Signature" button remains for manual re-sends.
+  let emailed = false;
+  try { const er = await emailSignatureRequest(accessId, primaryOpt); emailed = !!(er && (er.ok || er.id)); } catch { /* email best-effort */ }
+  if (emailed) logProjectEvent(accessId, { kind: "email", label: "Signature request emailed to the customer", actor: actorName(tok) });
   await revalidate(accessId);
-  return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
+  return { ok: true, stage, emailed, proposal: sanitizeProposal(row, tok.role) };
 }
 
 // Manually (re)send the "your proposal is ready" email to the customer — the Email button on the

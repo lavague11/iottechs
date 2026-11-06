@@ -501,9 +501,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     setBusy(false);
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
-    showToast("Proposal submitted to customer");
-    // The email is no longer pushed automatically — ask the staff member whether to email it now.
-    setEmailAsk(true);
+    // Fix #4: the send now emails the direct signing link in the same step — no separate "email it?" prompt.
+    showToast(r.emailed ? "Sent for signature — emailed to the customer" : "Sent for signature (email not configured)");
   }
   async function resolveFlag(itemId, label) {
     const r = await resolveFlagAction(accessId, itemId);

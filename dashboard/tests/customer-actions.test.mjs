@@ -57,7 +57,8 @@ test("DOCUMENT_ACTION_REQUIRED: sending a proposal drops an in-app customer noti
   assert.ok(send.includes("getCustomerUserForProject(accessId)") && send.includes("createNotification("), "send creates a customer notification");
   assert.ok(send.includes("Your proposal is ready to review") && send.includes("?open=proposal"), "it reads as a review request and deep-links to the proposal");
   assert.ok(send.includes("&sign="), "the deep-link auto-opens the signer on the primary option");
-  // The customer email is no longer pushed automatically on send — staff are prompted in the UI and the
-  // email goes out via emailProposalAction only on confirmation. So send() must NOT fire it itself.
-  assert.ok(!send.includes("emailSignatureRequest("), "the email is NOT auto-sent on send (staff choose to email)");
+  // Fix #4 — ONE "Send for signature": the send now ALSO emails the direct signing link in the same
+  // step (deep-links into the signer), instead of marking sent and prompting for a separate email.
+  assert.ok(send.includes("emailSignatureRequest(accessId, primaryOpt)"), "send auto-emails the signing link (one Send for signature)");
+  assert.ok(send.includes("emailed"), "send returns whether the email went so the UI can confirm");
 });

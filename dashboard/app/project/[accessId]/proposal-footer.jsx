@@ -80,7 +80,7 @@ export default function ProposalFooter({
     primary = isStaff && !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onRevise} title="Reopen this agreed proposal for changes">Revise</button> : null;
   } else if (isDraftNew) {
     meta = <span className="prop-foot-meta">{statusChip}{saveStateEl}</span>;
-    primary = !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Submit</button> : null;
+    primary = !authBlocked ? <button type="button" className="prop-dock-cta" disabled={busy} onClick={onSend}>Send for signature</button> : null;
   } else {
     // Clean revision opened over a published version, unedited — nothing to send yet.
     meta = <span className="prop-foot-meta">{statusChip}{pubV != null && <span className="prop-foot-v">· no changes since v{pubV}</span>}{saveStateEl}</span>;
