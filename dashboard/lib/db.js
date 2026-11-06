@@ -2304,7 +2304,9 @@ export function getProjectFinancialState(accessId) {
   const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
   const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
   const st = financialStateFromRow(r, { total, paid, pendingPay, lastPay });
-  return { ...st, total, paid, pendingPayments: pendingPay, closeReason: r.lost_reason || null, closeKind: r.lost_kind || null };
+  // Pending addendums are shown separately and NOT billed until approved (they're absent from `total`).
+  const pendAdd = getPendingAddons(accessId);
+  return { ...st, total, paid, pendingPayments: pendingPay, pendingAddons: pendAdd.total, pendingAddonCount: pendAdd.count, closeReason: r.lost_reason || null, closeKind: r.lost_kind || null };
 }
 
 // Archive (or restore) a receivable — hides it from the active portal (written off / parked) while
@@ -7145,6 +7147,20 @@ export function getApprovedAddons(accessId) {
     };
   });
   return { total: each.reduce((s, a) => s + a.total, 0), list: each };
+}
+
+// Pending job-site add-ons — customer-visible, PRICED, awaiting approval. Surfaced as a separate
+// "pending" line on the balance; NOT added to the amount due until the customer approves (then they
+// fold into getApprovedAddons). Excludes voided / declined / needs-pricing / already-approved.
+export function getPendingAddons(accessId) {
+  const rec = getToolData(accessId, "addendum");
+  let list = [];
+  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "pending" && !a.needsPricing); } catch { list = []; }
+  const each = list.map((a) => {
+    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
+    return { id: a.id, title: a.title || "Job-site add-on", total: Math.max(0, sub - (+a.discount || 0)) };
+  });
+  return { total: each.reduce((s, a) => s + a.total, 0), list: each, count: each.length };
 }
 
 // ---- Inquiry notes + appointment point-of-contact ----

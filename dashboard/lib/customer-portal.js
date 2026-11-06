@@ -53,6 +53,10 @@ export function financeSummary(fin, depositDue = 0) {
     depositDue: Math.round((+depositDue || 0) * 100) / 100,
     paidInFull,
     financialState: fin.financialState || "none",
+    // Pending addendums: shown as a separate "awaiting approval" line, NOT added to the amount due
+    // until the customer approves (then they fold into `total`/`balance` automatically).
+    pendingAddons: Math.round((+fin.pendingAddons || 0) * 100) / 100,
+    pendingAddonCount: +fin.pendingAddonCount || 0,
   };
 }
 

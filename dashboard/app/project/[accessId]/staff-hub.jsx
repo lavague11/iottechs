@@ -169,6 +169,9 @@ export default function StaffHub({
 /* Balance card: clickable summary (opens the balance pop-up) + the payment ledger beneath it. */
 .cpv-bal-sum{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer;background:none;border:0;padding:0}
 .cpv-bal-sum:hover .cpv-balrem b{text-decoration:underline;text-underline-offset:2px}
+.cpv-pendplus{color:#9a6a1a;font-weight:600;font-size:12.5px}
+.cpv-balpend{display:flex;justify-content:space-between;gap:10px;margin-top:8px;padding:7px 11px;border:1px solid rgba(176,141,76,.34);background:rgba(176,141,76,.1);border-radius:10px;font-size:13px;color:#8a5a1f;font-weight:600}
+.cpv-balpend b{color:#8a5a1f;font-variant-numeric:tabular-nums}
 .cpv-pays{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
 .cpv-pays-h{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:8px}
 .cpv-pay{display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--paper);font-family:inherit;cursor:pointer;margin-bottom:7px}
@@ -316,12 +319,21 @@ export default function StaffHub({
             <button type="button" className="cpv-bal-sum" onClick={() => setBalOpen(true)}>
               <div className="cpv-kick">Project balance</div>
               {finance.paidInFull ? (
-                <div className="cpv-paid">Paid in full ✓</div>
+                <>
+                  <div className="cpv-paid">Paid in full ✓</div>
+                  {finance.pendingAddons > 0 && (
+                    <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
+                  )}
+                </>
               ) : (
                 <div className="cpv-balrows">
                   <div><span>Total</span><b>{money(finance.total)}</b></div>
                   <div><span>Paid</span><b>{money(finance.paid)}</b></div>
-                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
+                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}{finance.pendingAddons > 0 && <span className="cpv-pendplus"> + {money(finance.pendingAddons)} pending</span>}</b></div>
+                  {/* Pending add-ons shown but NOT billed until approved. */}
+                  {finance.pendingAddons > 0 && (
+                    <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
+                  )}
                 </div>
               )}
             </button>

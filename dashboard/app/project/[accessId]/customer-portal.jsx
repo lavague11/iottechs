@@ -222,13 +222,22 @@ export default function CustomerPortal({
           <section className="cpv-bal">
             <div className="cpv-kick">Project balance</div>
             {finance.paidInFull ? (
-              <div className="cpv-paid">Paid in full ✓</div>
+              <>
+                <div className="cpv-paid">Paid in full ✓</div>
+                {finance.pendingAddons > 0 && (
+                  <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
+                )}
+              </>
             ) : (
               <>
                 <div className="cpv-balrows">
                   <div><span>Total</span><b>{money(finance.total)}</b></div>
                   <div><span>Paid</span><b>{money(finance.paid)}</b></div>
-                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}</b></div>
+                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}{finance.pendingAddons > 0 && <span className="cpv-pendplus"> + {money(finance.pendingAddons)} pending</span>}</b></div>
+                  {/* Pending add-ons are shown but NOT added to the amount due until the customer approves. */}
+                  {finance.pendingAddons > 0 && (
+                    <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
+                  )}
                 </div>
                 {payable(finance) && <button className="cpv-cta" onClick={() => open("payment")}>Make payment</button>}
               </>
@@ -427,6 +436,10 @@ export const PORTAL_CSS = `
 .cpv-balrem{border-top:1px solid var(--line);padding-top:9px;margin-top:2px;font-weight:700}
 .cpv-balrem span{color:var(--ink)}
 .cpv-balrem b{color:var(--gold-text)}
+/* Pending add-on — amber/pending; informational, not yet owed. */
+.cpv-pendplus{color:#9a6a1a;font-weight:600;font-size:13px}
+.cpv-balpend{display:flex;justify-content:space-between;gap:10px;margin-top:8px;padding:8px 11px;border:1px solid rgba(176,141,76,.34);background:rgba(176,141,76,.1);border-radius:10px;font-size:13.5px;color:#8a5a1f;font-weight:600}
+.cpv-balpend b{color:#8a5a1f;font-variant-numeric:tabular-nums}
 .cpv-paid{font-size:1.3rem;font-weight:700;color:var(--green)}
 .cpv-cards{display:flex;flex-direction:column;gap:10px}
 .cpv-card{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--raise);border:1px solid var(--line);border-radius:14px;padding:15px 18px;cursor:pointer;color:inherit;font-family:inherit}
