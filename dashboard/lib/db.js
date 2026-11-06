@@ -1211,6 +1211,9 @@ function init() {
   if (!propCols.includes("copied_by"))               db.exec("ALTER TABLE proposals ADD COLUMN copied_by TEXT");
   if (!propCols.includes("import_source_media_id"))  db.exec("ALTER TABLE proposals ADD COLUMN import_source_media_id TEXT");
   if (!propCols.includes("imported_at"))             db.exec("ALTER TABLE proposals ADD COLUMN imported_at TEXT");
+  // Provenance for a project MERGE: the access_id this proposal row was carried in from (its versions are
+  // renumbered onto the survivor and kept as history). Internal only; nullable; no backfill.
+  if (!propCols.includes("merged_from_project_id"))  db.exec("ALTER TABLE proposals ADD COLUMN merged_from_project_id TEXT");
   // Signature binding: the content fingerprint captured at sign time + a frozen JSON snapshot of the
   // exact payload that was signed. `proposal_signed` is only satisfied while signed_fingerprint still
   // matches the live payload; a signed version's PDF renders from signed_payload (the exact artifact).
@@ -5957,6 +5960,72 @@ export function archiveProject(accessId, actor) {
   if (!row) return { ok: false, error: "Project not found." };
   const res = archiveAndDelete("project", row.id, actor);
   return res.ok ? { ok: true, customer: row.customer, access_id: row.access_id } : res;
+}
+
+// Merge two projects for the same customer/address into one. The SURVIVOR is the older project (lower id)
+// — its access_id, stage, survey/mockup and active proposal are kept as-is. The other project's PROPOSALS
+// (both parties' versions are preserved — the moved ones are renumbered after the survivor's max and marked
+// superseded history, never overriding the survivor's active one), NOTES, FILES (media) and LOG move to the
+// survivor; its signed PDFs follow. The merged shell is then archived (recoverable at /archives). Everything
+// is one transaction. Returns { ok, survivor, merged, moved:{proposals,notes,files} }.
+export function mergeProjects(aAccessId, bAccessId, actor) {
+  const a = String(aAccessId || "").trim(), b = String(bAccessId || "").trim();
+  if (!a || !b || a.toLowerCase() === b.toLowerCase()) return { ok: false, error: "Pick two different projects." };
+  const pa = db.prepare("SELECT id, access_id, customer FROM projects WHERE access_id=? COLLATE NOCASE").get(a);
+  const pb = db.prepare("SELECT id, access_id, customer FROM projects WHERE access_id=? COLLATE NOCASE").get(b);
+  if (!pa || !pb) return { ok: false, error: "Project not found." };
+  // Survivor = older project (lower row id). Keep its access_id.
+  const [survivor, merged] = pa.id <= pb.id ? [pa, pb] : [pb, pa];
+  const sId = survivor.access_id, mId = merged.access_id;
+  let moved;
+  try {
+    db.exec("BEGIN");
+    const maxRow = db.prepare("SELECT MAX(version) AS v FROM proposals WHERE project_access_id=? COLLATE NOCASE").get(sId);
+    let nextV = (maxRow?.v || 0);
+    const props = db.prepare("SELECT id FROM proposals WHERE project_access_id=? COLLATE NOCASE ORDER BY version ASC, id ASC").all(mId);
+    for (const p of props) {
+      nextV += 1;
+      // Carried proposals are preserved as history — never active — so the survivor's own proposal stays
+      // the working/published truth. The full signed/accepted record is kept intact for the audit trail.
+      db.prepare("UPDATE proposals SET project_access_id=?, version=?, status='superseded', merged_from_project_id=? WHERE id=?")
+        .run(sId, nextV, mId, p.id);
+    }
+    db.prepare("UPDATE sign_documents SET project_access_id=? WHERE project_access_id=? COLLATE NOCASE").run(sId, mId);
+    const notes = db.prepare("UPDATE project_notes SET project_access_id=? WHERE project_access_id=? COLLATE NOCASE").run(sId, mId);
+    const files = db.prepare("UPDATE media SET project_access_id=? WHERE project_access_id=? COLLATE NOCASE").run(sId, mId);
+    db.prepare("UPDATE project_events SET project_access_id=? WHERE project_access_id=? COLLATE NOCASE").run(sId, mId);
+    moved = { proposals: props.length, notes: notes.changes || 0, files: files.changes || 0 };
+    db.exec("COMMIT");
+    try { logProjectEvent(sId, { kind: "merge", label: `Merged project ${mId}${merged.customer ? ` (${merged.customer})` : ""} — ${moved.proposals} proposal version(s), ${moved.notes} note(s), ${moved.files} file(s)`, actor: actor?.name || "Office" }); } catch { /* log best-effort */ }
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch { /* already rolled back */ }
+    return { ok: false, error: "Merge failed: " + (e?.message || "unknown error") };
+  }
+  // Archive the merged shell after the move commits, so the survivor keeps everything even if this fails.
+  const arch = archiveProject(mId, actor);
+  return { ok: true, survivor: sId, merged: mId, moved, archived: !!arch?.ok };
+}
+
+// Duplicate a project for the SAME customer: a fresh project (new access_id, back at inquiry) with the
+// source's contact + service + property, and its active proposal cloned in as a new DRAFT. Nothing on the
+// source is touched. Returns { ok, access_id, from }.
+export function duplicateProject(accessId, actor) {
+  const p = getJobByAccessId(accessId);
+  if (!p) return { ok: false, error: "Project not found." };
+  let created;
+  try {
+    created = createLeadProject(p.contact_name || p.customer, p.contact_email, p.contact_phone, p.address,
+      p.category || p.service_code, p.company_name, p.property_type,
+      { customerId: p.customer_id || undefined, allowDuplicate: true });
+  } catch (e) { return { ok: false, error: "Could not create the copy: " + (e?.message || "error") }; }
+  const newId = created?.accessId;
+  if (!newId) return { ok: false, error: "Could not create the copy." };
+  // Preserve the exact service so the copy reads as the same job (createLeadProject re-derives the code).
+  try { if (p.service_code) db.prepare("UPDATE projects SET service_code=? WHERE access_id=? COLLATE NOCASE").run(p.service_code, newId); } catch { /* keep the derived code */ }
+  // cloneProposal's `actor` is a NAME string (stored as created_by_name/copied_by) — not the actor object.
+  try { const src = getActiveProposal(accessId); if (src) cloneProposal({ sourceProposalId: src.id, destAccessId: newId, actor: actor?.name || "Office" }); } catch { /* copy without a proposal */ }
+  try { logProjectEvent(newId, { kind: "create", label: `Duplicated from ${accessId}`, actor: actor?.name || "Office" }); } catch {}
+  return { ok: true, access_id: newId, from: accessId };
 }
 
 // A "customer" is every project sharing a customer name — archive them all (soft/recoverable).
