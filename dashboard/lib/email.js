@@ -48,13 +48,19 @@ function appUrl() {
   return (secretValue("APP_URL") || "https://iot-techs.com").replace(/\/+$/, "");
 }
 
-// Low-level send. Returns {ok,id} | {skipped:true} | {ok:false,error}. Never throws.
-export async function sendEmail({ to, subject, html, text, replyTo, attachments }) {
+// Low-level send. Returns {ok,id} | {skipped,...} | {ok:false,error}. Never throws.
+// `bcc` (string | string[]) blind-copies the office on customer mail; `attachments` is Resend's
+// [{ filename, content:<base64>, content_type }]. When email is OFF (local/demo/test) the send is a
+// no-op that logs — and echoes the recipients + attachment names so a flow can be verified on localhost.
+export async function sendEmail({ to, subject, html, text, replyTo, attachments, bcc }) {
   const recipient = String(to || "").trim();
   if (!recipient || !recipient.includes("@")) return { ok: false, error: "no-recipient" };
+  const bccList = [...new Set((Array.isArray(bcc) ? bcc : bcc ? [bcc] : [])
+    .map((e) => String(e || "").trim()).filter((e) => e.includes("@") && e.toLowerCase() !== recipient.toLowerCase()))];
+  const attNames = (attachments || []).map((a) => a?.filename).filter(Boolean);
   if (!emailEnabled()) {
-    console.log(`[email:skipped] no RESEND_API_KEY — would send "${subject}" to ${recipient}`);
-    return { skipped: true };
+    console.log(`[email:skipped] no send — "${subject}" → ${recipient}${bccList.length ? ` · bcc ${bccList.join(", ")}` : ""}${attNames.length ? ` · 📎 ${attNames.join(", ")}` : ""}`);
+    return { skipped: true, to: recipient, bcc: bccList, subject, attachments: attNames };
   }
   try {
     const res = await fetch(ENDPOINT, {
@@ -70,6 +76,7 @@ export async function sendEmail({ to, subject, html, text, replyTo, attachments 
         html,
         text: text || undefined,
         ...(replyTo ? { reply_to: replyTo } : {}),
+        ...(bccList.length ? { bcc: bccList } : {}),
         ...(attachments?.length ? { attachments } : {}),
       }),
     });
@@ -160,11 +167,85 @@ function projectLink(accessId, open, sign) {
   return `${base}/project/${accessId}${q ? `?${q}` : ""}`;
 }
 
-// Send a customer email for a project. content = {heading, intro, lines, ctaLabel}.
-// Fire-and-forget friendly: awaited internally but callers may choose not to await.
+// ---- Office copies + PDF attachments ----------------------------------------
+// Every customer email is blind-copied to the office: the configured admin (ADMIN_NOTIFY_EMAIL, else
+// the active admin accounts) plus Maya. Document emails also carry the live PDF, generated at SEND time
+// so a scheduled email always attaches the current version. Demo/test projects never send.
+const MAYA_EMAIL = "maya@iot-techs.com";
+
+export function isDemoProject(p) {
+  return !!p && (p.source === "journey-test" || /@journey-test\.local$/i.test(String(p.contact_email || "")));
+}
+
+async function adminNotifyRecipients() {
+  try {
+    const { getAdminRecipients } = await import("./db.js");
+    const override = secretValue("ADMIN_NOTIFY_EMAIL");
+    const list = override ? String(override).split(/[,;]/).map((s) => s.trim()) : (getAdminRecipients() || []).map((u) => u.email);
+    // Never notify a demo/test address (e.g. the local demo-admin@journey-test.local).
+    return [...new Set(list.filter((e) => e && e.includes("@") && !/@journey-test\.local$/i.test(e)))];
+  } catch { return []; }
+}
+
+// The BCC applied to every customer email: admin(s) + Maya, minus the customer themselves.
+async function customerCopyBcc(toEmail) {
+  const admins = await adminNotifyRecipients();
+  const seen = new Set(), out = [];
+  for (const e of [...admins, MAYA_EMAIL]) {
+    const k = String(e || "").toLowerCase().trim();
+    if (!k || !k.includes("@") || k === String(toEmail || "").toLowerCase().trim() || seen.has(k)) continue;
+    seen.add(k); out.push(e);
+  }
+  return out;
+}
+
+// The customer-facing attachment filename, e.g. "IOT TECHS Proposal - Jamie Tester - PROP-0056-v2.pdf".
+// Email attachments carry the brand on purpose (the in-app downloads still use lib/doc-filename.js).
+function customerLabelOf(p) { return String(p?.business_name || p?.contact_name || p?.customer || "").trim(); }
+function attachmentName(kind, { customer, docNo } = {}) {
+  const tail = [customer, docNo].filter(Boolean).join(" - ");
+  return `IOT TECHS ${kind}${tail ? ` - ${tail}` : ""}.pdf`.replace(/\s+/g, " ").trim();
+}
+function proposalDocNo(row) { return `PROP-${String(row.id).padStart(4, "0")}-v${row.version || 1}`; }
+
+// The customer-sanitized proposal PDF (no cost/payout), rendered server-side at send time for the one
+// option being signed/sent. Returns a Resend attachment or null. Never throws into the caller.
+async function proposalPdfAttachment(accessId, optKey) {
+  try {
+    const { getPublishedProposal, getJobByAccessId } = await import("./db.js");
+    const row = getPublishedProposal(accessId);
+    if (!row) return null;
+    let payload; try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
+    let opt = (optKey != null && optKey !== "") ? optKey : (row.selected_option ?? payload.options?.[0]?.id);
+    if (opt == null) return null;
+    const { buildProposalUnsigned } = await import("./esign/proposal-source.js");
+    const built = buildProposalUnsigned(accessId, opt, row, null);
+    return { filename: attachmentName("Proposal", { customer: customerLabelOf(getJobByAccessId(accessId)), docNo: proposalDocNo(row) }),
+      content: Buffer.from(built.bytes).toString("base64"), content_type: "application/pdf" };
+  } catch (e) { console.error(`[email:proposal-pdf] ${e?.message || e}`); return null; }
+}
+
+// The stored SIGNED proposal PDF (flattened + certified) for the signed-contract notification. Null if
+// nothing is signed yet.
+async function signedPdfAttachment(accessId) {
+  try {
+    const { getPublishedProposal, getActiveProposal, getJobByAccessId } = await import("./db.js");
+    const row = getPublishedProposal(accessId) || getActiveProposal(accessId);
+    if (!row?.signed_doc_id) return null;
+    const { getDocument } = await import("./esign/store.js");
+    const d = getDocument(row.signed_doc_id);
+    if (!d?.bytes) return null;
+    return { filename: attachmentName("Signed Proposal", { customer: customerLabelOf(getJobByAccessId(accessId)), docNo: proposalDocNo(row) }),
+      content: Buffer.from(d.bytes).toString("base64"), content_type: "application/pdf" };
+  } catch (e) { console.error(`[email:signed-pdf] ${e?.message || e}`); return null; }
+}
+
+// Send a customer email for a project. content = {heading, intro, lines, ctaLabel, attachments?}.
+// Auto-BCCs the office (admin + Maya) and skips demo/test projects. Fire-and-forget friendly.
 export async function sendCustomerEmail(accessId, content) {
   const c = await customerContact(accessId);
   if (!c || !c.email) return { ok: false, error: "no-customer-email" };
+  if (isDemoProject(c.project)) return { skipped: "demo-project" };
   const ctaUrl = projectLink(accessId, content.open, content.sign);
   const payload = {
     heading: content.heading,
@@ -179,6 +260,8 @@ export async function sendCustomerEmail(accessId, content) {
     subject: content.subject || content.heading,
     html: renderEmail(payload),
     text: plainText(payload),
+    bcc: await customerCopyBcc(c.email),
+    attachments: content.attachments,
   });
 }
 
@@ -333,35 +416,39 @@ export async function emailPaymentReminder(accessId, { kind, amount } = {}) {
 // must never reverse a completed signature, so callers fire-and-forget.
 export async function emailContractSigned(accessId, { signerName = null, customerName = null, version = null, docType = "Security System Proposal", signedAt = null, projectName = null } = {}) {
   try {
-    const { getJobByAccessId, getAdminRecipients } = await import("./db.js");
+    const { getJobByAccessId } = await import("./db.js");
     const project = getJobByAccessId(accessId);
     if (!project) return { ok: false, error: "no-project" };
     const who = customerName || signerName || project.contact_name || project.customer || "A customer";
     const pname = projectName || project.business_name || project.customer || accessId;
     const base = appUrl();
     const ctaUrl = base ? `${base}/project/${encodeURIComponent(accessId)}?open=proposal` : null;
-    const override = secretValue("ADMIN_NOTIFY_EMAIL");
-    const recipients = [...new Set((override
-      ? String(override).split(/[,;]/).map((s) => s.trim())
-      : (getAdminRecipients() || []).map((u) => u.email)).filter((e) => e && e.includes("@")))];
+    const recipients = [...new Set([...(await adminNotifyRecipients()), MAYA_EMAIL].filter((e) => e && e.includes("@")))];
     if (!recipients.length) return { ok: false, error: "no-admin-recipient" };
     let when = null;
     try { when = signedAt ? new Date(String(signedAt).replace(" ", "T")).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : null; } catch { when = signedAt; }
+    // The signed amount (the contract total) + the signed PDF — generated now, never scheduled.
+    let money = "";
+    try { const { getProjectFinancialState } = await import("./db.js"); const fin = getProjectFinancialState(accessId); const t = Number(fin?.total || 0); if (t > 0) money = "$" + t.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch { /* amount is best-effort */ }
+    const att = await signedPdfAttachment(accessId);
+    const attachments = att ? [att] : undefined;
     const payload = {
       heading: "Contract Signed Successfully",
-      intro: `${who} has signed and completed their IOT TECHS proposal.`,
+      intro: `${who} has signed and completed their IOT TECHS proposal${money ? ` — ${money}` : ""}.`,
       lines: [
         `Project: ${pname} (${accessId})`,
         `Document: ${docType}${version ? ` · v${version}` : ""}`,
+        money ? `Amount: ${money}` : null,
         "Status: Signed — Pending Admin Review",
         when ? `Completed: ${when}` : null,
       ].filter(Boolean),
       ctaLabel: "Review Signed Contract",
       ctaUrl,
-      footNote: "The signed document has been saved to the project and is ready for your review. IOT TECHS — Automated Notification.",
+      footNote: "The signed document is attached and saved to the project. IOT TECHS — Automated Notification.",
     };
+    const subject = `${who} signed proposal${money ? ` — ${money}` : ""}`;
     const results = [];
-    for (const to of recipients) results.push(await sendEmail({ to, subject: `Contract Signed — ${who}`, html: renderEmail(payload), text: plainText(payload) }));
+    for (const to of recipients) results.push(await sendEmail({ to, subject, html: renderEmail(payload), text: plainText(payload), attachments }));
     const sent = results.some((r) => r && (r.ok || r.id || r.skipped));
     return { ok: true, sent, recipients, results };
   } catch (e) {
@@ -373,7 +460,8 @@ export async function emailContractSigned(accessId, { signerName = null, custome
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
 export async function emailProposalReady(accessId) {
   try {
-    return await sendCustomerEmail(accessId, STAGE_EMAIL.proposal);
+    const att = await proposalPdfAttachment(accessId);
+    return await sendCustomerEmail(accessId, { ...STAGE_EMAIL.proposal, attachments: att ? [att] : undefined });
   } catch (e) {
     console.error(`[email:proposal] ${e?.message || e}`);
     return { ok: false, error: "exception" };
@@ -385,15 +473,17 @@ export async function emailProposalReady(accessId) {
 // usual PIN gate at the door; nothing secret rides in the URL. `optKey` selects which option to sign.
 export async function emailSignatureRequest(accessId, optKey) {
   try {
+    const att = await proposalPdfAttachment(accessId, optKey);
     return await sendCustomerEmail(accessId, {
       subject: "Your signature is requested",
       heading: "Review & sign your proposal",
       intro: "Your proposal is ready for your signature.",
-      lines: ["Open it, review the equipment and total, then sign — it only takes a minute."],
+      lines: ["Open it, review the equipment and total, then sign — it only takes a minute.", "Your proposal is attached as a PDF for your records."],
       ctaLabel: "Review & Sign Your Proposal",
       open: "proposal",
       sign: optKey == null ? "" : optKey,
       footNote: "This link opens your proposal and signing page; you’ll confirm it’s you at the door. Reply with any questions.",
+      attachments: att ? [att] : undefined,
     });
   } catch (e) {
     console.error(`[email:sigrequest] ${e?.message || e}`);
@@ -434,7 +524,7 @@ export async function emailReviewRequest(accessId) {
       ctaUrl: reviewUrl,
       footNote: "Not happy with something? Just reply to this email and we'll make it right — no review needed.",
     };
-    const r = await sendEmail({ to, subject: "How did we do?", html: renderEmail(payload), text: plainText(payload) });
+    const r = await sendEmail({ to, subject: "How did we do?", html: renderEmail(payload), text: plainText(payload), bcc: await customerCopyBcc(to) });
     if (r && (r.ok || r.id)) markReviewRequested(accessId);
     return r;
   } catch (e) {
@@ -478,7 +568,7 @@ export async function emailAddendumApproval(accessId, addendumId) {
       ctaUrl: approveUrl,
       footNote: "This secure link opens your add-on to approve and sign. Questions? Just reply to this email.",
     };
-    return await sendEmail({ to, subject: "Approve an add-on to your project", html: renderEmail(payload), text: plainText(payload) });
+    return await sendEmail({ to, subject: "Approve an add-on to your project", html: renderEmail(payload), text: plainText(payload), bcc: await customerCopyBcc(to) });
   } catch (e) {
     console.error(`[email:addendum] ${e?.message || e}`);
     return { ok: false, error: "exception" };
@@ -694,6 +784,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const { getJobByAccessId, getProjectAssignments, getUserByEmail } = await import("./db.js");
     const p = getJobByAccessId(accessId);
     if (!p) return { ok: false, error: "no-project" };
+    if (isDemoProject(p)) return { ok: true, skipped: "demo-project", sent: 0 };
     const set = new Map();
     const add = (email, name, role) => {
       const e = String(email || "").trim();
@@ -783,7 +874,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       let changeUrl = "";
       try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
       const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name });
-      const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments });
+      const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments, bcc: isStaff ? undefined : await customerCopyBcc(r.email) });
       if (res?.ok || res?.skipped) sent++;
     }
     return { ok: true, sent, recipients: recipients.length };
@@ -816,7 +907,7 @@ export async function emailAdtQuoteReady(app) {
       ctaUrl,
       footNote: "Reply to this email if you have any questions.",
     };
-    return await sendEmail({ to: app.email, subject: "Your ADT quote is ready", html: renderEmail(payload), text: plainText(payload) });
+    return await sendEmail({ to: app.email, subject: "Your ADT quote is ready", html: renderEmail(payload), text: plainText(payload), bcc: await customerCopyBcc(app.email) });
   } catch (e) { return { ok: false, error: e?.message || String(e) }; }
 }
 
