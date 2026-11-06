@@ -61,4 +61,15 @@ export async function register() {
   };
   setTimeout(sweepSignatureEmails, 110_000);           // ~2 min after boot
   setInterval(sweepSignatureEmails, 15 * 60 * 1000);   // then every 15 minutes
+
+  // Scheduled invoice sends + automatic invoice reminders (3 days before due + on the due date, if unpaid).
+  const sweepInvoiceEmails = async () => {
+    try {
+      const { sendDueInvoiceEmails } = await import("./lib/invoice-emails.js");
+      const r = await sendDueInvoiceEmails();
+      if (r?.sent || r?.reminders) console.log(`[invoice] sent ${r.sent || 0} invoice(s), ${r.reminders || 0} reminder(s)`);
+    } catch (e) { console.error("[invoice] sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepInvoiceEmails, 130_000);             // ~2 min after boot
+  setInterval(sweepInvoiceEmails, 60 * 60 * 1000);     // then hourly (reminders are day-grained)
 }

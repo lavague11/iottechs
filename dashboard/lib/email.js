@@ -258,6 +258,19 @@ async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) 
   } catch (e) { console.error(`[email:addendum-pdf] ${e?.message || e}`); return null; }
 }
 
+// The INVOICE PDF for the customer invoice email — rendered server-side from the published proposal +
+// the live financial state, with the due date stamped. Null when there's nothing to bill.
+async function invoicePdfAttachment(accessId, dueDate, invoiceNo) {
+  try {
+    const { buildInvoicePdfBytes } = await import("./invoice-model.js");
+    const bytes = buildInvoicePdfBytes(accessId, { dueDate });
+    if (!bytes) return null;
+    const { getJobByAccessId } = await import("./db.js");
+    return { filename: attachmentName("Invoice", { customer: customerLabelOf(getJobByAccessId(accessId)), docNo: invoiceNo }),
+      content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" };
+  } catch (e) { console.error(`[email:invoice-pdf] ${e?.message || e}`); return null; }
+}
+
 // The stored SIGNED proposal PDF (flattened + certified) for the signed-contract notification. Null if
 // nothing is signed yet.
 async function signedPdfAttachment(accessId) {
@@ -443,6 +456,39 @@ export async function emailPaymentReminder(accessId, { kind, amount } = {}) {
     console.error(`[email:payment-reminder] ${e?.message || e}`);
     return { ok: false, error: "exception" };
   }
+}
+
+// Customer invoice email — the invoice PDF + a Pay button. `reminder` = null (the invoice itself),
+// "pre" (3 days before due) or "due" (due today). Goes through sendCustomerEmail, so it auto-BCCs the
+// office (admin + Maya) and skips demo/test projects. The invoice + due date are generated at SEND time.
+const invDay = (d) => { try { return new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(d || "")) ? `${d}T00:00:00` : d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }); } catch { return String(d || ""); } };
+export async function emailInvoice(accessId, { dueDate = null, reminder = null } = {}) {
+  try {
+    const { buildInvoiceFigures } = await import("./invoice-model.js");
+    const f = buildInvoiceFigures(accessId);
+    if (!f) return { ok: false, error: "no-invoice" };
+    const bal = +f.balance || 0;
+    const money = "$" + bal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const att = await invoicePdfAttachment(accessId, dueDate, f.invoiceNo);
+    const copy = reminder === "due"
+      ? { subject: `Your invoice is due today — ${money}`, heading: "Your invoice is due today", intro: `A friendly reminder that your balance of ${money} is due today.` }
+      : reminder === "pre"
+      ? { subject: `Invoice due soon — ${money}`, heading: "Your invoice is due soon", intro: `A friendly reminder that your balance of ${money} is due${dueDate ? ` on ${invDay(dueDate)}` : " in a few days"}.` }
+      : { subject: `Your invoice — ${money}`, heading: "Your invoice is ready", intro: `Here's your invoice for ${money}.` };
+    return await sendCustomerEmail(accessId, {
+      ...copy,
+      lines: [
+        `Invoice: ${f.invoiceNo}`,
+        dueDate ? `Due by: ${invDay(dueDate)}` : null,
+        `Amount due: ${money}`,
+        "Your invoice is attached. Tap below to pay — Zelle, card, or Apple / Google Pay.",
+      ].filter(Boolean),
+      ctaLabel: "Pay Invoice",
+      open: "payment",
+      footNote: "Reply to this email with any questions about your invoice.",
+      attachments: att ? [att] : undefined,
+    });
+  } catch (e) { console.error(`[email:invoice] ${e?.message || e}`); return { ok: false, error: "exception" }; }
 }
 
 // Admin notification — a customer finished signing a proposal. Sent to the configured admin recipients

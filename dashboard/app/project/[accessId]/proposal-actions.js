@@ -299,6 +299,64 @@ export async function cancelSignatureEmailAction(accessId) {
   return { ok: true };
 }
 
+// ---- Customer invoice email --------------------------------------------------------------------------
+// "Send invoice" emails the invoice PDF + a Pay button (same Send now / Schedule 8:30 flow as the signature
+// email). The invoice state lives in the project's "invoice" tool blob: { sentAt, dueDate (Net 14 default),
+// invoiceNo, scheduledSendAt, remind3SentAt, remindDueSentAt }. Reminders (3 days before due + on due) are
+// sent by the sweep in lib/invoice-emails.js. Admin/manager only (an AR action). Demo/test never send.
+const INV_STAFF = new Set(["admin", "manager"]);
+function _readInvoice(accessId) { try { return JSON.parse(getToolData(accessId, "invoice")?.data || "null"); } catch { return null; } }
+function _saveInvoice(accessId, obj) { try { saveToolData(accessId, "invoice", JSON.stringify(obj || {}), "system"); } catch { /* best-effort */ } }
+
+export async function getInvoiceScheduleAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !INV_STAFF.has(tok.role)) return { error: "Unauthorized." };
+  const s = _readInvoice(accessId) || {};
+  const fin = getProjectFinancialState(accessId);
+  return { ok: true, scheduledSendAt: s.scheduledSendAt || null, sentAt: s.sentAt || null, dueDate: s.dueDate || null, invoiceNo: s.invoiceNo || null, balance: +fin?.balance || 0, hasContract: !!fin };
+}
+
+export async function sendInvoiceAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !INV_STAFF.has(tok.role)) return { error: "Unauthorized." };
+  const { defaultDueDate, buildInvoiceFigures } = await import("../../../lib/invoice-model");
+  const f = buildInvoiceFigures(accessId);
+  if (!f) return { error: "No proposal to invoice yet." };
+  const dueDate = (_readInvoice(accessId)?.dueDate) || defaultDueDate();
+  const { emailInvoice } = await import("../../../lib/email");
+  const r = await emailInvoice(accessId, { dueDate }).catch(() => null);
+  const sent = !!(r && (r.ok || r.id || r.skipped === "demo-project"));
+  const prev = _readInvoice(accessId) || {};
+  _saveInvoice(accessId, { ...prev, sentAt: new Date().toISOString(), dueDate, invoiceNo: f.invoiceNo, scheduledSendAt: undefined, remind3SentAt: undefined, remindDueSentAt: undefined });
+  logProjectEvent(accessId, { kind: "email", label: `Invoice ${f.invoiceNo} emailed to the customer${r?.skipped ? " (not sent — " + r.skipped + ")" : ""}`, actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, sent: !!(r && (r.ok || r.id)), dueDate, note: (r && (r.ok || r.id)) ? "" : (r?.skipped === "demo-project" ? "Demo/test project — not sent." : "Email isn’t configured yet (needs RESEND_API_KEY).") };
+}
+
+export async function scheduleInvoiceEmailAction(accessId, sendAtISO) {
+  const tok = await getSessionRole();
+  if (!tok || !INV_STAFF.has(tok.role)) return { error: "Unauthorized." };
+  const { buildInvoiceFigures } = await import("../../../lib/invoice-model");
+  if (!buildInvoiceFigures(accessId)) return { error: "No proposal to invoice yet." };
+  const when = new Date(sendAtISO);
+  if (isNaN(when.getTime())) return { error: "Pick a valid date and time." };
+  const prev = _readInvoice(accessId) || {};
+  _saveInvoice(accessId, { ...prev, scheduledSendAt: when.toISOString() });
+  logProjectEvent(accessId, { kind: "request", label: `Invoice email scheduled · ${when.toLocaleString("en-US")}`.slice(0, 300), actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, scheduledSendAt: when.toISOString() };
+}
+
+export async function cancelInvoiceScheduleAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !INV_STAFF.has(tok.role)) return { error: "Unauthorized." };
+  const prev = _readInvoice(accessId) || {};
+  _saveInvoice(accessId, { ...prev, scheduledSendAt: undefined });
+  logProjectEvent(accessId, { kind: "request", label: "Invoice email schedule cancelled", actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true };
+}
+
 // "Send a payment reminder" (#1 collections) → email the customer that their deposit/final balance is due.
 // Admin/manager only (the money/AR function). Only sends when there's actually an amount due now (reads the
 // canonical financial state); grounded in the real balance; debounced like the signature reminder; logs a

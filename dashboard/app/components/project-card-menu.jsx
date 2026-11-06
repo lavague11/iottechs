@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { useContextMenu, ContextMenu } from "./context-menu";
 import { duplicateProjectAction, deleteProjectAction, setProjectArchivedAction, mergeProjectsAction, listMergeCandidatesAction } from "../projects/actions";
 import { setStage } from "../project/[accessId]/actions";
+import { sendInvoiceAction, scheduleInvoiceEmailAction } from "../project/[accessId]/proposal-actions";
+import SendScheduler from "../project/[accessId]/send-scheduler";
 
 // Wraps a project card/row (a single element — usually a <Link>) with a right-click / long-press context
 // menu. Clones the trigger props onto the child so layout is untouched. Role-aware; destructive actions
@@ -50,6 +52,8 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
     if (r?.ok) go(`/project/${r.survivor}`); else refresh();
   }
   async function doDelete() { setBusy(true); const r = await deleteProjectAction(id).catch(() => null); setBusy(false); setOverlay(null); refresh(); }
+  async function doSendInvoice() { setBusy(true); await sendInvoiceAction(id).catch(() => null); setBusy(false); setOverlay(null); refresh(); }
+  async function doScheduleInvoice(iso) { setBusy(true); await scheduleInvoiceEmailAction(id, iso).catch(() => null); setBusy(false); setOverlay(null); refresh(); }
 
   const items = [
     { label: "Open", icon: <Ic d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />, onClick: () => go(`/project/${id}`) },
@@ -60,6 +64,7 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
     email && { label: "Email", icon: <Ic d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM22 6l-10 7L2 6" />, onClick: () => go(`mailto:${email}`) },
     canSell && { type: "divider" },
     canSell && { label: "Send proposal", icon: <Ic d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z" />, onClick: () => go(`/project/${id}?open=proposal&reqsign=1`) },
+    isMgr && { label: "Send invoice", icon: <Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6M9 9h1" />, onClick: () => setOverlay({ type: "invoice" }) },
     isMgr && { type: "header", label: "Change stage" },
     ...(isMgr ? STAGE_TARGETS.map(([label, master]) => ({ label: `→ ${label}`, checked: project.stageGroup === master, onClick: () => changeStage(label, master) })) : []),
     canSell && { type: "divider" },
@@ -77,7 +82,11 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
     <>
       {cloneElement(children, { ...menu.triggerProps, style: { ...(children.props.style || {}), ...menu.triggerProps.style } })}
       <ContextMenu open={menu.open} point={menu.point} onClose={menu.close} title={project.customer || id} items={items} />
-      {overlay && createPortal(
+      {overlay?.type === "invoice" && (
+        <SendScheduler open title="Send invoice" subtitle={`${project.customer || id} — invoice with a Pay button`}
+          busy={busy} onSendNow={doSendInvoice} onSchedule={doScheduleInvoice} onClose={() => setOverlay(null)} />
+      )}
+      {overlay && overlay.type !== "invoice" && createPortal(
         <div className="pcm-bg" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setOverlay(null); }}>
           <div className="pcm-modal" role="dialog" aria-modal="true">
             {overlay.type === "delete" ? (

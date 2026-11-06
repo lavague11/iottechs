@@ -1,4 +1,5 @@
-"use client";
+// Pure jsPDF renderer — no "use client" directive on purpose: the invoice email (lib/invoice-model.js)
+// calls it from server code with meta.__return to get bytes, the same way lib/esign/ reuses proposal-pdf.
 import { jsPDF } from "jspdf";
 import { DOC, documentFilename } from "./doc-filename.js";
 
@@ -10,7 +11,7 @@ const fmtDay = (d) => { if (!d) return ""; try { return new Date(String(d).slice
 const titleCaseX = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 
 export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
-  const { customerName, customerAddress, customerPhone, customerEmail, invoiceNo, proposalNo, issuedAt, projectId, depositPct } = meta;
+  const { customerName, customerAddress, customerPhone, customerEmail, invoiceNo, proposalNo, issuedAt, projectId, depositPct, dueDate } = meta;
   const { lines = [], grandWithAddons = 0, paidTotal = 0, balance = 0 } = figs;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
@@ -32,7 +33,7 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   rt("INVOICE", rm, 42);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(210, 214, 220);
   if (invoiceNo) rt(invoiceNo, rm, 60);
-  rt(issuedAt || fmtDay(new Date().toISOString()), rm, 73);
+  rt((issuedAt || fmtDay(new Date().toISOString())) + (dueDate ? `   ·   Due ${fmtDay(dueDate)}` : ""), rm, 73);
   if (proposalNo) rt("Ref " + proposalNo, rm, 86);
 
   // ── Bill To ──────────────────────────────────────────────────────────────
@@ -156,5 +157,9 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
     doc.text("Complete payment ledger from the IOT TECHS payment tool.  ·  support@iot-techs.com", lm, 762);
   }
 
-  doc.save(documentFilename(meta.fileBase || { identity: customerName, service: "Custom System", last4: String(projectId || "").slice(-4) }, { type: DOC.INVOICE, invoiceNo }));
+  const fileName = documentFilename(meta.fileBase || { identity: customerName, service: "Custom System", last4: String(projectId || "").slice(-4) }, { type: DOC.INVOICE, invoiceNo });
+  // Server callers (the invoice email) pass meta.__return to get the jsPDF doc for `doc.output("arraybuffer")`
+  // instead of triggering a browser download. jsPDF runs fine in Node (same trick proposal-pdf uses for e-sign).
+  if (meta.__return) { doc.__fileName = fileName; return doc; }
+  doc.save(fileName);
 }
