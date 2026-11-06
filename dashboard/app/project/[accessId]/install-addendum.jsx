@@ -5,6 +5,7 @@ import { titleCase } from "../../../lib/proposal";
 import { saveToolDataAction } from "./proposal-actions";
 import { logAddendumAction, sendAddendumApprovalAction, scheduleAddendumApprovalAction, cancelAddendumScheduleAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
+import SendScheduler from "./send-scheduler";
 import { can } from "../../../lib/roles";
 
 // On-site addendum builder. Things change on the job (customer wants 3 more cameras) — the office
@@ -40,15 +41,11 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(null); // { id, action: 'delete'|'void' }
   // Part B — approval-email prompt after creating/pricing an add-on (office). `emailPrompt` = the add-on id
-  // being prompted; `schedMode` toggles the date/time picker; `schedAt` is its datetime-local value.
+  // being prompted; the shared SendScheduler handles Send now / Schedule send (default next 8:30 AM).
   const [emailPrompt, setEmailPrompt] = useState(null);
-  const [schedMode, setSchedMode] = useState(false);
-  const [schedAt, setSchedAt] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
   const first = useRef(true);
-  // Tomorrow at 9:00 AM (local) as a datetime-local value — the Schedule default.
-  const tomorrow9 = () => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
-  const openPrompt = (id) => { setSchedMode(false); setSchedAt(tomorrow9()); setEmailPrompt(id); };
+  const openPrompt = (id) => setEmailPrompt(id);
 
   // Read the add-on list from the stable API route (not a server action) — on the deploy host the
   // server-action read intermittently 404'd, so the panel rendered nothing and the customer couldn't
@@ -129,15 +126,15 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   async function sendNow(id) {
     setPromptBusy(true);
     const r = await sendAddendumApprovalAction(accessId, id).catch(() => null);
-    setPromptBusy(false); setEmailPrompt(null); setSchedMode(false);
+    setPromptBusy(false); setEmailPrompt(null);
     setAddendums((prev) => prev.map((a) => a.id === id ? { ...a, emailSentAt: new Date().toISOString(), scheduledSendAt: undefined } : a));
     if (r?.note) setSignErr(r.note);   // reuse the inline notice line for "demo — not sent" etc.
   }
-  async function scheduleIt(id) {
-    if (!schedAt) return;
+  async function scheduleIt(id, iso) {
+    if (!iso) return;
     setPromptBusy(true);
-    const r = await scheduleAddendumApprovalAction(accessId, id, new Date(schedAt).toISOString()).catch(() => null);
-    setPromptBusy(false); setEmailPrompt(null); setSchedMode(false);
+    const r = await scheduleAddendumApprovalAction(accessId, id, iso).catch(() => null);
+    setPromptBusy(false); setEmailPrompt(null);
     if (r?.ok) setAddendums((prev) => prev.map((a) => a.id === id ? { ...a, scheduledSendAt: r.scheduledSendAt, emailSentAt: undefined } : a));
   }
   async function cancelSched(id) {
@@ -268,6 +265,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                   <>
                     <span className="adn-email-sched">✦ Email scheduled for {fmtStamp(a.scheduledSendAt)}</span>
                     <button type="button" className="adn-email-link" disabled={busy} onClick={() => openPrompt(a.id)}>Edit</button>
+                    <button type="button" className="adn-email-link" disabled={busy} onClick={() => sendNow(a.id)}>Send now</button>
                     <button type="button" className="adn-email-link adn-email-cancel" disabled={busy} onClick={() => cancelSched(a.id)}>Cancel</button>
                   </>
                 ) : a.emailSentAt ? (
@@ -356,33 +354,20 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         <button type="button" className="adn-newbtn" onClick={() => { setDraft((d) => ({ ...d, title: d.title || defaultTitle() })); setBuilding(true); }}>+ New addendum</button>
       ))}
 
-      {/* Part B — "Send approval email to <customer>?" prompt (Send now / Schedule / Not now). */}
+      {/* Part B — "Send approval email to <customer>?" via the shared Send-now / Schedule-send chooser. */}
       {emailPrompt && (() => {
         const a = addendums.find((x) => x.id === emailPrompt);
         const who = (customerName || "the customer").trim() || "the customer";
         return (
-          <div className="adn-promptbg" onClick={() => { if (!promptBusy) { setEmailPrompt(null); setSchedMode(false); } }}>
-            <div className="adn-prompt" onClick={(e) => e.stopPropagation()}>
-              <div className="adn-prompt-h">Send approval email to {who}?</div>
-              {a && <div className="adn-prompt-sub">{a.title} · {money(custTotal(a))}</div>}
-              {!schedMode ? (
-                <div className="adn-prompt-acts">
-                  <button type="button" className="adn-prompt-primary" disabled={promptBusy} onClick={() => sendNow(emailPrompt)}>Send now</button>
-                  <button type="button" className="adn-prompt-ghost" disabled={promptBusy} onClick={() => { setSchedAt(schedAt || tomorrow9()); setSchedMode(true); }}>Schedule</button>
-                  <button type="button" className="adn-prompt-text" disabled={promptBusy} onClick={() => setEmailPrompt(null)}>Not now</button>
-                </div>
-              ) : (
-                <div className="adn-prompt-sched">
-                  <label className="adn-fld"><span className="adn-flbl">Send at</span>
-                    <input type="datetime-local" className="adn-b-title" value={schedAt} onChange={(e) => setSchedAt(e.target.value)} /></label>
-                  <div className="adn-prompt-acts">
-                    <button type="button" className="adn-prompt-primary" disabled={promptBusy || !schedAt} onClick={() => scheduleIt(emailPrompt)}>Schedule email</button>
-                    <button type="button" className="adn-prompt-text" disabled={promptBusy} onClick={() => setSchedMode(false)}>Back</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <SendScheduler
+            open
+            title={`Send approval email to ${who}?`}
+            subtitle={a ? `${a.title} · ${money(custTotal(a))}` : ""}
+            busy={promptBusy}
+            onSendNow={() => sendNow(emailPrompt)}
+            onSchedule={(iso) => scheduleIt(emailPrompt, iso)}
+            onClose={() => setEmailPrompt(null)}
+          />
         );
       })()}
 

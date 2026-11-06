@@ -37,9 +37,12 @@ test("office actions: send now, schedule, cancel (office-only, server-stamped)",
   assert.ok(actions.includes("emailSentAt") && actions.includes("scheduledSendAt"), "stamps send/schedule state");
 });
 
-test("UI prompt has all three options + default Send now, and card email-state", () => {
-  assert.ok(ui.includes("Send approval email to") && ui.includes("Send now") && ui.includes("Schedule") && ui.includes("Not now"), "three-option prompt");
-  assert.ok(ui.includes("tomorrow9") && ui.includes('setHours(9, 0, 0, 0)'), "Schedule defaults to tomorrow 9 AM");
+test("UI prompt uses the shared Send-now / Schedule-send scheduler, and card email-state", () => {
+  // Unified onto SendScheduler (same 8:30 default + quick picks as the signature-request email). The old
+  // inline "Not now" / tomorrow-9 prompt is gone; Cancel on the shared chooser is the "not now".
+  assert.ok(ui.includes("import SendScheduler"), "uses the shared scheduler");
+  assert.ok(ui.includes("Send approval email to") && ui.includes("onSendNow") && ui.includes("onSchedule"), "chooser wired to send-now + schedule");
+  assert.ok(!ui.includes("tomorrow9"), "old tomorrow-9 default removed (now next 8:30)");
   assert.ok(ui.includes("Email scheduled for") && ui.includes("Approval email sent") && ui.includes("Send approval email"), "card shows scheduled / sent / send-later states");
   assert.ok(ui.includes('sp?.get("approve")') && ui.includes("setSignId(want)"), "magic-link ?approve auto-opens the sign modal");
 });

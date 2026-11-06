@@ -49,4 +49,16 @@ export async function register() {
   };
   setTimeout(sweepAddendumEmails, 100_000);            // ~1.5 min after boot
   setInterval(sweepAddendumEmails, 15 * 60 * 1000);    // then every 15 minutes
+
+  // Scheduled signature-request emails: same pattern — send any due, skip ones no longer live (signed,
+  // voided, revised, demo). Idempotent; a sent/stale schedule clears itself.
+  const sweepSignatureEmails = async () => {
+    try {
+      const { sendDueSignatureEmails } = await import("./lib/signature-emails.js");
+      const r = await sendDueSignatureEmails();
+      if (r?.sent) console.log(`[signature] sent ${r.sent} scheduled request email(s)`);
+    } catch (e) { console.error("[signature] scheduled-email sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepSignatureEmails, 110_000);           // ~2 min after boot
+  setInterval(sweepSignatureEmails, 15 * 60 * 1000);   // then every 15 minutes
 }

@@ -17,7 +17,7 @@ import {
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
   customerOwnsProjectAccount, resolveCustomerRequiredActions,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint } from "../../../lib/proposal";
+import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
@@ -245,7 +245,58 @@ export async function requestSignatureEmailAction(accessId, optKey) {
         link: `/project/${accessId}?open=proposal${optKey != null ? `&sign=${encodeURIComponent(optKey)}` : ""}` });
     } catch { /* notification is best-effort */ }
   }
+  // A real send supersedes any pending schedule for this project.
+  if (sent) _saveSigSchedule(accessId, null);
   return { ok: true, sent, note: sent ? "" : "Email isn’t configured yet (needs RESEND_API_KEY)." };
+}
+
+// ---- Scheduled signature-request emails -------------------------------------------------------------
+// The "Request via Email" sheet can SCHEDULE the signature email for later (default next 8:30 AM) instead
+// of sending now. The schedule lives in the project's "sig_email" tool blob, bound to the current proposal
+// version + content fingerprint so a sign / void / revise before the send time cancels it (the sweep in
+// lib/signature-emails.js re-checks the binding). Same scheduler + 8:30 default as add-on approval emails.
+function _sigBinding(accessId) {
+  const p = getActiveProposal(accessId);
+  if (!p) return null;
+  return { versionId: p.id, version: p.version || 1, status: p.status,
+    fingerprint: proposalFingerprint(p.payload, p.tax_rate, p.deposit_pct), signed: !!p.signed_name };
+}
+function _readSigSchedule(accessId) {
+  try { return JSON.parse(getToolData(accessId, "sig_email")?.data || "null"); } catch { return null; }
+}
+function _saveSigSchedule(accessId, obj) {
+  try { saveToolData(accessId, "sig_email", JSON.stringify(obj || {}), "system"); } catch { /* best-effort */ }
+}
+
+export async function getSignatureScheduleAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  const s = _readSigSchedule(accessId);
+  return { ok: true, scheduledSendAt: s?.scheduledSendAt || null, optionId: s?.optionId ?? null };
+}
+
+export async function scheduleSignatureEmailAction(accessId, optKey, sendAtISO) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  const cur = getActiveProposal(accessId);
+  if (!cur || cur.status === "draft") return { error: "Send the proposal first." };
+  if (cur.status === "accepted" && cur.signed_name) return { error: "Already signed." };
+  const when = new Date(sendAtISO);
+  if (isNaN(when.getTime())) return { error: "Pick a valid date and time." };
+  _saveSigSchedule(accessId, { scheduledSendAt: when.toISOString(), optionId: optKey ?? null,
+    binding: _sigBinding(accessId), scheduledBy: actorName(tok), scheduledAt: new Date().toISOString() });
+  logProjectEvent(accessId, { kind: "request", label: `Signature email scheduled · ${when.toLocaleString("en-US")}`.slice(0, 300), actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true, scheduledSendAt: when.toISOString() };
+}
+
+export async function cancelSignatureEmailAction(accessId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
+  _saveSigSchedule(accessId, null);
+  logProjectEvent(accessId, { kind: "request", label: "Signature email schedule cancelled", actor: actorName(tok) });
+  await revalidate(accessId);
+  return { ok: true };
 }
 
 // "Send a payment reminder" (#1 collections) → email the customer that their deposit/final balance is due.

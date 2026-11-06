@@ -1,18 +1,29 @@
 "use client";
-import { useState } from "react";
-import { requestSignatureEmailAction, overrideSignatureAction } from "./proposal-actions";
+import { useState, useEffect } from "react";
+import { requestSignatureEmailAction, overrideSignatureAction, scheduleSignatureEmailAction, cancelSignatureEmailAction, getSignatureScheduleAction } from "./proposal-actions";
+import SendScheduler from "./send-scheduler";
+import { friendlyWhen } from "../../../lib/send-schedule";
 
 // The staff "Request Signature" share sheet — Copy Link · Share · Request via Email · (admin/manager)
 // Override. Extracted from the proposal builder so it can open on its OWN, directly from the project hub,
 // instead of having to open the whole proposal page first (bug #84). Self-contained: its own busy/toast
 // state and styles. `onClose` dismisses it; `onDone(kind)` lets a host refresh after email/override.
+// "Request via Email" opens the shared Send-now / Schedule-send chooser (default next 8:30 AM).
 export default function RequestSignatureSheet({ accessId, optionId = "", role = "", onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState(null);
+  const [schedOpen, setSchedOpen] = useState(false);
+  const [sched, setSched] = useState(null);   // current schedule { scheduledSendAt } | null
   const canOverride = ["admin", "manager"].includes(role);
   const show = (m) => { setToast(m); setTimeout(() => setToast(null), 2600); };
   const signingUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/project/${accessId}?open=proposal&sign=${optionId ?? ""}`;
+
+  useEffect(() => {
+    let live = true;
+    getSignatureScheduleAction(accessId).then((r) => { if (live && r?.ok) setSched(r.scheduledSendAt ? r : null); }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId]);
 
   async function copyLink() {
     try { await navigator.clipboard.writeText(signingUrl); show("Signing link copied"); }
@@ -29,10 +40,29 @@ export default function RequestSignatureSheet({ accessId, optionId = "", role = 
     setBusy(true);
     const r = await requestSignatureEmailAction(accessId, optionId).catch(() => null);
     setBusy(false);
+    setSchedOpen(false);
     onClose?.();
     if (r?.error) { show(r.error); return; }
     show(r?.sent ? "Signature request emailed" : (r?.note || "Email isn’t configured yet"));
     onDone?.("email");
+  }
+  async function scheduleAt(iso) {
+    if (busy) return;
+    setBusy(true);
+    const r = await scheduleSignatureEmailAction(accessId, optionId, iso).catch(() => null);
+    setBusy(false);
+    setSchedOpen(false);
+    if (r?.error) { show(r.error); return; }
+    onClose?.();
+    onDone?.("schedule");
+  }
+  async function cancelSchedule() {
+    if (busy) return;
+    setBusy(true);
+    await cancelSignatureEmailAction(accessId).catch(() => null);
+    setBusy(false);
+    setSched(null);
+    onDone?.("schedule");
   }
   async function override() {
     if (busy) return;
@@ -61,9 +91,19 @@ export default function RequestSignatureSheet({ accessId, optionId = "", role = 
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.6" y1="13.5" x2="15.4" y2="17.5"/><line x1="15.4" y1="6.5" x2="8.6" y2="10.5"/></svg>
           <span>{copied ? "Link copied" : "Share Signing Link"}</span>
         </button>
-        <button type="button" className="prop-sig-act" disabled={busy} onClick={email}>
+        {sched?.scheduledSendAt && (
+          <div className="prop-sig-sched">
+            <span className="prop-sig-sched-t">Signature email scheduled for {friendlyWhen(sched.scheduledSendAt)}</span>
+            <span className="prop-sig-sched-acts">
+              <button type="button" disabled={busy} onClick={() => setSchedOpen(true)}>Edit</button>
+              <button type="button" disabled={busy} onClick={email}>Send now</button>
+              <button type="button" className="prop-sig-sched-cancel" disabled={busy} onClick={cancelSchedule}>Cancel</button>
+            </span>
+          </div>
+        )}
+        <button type="button" className="prop-sig-act" disabled={busy} onClick={() => setSchedOpen(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
-          <span>{busy ? "Sending…" : "Request via Email"}</span>
+          <span>{busy ? "Working…" : "Request via Email"}</span>
         </button>
         {canOverride && (
           <button type="button" className="prop-sig-act prop-sig-override" disabled={busy} onClick={override}>
@@ -73,6 +113,15 @@ export default function RequestSignatureSheet({ accessId, optionId = "", role = 
         )}
         {toast && <div className="prop-sig-note" role="status">{toast}</div>}
       </div>
+      <SendScheduler
+        open={schedOpen}
+        title="Request signature by email"
+        subtitle="Send the customer a direct signing link."
+        busy={busy}
+        onSendNow={email}
+        onSchedule={scheduleAt}
+        onClose={() => setSchedOpen(false)}
+      />
       <style>{SIG_SHEET_CSS}</style>
     </div>
   );
@@ -90,6 +139,13 @@ const SIG_SHEET_CSS = `
 .prop-sig-act:disabled{opacity:.5;cursor:default}
 .prop-sig-act svg{color:#C9A96E;flex-shrink:0}
 .prop-sig-note{font-size:11.5px;color:var(--dv-meta,#787D84);padding:10px 2px 2px}
+.prop-sig-sched{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:8px;padding:11px 13px;border:1px solid #e8d7ab;border-radius:12px;background:#fbf3e3}
+.prop-sig-sched-t{font-size:12.5px;font-weight:600;color:#7a5b16;flex:1;min-width:160px}
+.prop-sig-sched-acts{display:inline-flex;gap:12px}
+.prop-sig-sched-acts button{border:0;background:none;color:#7a5b16;font:600 12.5px/1 inherit;cursor:pointer;padding:0}
+.prop-sig-sched-acts button:hover{text-decoration:underline}
+.prop-sig-sched-acts .prop-sig-sched-cancel{color:#b23b3b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .prop-sig-sched{background:#2a2412;border-color:#5a4c22}:root:not([data-theme="light"]) .prop-sig-sched-t,:root:not([data-theme="light"]) .prop-sig-sched-acts button{color:#e7cf96}}
 .prop-sig-override{margin-top:12px;border-top:1px solid var(--dv-line,#E4E4DF);border-radius:12px}
 .prop-sig-override-wrap{display:flex;flex-direction:column;gap:2px}
 .prop-sig-override-wrap small{font-weight:500;font-size:11.5px;color:var(--dv-meta,#787D84)}

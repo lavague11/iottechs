@@ -10,7 +10,8 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { PORTAL_CSS } from "./customer-portal";
 import ProjectContactCard from "./project-contact-card";
-import { getPaymentsForLogAction } from "./proposal-actions";
+import { getPaymentsForLogAction, getSignatureScheduleAction, requestSignatureEmailAction, cancelSignatureEmailAction } from "./proposal-actions";
+import { friendlyWhen } from "../../../lib/send-schedule";
 import RequestSignatureSheet from "./request-signature-sheet";
 
 const fmtPayDate = (s) => { const m = String(s || "").match(/(\d{4})-(\d{2})-(\d{2})/); if (!m) return ""; try { return new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return `${m[2]}/${m[3]}/${m[1]}`; } };
@@ -40,6 +41,8 @@ export default function StaffHub({
   const [payDetail, setPayDetail] = useState(null);   // one payment opened for full detail
   const [lightbox, setLightbox] = useState(null);     // a payment proof photo opened full-size
   const [reqSignOpen, setReqSignOpen] = useState(false); // staff Request-Signature share sheet (opens here, not the proposal page)
+  const [sigSched, setSigSched] = useState(null);        // scheduled signature email { scheduledSendAt } | null
+  const [sigBusy, setSigBusy] = useState(false);
 
   // Pull the payment ledger so recorded payments show under the balance (date · method · amount),
   // each openable for its full detail + any proof photos. Only when there's a contract to pay against.
@@ -51,6 +54,26 @@ export default function StaffHub({
   }, [accessId, finance?.hasContract]);
   // Confirmed money-in-hand plus any still-pending submissions (tagged), newest first.
   const shownPays = (payments || []).filter((p) => (+p.amount || 0) > 0 && p.status !== "void");
+
+  // A scheduled signature-request email surfaces right on the hero (not only inside the share sheet), with
+  // Edit · Send now · Cancel. Re-read whenever the share sheet closes so the line reflects any change.
+  const awaitingSig = !!primaryCta?.inlineSign;
+  useEffect(() => {
+    if (!accessId || !awaitingSig) { setSigSched(null); return; }
+    let live = true;
+    getSignatureScheduleAction(accessId).then((r) => { if (live) setSigSched(r?.ok && r.scheduledSendAt ? r : null); }).catch(() => {});
+    return () => { live = false; };
+  }, [accessId, awaitingSig, reqSignOpen]);
+  async function sigSendNow() {
+    if (sigBusy) return; setSigBusy(true);
+    await requestSignatureEmailAction(accessId, signOptionId).catch(() => null);
+    setSigBusy(false); setSigSched(null); onRefresh?.();
+  }
+  async function sigCancel() {
+    if (sigBusy) return; setSigBusy(true);
+    await cancelSignatureEmailAction(accessId).catch(() => null);
+    setSigBusy(false); setSigSched(null);
+  }
 
   // URL drives the open overlay, exactly like the customer portal: ?view=<key>. Any section or rail action
   // that carries a `view` is openable (plus the synthetic `install` detail).
@@ -109,6 +132,12 @@ export default function StaffHub({
 .cpv-collapse{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:999px;background:var(--raise);color:var(--meta);cursor:pointer}
 .cpv-collapse:hover{border-color:var(--ink);color:var(--ink)}
 .cpv-collapse + .cpv-portwrap{margin-left:8px}
+.cpv-sig-sched{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:12px;padding:9px 12px;border-radius:10px;background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.4)}
+.cpv-sig-sched-t{font-size:12.5px;font-weight:600;color:var(--ink);flex:1;min-width:150px}
+.cpv-sig-sched-acts{display:inline-flex;gap:12px}
+.cpv-sig-sched-acts button{border:0;background:none;color:#8a6d2f;font:700 12.5px/1 inherit;cursor:pointer;padding:0}
+.cpv-sig-sched-acts button:hover{text-decoration:underline}
+.cpv-sig-sched-acts .cpv-sig-cancel{color:#b23b3b}
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
 .cpv-ovl-body{background:var(--paper)}
@@ -272,6 +301,16 @@ export default function StaffHub({
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-status">{status.label}</div>
             {primaryCta && <button className="cpv-cta" onClick={() => primaryCta.inlineSign ? setReqSignOpen(true) : primaryCta.action ? onPrimaryAction?.(primaryCta.action) : open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
+            {awaitingSig && sigSched?.scheduledSendAt && (
+              <div className="cpv-sig-sched">
+                <span className="cpv-sig-sched-t">Signature email scheduled for {friendlyWhen(sigSched.scheduledSendAt)}</span>
+                <span className="cpv-sig-sched-acts">
+                  <button type="button" disabled={sigBusy} onClick={() => setReqSignOpen(true)}>Edit</button>
+                  <button type="button" disabled={sigBusy} onClick={sigSendNow}>Send now</button>
+                  <button type="button" className="cpv-sig-cancel" disabled={sigBusy} onClick={sigCancel}>Cancel</button>
+                </span>
+              </div>
+            )}
           </section>
         ) : null}
 
