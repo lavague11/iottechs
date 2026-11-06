@@ -5328,15 +5328,16 @@ export function getNotificationFeed(userId, role) {
     // 3) Open tickets.
     for (const t of getTickets().filter((t) => t.status !== "closed" && t.status !== "resolved").slice(0, 40))
       out.push({ key: "t" + t.id, source: "live", group: "tickets", icon: "red", title: `${t.priority === "urgent" ? "Urgent ticket" : "Ticket"} — ${t.subject}`, body: [t.project_customer, t.assignee_name ? `→ ${t.assignee_name}` : "Unassigned"].filter(Boolean).join(" · "), link: `/tickets/${t.id}`, at: t.updated_at || t.created_at });
-    // 4) Recent activity — logins, new inquiries, PIN access.
+    // 4) Recent activity — the ops feed. Sign-in / sign-out / PIN-access are pure audit noise (they
+    // flooded the feed and buried real leads), so they are NOT surfaced here; they remain in the audit
+    // trail (getActivityLog) for the security view. We keep only actionable activity: new inquiries and
+    // substantive notes.
+    const NOISE = new Set(["login", "logout", "pin_access"]);
     for (const a of getActivityLog(40)) {
-      const who = a.user_name || "System";
+      if (NOISE.has(a.event_type)) continue;
       const proj = a.project_customer || a.project_access_id || null;
       let title, group = "activity", icon = "blue";
-      if (a.event_type === "login") title = `${who} signed in`;
-      else if (a.event_type === "logout") { title = `${who} signed out`; icon = "amber"; }
-      else if (a.event_type === "demo") { title = `New inquiry${proj ? ` — ${proj}` : ""}`; group = "projects"; icon = "green"; }
-      else if (a.event_type === "pin_access") { title = a.notes || `PIN access${proj ? ` — ${proj}` : ""}`; icon = "gold"; }
+      if (a.event_type === "demo") { title = `New inquiry${proj ? ` — ${proj}` : ""}`; group = "projects"; icon = "green"; }
       else { title = a.notes || a.event_type; icon = "gold"; }
       out.push({ key: "a" + a.id, source: "live", group, icon, title, body: a.user_role || "", link: a.project_access_id ? `/project/${a.project_access_id}` : null, at: a.login_at });
     }
