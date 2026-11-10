@@ -32,7 +32,10 @@ async function hmac(payload) {
 }
 
 export async function makeToken(user) {
-  const payload = `${user.id}:${user.role}:${user.email}`;
+  // The token bakes in the session_epoch; getSessionUser / the project loader reject a token whose epoch
+  // no longer matches the user's, so a role or disabled change (which bumps the epoch) invalidates old logins.
+  const epoch = Number(user?.session_epoch || 0);
+  const payload = `${user.id}:${user.role}:${user.email}:${epoch}`;
   const sig = await hmac(payload);
   return btoa(`${payload}:${sig}`).replace(/\+/g,"-").replace(/\//g,"_").replace(/=/g,"");
 }
@@ -41,12 +44,18 @@ export async function parseToken(token) {
   try {
     const raw = atob(token.replace(/-/g,"+").replace(/_/g,"/"));
     const parts = raw.split(":");
-    if (parts.length < 4) return null;
-    const [id, role, email, sig] = parts;
-    const payload = `${id}:${role}:${email}`;
-    const expected = await hmac(payload);
-    if (sig !== expected) return null;
-    return { id: Number(id), role, email };
+    // New format: id:role:email:epoch:sig. Legacy (pre-epoch) tokens are id:role:email:sig → epoch 0.
+    if (parts.length === 5) {
+      const [id, role, email, epoch, sig] = parts;
+      if (sig !== (await hmac(`${id}:${role}:${email}:${epoch}`))) return null;
+      return { id: Number(id), role, email, epoch: Number(epoch) || 0 };
+    }
+    if (parts.length === 4) {
+      const [id, role, email, sig] = parts;
+      if (sig !== (await hmac(`${id}:${role}:${email}`))) return null;
+      return { id: Number(id), role, email, epoch: 0 };
+    }
+    return null;
   } catch {
     return null;
   }

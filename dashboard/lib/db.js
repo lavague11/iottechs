@@ -162,6 +162,9 @@ function init() {
   // Technician certification, stamped when a candidate becomes an Approved Technician (Portal 3).
   // { active, tier, badges:[], approved_at, from_app } — operations gates work-order eligibility on it.
   if (!uCols.includes("tech_cert"))    db.exec("ALTER TABLE users ADD COLUMN tech_cert TEXT");
+  // Session invalidation counter: bumped whenever a user's role or disabled state changes, so their old
+  // login tokens (which bake in the role) stop resolving and they re-authenticate with the new role.
+  if (!uCols.includes("session_epoch")) db.exec("ALTER TABLE users ADD COLUMN session_epoch INTEGER DEFAULT 0");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
   // Databases created before phone logins have `email TEXT UNIQUE NOT NULL`, so a phone-only customer
@@ -2871,7 +2874,8 @@ export function getAllUsers() {
 }
 
 export function setUserDisabled(targetId, disabled) {
-  db.prepare("UPDATE users SET disabled = ? WHERE id = ?").run(disabled ? 1 : 0, Number(targetId));
+  // Disabling also bumps session_epoch so an active token can't keep the account signed in after it's off.
+  db.prepare("UPDATE users SET disabled = ?, session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?").run(disabled ? 1 : 0, Number(targetId));
 }
 
 // Auto-derive a username from an email's local-part (before @) — the customer's starting
@@ -2922,7 +2926,9 @@ export function createStaffUser({ name, username, email, phone, role, password }
 }
 
 export function setUserRole(targetId, newRole) {
-  db.prepare("UPDATE users SET role = ? WHERE id = ?").run(String(newRole), Number(targetId));
+  // Bump session_epoch so the user's existing login tokens (which carry the OLD role) are invalidated —
+  // their next request re-authenticates and every surface, views and action guards alike, sees the new role.
+  db.prepare("UPDATE users SET role = ?, session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?").run(String(newRole), Number(targetId));
 }
 
 export function deleteUser(targetId) {
@@ -2934,7 +2940,7 @@ export function resetUserPassword(userId, plainPassword) {
 }
 
 export function getUserById(id) {
-  const r = db.prepare("SELECT id, name, username, email, phone, role, disabled, tech_cert FROM users WHERE id = ?").get(Number(id));
+  const r = db.prepare("SELECT id, name, username, email, phone, role, disabled, tech_cert, session_epoch FROM users WHERE id = ?").get(Number(id));
   return r ? { ...r, tech_cert: safeJson(r.tech_cert, null) } : r;
 }
 
@@ -2961,12 +2967,12 @@ export function getCustomerUserForProject(project) {
   if (!project) return null;
   const email = project.contact_email ? String(project.contact_email).trim().toLowerCase() : null;
   if (email) {
-    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE LOWER(email)=? AND role='customer'").get(email);
+    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled, session_epoch FROM users WHERE LOWER(email)=? AND role='customer'").get(email);
     if (u) return u;
   }
   const digits = String(project.contact_phone || "").replace(/\D/g, "");
   if (digits.length >= 7) {
-    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'(',''),')',''),'-',''),' ','')=? AND role='customer'").get(digits);
+    const u = db.prepare("SELECT id, name, username, email, phone, role, disabled, session_epoch FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone,''),'(',''),')',''),'-',''),' ','')=? AND role='customer'").get(digits);
     if (u) return u;
   }
   return null;
@@ -3047,14 +3053,14 @@ export function userHasPassword(userId) {
 }
 
 export function getUserByEmail(email) {
-  return db.prepare("SELECT id, name, username, email, phone, role, disabled FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
+  return db.prepare("SELECT id, name, username, email, phone, role, disabled, session_epoch FROM users WHERE LOWER(email) = ?").get(String(email).trim().toLowerCase());
 }
 
 export function getUserByPhone(phone) {
   const digits = String(phone || "").replace(/\D/g, "");
   if (!digits) return null;
   return db.prepare(
-    "SELECT id, name, username, email, phone, role FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') = ?"
+    "SELECT id, name, username, email, phone, role, session_epoch FROM users WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone,'(',''),')',''),'-',''),' ','') = ?"
   ).get(digits);
 }
 
@@ -7692,7 +7698,7 @@ export function removeProjectAssignment(id) {
 }
 export function getStaffUsers() {
   // Returns all active users (staff + customers) so the project add-member search can find anyone.
-  return db.prepare("SELECT id, name, email, role, phone, username, tech_cert FROM users WHERE (disabled IS NULL OR disabled != 1) ORDER BY role, name").all().map(r=>({...r, tech_cert: safeJson(r.tech_cert, null)}));
+  return db.prepare("SELECT id, name, email, role, phone, username, tech_cert, session_epoch FROM users WHERE (disabled IS NULL OR disabled != 1) ORDER BY role, name").all().map(r=>({...r, tech_cert: safeJson(r.tech_cert, null)}));
 }
 
 export function getProjectsForUser(userId) {

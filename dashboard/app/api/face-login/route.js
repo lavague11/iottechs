@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { makeToken, sessionCookie } from "../../../lib/auth";
-import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace, customerSignLandingPath } from "../../../lib/db";
+import { listEnrolledFaces, recordLogin, logIdentityEvent, recordUnauthorizedFace, customerSignLandingPath, getUserById } from "../../../lib/db";
 
 // Face-first login (1:N). The client sends a live face embedding; we cosine-match
 // it against every verified enrolled face, and — the two-step the owner asked for
@@ -96,7 +96,7 @@ export async function POST(request) {
   }
 
   const u = best.r;
-  const token = await makeToken({ id: u.user_id, role: u.role, email: u.email });
+  const token = await makeToken({ id: u.user_id, role: u.role, email: u.email, session_epoch: getUserById(u.user_id)?.session_epoch });
   const jar = await cookies();
   jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
   jar.delete("iot_access");

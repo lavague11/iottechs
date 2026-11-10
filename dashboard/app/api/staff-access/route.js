@@ -50,7 +50,7 @@ export async function POST(request) {
     if (!admin) return Response.json({ ok: false, error: "wrong" }, { status: 401 });
 
     const jar = await cookies();
-    const tok = await makeToken({ id: admin.id, role: admin.role, email: admin.email });
+    const tok = await makeToken({ id: admin.id, role: admin.role, email: admin.email, session_epoch: admin.session_epoch });
     jar.set("iot_session", tok, sessionCookie(tok));   // 90-day persistent login
 
     // Land on the admin view of that application when one was in play; else the hiring board.

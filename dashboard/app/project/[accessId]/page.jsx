@@ -54,7 +54,13 @@ async function resolveSessionView(project, previewRole, previewToken) {
 
   const jar  = await cookies();
   const tok  = jar.get("iot_session")?.value;
-  const user = tok ? await parseToken(tok) : null;
+  let   user = tok ? await parseToken(tok) : null;
+  // Reject a stale session (role/disabled changed since login → session_epoch bumped) so the project view
+  // never resolves off an outdated role; the person falls back to the PIN path / re-login, same as logged out.
+  if (user?.id) {
+    const su = getUserById(user.id);
+    if (!su || su.disabled || Number(su.session_epoch || 0) !== Number(user.epoch || 0)) user = null;
+  }
 
   // Project-scoped PIN grant (iot_access). This is what the PIN gate mints — without reading it
   // here, a PIN visitor was bounced back to the gate on every reload, and a staff member who

@@ -9,7 +9,12 @@ export async function getSessionUser() {
   const s   = tok ? await parseToken(tok) : null;
   if (!s?.id) return { id: null, name: "Staff", email: s?.email || "", role: s?.role || "staff" };
   const u = getUserById(s.id);
-  return { id: s.id, name: u?.name || "Staff", email: u?.email || s.email || "", role: u?.role || s.role || "staff" };
+  // A role or disabled change bumps session_epoch, so a token minted before it no longer matches → treat
+  // the session as signed out (the page gate then bounces to /login, where a fresh login mints the new role).
+  if (!u || u.disabled || Number(u.session_epoch || 0) !== Number(s.epoch || 0)) {
+    return { id: null, name: "Staff", email: "", role: "guest", stale: !!u };
+  }
+  return { id: s.id, name: u.name || "Staff", email: u.email || s.email || "", role: u.role || s.role || "staff" };
 }
 
 // Notification summary for the nav bell.

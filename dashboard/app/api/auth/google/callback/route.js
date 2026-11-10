@@ -71,7 +71,7 @@ export async function GET(request) {
       if (!user) return fail("google");
     }
 
-    const token = await makeToken({ id: user.id, role: user.role, email: user.email });
+    const token = await makeToken({ id: user.id, role: user.role, email: user.email, session_epoch: user.session_epoch });
     jar.set("iot_session", token, sessionCookie(token));   // 90-day persistent login
     // Return to where they started (e.g. the project page) when given a safe same-site path; else home.
     const dest = next || ROLE_HOME[user.role] || "/dashboard";
