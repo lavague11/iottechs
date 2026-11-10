@@ -99,7 +99,14 @@ export async function lookupAccountAction(identifierRaw) {
     if (!e164) return { error: "Enter a valid email or phone number." };
     user = getUserByPhone(e164.slice(-10));
   }
-  if (!user || user.disabled) return { error: "We couldn’t continue with those details. Check the email or phone number and try again." };
+  if (user && user.disabled) return { error: "This account has been disabled. Contact an administrator." };
+  // No account on file → don't dead-end: route the person straight into creating one (the account is
+  // actually created when they submit a password, so there are no orphan rows and no email-enumeration
+  // abuse). `newAccount` tells the client to open the create-account step with the identifier prefilled.
+  if (!user) {
+    const isEmail = id.includes("@");
+    return { ok: true, newAccount: true, email: isEmail ? id : "", phone: isEmail ? "" : id };
+  }
   return { ok: true };
 }
 

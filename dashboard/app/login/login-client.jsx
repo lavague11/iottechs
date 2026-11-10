@@ -67,6 +67,7 @@ export default function LoginClient({ next }) {
   const [masked, setMasked]       = useState("");
   const [noAccount, setNoAccount] = useState(false);
   const [su, setSu]               = useState({ name: "", email: "", phone: "", password: "", confirm: "" });
+  const [newAcct, setNewAcct]     = useState(false);   // arrived at signup from an unknown login identifier
   const suSet = (k, v) => setSu((p) => ({ ...p, [k]: v }));
   const faceVideoRef  = useRef(null);
   const faceStreamRef = useRef(null);
@@ -175,6 +176,11 @@ export default function LoginClient({ next }) {
     startTransition(async () => {
       const r = await lookupAccountAction(v).catch(() => ({ error: "Something went wrong — please try again." }));
       if (r?.error) { setError(r.error); return; }
+      // No account yet → open the create-account step with what they typed prefilled.
+      if (r?.newAccount) {
+        setSu((p) => ({ ...p, email: r.email || p.email, phone: r.phone ? suPhone(r.phone) : p.phone }));
+        setNewAcct(true); setMode("signup"); setError(null); return;
+      }
       setAcctMask(maskIdent(v)); setAuthStep("auth");
     });
   }
@@ -206,9 +212,11 @@ export default function LoginClient({ next }) {
   function handleSignup(e) {
     e.preventDefault();
     setError(null);
+    const hasEmail = !!su.email.trim(), hasPhone = su.phone.replace(/\D/g, "").length === 10;
     if (!su.name.trim())                              { setError("Please enter your name."); return; }
-    if (!EMAIL_RE.test(su.email.trim()))             { setError("Enter a valid email address."); return; }
-    if (su.phone.replace(/\D/g, "").length !== 10)   { setError("Enter a valid 10-digit phone number."); return; }
+    if (!hasEmail && !hasPhone)                       { setError("Enter an email or phone number."); return; }
+    if (hasEmail && !EMAIL_RE.test(su.email.trim()))  { setError("Enter a valid email address."); return; }
+    if (su.phone.trim() && !hasPhone)                 { setError("Enter a valid 10-digit phone number."); return; }
     if (!pwStrong(su.password))                       { setError("Password needs 6+ characters and a capital letter."); return; }
     if (su.password !== su.confirm)                   { setError("Passwords don't match."); return; }
     const fd = new FormData(e.target);
@@ -326,7 +334,7 @@ export default function LoginClient({ next }) {
               <label className="lg-label">Phone number</label>
               <input value={phone} onChange={(e) => setPhone(suPhone(e.target.value))} type="tel" inputMode="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" autoFocus required disabled={pending || granted} />
             </div>
-            {error && <div className="lg-err">{error}{noAccount && <> — <button type="button" className="lg-err-link" onClick={() => { setMode("signup"); setError(null); }}>Create account</button></>}</div>}
+            {error && <div className="lg-err">{error}{noAccount && <> — <button type="button" className="lg-err-link" onClick={() => { setMode("signup"); setError(null); setNewAcct(false); }}>Create account</button></>}</div>}
             <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Sending…" : "Text me a code →"}</button>
           </form>
           ) : (
@@ -403,9 +411,10 @@ export default function LoginClient({ next }) {
         ) : mode === "signup" ? (
         <form className="lg-form" onSubmit={handleSignup}>
           <input type="hidden" name="next" value={next} />
-          <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required disabled={pending || granted} value={su.name} onChange={(e) => suSet("name", suTitle(e.target.value))} /></div>
-          <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" required disabled={pending || granted} value={su.email} onChange={(e) => suSet("email", e.target.value.trim())} />{su.email && !EMAIL_RE.test(su.email) && <div className="lg-mini no">Invalid email</div>}</div>
-          <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" inputMode="tel" required disabled={pending || granted} value={su.phone} onChange={(e) => suSet("phone", suPhone(e.target.value))} /></div>
+          {newAcct && <div style={{ fontSize: "12.5px", color: "#6b7280", textAlign: "center", margin: "0 0 4px", lineHeight: 1.45 }}>No account yet for that — set a password to create one.</div>}
+          <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required autoFocus={newAcct} disabled={pending || granted} value={su.name} onChange={(e) => suSet("name", suTitle(e.target.value))} /></div>
+          <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" disabled={pending || granted} value={su.email} onChange={(e) => suSet("email", e.target.value.trim())} />{su.email && !EMAIL_RE.test(su.email) && <div className="lg-mini no">Invalid email</div>}</div>
+          <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" inputMode="tel" disabled={pending || granted} value={su.phone} onChange={(e) => suSet("phone", suPhone(e.target.value))} /></div>
           <div className="lg-field"><label className="lg-label">Password</label><PwInput name="password" placeholder="6+ characters, 1 capital" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 6+ characters & a capital"}</div>}</div>
           <div className="lg-field"><label className="lg-label">Confirm password</label><PwInput name="confirm" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} value={su.confirm} onChange={(e) => suSet("confirm", e.target.value)} />{su.confirm && <div className={`lg-mini ${su.password === su.confirm ? "ok" : "no"}`}>{su.password === su.confirm ? "Passwords match" : "No match"}</div>}</div>
           {error && <div className="lg-err">{error}</div>}
@@ -435,7 +444,7 @@ export default function LoginClient({ next }) {
               <button className="gw2-lbtn" onClick={() => { setMode("pin"); setPinErr(""); }}>Use PIN</button>
             </>
           ) : (
-            <button className="gw2-lbtn" onClick={() => { setMode("password"); setAuthStep("lookup"); setError(null); }}>← {mode === "signup" ? "Sign in" : "Back"}</button>
+            <button className="gw2-lbtn" onClick={() => { setMode("password"); setAuthStep("lookup"); setError(null); setNewAcct(false); }}>← {mode === "signup" ? "Sign in" : "Back"}</button>
           )}
           <button className="gw2-lbtn gw2-help-btn" onClick={() => setShowHelp(true)}>help</button>
         </div>
