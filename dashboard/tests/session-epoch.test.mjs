@@ -1,6 +1,6 @@
-// Role / disabled changes invalidate a user's existing login sessions (session_epoch), so an upgraded
-// account re-authenticates and every surface sees the new role — instead of staying stuck on the old
-// dashboard until the 90-day token expires. Token round-trip is functional; the wiring is source-level.
+// A role change takes effect on the user's NEXT request with no re-login: every gate resolves the role
+// fresh from the DB (withFreshRole / getSessionUser), ignoring the role baked into the token. A disabled
+// account is signed out. Token round-trip is functional; the wiring is source-level.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -46,7 +46,14 @@ test("every getter that mints a token selects session_epoch", () => {
   ]) assert.ok(db.includes(marker), `token-minting getter selects session_epoch (${marker.slice(0, 24)}…)`);
 });
 
-test("the session reader + project loader reject a stale-epoch token (forced re-login)", () => {
-  assert.ok(session.includes("Number(u.session_epoch || 0) !== Number(s.epoch || 0)") && session.includes('role: "guest"'), "getSessionUser signs out a stale session");
-  assert.ok(page.includes("Number(su.session_epoch || 0) !== Number(user.epoch || 0)") && page.includes("user = null"), "resolveSessionView drops a stale session");
+test("every gate resolves the role FRESH from the DB (seamless upgrade, no re-login)", () => {
+  // withFreshRole swaps the token's baked-in role for the current DB role; null when gone/disabled.
+  assert.ok(db.includes("export function withFreshRole") && db.includes("SELECT role, disabled FROM users WHERE id = ?") && db.includes("return tok.role === u.role ? tok : { ...tok, role: u.role }"), "withFreshRole returns the current DB role");
+  // getSessionUser keeps the session and uses the fresh role; only a gone/disabled account signs out.
+  assert.ok(session.includes("if (!u || u.disabled) return { id: null") && !session.includes("session_epoch"), "getSessionUser no longer rejects on epoch — fresh role, disabled → logout");
+  // the project loader uses the fresh role instead of dropping the session.
+  assert.ok(page.includes("user = (!su || su.disabled) ? null : { ...user, role: su.role }"), "resolveSessionView swaps in the fresh role");
+  // the action-auth helpers all run the session token through withFreshRole.
+  for (const f of ["../app/project/[accessId]/proposal-actions.js", "../app/project/[accessId]/ai-actions.js", "../app/project/[accessId]/actions.js", "../app/api/tool-data/route.js", "../app/api/site-intel/route.js", "../app/api/project-cameras/route.js"])
+    assert.ok(readFileSync(new URL(f, import.meta.url), "utf8").includes("withFreshRole(await parseToken"), `${f.split("/").pop()} authorizes with the fresh role`);
 });

@@ -2874,7 +2874,8 @@ export function getAllUsers() {
 }
 
 export function setUserDisabled(targetId, disabled) {
-  // Disabling also bumps session_epoch so an active token can't keep the account signed in after it's off.
+  // A disabled account is signed out on its next request — withFreshRole() / getSessionUser read `disabled`
+  // fresh and treat it as logged out. session_epoch is bumped alongside as the latent "invalidate all" signal.
   db.prepare("UPDATE users SET disabled = ?, session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?").run(disabled ? 1 : 0, Number(targetId));
 }
 
@@ -2926,8 +2927,9 @@ export function createStaffUser({ name, username, email, phone, role, password }
 }
 
 export function setUserRole(targetId, newRole) {
-  // Bump session_epoch so the user's existing login tokens (which carry the OLD role) are invalidated —
-  // their next request re-authenticates and every surface, views and action guards alike, sees the new role.
+  // The new role takes effect on the user's very NEXT request with NO re-login: every gate resolves the role
+  // fresh from the DB via withFreshRole() / getSessionUser (the token's baked-in role is ignored). session_epoch
+  // is still bumped as a latent "invalidate all sessions" signal (not currently enforced at the gates).
   db.prepare("UPDATE users SET role = ?, session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?").run(String(newRole), Number(targetId));
 }
 
@@ -2937,6 +2939,17 @@ export function deleteUser(targetId) {
 
 export function resetUserPassword(userId, plainPassword) {
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPw(String(plainPassword)), Number(userId));
+}
+
+// Given a parsed iot_session token (which carries the role baked in at login), return it with the CURRENT
+// role from the DB, so a role change takes effect on the user's very next request — no re-login. Returns
+// null when the account is gone or disabled (so the caller treats it as signed out). PIN/access tokens have
+// no user id and pass through unchanged. This is why a staff action and the shell view always agree on role.
+export function withFreshRole(tok) {
+  if (!tok || tok.id == null) return tok;
+  const u = db.prepare("SELECT role, disabled FROM users WHERE id = ?").get(Number(tok.id));
+  if (!u || u.disabled) return null;
+  return tok.role === u.role ? tok : { ...tok, role: u.role };
 }
 
 export function getUserById(id) {

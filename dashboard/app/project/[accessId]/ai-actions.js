@@ -97,8 +97,9 @@ async function getSessionRole() {
   const cookie = hdrs.get("cookie") || "";
   const getC = (name) => cookie.split(";").find((c) => c.trim().startsWith(name + "="))?.split("=").slice(1).join("=");
   const { parseToken, parseAccessToken } = await import("../../../lib/auth");
+  const { withFreshRole } = await import("../../../lib/db");
   const raw = getC("iot_session");
-  if (raw) { const tok = await parseToken(raw.trim()); if (tok?.role) return tok; }
+  if (raw) { const tok = withFreshRole(await parseToken(raw.trim())); if (tok?.role) return tok; }   // fresh DB role (no re-login)
   const acc = getC("iot_access");
   if (acc) { const at = await parseAccessToken(acc.trim()); if (at?.role) return { role: at.role, accessId: at.accessId, viaPin: true }; }
   return null;

@@ -775,7 +775,8 @@ async function getSessionTok() {
   const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
   if (!raw) return null;
   const { parseToken } = await import("../../../lib/auth");
-  return parseToken(raw.trim());
+  const { withFreshRole } = await import("../../../lib/db");
+  return withFreshRole(await parseToken(raw.trim()));   // fresh DB role → role changes apply with no re-login
 }
 
 // Session token OR the project-scoped PIN cookie (same resolution order as proposal-actions):

@@ -21,8 +21,9 @@ const MAX_OUTPUT_TOKENS = 4000;
 // --- Auth (mirrors app/api/tool-data/route.js) ------------------------------------------------
 async function getSessionRole() {
   const jar = await cookies();
+  const { withFreshRole } = await import("../../../lib/db");
   const raw = jar.get("iot_session")?.value;
-  if (raw) { const tok = await parseToken(raw); if (tok?.role) return tok; }
+  if (raw) { const tok = withFreshRole(await parseToken(raw)); if (tok?.role) return tok; }   // fresh DB role (no re-login)
   const acc = jar.get("iot_access")?.value;
   if (acc) { const at = await parseAccessToken(acc); if (at?.role) return { role: at.role, accessId: at.accessId, viaPin: true }; }
   return null;
