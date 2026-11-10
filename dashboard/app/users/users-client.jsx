@@ -175,11 +175,16 @@ function UserRow({ user: initUser, actorRole, selfId, selected, onToggleSelect }
   const allowedRoles = actorRole === "admin" ? ALL_ROLES : ALL_ROLES.filter((r) => r !== "admin");
   const isLocked     = actorRole === "manager" && user.role === "admin";
 
-  function handleRoleSave() {
+  // Role saves the instant it's changed — no Save button. Optimistic: reflect the pick immediately, persist,
+  // and revert to the stored role on error. (Role changes take effect live, so the user sees the new role on
+  // their next request — see withFreshRole / the session-lifetime note.)
+  function saveRole(next) {
+    if (next === role) return;
+    setErr(null); setRole(next);
     startTx(async () => {
-      const res = await updateRoleAction(user.id, role);
+      const res = await updateRoleAction(user.id, next);
       if (res.error) { setErr(res.error); setRole(user.role); }
-      else { setSaved(true); setTimeout(() => setSaved(false), 2200); }
+      else { setUser((u) => ({ ...u, role: next })); setSaved(true); setTimeout(() => setSaved(false), 2200); }
     });
   }
   function handleSetDisabled(next) {
@@ -230,7 +235,7 @@ function UserRow({ user: initUser, actorRole, selfId, selected, onToggleSelect }
         <td style={{ color: "var(--muted)" }}><div>{user.email || "—"}</div>{user.phone && <div style={{ fontSize: ".8rem" }}>{user.phone}</div>}</td>
         <td>
           {isLocked ? <span className={`role-chip role-${user.role}`}>{ROLE_LABEL[user.role]}</span> : (
-            <select className="usel" value={role} onChange={(e) => { setRole(e.target.value); setSaved(false); setErr(null); }} disabled={pending}>
+            <select className="usel" value={role} onChange={(e) => saveRole(e.target.value)} disabled={pending} title="Changes save instantly">
               {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
             </select>
           )}
@@ -243,7 +248,6 @@ function UserRow({ user: initUser, actorRole, selfId, selected, onToggleSelect }
             <div style={{ display: "inline-flex", gap: 6, alignItems: "center", justifyContent: "flex-end", flexWrap: "wrap" }}>
               {err && <span style={{ color: "var(--red)", fontSize: ".78rem" }}>{err}</span>}
               {saved && <span className="save-flash">Saved ✓</span>}
-              {role !== user.role && !saved && <button className="btn btn-gold btn-sm" onClick={handleRoleSave} disabled={pending}>{pending ? "…" : "Save Role"}</button>}
               {disabled && <button className="btn btn-gold btn-sm" onClick={() => handleSetDisabled(false)} disabled={pending}>Enable</button>}
               <button className="btn-icon-reset" title="Reset password" disabled={pending} onClick={() => {
                 startTx(async () => {

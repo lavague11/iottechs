@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseToken } from "../../lib/auth";
-import { setUserRole, getUserById, updateUser, setUserDisabled, createStaffUser, archiveAndDelete, resetUserPassword, setUserPin, userEffectivePin, openPinConflictTicketIfAny } from "../../lib/db";
+import { setUserRole, getUserById, updateUser, setUserDisabled, createStaffUser, archiveAndDelete, resetUserPassword, setUserPin, userEffectivePin, openPinConflictTicketIfAny, withFreshRole } from "../../lib/db";
 import { randomBytes } from "crypto";
 
 const ALLOWED_ROLES = ["admin", "manager", "sales", "tech", "customer"];
@@ -11,13 +11,13 @@ const ALLOWED_ROLES = ["admin", "manager", "sales", "tech", "customer"];
 async function getActor() {
   const jar   = await cookies();
   const token = jar.get("iot_session")?.value;
-  return token ? await parseToken(token) : null;
+  // Resolve the actor's role FRESH from the DB (withFreshRole), so a just-promoted admin/manager can manage
+  // users immediately with no re-login — consistent with the rest of the app's role resolution.
+  return token ? withFreshRole(await parseToken(token)) : null;
 }
 
 export async function updateRoleAction(targetId, newRole) {
-  const jar   = await cookies();
-  const token = jar.get("iot_session")?.value;
-  const actor = token ? await parseToken(token) : null;
+  const actor = await getActor();
 
   if (!actor || !["admin", "manager"].includes(actor.role)) {
     return { error: "Unauthorized." };
@@ -41,9 +41,7 @@ export async function updateRoleAction(targetId, newRole) {
 }
 
 export async function updateUserInfoAction(targetId, fields) {
-  const jar   = await cookies();
-  const token = jar.get("iot_session")?.value;
-  const actor = token ? await parseToken(token) : null;
+  const actor = await getActor();
 
   if (!actor || !["admin", "manager"].includes(actor.role)) {
     return { error: "Unauthorized." };
