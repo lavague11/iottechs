@@ -131,6 +131,17 @@ export const CSV_TEMPLATE = CSV_COLUMNS.join(",") + "\n" +
   "2026-01-22,Annke 4K dome cameras,Equipment,436.00,Annke,,8AB12345,PayPal,PayPal,Camera\n" +
   "2026-01-10,HDMI + RJ45 connectors,Connectors/Jacks,58.90,Amazon,,114-2876562-1537803,Amazon,Amazon,Connectors/Jacks\n";
 
+// Collapse a multi-item receipt description (Home Depot / Amazon dump the whole cart, separated by ";" or
+// newlines) to a tidy "<first item> (+N more)". A single-item description is returned unchanged — the full
+// text still lives on the attached receipt. Used on CSV import only; manual entries are left as typed.
+export function shortenDescription(desc) {
+  const s = String(desc || "").trim();
+  if (!s) return s;
+  const parts = s.split(/\s*[;\n]+\s*/).map((x) => x.trim()).filter(Boolean);
+  if (parts.length <= 1) return s;
+  return `${parts[0]} (+${parts.length - 1} more)`;
+}
+
 // Minimal RFC-4180-ish CSV parser (handles quotes, embedded commas/newlines, CRLF). Pure JS.
 export function parseCSVText(text) {
   const rows = []; let row = [], cell = "", q = false;
@@ -158,7 +169,7 @@ export function parseExpensesCSV(text) {
   const idx = (name) => header.indexOf(name);
   const get = (r, name) => { const i = idx(name); return i >= 0 ? String(r[i] ?? "").trim() : ""; };
   return rows.slice(1).map((r) => ({
-    spent_on: get(r, "date"), description: get(r, "description"), category: get(r, "category"),
+    spent_on: get(r, "date"), description: shortenDescription(get(r, "description")), category: get(r, "category"),
     amount: get(r, "amount"), vendor: get(r, "vendor"), access_id: get(r, "project"),
     reference: get(r, "reference"), payment_method: get(r, "payment_method"),
     source: get(r, "source"), item_type: get(r, "item_type"),

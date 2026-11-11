@@ -7,6 +7,7 @@ import {
   EXPENSE_CATEGORIES, PAYMENT_METHODS, ITEM_TYPES, SOURCES, SOURCE_DEFAULTS,
   vendorColor, normalizeCategory, normalizeDate, parseAmount, validateExpense,
   parseExpensesCSV, parseCSVText, CSV_TEMPLATE, softDuplicate, sameReference,
+  shortenDescription,
 } from "../lib/expense-model.js";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
@@ -76,6 +77,16 @@ test("duplicate matching: same reference (hard) and same vendor+amount within ±
   assert.ok(softDuplicate(a, { vendor: "annke", amount: 436, spent_on: "2026-01-23" }), "the two $436 Annke payments on adjacent days");
   assert.ok(!softDuplicate(a, { vendor: "Annke", amount: 436, spent_on: "2026-01-25" }), "3 days apart is not a soft dup");
   assert.ok(!softDuplicate(a, { vendor: "Amazon", amount: 436, spent_on: "2026-01-22" }), "different vendor");
+});
+
+test("shortenDescription collapses a multi-item receipt to first + (+N more); single items untouched", () => {
+  assert.equal(shortenDescription("4K dome cameras"), "4K dome cameras");                 // single item unchanged
+  assert.equal(shortenDescription("Cat6 cable; RJ45 jacks; power supply"), "Cat6 cable (+2 more)");
+  assert.equal(shortenDescription("Drill\nBits\nScrews\nAnchors"), "Drill (+3 more)");     // newlines too
+  assert.equal(shortenDescription("  spaced  "), "spaced");
+  assert.equal(shortenDescription(""), "");
+  const imported = parseExpensesCSV("date,description,amount\n2026-01-01,\"A; B; C\",10");
+  assert.equal(imported[0].description, "A (+2 more)", "import shortens multi-item descriptions");
 });
 
 test("db + actions wire the new fields, batch import, and duplicate guard", () => {

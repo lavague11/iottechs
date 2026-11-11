@@ -242,6 +242,44 @@ function ImportModal({ existing, onClose, onImported }) {
   );
 }
 
+// ------------------------------------------------------------------- expense detail (click a row)
+function DetailModal({ expense: e, onClose }) {
+  const c = vendorColor(e.vendor);
+  const [imgOk, setImgOk] = useState(true);
+  const Row = ({ label, children }) => (children || children === 0) ? <div className="exd-row"><span className="exd-k">{label}</span><span className="exd-v">{children}</span></div> : null;
+  return (
+    <div className="ex-overlay" onClick={(ev) => { if (ev.target.classList.contains("ex-overlay")) onClose(); }}>
+      <div className="ex-box">
+        <button className="ex-x" onClick={onClose}>×</button>
+        <div className="ex-head"><h2>Expense detail</h2><p>{money(e.amount)} · {e.spent_on || "—"}</p></div>
+        <div className="exd-desc">{e.description}</div>
+        <div className="exd-grid">
+          <Row label="Amount"><b style={Number(e.amount) < 0 ? { color: "var(--green)" } : undefined}>{money(e.amount)}</b></Row>
+          <Row label="Category">{e.category || "—"}</Row>
+          <Row label="Vendor">{e.vendor ? (c ? <span className="exp-vchip" style={{ background: c.bg, color: c.fg }}>{e.vendor}</span> : e.vendor) : "—"}</Row>
+          <Row label="Payment">{e.payment_method}</Row>
+          <Row label="Item Type">{e.item_type}</Row>
+          <Row label="Source">{e.source}</Row>
+          <Row label="Reference #">{e.reference ? <span className="mono">{e.reference}</span> : null}</Row>
+          <Row label="Date">{e.spent_on}</Row>
+          <Row label="Project">{e.access_id ? <a href={`/project/${e.access_id}`} className="idlink">{e.project_customer || e.access_id} →</a> : "General / overhead"}</Row>
+          <Row label="Status">{normalizeStatus(e.status)}</Row>
+        </div>
+        <div className="exd-receipt">
+          <div className="exd-k" style={{ marginBottom: 8 }}>Receipt</div>
+          {e.receipt_media_id ? (
+            <a href={`/api/receipt/${e.receipt_media_id}`} target="_blank" rel="noreferrer" className="exd-rlink">
+              {imgOk
+                ? <img src={`/api/receipt/${e.receipt_media_id}`} alt="Receipt" className="exd-img" onError={() => setImgOk(false)} />
+                : <span className="exd-openlink">📎 Open receipt (PDF) →</span>}
+            </a>
+          ) : <div className="exp-hint">No receipt attached.</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ------------------------------------------------------------------- status cell (unchanged behavior)
 function ExpStatusCell({ expense, onSaved }) {
   const [sel, setSel] = useState(normalizeStatus(expense.status));
@@ -283,6 +321,7 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
   const [query, setQuery] = useState("");
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [detail, setDetail] = useState(null);   // the expense opened in the detail view
   const [expenses, setExpenses] = useState(initExpenses);
   const [pending, startTx] = useTransition();
   const router = useRouter();
@@ -305,6 +344,15 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
   }, [visible]);
 
   const allCats = useMemo(() => [...new Set(expenses.map((e) => e.category || "Other"))], [expenses]);
+
+  // Export exactly what's on screen (the active filter + search), as a CSV re-importable by this same tool.
+  function exportVisibleCSV() {
+    const esc = (v) => { const s = String(v ?? ""); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const cols = ["date", "description", "category", "amount", "vendor", "project", "reference", "payment_method", "source", "item_type"];
+    const lines = [cols.join(",")].concat(visible.map((e) => [e.spent_on, e.description, e.category, e.amount, e.vendor, e.access_id, e.reference, e.payment_method, e.source, e.item_type].map(esc).join(",")));
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `expenses-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+  }
 
   const [delExp, setDelExp] = useState(null);
   function confirmRemove() { const id = delExp?.id; setDelExp(null); if (id) startTx(async () => { await deleteExpenseAction(id); router.refresh(); }); }
@@ -345,15 +393,17 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
           {KPI.map((k) => <div key={k.label} className={`kpi ${k.cls}`}><div className="k-label">{k.label}</div><div className="k-val" style={{ fontSize: k.big ? undefined : "1.2rem" }}>{k.val}</div></div>)}
         </div>
 
-        <div className="sec-head exp-filters-head">
-          <div className="filters">
+        <div className="exp-toolbar">
+          <div className="exp-chips">
             <button className={catFilter === "all" ? "on" : ""} onClick={() => setCatFilter("all")}>All</button>
             {allCats.slice(0, 6).map((c) => <button key={c} className={catFilter === c ? "on" : ""} onClick={() => setCatFilter(c)}>{c}</button>)}
           </div>
-          <div className="exp-filter-row">
+          <div className="exp-controls">
             <select className="apx-input exp-fsel" value={payFilter} onChange={(e) => setPayFilter(e.target.value)}><option value="all">All payment</option>{PAYMENT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>
             <select className="apx-input exp-fsel" value={itemFilter} onChange={(e) => setItemFilter(e.target.value)}><option value="all">All items</option>{ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}</select>
-            <input className="apx-input" style={{ maxWidth: 260 }} placeholder="Search (desc, vendor, ref #)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="apx-input exp-search" placeholder="Search (desc, vendor, ref #)…" value={query} onChange={(e) => setQuery(e.target.value)} />
+            {activeFilters && <button className="btn btn-sm btn-ghost" onClick={() => { setCatFilter("all"); setPayFilter("all"); setItemFilter("all"); setQuery(""); }}>Reset</button>}
+            <button className="btn btn-sm" onClick={exportVisibleCSV} title="Export the expenses currently shown"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v12M8 11l4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg> Export</button>
           </div>
         </div>
 
@@ -378,9 +428,9 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
                 {visible.map((e) => {
                   const c = vendorColor(e.vendor);
                   return (
-                    <tr key={e.id} className={sel.has(e.id) ? "exp-row-sel" : ""} style={c ? { boxShadow: `inset 4px 0 0 ${c.bg}`, background: c.bg + "14" } : undefined}>
-                      <td className="exp-cb"><input type="checkbox" checked={sel.has(e.id)} onChange={() => toggleOne(e.id)} aria-label={`Select ${e.description}`} /></td>
-                      <td className="name-cell"><span className="exp-desc" title={e.description}>{e.description}</span>{e.receipt_media_id && <a href={`/api/receipt/${e.receipt_media_id}`} target="_blank" rel="noreferrer" className="exp-clip" title="View receipt">📎</a>}</td>
+                    <tr key={e.id} className={`exp-rowclick${sel.has(e.id) ? " exp-row-sel" : ""}`} style={c ? { boxShadow: `inset 4px 0 0 ${c.bg}`, background: c.bg + "14" } : undefined} onClick={() => setDetail(e)}>
+                      <td className="exp-cb" onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={sel.has(e.id)} onChange={() => toggleOne(e.id)} aria-label={`Select ${e.description}`} /></td>
+                      <td className="name-cell"><span className="exp-desc" title={e.description}>{e.description}</span>{e.receipt_media_id && <a href={`/api/receipt/${e.receipt_media_id}`} target="_blank" rel="noreferrer" className="exp-clip" title="View receipt" onClick={(ev) => ev.stopPropagation()}>📎</a>}</td>
                       <td><span className="chip">{e.category || "—"}</span></td>
                       <td>{e.vendor ? (c ? <span className="exp-vchip" style={{ background: c.bg, color: c.fg }}>{e.vendor}</span> : e.vendor) : <span style={{ color: "var(--muted)" }}>—</span>}</td>
                       <td style={{ color: "var(--muted)" }}>{e.payment_method || "—"}</td>
@@ -388,8 +438,8 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
                       <td>{e.access_id ? <Link href={`/project/${e.access_id}`} className="idlink">{e.project_customer || e.access_id} →</Link> : <span style={{ color: "var(--muted)" }}>General</span>}</td>
                       <td style={{ color: "var(--muted)" }}>{e.spent_on || "—"}</td>
                       <td className="num" style={Number(e.amount) < 0 ? { color: "var(--green)" } : undefined}>{money(e.amount)}</td>
-                      <td><ExpStatusCell expense={e} onSaved={handleStatusSaved} /></td>
-                      <td className="num"><button className="btn btn-ghost btn-sm" onClick={() => setDelExp(e)} disabled={pending}>Remove</button></td>
+                      <td onClick={(ev) => ev.stopPropagation()}><ExpStatusCell expense={e} onSaved={handleStatusSaved} /></td>
+                      <td className="num" onClick={(ev) => ev.stopPropagation()}><button className="btn btn-ghost btn-sm" onClick={() => setDelExp(e)} disabled={pending}>Remove</button></td>
                     </tr>
                   );
                 })}
@@ -401,6 +451,7 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
 
       {adding && <AddModal projects={projects} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); router.refresh(); }} />}
       {importing && <ImportModal existing={expenses} onClose={() => setImporting(false)} onImported={() => { setImporting(false); router.refresh(); }} />}
+      {detail && <DetailModal expense={detail} onClose={() => setDetail(null)} />}
 
       <ConfirmDialog open={!!delExp} title="Remove this expense?" message={<>“{delExp?.description}” will be moved to <strong>Archives</strong>. You can restore it from there if needed.</>} confirmLabel="Remove expense" busy={pending} onConfirm={confirmRemove} onCancel={() => setDelExp(null)} />
       <ConfirmDialog open={bulkDel} title={`Remove ${sel.size} expense${sel.size === 1 ? "" : "s"}?`} message={<>The selected expenses move to <strong>Archives</strong> — you can restore them from there.</>} confirmLabel="Remove all" busy={pending} onConfirm={bulkDelete} onCancel={() => setBulkDel(false)} />
@@ -473,4 +524,25 @@ const EXP_CSS = `
 .apx .exp-bulk-acts{display:flex;gap:8px;flex-wrap:wrap}
 .apx .exp-bulkbar .btn{background:#fff;border:1px solid transparent}
 .apx .exp-bulkbar .btn-ghost{background:transparent;color:#fff;border-color:rgba(255,255,255,.3)}
+.apx .exp-rowclick{cursor:pointer}
+.apx .exp-rowclick:hover{background:var(--bg-soft)}
+.apx .exp-toolbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.apx .exp-chips{display:flex;gap:6px;flex-wrap:wrap}
+.apx .exp-chips button{background:var(--bg-soft);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:6px 13px;font-size:.8rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:.15s}
+.apx .exp-chips button:hover{color:var(--ink)}
+.apx .exp-chips button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.apx .exp-controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.apx .exp-controls .exp-fsel{max-width:150px;min-height:40px}
+.apx .exp-search{min-height:40px;max-width:230px}
+.apx .exp-controls .btn{min-height:40px;display:inline-flex;align-items:center;gap:6px}
+.apx .exd-desc{font-size:.95rem;font-weight:600;line-height:1.4;margin-bottom:16px;color:var(--ink)}
+.apx .exd-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 20px;margin-bottom:20px}
+.apx .exd-row{display:flex;flex-direction:column;gap:3px;min-width:0}
+.apx .exd-k{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+.apx .exd-v{font-size:.9rem;color:var(--ink);min-width:0;overflow-wrap:anywhere}
+.apx .exd-receipt{border-top:1px solid var(--line);padding-top:16px}
+.apx .exd-rlink{display:block;text-decoration:none}
+.apx .exd-img{max-width:100%;max-height:420px;border-radius:12px;border:1px solid var(--line);display:block}
+.apx .exd-openlink{display:inline-block;padding:11px 15px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;color:var(--ink);font-weight:600;font-size:.88rem}
+@media(max-width:620px){.apx .exp-toolbar{flex-direction:column;align-items:stretch}.apx .exp-controls{width:100%}.apx .exp-search{max-width:none;flex:1}.apx .exd-grid{grid-template-columns:1fr}}
 `;
