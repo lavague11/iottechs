@@ -14,6 +14,21 @@ export const ITEM_TYPES = [
 ];
 export const SOURCES = ["PayPal", "Amazon", "Home Depot"];
 
+// Type-or-pick suggestions so filing is fast (shown as a datalist on the Vendor / Description fields — the
+// user can still type anything). Extend these lists freely.
+export const COMMON_VENDORS = [
+  "Annke", "Amazon", "Home Depot", "Lowe's", "Harbor Freight", "Best Buy", "Walmart", "Costco",
+  "B&H Photo", "Newegg", "Graybar", "Anixter", "ADI Global", "Ubiquiti", "Hikvision Distributor",
+  "Uline", "Shell", "EZ-Pass", "Verizon", "AT&T",
+];
+export const COMMON_DESCRIPTIONS = [
+  "4K dome cameras", "Bullet cameras", "PTZ camera", "NVR recorder", "DVR recorder",
+  "Surveillance hard drive", "PoE switch", "Network switch", "Router", "Cat6 cable", "Cat5e cable",
+  "RG59 siamese cable", "BNC connectors", "RJ45 connectors / jacks", "Power supply", "UPS battery backup",
+  "Mounting brackets", "Junction boxes", "Conduit", "Zip ties / consumables", "Drill / bit set",
+  "Ladder", "Fuel", "Tolls & parking", "Monitor",
+];
+
 // Picking a Source pre-fills payment_method (and vendor for the marketplaces) when those are empty.
 export const SOURCE_DEFAULTS = {
   "PayPal":     { payment_method: "PayPal" },

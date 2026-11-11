@@ -7,7 +7,7 @@ import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
 import { addExpenseAction, importExpensesAction, deleteExpenseAction, updateExpenseStatusAction, bulkUpdateExpenseStatusAction, bulkDeleteExpenseAction } from "./actions";
 import {
-  EXPENSE_CATEGORIES, PAYMENT_METHODS, ITEM_TYPES, SOURCES, SOURCE_DEFAULTS,
+  EXPENSE_CATEGORIES, PAYMENT_METHODS, ITEM_TYPES, SOURCES, SOURCE_DEFAULTS, COMMON_VENDORS, COMMON_DESCRIPTIONS,
   vendorColor, validateExpense, parseExpensesCSV, CSV_TEMPLATE, softDuplicate, sameReference,
 } from "../../lib/expense-model";
 
@@ -72,11 +72,21 @@ function AddModal({ projects, onClose, onAdded }) {
         <button className="ex-x" onClick={onClose}>×</button>
         <div className="ex-head"><h2>Add Expense</h2><p>Record a business cost, optionally tied to a project.</p></div>
         <form className="ex-form" onSubmit={(e) => { e.preventDefault(); doSubmit(false); }}>
-          <div className="ex-f"><label>Description</label><input className="apx-input" value={f.description} onChange={(e) => set("description", e.target.value)} />{fieldErr("description")}</div>
+          <div className="ex-f"><label>Description</label><input className="apx-input" list="exp-desc-list" value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="Type or pick a common item" />{fieldErr("description")}
+            <datalist id="exp-desc-list">{COMMON_DESCRIPTIONS.map((d) => <option key={d} value={d} />)}</datalist>
+          </div>
 
           <div className="ex-row2">
             <div className="ex-f"><label>Category</label><select className="apx-input" value={f.category} onChange={(e) => set("category", e.target.value)}>{EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></div>
             <div className="ex-f"><label>Amount ($)</label><input className="apx-input" type="number" step="0.01" value={f.amount} onChange={(e) => set("amount", e.target.value)} placeholder="0.00" />{fieldErr("amount")}<div className="exp-hint">Negative = refund / credit</div></div>
+          </div>
+
+          <div className="ex-row2">
+            <div className="ex-f"><label>Vendor <span className="opt">(optional)</span></label>
+              <div className="exp-vendorrow"><input className="apx-input" list="exp-vendor-list" value={f.vendor} onChange={(e) => set("vendor", e.target.value)} placeholder="Type or pick" /><VendorChip vendor={f.vendor} /></div>
+              <datalist id="exp-vendor-list">{COMMON_VENDORS.map((v) => <option key={v} value={v} />)}</datalist>
+            </div>
+            <div className="ex-f"><label>Date</label><input className="apx-input" type="date" value={f.spent_on} onChange={(e) => set("spent_on", e.target.value)} />{fieldErr("spent_on")}</div>
           </div>
 
           <div className="ex-row2">
@@ -93,19 +103,12 @@ function AddModal({ projects, onClose, onAdded }) {
           </div>
 
           <div className="ex-row2">
-            <div className="ex-f"><label>Vendor <span className="opt">(optional)</span></label>
-              <div className="exp-vendorrow"><input className="apx-input" value={f.vendor} onChange={(e) => set("vendor", e.target.value)} /><VendorChip vendor={f.vendor} /></div>
-            </div>
             <div className="ex-f"><label>Item Type <span className="opt">(optional)</span></label>
               <select className="apx-input" value={f.item_type} onChange={(e) => set("item_type", e.target.value)}>
                 <option value="">—</option>{ITEM_TYPES.map((t) => <option key={t}>{t}</option>)}
               </select>
             </div>
-          </div>
-
-          <div className="ex-row2">
-            <div className="ex-f"><label>Reference # <span className="opt">(optional)</span></label><input className="apx-input" value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder="PayPal / Amazon order / invoice #" /></div>
-            <div className="ex-f"><label>Date</label><input className="apx-input" type="date" value={f.spent_on} onChange={(e) => set("spent_on", e.target.value)} />{fieldErr("spent_on")}</div>
+            <div className="ex-f"><label>Reference # <span className="opt">(optional)</span></label><input className="apx-input" value={f.reference} onChange={(e) => set("reference", e.target.value)} placeholder="Order / invoice #" /></div>
           </div>
 
           <div className="ex-f"><label>Project <span className="opt">(optional)</span></label>
@@ -413,10 +416,10 @@ const EXP_CSS = `
 .apx .ex-box-wide{max-width:900px}
 .apx .ex-x{position:absolute;top:14px;right:16px;background:none;border:none;font-size:1.4rem;cursor:pointer;color:#9ca3af;line-height:1;padding:4px 8px;border-radius:8px}
 .apx .ex-x:hover{background:var(--bg-soft);color:var(--ink)}
-.apx .ex-head{margin-bottom:18px}
-.apx .ex-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:6px}
+.apx .ex-head{margin-bottom:14px}
+.apx .ex-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.3rem;font-weight:700;margin-bottom:4px}
 .apx .ex-head p{color:var(--muted);font-size:.86rem}
-.apx .ex-form{display:grid;gap:13px}
+.apx .ex-form{display:grid;gap:11px}
 .apx .ex-row2{display:grid;grid-template-columns:1fr 1fr;gap:13px}
 .apx .ex-f{display:flex;flex-direction:column;gap:5px;min-width:0}
 .apx .ex-f label{font-size:.82rem;font-weight:600}
