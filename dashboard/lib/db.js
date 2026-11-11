@@ -6,6 +6,7 @@ import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
+import { normalizeCategory as _normalizeExpenseCategory } from "./expense-model.js";
 import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "./svc-status.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
@@ -793,8 +794,19 @@ function init() {
   if (!eCols.includes("reviewed_at"))       db.exec("ALTER TABLE expenses ADD COLUMN reviewed_at TEXT");
   if (!eCols.includes("payment_date"))      db.exec("ALTER TABLE expenses ADD COLUMN payment_date TEXT");
   if (!eCols.includes("payment_method"))    db.exec("ALTER TABLE expenses ADD COLUMN payment_method TEXT");
-  // Normalize legacy category names
-  db.exec("UPDATE expenses SET category='Operations' WHERE category='Overhead'");
+  // Expense upgrade (2026-11): reference #, item type, source, and an attached receipt. All nullable —
+  // existing expenses keep working with the new fields empty.
+  if (!eCols.includes("reference"))         db.exec("ALTER TABLE expenses ADD COLUMN reference TEXT");
+  if (!eCols.includes("item_type"))         db.exec("ALTER TABLE expenses ADD COLUMN item_type TEXT");
+  if (!eCols.includes("source"))            db.exec("ALTER TABLE expenses ADD COLUMN source TEXT");
+  if (!eCols.includes("receipt_media_id"))  db.exec("ALTER TABLE expenses ADD COLUMN receipt_media_id TEXT");
+  // Category is now a fixed enum. Migrate any non-null value that isn't already on the list to its mapped
+  // equivalent (or "Other") — idempotent, non-destructive (nothing is deleted; nulls are left alone).
+  try {
+    const seen = db.prepare("SELECT DISTINCT category FROM expenses WHERE category IS NOT NULL").all();
+    const upd = db.prepare("UPDATE expenses SET category=? WHERE category IS ?");
+    for (const { category } of seen) { const norm = _normalizeExpenseCategory(category); if (norm !== category) upd.run(norm, category); }
+  } catch { /* table may be empty on first boot */ }
 
   // ---- Requests (equipment / tool / material requests from techs) ----
   db.exec(`
@@ -5399,10 +5411,45 @@ export function getExpenseStats() {
   for (const r of rows) { total += r.amount || 0; byCat[r.category || "Other"] = (byCat[r.category || "Other"] || 0) + (r.amount || 0); }
   return { total, count: rows.length, byCat };
 }
-export function addExpense({ description, category, amount, vendor, access_id, spent_on }) {
-  const info = db.prepare("INSERT INTO expenses (description, category, amount, vendor, access_id, spent_on) VALUES (?,?,?,?,?,?)")
-    .run(String(description || "").trim() || "Expense", category || null, Number(amount) || 0, vendor || null, access_id || null, spent_on || null);
+const EXP_COLS = "description, category, amount, vendor, access_id, spent_on, reference, payment_method, item_type, source, receipt_media_id";
+const expRow = (e) => [
+  String(e.description || "").trim() || "Expense", _normalizeExpenseCategory(e.category), Number(e.amount) || 0,
+  e.vendor || null, e.access_id || null, e.spent_on || null, e.reference || null,
+  e.payment_method || null, e.item_type || null, e.source || null, e.receipt_media_id || null,
+];
+export function addExpense(e) {
+  const info = db.prepare(`INSERT INTO expenses (${EXP_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(...expRow(e));
   return Number(info.lastInsertRowid);
+}
+// Insert many expenses in one transaction (CSV import). Returns the count written.
+export function addExpensesBatch(rows) {
+  const ins = db.prepare(`INSERT INTO expenses (${EXP_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+  let n = 0;
+  db.exec("BEGIN");
+  try { for (const e of (rows || [])) { ins.run(...expRow(e)); n++; } db.exec("COMMIT"); }
+  catch (err) { try { db.exec("ROLLBACK"); } catch {} throw err; }
+  return n;
+}
+// Duplicate scan for the modal + importer. `hardRef` = an existing expense with the SAME reference #;
+// `soft` = existing expenses with the same vendor + amount within ±1 day. Read-only.
+export function findExpenseDuplicates({ reference, vendor, amount, spent_on, excludeId } = {}) {
+  const out = { hardRef: null, soft: [] };
+  const ref = String(reference || "").trim();
+  if (ref) {
+    out.hardRef = db.prepare(
+      "SELECT id, description, amount, vendor, spent_on, reference FROM expenses WHERE reference IS NOT NULL AND LOWER(TRIM(reference))=LOWER(TRIM(?)) AND id != ? LIMIT 1"
+    ).get(ref, Number(excludeId) || -1) || null;
+  }
+  const v = String(vendor || "").trim();
+  const amt = Number(amount);
+  if (v && isFinite(amt) && spent_on) {
+    const rows = db.prepare(
+      "SELECT id, description, amount, vendor, spent_on, reference FROM expenses WHERE vendor IS NOT NULL AND LOWER(TRIM(vendor))=LOWER(TRIM(?)) AND ABS(amount - ?) < 0.005 AND id != ?"
+    ).all(v, amt, Number(excludeId) || -1);
+    const t = Date.parse(spent_on);
+    out.soft = rows.filter((r) => { const d = Date.parse(r.spent_on); return !isNaN(d) && !isNaN(t) && Math.abs(d - t) <= 86400000; });
+  }
+  return out;
 }
 export function deleteExpense(id) {
   db.prepare("DELETE FROM expenses WHERE id = ?").run(Number(id));
