@@ -731,6 +731,9 @@ function init() {
   const appCols = db.prepare("PRAGMA table_info(applications)").all().map((c) => c.name);
   if (!appCols.includes("resume_name")) db.exec("ALTER TABLE applications ADD COLUMN resume_name TEXT");
   if (!appCols.includes("resume_data")) db.exec("ALTER TABLE applications ADD COLUMN resume_data TEXT");
+  // Quick interest triage on the hiring list (yes | maybe | no | null) — a lightweight recruiter signal,
+  // ORTHOGONAL to the pipeline stage and separate from a formal "Not Selected" decline.
+  if (!appCols.includes("interest")) db.exec("ALTER TABLE applications ADD COLUMN interest TEXT");
 
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
@@ -4683,17 +4686,28 @@ export function saveApplicationStep(appId, step, data, { actor_role, actor_name 
   return cur;
 }
 
-export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name, interview_at }, { actor_role, actor_name } = {}) {
+export function setApplicationReview(appId, { rating, reviewer_id, reviewer_name, interview_at, interest }, { actor_role, actor_name } = {}) {
   const cur = getApplication(appId);
   if (!cur) return null;
   const sets = [], vals = [];
   if (rating != null)       { sets.push("rating = ?");        vals.push(Math.max(0, Math.min(5, +rating || 0))); }
   if (reviewer_id !== undefined) { sets.push("reviewer_id = ?", "reviewer_name = ?"); vals.push(reviewer_id || null, reviewer_name || null); }
   if (interview_at !== undefined) { sets.push("interview_at = ?"); vals.push(String(interview_at || "").slice(0, 30) || null); }
+  // Quick interest triage: yes | maybe | no, or null to clear. Anything else is ignored.
+  let interestLogged = null;
+  if (interest !== undefined) {
+    const v = ["yes", "maybe", "no"].includes(interest) ? interest : null;
+    sets.push("interest = ?"); vals.push(v);
+    if (v !== (cur.interest || null)) interestLogged = v;
+  }
   if (!sets.length) return cur;
   vals.push(String(appId));
   db.prepare(`UPDATE applications SET ${sets.join(", ")}, updated_at = datetime('now','localtime') WHERE app_id = ? COLLATE NOCASE`).run(...vals);
   if (interview_at) logApplicationEvent(cur.app_id, { kind: "interview", detail: `Interview set for ${interview_at}`, actor_role, actor_name });
+  if (interestLogged !== null || (interest !== undefined && cur.interest && interest !== cur.interest)) {
+    const LBL = { yes: "Interested", maybe: "Maybe", no: "Not interested" };
+    logApplicationEvent(cur.app_id, { kind: "note", detail: `Interest · ${LBL[interestLogged] || "Cleared"}`, actor_role, actor_name });
+  }
   return getApplication(appId);
 }
 

@@ -28,6 +28,11 @@ export default async function HiringPage() {
       disp_key: eff.key, disp_label: eff.label, disp_tone: eff.tone,
       next_label: na?.label || null,
       days_in_stage: days, overdue,
+      // Indeed-style list fields:
+      interest: a.interest || null,
+      experience: a.experience || null, skills: a.skills || null,
+      resume_name: a.resume_name || null,
+      assessment_state: a.status === "assessment" ? (a.assessment?.status || "sent") : null,
     };
   });
 

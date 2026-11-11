@@ -18,6 +18,7 @@ async function requireHiring() {
 
 function touch(appId) {
   revalidatePath("/onboarding");
+  revalidatePath("/hiring");
   revalidatePath(`/onboarding/${appId}`);
   revalidatePath(`/application/${appId}`);
 }
@@ -49,6 +50,38 @@ export async function setAppReviewAction(appId, patch) {
   if (!r) return { ok: false, error: "Could not update." };
   touch(appId);
   return { ok: true, app: r };
+}
+
+// Quick interest triage from the hiring list: "yes" | "maybe" | "no", or null to clear.
+export async function setAppInterestAction(appId, interest) {
+  const { user, error } = await requireHiring();
+  if (error) return { ok: false, error };
+  const r = setApplicationReview(appId, { interest: interest ?? null }, { actor_role: user.role, actor_name: user.name });
+  if (!r) return { ok: false, error: "Could not update." };
+  touch(appId);
+  return { ok: true, interest: r.interest || null };
+}
+
+// Set interest on many candidates at once (bulk list action). Skips ids that don't resolve.
+export async function bulkInterestAction(appIds, interest) {
+  const { user, error } = await requireHiring();
+  if (error) return { ok: false, error };
+  const ids = Array.isArray(appIds) ? appIds.slice(0, 500) : [];
+  let n = 0;
+  for (const id of ids) if (setApplicationReview(id, { interest: interest ?? null }, { actor_role: user.role, actor_name: user.name })) n++;
+  revalidatePath("/hiring"); revalidatePath("/onboarding");
+  return { ok: true, updated: n };
+}
+
+// Bulk void/restore (archive) candidates. Admin-only, matching the single-row rule — non-destructive.
+export async function bulkArchiveAction(appIds, archived) {
+  const user = await getSessionUser();
+  if (user.role !== "admin") return { ok: false, error: "Only an admin can void an application." };
+  const ids = Array.isArray(appIds) ? appIds.slice(0, 500) : [];
+  let n = 0;
+  for (const id of ids) if (setApplicationArchived(id, !!archived, { actor_role: user.role, actor_name: user.name })) n++;
+  revalidatePath("/hiring"); revalidatePath("/onboarding");
+  return { ok: true, updated: n };
 }
 
 export async function addAppNoteAction(appId, body) {
