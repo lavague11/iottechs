@@ -380,7 +380,7 @@ export default function ExpensesClient({ user, alerts, expenses: initExpenses, p
                   return (
                     <tr key={e.id} className={sel.has(e.id) ? "exp-row-sel" : ""} style={c ? { boxShadow: `inset 4px 0 0 ${c.bg}`, background: c.bg + "14" } : undefined}>
                       <td className="exp-cb"><input type="checkbox" checked={sel.has(e.id)} onChange={() => toggleOne(e.id)} aria-label={`Select ${e.description}`} /></td>
-                      <td className="name-cell">{e.description}{e.receipt_media_id && <a href={`/api/receipt/${e.receipt_media_id}`} target="_blank" rel="noreferrer" className="exp-clip" title="View receipt">📎</a>}</td>
+                      <td className="name-cell"><span className="exp-desc" title={e.description}>{e.description}</span>{e.receipt_media_id && <a href={`/api/receipt/${e.receipt_media_id}`} target="_blank" rel="noreferrer" className="exp-clip" title="View receipt">📎</a>}</td>
                       <td><span className="chip">{e.category || "—"}</span></td>
                       <td>{e.vendor ? (c ? <span className="exp-vchip" style={{ background: c.bg, color: c.fg }}>{e.vendor}</span> : e.vendor) : <span style={{ color: "var(--muted)" }}>—</span>}</td>
                       <td style={{ color: "var(--muted)" }}>{e.payment_method || "—"}</td>
@@ -462,6 +462,12 @@ const EXP_CSS = `
 .apx .exp-cb input{cursor:pointer;width:16px;height:16px}
 .apx .exp-row-sel{background:rgba(201,169,110,.12)}
 .apx .exp-tablewrap{overflow-x:auto}
+.apx .exp-table td{vertical-align:top;padding-top:11px;padding-bottom:11px}
+.apx .exp-table .name-cell{max-width:320px}
+.apx .exp-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35;max-width:300px}
+.apx .exp-table td:nth-child(8){white-space:nowrap}
+.apx .exp-table .idlink{white-space:nowrap}
+.apx .exp-vchip{max-width:140px;overflow:hidden;text-overflow:ellipsis}
 .apx .exp-bulkbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:var(--ink);color:#fff;border-radius:12px;padding:10px 16px;margin-bottom:12px}
 .apx .exp-bulk-count{font-weight:700;font-size:.88rem}
 .apx .exp-bulk-acts{display:flex;gap:8px;flex-wrap:wrap}
