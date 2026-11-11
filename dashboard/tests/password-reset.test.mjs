@@ -48,6 +48,11 @@ test("completing a reset re-verifies the token, enforces single-use, and signs i
   assert.ok(page.includes("passwordResetFingerprint(v.userId) === v.fp"), "the page shows expired for an already-used link (not a dead form)");
 });
 
+test("the login password step has a Forgot password link to /forgot", () => {
+  const lc = read("../app/login/login-client.jsx");
+  assert.ok(/<a href="\/forgot" className="gw2-forgot">Forgot password\?<\/a>/.test(lc), "persistent Forgot password link on the password step");
+});
+
 test("the /forgot page offers the emailed link by default, phone last-4 as fallback", () => {
   const page = read("../app/forgot/page.jsx");
   assert.ok(page.includes('useState("email")') && page.includes("Email me a reset link"), "email link is the default mode");

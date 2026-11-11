@@ -388,6 +388,7 @@ export default function LoginClient({ next }) {
             <button className="gw2-lf-btn" type="submit" disabled={pending || granted}>
               {pending ? "Signing in…" : "Sign In →"}
             </button>
+            <a href="/forgot" className="gw2-forgot">Forgot password?</a>
           </form>
           <button type="button" className="gw2-diff" onClick={() => { setAuthStep("lookup"); setError(null); }}>Use a different account</button>
           <div className="gw2-or"><span>or</span></div>
@@ -554,5 +555,7 @@ const CSS = `
 /* Step 1 tertiary + Step 2 "use a different account" — quiet text links, not competing buttons */
 .gw2-trouble,.gw2-diff{display:block;width:100%;margin-top:14px;background:none;border:none;font:inherit;font-size:.85rem;font-weight:500;color:#6b7280;cursor:pointer;text-align:center;padding:2px}
 .gw2-trouble:hover,.gw2-diff:hover{color:#0e1320}
+.gw2-forgot{display:block;margin-top:12px;font-size:.82rem;font-weight:500;color:#6b7280;text-align:center;text-decoration:none}
+.gw2-forgot:hover{color:#0e1320;text-decoration:underline}
 .gw2-diff{margin-top:10px}
 `;
