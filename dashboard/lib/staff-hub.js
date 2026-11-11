@@ -10,12 +10,11 @@ export function eligibleForStaffHub(project) {
   return eligibleForCustomerPortalV2(project);
 }
 
-// Simple view (the hub, "V2") is the DEFAULT for eligible projects. Only an explicit "deck" override
-// (Advanced view, "V1") opts out. `staff_view`: "deck" → Advanced deck · "hub"/null/undefined → Simple hub.
-// (The old global STAFF_PROJECT_HUB flag is no longer consulted — Simple is simply the default now.)
+// Simple view (the hub) is now the ONE AND ONLY staff view for eligible install projects — the Advanced
+// deck is retired for projects. The per-project `staff_view="deck"` override is no longer consulted (the
+// column stays for history). Service calls (type C) are not hub-eligible and keep their own deck gateway.
 export function staffHubFor(project) {
-  if (!eligibleForStaffHub(project)) return false;
-  return project?.staff_view !== "deck";
+  return eligibleForStaffHub(project);
 }
 
 // The Simple view (hub + customer portal) shows a 3-step progress rail, not the full 5-phase lifecycle:

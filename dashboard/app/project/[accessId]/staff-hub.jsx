@@ -263,7 +263,6 @@ export default function StaffHub({
               <div className="cpv-menu-scrim" onClick={() => setMenuOpen(false)} />
               <div className="cpv-menu" role="menu">
                 {dashboardHref && <button role="menuitem" onClick={() => { setMenuOpen(false); window.location.href = dashboardHref; }}>Dashboard</button>}
-                <button role="menuitem" onClick={() => { setMenuOpen(false); onAdvanced?.(); }}>Advanced view</button>
               </div>
             </>
           )}

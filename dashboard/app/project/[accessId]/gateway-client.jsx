@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction, setStaffViewAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -3110,11 +3110,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       );
     }
 
-    // Staff Project Hub (Phase 1) — render the clean customer-style hub for STAFF instead of the deck, behind
-    // the STAFF_PROJECT_HUB flag / per-project `staff_view`. `?classic=1` is the escape hatch back to the deck.
-    // Each card opens the SAME tool the deck mounts, in staff (editable) mode — zero duplicated logic.
-    const forceDeck = searchParams?.get("classic") != null;
-    if (staffHub && !isCustomerView && !forceDeck) {
+    // Staff Project Hub — the ONE AND ONLY staff view for eligible install projects (the Advanced deck is
+    // retired for projects; service calls keep their own deck gateway, where staffHub is false). Each card
+    // opens the SAME tool the deck mounts, in staff (editable) mode — zero duplicated logic.
+    if (staffHub && !isCustomerView) {
       // One consistent overlay frame: centered, comfortable padding, per-tool width. The overlay body is
       // lightly tinted (staff-hub CSS) so each tool's white cards read as a polished page.
       const ovl = (w = 820) => ({ maxWidth: w, margin: "0 auto", padding: "24px 18px 56px" });
@@ -3347,9 +3346,6 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
             dashboardHref={DECK_DASH_HOME[view] || "/dashboard"}
-            onAdvanced={["admin", "manager"].includes(cView)
-              ? async () => { await setStaffViewAction(lp.access_id, "deck").catch(() => {}); const u = new URL(window.location.href); u.searchParams.delete("view"); u.searchParams.delete("classic"); window.location.assign(u.toString()); }
-              : () => { try { const u = new URL(window.location.href); u.searchParams.set("classic", "1"); u.searchParams.delete("view"); window.location.assign(u.toString()); } catch { /* noop */ } }}
           />
           <RecordPaymentModal open={hubPayOpen} onClose={() => setHubPayOpen(false)} accessId={lp.access_id}
             stage={projectStage === "payment" ? "payment" : "approval_deposit"} showToast={showLiveToast}
@@ -3372,11 +3368,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         openToolOnMount={openToolOnMount}
         openToolSignal={deckOpenSignal}
         menu={[
-          // View toggle — Simple (the hub, V2, default) ↔ Advanced (this deck, V1). Right under Dashboard.
-          // On the deck you're in Advanced, so this switches you to Simple (clears the per-project override).
-          ...(["admin", "manager"].includes(cView) && !previewRole
-            ? [{ label: "Simple view", onClick: async () => { await setStaffViewAction(lp.access_id, "").catch(() => {});
-                const u = new URL(window.location.href); u.searchParams.delete("classic"); u.searchParams.delete("view"); window.location.assign(u.toString()); } }] : []),
+          // (The Simple ↔ Advanced view toggle is retired — install projects always render the Simple hub;
+          //  this deck is reached only by service calls, which have no simple view.)
           ...(cView === "customer" ? [{ label: "My projects", onClick: () => { window.location.href = "/my-projects"; } }] : []),
           // Waive the survey for jobs that never get one (monitoring/ADT, phone-quoted). Low-frequency → lives here.
           ...(["admin", "manager"].includes(cView) && !previewRole
