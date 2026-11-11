@@ -252,6 +252,29 @@ export async function verifyRsvpToken(token) {
 // add-on with NO PIN. Signed (project + addendum + issuedAt) and expiring, so an old/forwarded link
 // stops working. Consuming it grants only the same short customer access the PIN would, for that project.
 const ADDENDUM_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// ---- Password-reset magic link ---------------------------------------------------------------------
+// A short-lived, signed, SINGLE-USE token emailed to the account holder. `fp` is a fingerprint of the
+// account's current password hash (from lib/db passwordResetFingerprint) — once the password changes, the
+// fingerprint changes, so a used (or otherwise stale) link can't reset again. 30-minute TTL.
+const PWRESET_TTL_MS = 30 * 60 * 1000;
+export async function makePasswordResetToken(userId, fp) {
+  const payload = b64u(JSON.stringify({ u: Number(userId), f: String(fp || ""), t: Date.now() }));
+  const sig = await previewHmac(`pwr:${payload}`);
+  return `${payload}.${sig}`;
+}
+export async function verifyPasswordResetToken(token) {
+  const parts = String(token || "").split(".");
+  if (parts.length !== 2) return null;
+  const [payload, sig] = parts;
+  if (sig !== await previewHmac(`pwr:${payload}`)) return null;
+  try {
+    const o = JSON.parse(unb64u(payload));
+    if (!o.u) return null;
+    if (o.t && Date.now() - Number(o.t) > PWRESET_TTL_MS) return null;   // expired
+    return { userId: Number(o.u), fp: String(o.f || "") };
+  } catch { return null; }
+}
+
 export async function makeAddendumToken(accessId, addendumId) {
   const payload = b64u(JSON.stringify({ a: String(accessId), d: String(addendumId), t: Date.now() }));
   const sig = await previewHmac(`adn:${payload}`);

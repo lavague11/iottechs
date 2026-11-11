@@ -2941,6 +2941,14 @@ export function resetUserPassword(userId, plainPassword) {
   db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPw(String(plainPassword)), Number(userId));
 }
 
+// A short fingerprint of the account's CURRENT password hash (or "none" when unset). A password-reset
+// link embeds this; once the password is set/changed the fingerprint changes, so the link is single-use
+// and can't be replayed. Never exposes the hash itself.
+export function passwordResetFingerprint(userId) {
+  const r = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(Number(userId));
+  return createHash("sha256").update(String(r?.password_hash || "none")).digest("hex").slice(0, 12);
+}
+
 // Given a parsed iot_session token (which carries the role baked in at login), return it with the CURRENT
 // role from the DB, so a role change takes effect on the user's very next request — no re-login. Returns
 // null when the account is gone or disabled (so the caller treats it as signed out). PIN/access tokens have

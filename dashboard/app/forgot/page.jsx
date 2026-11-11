@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { resetPasswordAction } from "./actions";
+import { resetPasswordAction, requestPasswordResetByEmailAction } from "./actions";
 
 export default function ForgotPage() {
+  const [mode, setMode] = useState("email");   // "email" = emailed link (default) · "phone" = last-4 fallback
   const [f, setF] = useState({ identifier: "", last4: "", password: "", confirm: "" });
   const [err, setErr] = useState("");
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(false);     // phone-reset complete
+  const [sent, setSent] = useState(false);     // email link requested
   const [pending, startTx] = useTransition();
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
@@ -21,23 +23,53 @@ export default function ForgotPage() {
       if (r?.error) setErr(r.error); else setDone(true);
     });
   }
+  function emailSubmit(e) {
+    e.preventDefault();
+    setErr("");
+    if (!f.identifier.trim()) { setErr("Enter your email or phone number."); return; }
+    startTx(async () => {
+      const r = await requestPasswordResetByEmailAction(f.identifier);
+      if (r?.error) setErr(r.error); else setSent(true);   // generic — never reveals if the account exists
+    });
+  }
 
   return (
     <div className="fp-root">
       <div className="fp-card">
         <div className="fp-brand">IOT <b>TECHS</b></div>
 
-        {done ? (
+        {sent ? (
+          <div className="fp-done">
+            <div className="fp-check"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#1c8a45" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 7h16v12H4zM4 7l8 6 8-6" /></svg></div>
+            <h1>Check your email</h1>
+            <p>If an account matches that, we&apos;ve emailed a link to reset your password. It expires in 30 minutes and can be used once.</p>
+            <Link href="/login" className="fp-btn">Back to sign in →</Link>
+          </div>
+        ) : done ? (
           <div className="fp-done">
             <div className="fp-check"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="#1c8a45" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg></div>
             <h1>Password updated</h1>
             <p>You can sign in with your new password now — by email, phone, or username.</p>
             <Link href="/login" className="fp-btn">Sign in →</Link>
           </div>
+        ) : mode === "email" ? (
+          <>
+            <h1 className="fp-title">Reset your password</h1>
+            <p className="fp-sub">Enter your email and we&apos;ll send you a secure link to set a new password.</p>
+            <form className="fp-form" onSubmit={emailSubmit}>
+              <label className="fp-field"><span>Email or phone</span>
+                <input className="fp-input" value={f.identifier} onChange={(e) => set("identifier", e.target.value)} placeholder="you@email.com or (555) 123-4567" autoComplete="username" autoFocus required />
+              </label>
+              {err && <div className="fp-err">{err}</div>}
+              <button className="fp-btn" type="submit" disabled={pending}>{pending ? "Sending…" : "Email me a reset link"}</button>
+            </form>
+            <button type="button" className="fp-back" onClick={() => { setMode("phone"); setErr(""); }}>Can&apos;t get email? Use your phone instead</button>
+            <Link href="/login" className="fp-back">← Back to sign in</Link>
+          </>
         ) : (
           <>
             <h1 className="fp-title">Reset your password</h1>
-            <p className="fp-sub">Enter your account and confirm it&apos;s you with the last 4 digits of your phone.</p>
+            <p className="fp-sub">Confirm it&apos;s you with the last 4 digits of your phone, then set a new password.</p>
             <form className="fp-form" onSubmit={submit}>
               <label className="fp-field"><span>Email or phone</span>
                 <input className="fp-input" value={f.identifier} onChange={(e) => set("identifier", e.target.value)} placeholder="you@email.com or (555) 123-4567" autoComplete="username" required />
@@ -54,6 +86,7 @@ export default function ForgotPage() {
               {err && <div className="fp-err">{err}</div>}
               <button className="fp-btn" type="submit" disabled={pending}>{pending ? "Updating…" : "Update password"}</button>
             </form>
+            <button type="button" className="fp-back" onClick={() => { setMode("email"); setErr(""); }}>Email me a link instead</button>
             <Link href="/login" className="fp-back">← Back to sign in</Link>
           </>
         )}
@@ -76,7 +109,7 @@ export default function ForgotPage() {
         .fp-btn{display:inline-flex;align-items:center;justify-content:center;height:46px;margin-top:4px;background:#C9A96E;color:#0B0F1A;font-weight:800;font-size:.96rem;border:none;border-radius:12px;cursor:pointer;text-decoration:none;transition:background .15s}
         .fp-btn:hover:not(:disabled){background:#d8bd88}
         .fp-btn:disabled{opacity:.6;cursor:default}
-        .fp-back{display:block;text-align:center;margin-top:16px;color:#7d879c;font-size:.82rem;text-decoration:none}
+        .fp-back{display:block;width:100%;text-align:center;margin-top:16px;color:#7d879c;font-size:.82rem;text-decoration:none;background:none;border:0;cursor:pointer;font-family:inherit}
         .fp-back:hover{color:#c3ccdd}
         .fp-done{text-align:center}
         .fp-check{width:56px;height:56px;border-radius:50%;background:rgba(28,138,69,.14);display:grid;place-items:center;margin:6px auto 16px}

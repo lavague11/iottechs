@@ -311,6 +311,34 @@ export async function sendCustomerEmail(accessId, content) {
   });
 }
 
+// Password-reset link — emailed ONLY to the account holder (never BCC'd to the office). Mints a signed,
+// single-use, 30-minute token (lib/auth) bound to the account's current password fingerprint, and links to
+// /reset?t=…. No-op (and never throws) when email is off / there's no address / it's a demo account.
+export async function emailPasswordReset({ userId, email, name } = {}) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  const to = String(email || "").trim();
+  if (!to.includes("@")) return { skipped: "no-email" };
+  if (/@journey-test\.local$/i.test(to)) return { skipped: "demo-project" };
+  try {
+    const { passwordResetFingerprint } = await import("./db.js");
+    const { makePasswordResetToken } = await import("./auth.js");
+    const token = await makePasswordResetToken(userId, passwordResetFingerprint(userId));
+    const ctaUrl = `${appUrl()}/reset?t=${encodeURIComponent(token)}`;
+    const first = String(name || "there").trim().split(/\s+/)[0] || "there";
+    const payload = {
+      heading: "Reset your password",
+      intro: `Hi ${first} — we received a request to reset your IOT TECHS password.`,
+      lines: [
+        "Tap below to set a new password. This link expires in 30 minutes and can be used once.",
+        "If you didn't request this, you can safely ignore this email — your password won't change.",
+      ],
+      ctaLabel: "Set a New Password", ctaUrl,
+      footNote: "For your security this link is single-use and time-limited. Never share it.",
+    };
+    return await sendEmail({ to, subject: "Reset your IOT TECHS password", html: renderEmail(payload), text: plainText(payload) });
+  } catch (e) { console.error(`[email:pwreset] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
 // ---- Event copy -------------------------------------------------------------
 // Customer-facing stages only — internal churn (qc, install scheduling, payout) never emails
 // the customer. Keyed by the master stage key from lib/spec.js.
