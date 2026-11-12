@@ -388,7 +388,7 @@ const CSS = `
    warm-paper palette, JetBrains mono for codes. No Bricolage/Hanken — the deck uses one sans. */
 .ap-root{--ink:#101418;--ink-soft:#3A4048;--muted:#787D84;--faint:#A1A6AC;--line:#E4E4DF;--line-soft:#EDEDE9;
   --soft:#F4F4F2;--raise:#FBFBFA;--gold:#C9A96E;--gold-hi:#E8CB94;--gold-deep:#A8842F;--green:#2E7D5B;
-  min-height:100vh;background:var(--soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55}
+  min-height:100vh;background:var(--soft);color:var(--ink);font-family:var(--font-sans),'Instrument Sans',ui-sans-serif,system-ui,sans-serif;line-height:1.55;overflow-x:clip}
 .ap-shell{min-height:100vh;display:grid;grid-template-columns:minmax(380px,460px) 1fr;background:var(--soft)}
 
 /* ---- left brand panel — deck light treatment (warm paper, ink text, soft gold) ---- */
