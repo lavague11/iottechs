@@ -82,8 +82,23 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   function explain(n, explanation) { dirty.current = true; setResp((p) => ({ ...p, [n]: { ...p[n], explanation } })); }
   function toggleFlag(n) { dirty.current = true; setResp((p) => ({ ...p, [n]: { ...p[n], flagged: !p[n]?.flagged } })); }
 
-  function go(delta) { setErr(""); stampCurrent(); setCur((c) => Math.min(N - 1, Math.max(0, c + delta))); }
-  function jumpTo(i) { setErr(""); stampCurrent(); setCur(i); setMode("quiz"); }
+  // Selecting an answer auto-advances to the next question (last one → review). A short beat lets the
+  // selection register first; any manual navigation cancels the pending advance.
+  const advT = useRef(null);
+  useEffect(() => () => clearTimeout(advT.current), []);
+  function answerAndAdvance(n, key) {
+    pick(n, key);
+    if (noteOpen[n]) return;   // writing a note on this one — don't advance out from under them
+    const at = cur;
+    clearTimeout(advT.current);
+    advT.current = setTimeout(() => {
+      setErr(""); stampCurrent();
+      if (at < N - 1) setCur(at + 1); else setMode("review");
+    }, 260);
+  }
+
+  function go(delta) { clearTimeout(advT.current); setErr(""); stampCurrent(); setCur((c) => Math.min(N - 1, Math.max(0, c + delta))); }
+  function jumpTo(i) { clearTimeout(advT.current); setErr(""); stampCurrent(); setCur(i); setMode("quiz"); }
 
   // Arrow-key navigation while taking the quiz (ignored when typing a note).
   useEffect(() => {
@@ -247,7 +262,7 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
                 const text = typeof val === "string" ? val : val.t;
                 const on = r.answer === key;
                 return (
-                  <button type="button" key={key} className={`asx-choice${on ? " on" : ""}`} onClick={() => pick(q.n, key)}>
+                  <button type="button" key={key} className={`asx-choice${on ? " on" : ""}`} onClick={() => answerAndAdvance(q.n, key)}>
                     <span className="asx-radio">{on && <span className="asx-dot" />}</span>
                     <span className="asx-key">{key}</span><span className="asx-ctext">{text}</span>
                   </button>
