@@ -397,6 +397,93 @@ export async function emailStageAdvance(accessId, stageKey) {
   }
 }
 
+// ---- Hiring / candidate-facing emails --------------------------------------
+// Automated messages a candidate receives as they move through the hiring flow (Apply → Assessment →
+// Review → Phone screen → In-person). Email-only, fired automatically on stage entry. EDIT THE COPY
+// HERE — one place, each template is {subject, heading, intro, lines[], cta?{label,path}}. `{first}` is
+// replaced with the candidate's first name. A key with no template simply doesn't send (internal-only
+// stages stay silent). Safe no-op until RESEND_API_KEY is set; never fires for demo/test applications.
+const HIRING_EMAIL = {
+  applied: {
+    subject: "We got your application — here's your next step",
+    heading: "Thanks for applying, {first}.",
+    intro: "Your application to IOT TECHS is in. The next step is a short assessment — it takes about 25 minutes and you can do it right now from your application page.",
+    lines: ["Finish the assessment and our team reviews everything together."],
+    cta: { label: "Open my application", path: "/application/" },
+  },
+  assessment_review: {
+    subject: "Assessment received — what happens next",
+    heading: "Got it, {first} — thank you.",
+    intro: "We've received your assessment. Ahmed reviews each candidate personally, so you'll hear back from us within 3–5 business days.",
+    lines: ["No action needed right now — we'll reach out with the next step.", "You can check your status any time from your application page."],
+    cta: { label: "Check my status", path: "/application/" },
+  },
+  phone: {
+    subject: "You're moving forward — let's set up a quick call",
+    heading: "Good news, {first}.",
+    intro: "We'd like to move you forward to a short phone screen (about 15 minutes). We'll be in touch to find a time that works.",
+    lines: ["If you have a preferred window, just reply to this email and let us know."],
+    cta: { label: "View my application", path: "/application/" },
+  },
+  in_person: {
+    subject: "Interview invitation — IOT TECHS",
+    heading: "Let's meet, {first}.",
+    intro: "You've passed the phone screen — we'd like to invite you to an in-person interview. We'll follow up shortly with the details and timing.",
+    lines: ["Bring any certifications or questions you have for us."],
+    cta: { label: "View my application", path: "/application/" },
+  },
+  declined: {
+    subject: "Update on your IOT TECHS application",
+    heading: "Thank you for your interest, {first}.",
+    intro: "After careful review, we won't be moving forward with your application at this time. This was a genuinely tough decision and it isn't a reflection of your abilities.",
+    lines: ["We'd welcome you to apply again for future openings. Thank you for the time you put in."],
+  },
+  hired: {
+    subject: "Welcome to the IOT TECHS team!",
+    heading: "Welcome aboard, {first}!",
+    intro: "We're excited to have you join IOT TECHS. Our office will reach out with your onboarding steps, paperwork, and your start details.",
+    lines: ["Keep an eye on your inbox — your next steps are on the way."],
+    cta: { label: "Open my portal", path: "/application/" },
+  },
+};
+// Which P1 pipeline status, on entry, sends which template (the advance path uses this).
+const HIRING_STATUS_EMAIL = { phone: "phone", in_person: "in_person", declined: "declined", documents_pending: "hired" };
+
+// Send one candidate-facing hiring email. `app` is an application row ({ app_id, name, email }). Never
+// throws; silently no-ops when email is off, the address is missing, or it's a demo/test application.
+export async function emailHiringStage(app, key) {
+  try {
+    const tpl = HIRING_EMAIL[key];
+    if (!tpl || !app) return { ok: false, error: "no-template" };
+    const to = String(app.email || "").trim();
+    if (!to.includes("@")) return { ok: false, error: "no-email" };
+    if (/@journey-test\.local$/i.test(to) || app.source === "journey-test") return { ok: false, error: "demo" };
+    const first = String(app.name || "").trim().split(/\s+/)[0] || "there";
+    const fill = (s) => String(s || "").replace(/\{first\}/g, first);
+    const base = appUrl();
+    const ctaUrl = tpl.cta && base ? `${base}${tpl.cta.path}${encodeURIComponent(app.app_id)}` : null;
+    const payload = {
+      heading: fill(tpl.heading),
+      intro: fill(tpl.intro),
+      lines: (tpl.lines || []).map(fill),
+      ctaLabel: ctaUrl ? tpl.cta.label : null,
+      ctaUrl,
+      footNote: "You're receiving this because you applied to IOT TECHS.",
+    };
+    const html = renderEmail(payload);
+    const text = plainText(payload);
+    return await sendEmail({ to, subject: fill(tpl.subject), html, text });
+  } catch (e) { console.error(`[email:hiring] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
+// Fire the right template for a pipeline STATUS transition (used by the advance / stage-move actions).
+// Returns quietly when the status has no candidate-facing message.
+export async function emailHiringForStatus(app, status) {
+  const key = HIRING_STATUS_EMAIL[status];
+  if (!key) return { ok: false, error: "not-candidate-facing" };
+  return emailHiringStage(app, key);
+}
+
 // Email the office (admin/manager) about a customer action — e.g. an appointment confirmation or a
 // reschedule/cancel request. Best-effort; never throws. Uses the branded template.
 export async function sendOfficeEmail({ subject, heading, lines = [], accessId } = {}) {

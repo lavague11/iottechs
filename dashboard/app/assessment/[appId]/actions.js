@@ -6,6 +6,7 @@ import { resolveApplicationRef, getApplicationAssessment, saveApplicationAssessm
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
 import { scoreCore, ASSESSMENT_META } from "../../../lib/assessment-bank";
+import { emailHiringStage } from "../../../lib/email";
 import { gradeAssessmentAI } from "../../../lib/assessment-grade";
 import { P1_FLOW } from "../../../lib/hiring";
 
@@ -98,6 +99,9 @@ export async function submitAssessmentAction(appId, responses, meta = {}) {
   const appId2 = a.app.app_id;
   try { after(() => gradeAssessmentAI(appId2).catch(() => {})); }
   catch { gradeAssessmentAI(appId2).catch(() => {}); }
+  // Candidate-facing "assessment received — Ahmed reviews in 3–5 business days" email (fire-and-forget).
+  try { after(() => emailHiringStage(a.app, "assessment_review").catch(() => {})); }
+  catch { emailHiringStage(a.app, "assessment_review").catch(() => {}); }
   return { ok: true };
 }
 

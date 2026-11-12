@@ -1,7 +1,9 @@
 import { cookies, headers } from "next/headers";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createApplication, findApplicationByEmail, logApplicationEvent, lookupEmailOwner } from "../../../lib/db";
 import { makeSvcToken, SVC_ACCESS_TTL_MS } from "../../../lib/auth";
+import { emailHiringStage } from "../../../lib/email";
 
 // Applying IS proving who you are (they just typed all their own details), so mint the same
 // scoped iot_app grant the PIN gate would — the success redirect lands them straight on their
@@ -119,6 +121,11 @@ export async function POST(request) {
       // Untagged = the public website. SMS/Indeed links carry ?src= which the form forwards here.
       source: b.source || "website",
     });
+
+    // Automated "application received + your assessment is ready" email (email-only, no-op until
+    // RESEND_API_KEY is set). Fire-and-forget so the applicant's submit returns instantly.
+    try { after(() => emailHiringStage(app, "applied").catch(() => {})); }
+    catch { emailHiringStage(app, "applied").catch(() => {}); }
 
     // Customer overlap → flag for the office (non-blocking). Surfaced as a header chip in the review.
     if (emailOwner?.kind === "customer") {

@@ -1,7 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { getSessionUser } from "../../lib/session";
+import { emailHiringStage, emailHiringForStatus } from "../../lib/email";
 import {
   getApplication, setApplicationStage, setApplicationReview, setApplicationOnboarding,
   hireApplicant, logApplicationEvent, verifyEmergencyContact,
@@ -23,12 +25,16 @@ function touch(appId) {
   revalidatePath(`/application/${appId}`);
 }
 
+// Fire a candidate hiring email without blocking the action's response (email-only, auto on stage move).
+function fireHiringEmail(fn) { try { after(() => fn().catch(() => {})); } catch { fn().catch(() => {}); } }
+
 export async function setAppStageAction(appId, stage, reason) {
   const { user, error } = await requireHiring();
   if (error) return { ok: false, error };
   const r = setApplicationStage(appId, stage, { actor_role: user.role, actor_name: user.name, reason });
   if (!r) return { ok: false, error: "Could not update." };
   touch(appId);
+  fireHiringEmail(() => emailHiringForStatus(r, r.status));
   return { ok: true, app: r };
 }
 
@@ -121,6 +127,7 @@ export async function hireApplicantAction(appId, role) {
   const r = hireApplicant(appId, role, { actor_role: user.role, actor_name: user.name });
   if (!r) return { ok: false, error: "Could not hire." };
   touch(appId);
+  fireHiringEmail(() => emailHiringStage(r.app, "hired"));
   revalidatePath("/users");
   // The stage moved either way — but say so plainly when the login couldn't be created.
   return { ok: true, app: r.app, warning: r.accountError || null };
@@ -163,6 +170,7 @@ export async function advanceHiringAction(appId, { override = false, reason = ""
   }
   setApplicationStatus(appId, next, { actor_role: user.role, actor_name: user.name });
   touch(appId);
+  fireHiringEmail(() => emailHiringForStatus(app, next));
   return { ok: true, status: next };
 }
 
@@ -194,6 +202,7 @@ export async function hiringDecisionAction(appId, decision, { role = "tech", not
     setApplicationStatus(appId, "declined", { actor_role: user.role, actor_name: user.name, reason: notes });
     logApplicationEvent(appId, { kind: "declined", detail: `Not selected${notes ? ` — ${notes}` : ""}`, actor_role: user.role, actor_name: user.name });
     touch(appId);
+    fireHiringEmail(() => emailHiringStage(app, "declined"));
     return { ok: true, status: "declined" };
   }
   // hire / conditional → create the staff account, then enter Portal 2 (Compliance).
@@ -203,6 +212,7 @@ export async function hiringDecisionAction(appId, decision, { role = "tech", not
   setApplicationStatus(appId, "documents_pending", { actor_role: user.role, actor_name: user.name });
   logApplicationEvent(appId, { kind: "hired", detail: `${decision === "conditional" ? "Conditional hire" : "Hired"} — into Compliance${notes ? ` · ${notes}` : ""}`, actor_role: user.role, actor_name: user.name });
   touch(appId);
+  fireHiringEmail(() => emailHiringStage(app, "hired"));
   revalidatePath("/users");
   return { ok: true, status: "documents_pending", conditional: decision === "conditional", warning: r.accountError || null };
 }
