@@ -3,7 +3,7 @@
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 
-const money = (n) => "$" + (n || 0).toLocaleString();
+const money = (n) => "$" + Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const CAT_COLOR = ["#3257ff", "#C9A96E", "#7c3aed", "#1c8a45", "#b45309", "#d23c3c", "#5b6275"];
 
 export default function FinancesClient({ user, alerts, stats, txn }) {

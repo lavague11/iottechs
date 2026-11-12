@@ -3,6 +3,8 @@ import { getSessionUser } from "../../lib/session";
 import { listBugReports } from "../../lib/db";
 import BugsClient from "./bugs-client";
 
+export const metadata = { title: "Bug Portal · IOT TECHS", robots: { index: false } };
+
 // The bug portal — staff-only. Everything filed by the site-wide "Report a bug" button lands here to
 // triage and resolve. Open reports first, resolved below.
 export default async function BugsPage() {

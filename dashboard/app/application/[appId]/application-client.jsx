@@ -141,7 +141,9 @@ function WelcomeToast({ appId }) {
 export default function ApplicationClient({ app, events = [], staff, viewerName }) {
   useEffect(() => { document.title = `Application ${app?.app_id || ""} · IOT TECHS`.replace("  ", " "); }, [app?.app_id]);
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(app.stage)));
-  const first = (viewerName || app.name || "").trim().split(/\s+/)[0];
+  // Always greet the APPLICANT (whose page this is), never the signed-in viewer — a staff member
+  // opening an application used to see their own name ("Hi Maya") on the applicant's status page.
+  const first = (app.name || viewerName || "").trim().split(/\s+/)[0];
   const hired = app.stage === "hired";
   const declined = app.stage === "declined";
   const pct = declined ? 100 : Math.round(((stepIdx + 1) / STEPS.length) * 100);

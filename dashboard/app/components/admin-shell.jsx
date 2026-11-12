@@ -728,7 +728,7 @@ export default function AdminShell({ user, alerts, active, children }) {
             <TaglinePill tone="dark" style={{ borderColor: "rgba(255,255,255,.3)" }} />
           </Link>
           <div>© 2026 IOT TECHS · La Vague Inc.</div>
-          <div><Link href="/">Help</Link> · <Link href="/">Privacy</Link></div>
+          <div><Link href="/report-issue">Help</Link> · <Link href="/terms">Privacy</Link></div>
         </div>
       </footer>
       <GlobalCommandBar />

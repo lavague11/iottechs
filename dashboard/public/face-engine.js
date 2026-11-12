@@ -65,6 +65,16 @@
       let ok = false;
       for (const s of LIB_SOURCES) { try { await loadScript(s); if (window.faceapi) { ok = true; break; } } catch (e) {} }
       if (!ok || !window.faceapi) throw new Error("face engine failed to load");
+      // Pin face-api's bundled TFJS to WebGL (CPU fallback) so it never fetches a tfjs-backend-wasm
+      // binary — that file 404s on the @vladmandic/face-api CDN path and spams the console each load.
+      try {
+        if (faceapi.tf && faceapi.tf.setBackend) {
+          let set = false;
+          try { set = await faceapi.tf.setBackend("webgl"); } catch (e) {}
+          if (!set) { try { await faceapi.tf.setBackend("cpu"); } catch (e) {} }
+          if (faceapi.tf.ready) { try { await faceapi.tf.ready(); } catch (e) {} }
+        }
+      } catch (e) {}
       for (const b of MODEL_SOURCES) {
         try {
           await faceapi.nets.ssdMobilenetv1.loadFromUri(b);
