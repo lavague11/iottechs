@@ -36,7 +36,13 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
   async function submit(e) {
     e.preventDefault();
     setErr("");
-    if (!name.trim() && !email.trim() && !phone.trim()) { setErr("Tell us who you are so we can reach you."); return; }
+    if (!name.trim()) { setErr("Tell us your name so we can reach you."); return; }
+    // A reachable contact method is required — a name alone leaves no way to follow up.
+    const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim());
+    const phoneOk = phone.replace(/\D/g, "").length >= 10;
+    if (!emailOk && !phoneOk) { setErr("Add a valid email or phone so we can reach you."); return; }
+    if (email.trim() && !emailOk) { setErr("Enter a valid email address."); return; }
+    if (phone.trim() && !phoneOk) { setErr("Enter a valid phone number (at least 10 digits)."); return; }
     if (!issue.trim()) { setErr("Describe the issue so we can help."); return; }
     setBusy(true);
     try {
@@ -135,12 +141,12 @@ export default function ReportIssueClient({ loggedIn, prefill, projects = [], pr
             {/* Contact */}
             <div className="ri-two">
               <div>
-                <label className="ri-label" htmlFor="ri-name">Full name</label>
-                <input id="ri-name" className="ri-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" autoComplete="name" />
+                <label className="ri-label" htmlFor="ri-name">Full name <span className="ri-req" aria-hidden="true">*</span></label>
+                <input id="ri-name" className="ri-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Smith" autoComplete="name" aria-required="true" />
               </div>
               <div>
-                <label className="ri-label" htmlFor="ri-phone">Phone</label>
-                <input id="ri-phone" className="ri-input" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" />
+                <label className="ri-label" htmlFor="ri-phone">Phone <span className="ri-opt">(email or phone)</span></label>
+                <input id="ri-phone" className="ri-input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" />
               </div>
             </div>
             <div className="ri-two">
@@ -182,6 +188,7 @@ const CSS = `
 .ri-sub{color:var(--muted);margin:0 0 22px;font-size:.96rem}
 .ri-label{display:block;font-weight:700;font-size:.86rem;margin:18px 0 9px}
 .ri-opt{font-weight:500;color:var(--muted)}
+.ri-req{color:#A8842F;font-weight:700}
 .ri-cats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ri-cat{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:13px 14px;border:1.5px solid var(--line);border-radius:13px;background:#fff;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s,transform .1s}
 .ri-cat:hover{border-color:#d6c091}
