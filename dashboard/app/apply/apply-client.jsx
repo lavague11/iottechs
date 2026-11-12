@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Wordmark, TaglinePill } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
 
@@ -84,12 +84,16 @@ export default function ApplyClient() {
   const [err, setErr] = useState("");
   const [step, setStep] = useState(1);          // 1 = job · 2 = your info · 3 = resume
   const [googleEmail, setGoogleEmail] = useState("");   // set when they arrived via Continue with Google
+  // Where they came from — read once from the link tag (?src= / ?source= / ?utm_source=). The 10 AM
+  // text blast links to /apply?src=sms, the Indeed post to ?src=indeed; untagged defaults to website.
+  const sourceRef = useRef("");
 
   // Prefill name + email if they came back from "Continue with Google" (?g_email / ?g_name), then
   // scrub those params from the URL. Google is only a shortcut here — the real /api/apply checks still run.
   useEffect(() => {
     try {
       const p = new URLSearchParams(window.location.search);
+      sourceRef.current = (p.get("src") || p.get("source") || p.get("utm_source") || "").trim().slice(0, 40);
       const ge = (p.get("g_email") || "").trim();
       const gn = (p.get("g_name") || "").trim();
       if (ge || gn) {
@@ -181,6 +185,7 @@ export default function ApplyClient() {
           has_license: hasLicense, has_vehicle: hasVehicle, has_tools: hasTools,
           availability, start_date: startDate, about,
           resume_name: resume?.name || "", resume_data: resume?.data || "",
+          source: sourceRef.current || "",
         }),
       });
       const j = await res.json();

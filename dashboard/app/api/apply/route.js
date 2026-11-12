@@ -112,6 +112,8 @@ export async function POST(request) {
       has_license: b.has_license, has_vehicle: b.has_vehicle, has_tools: b.has_tools,
       availability: b.availability, start_date: b.start_date, about: b.about,
       resume_name, resume_data, dob: b.dob,
+      // Untagged = the public website. SMS/Indeed links carry ?src= which the form forwards here.
+      source: b.source || "website",
     });
 
     // Customer overlap → flag for the office (non-blocking). Surfaced as a header chip in the review.

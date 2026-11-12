@@ -30,6 +30,7 @@ export default async function HiringPage() {
       days_in_stage: days, overdue,
       // Indeed-style list fields:
       interest: a.interest || null,
+      source: a.source || null, source_label: a.source_label || null,
       experience: a.experience || null, skills: a.skills || null,
       resume_name: a.resume_name || null,
       assessment_state: a.status === "assessment" ? (a.assessment?.status || "sent") : null,

@@ -53,3 +53,23 @@ test("the page passes the new list fields through", () => {
   const p = read("../app/hiring/page.jsx");
   assert.ok(p.includes("interest: a.interest") && p.includes("experience: a.experience") && p.includes("resume_name: a.resume_name"), "interest/experience/résumé threaded to the client");
 });
+
+test("candidate source: column migration, apply capture, and the list badge are wired end to end", () => {
+  const db = read("../lib/db.js");
+  assert.ok(db.includes("ADD COLUMN source TEXT"), "source column migration present");
+  assert.ok(db.includes("normalizeApplicationSource") && db.includes("applicationSourceLabel"), "source normalizer + label helper exist");
+  assert.ok(/INSERT INTO applications \([^)]*source\)/.test(db), "createApplication stores source");
+  assert.ok(db.includes("source_label: applicationSourceLabel(r.source)"), "decorateApp exposes a source label");
+
+  const route = read("../app/api/apply/route.js");
+  assert.ok(route.includes('source: b.source || "website"'), "apply route defaults an untagged apply to website");
+
+  const client = read("../app/apply/apply-client.jsx");
+  assert.ok(client.includes('p.get("src")') && client.includes("source: sourceRef.current"), "apply form reads ?src= and forwards it");
+
+  const list = read("../app/hiring/hiring-client.jsx");
+  assert.ok(list.includes("hb-src") && list.includes("r.source_label"), "hiring list renders the source badge");
+
+  const page = read("../app/hiring/page.jsx");
+  assert.ok(page.includes("source_label: a.source_label"), "page threads the source label to the client");
+});

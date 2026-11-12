@@ -734,6 +734,9 @@ function init() {
   // Quick interest triage on the hiring list (yes | maybe | no | null) — a lightweight recruiter signal,
   // ORTHOGONAL to the pipeline stage and separate from a formal "Not Selected" decline.
   if (!appCols.includes("interest")) db.exec("ALTER TABLE applications ADD COLUMN interest TEXT");
+  // Where the candidate came from (indeed | website | referral | sms | …). Captured at apply from the
+  // link's ?src= / ?source= tag so Indeed vs website traffic (and the 10 AM text blast) stay tellable apart.
+  if (!appCols.includes("source")) db.exec("ALTER TABLE applications ADD COLUMN source TEXT");
 
   const tCount = db.prepare("SELECT COUNT(*) AS n FROM tickets").get().n;
   if (!tCount) {
@@ -4427,7 +4430,38 @@ function decorateApp(r) {
   return { ...r, stage_label: appStageLabel(r.stage), position_label: appPositionLabel(r.position),
     onboarding: safeJson(r.onboarding, null), assessment: safeJson(r.assessment, null), steps: safeJson(r.steps, {}), training: safeJson(r.training, { modules: {}, tier: null, badges: [] }),
     portal: r.portal || h.portal, status: h.status, status_label: statusLabel(h.status), status_tone: h.meta?.tone || "neutral",
+    source: r.source || null, source_label: applicationSourceLabel(r.source),
     disposition: r.disposition || "active" };
+}
+
+// Candidate acquisition source. Canonical keys + their display label; aliases (what a link tag or
+// UTM might actually say) fold into a key, and an unknown tag is slugged + kept rather than lost.
+export const APPLICATION_SOURCES = {
+  website:  "Website",
+  indeed:   "Indeed",
+  sms:      "Text",
+  referral: "Referral",
+  social:   "Social",
+  flyer:    "Flyer / QR",
+  other:    "Other",
+};
+const SOURCE_ALIASES = {
+  web: "website", site: "website", organic: "website", direct: "website",
+  indeed: "indeed",
+  text: "sms", sms: "sms", blast: "sms",
+  referral: "referral", refer: "referral", friend: "referral",
+  social: "social", facebook: "social", fb: "social", instagram: "social", ig: "social", tiktok: "social",
+  flyer: "flyer", qr: "flyer", poster: "flyer",
+  other: "other",
+};
+export function normalizeApplicationSource(raw) {
+  const s = String(raw || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  if (!s) return null;                                   // untagged link → unknown, not assumed
+  return SOURCE_ALIASES[s] || s.slice(0, 24);
+}
+export function applicationSourceLabel(key) {
+  if (!key) return null;
+  return APPLICATION_SOURCES[key] || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 export function logApplicationEvent(appId, { kind, detail, actor_role, actor_name } = {}) {
@@ -4446,10 +4480,10 @@ export function stageEnteredMap() {
   return m;
 }
 
-export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data, dob }) {
+export function createApplication({ name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, resume_name, resume_data, dob, source }) {
   const info = db.prepare(`
-    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin, resume_name, resume_data, dob)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    INSERT INTO applications (name, email, phone, address, position, experience, skills, has_license, has_vehicle, has_tools, availability, start_date, about, applicant_pin, resume_name, resume_data, dob, source)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
     String(name || "").trim() || null, String(email || "").trim() || null, String(phone || "").trim() || null,
     String(address || "").trim() || null, position || "other",
@@ -4460,7 +4494,8 @@ export function createApplication({ name, email, phone, address, position, exper
     phonePin(phone),
     resume_name ? String(resume_name).slice(0, 200) : null,
     resume_data || null,
-    String(dob || "").slice(0, 10) || null
+    String(dob || "").slice(0, 10) || null,
+    normalizeApplicationSource(source)
   );
   const id = Number(info.lastInsertRowid);
   const appId = makeAppId(id);

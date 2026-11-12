@@ -175,6 +175,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                           <Link href={`/onboarding/${r.app_id}`} className="hb-name">{r.name || "—"}</Link>
                           <div className="hb-cand-sub">
                             {r.position_label && <span>{r.position_label}</span>}
+                            {r.source_label && <span className={`hb-src s-${r.source || "x"}`} title={`Source · ${r.source_label}`}>{r.source_label}</span>}
                             {r.owner_name && <span className="hb-owner" title={`Owner · ${r.owner_name}`}>{initials(r.owner_name)}</span>}
                           </div>
                         </div>
@@ -283,6 +284,12 @@ const CSS = `
 .hb-name:hover{color:var(--gold-deep);text-decoration:underline}
 .hb-cand-sub{display:flex;align-items:center;gap:8px;margin-top:2px;font-size:.78rem;color:var(--muted,#787D84)}
 .hb-owner{width:20px;height:20px;border-radius:50%;background:#F6F0E2;color:var(--gold-deep,#A8842F);display:grid;place-items:center;font-size:.58rem;font-weight:800;border:1px solid #E7D4A6}
+.hb-src{font-size:.64rem;font-weight:700;letter-spacing:.02em;padding:1px 7px;border-radius:999px;background:#EEEEEA;color:var(--muted,#787D84);white-space:nowrap}
+.hb-src.s-indeed{background:#E8EEF6;color:#2A5A9C}
+.hb-src.s-website{background:#E6F0EA;color:var(--green,#2E7D5B)}
+.hb-src.s-sms{background:#F3ECDD;color:var(--gold-deep,#A8842F)}
+.hb-src.s-referral{background:#F0EAF6;color:#6A4A9C}
+.hb-src.s-social{background:#FBEDE9;color:var(--red,#C4553D)}
 
 .hb-exp{display:flex;flex-direction:column;gap:3px;max-width:260px}
 .hb-exp-yrs{font-weight:600;font-size:.84rem;color:var(--ink,#101418)}
