@@ -179,7 +179,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                   <tr key={r.app_id} className={`hb-rowclick ${sel.has(r.app_id) ? "sel " : ""}${r.status === "declined" ? "dim" : ""}`}
                     onClick={() => router.push(`/onboarding/${r.app_id}`)} title="Open full application">
                     <td className="hb-cb" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.has(r.app_id)} onChange={() => toggleOne(r.app_id)} aria-label={`Select ${r.name}`} /></td>
-                    <td>
+                    <td className="hb-c-cand">
                       <div className="hb-cand">
                         <span className="hb-av">{initials(r.name)}</span>
                         <div className="hb-cand-b">
@@ -207,7 +207,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                         </div>
                       ) : <span className="hb-muted">—</span>}
                     </td>
-                    <td>
+                    <td className="hb-c-stage">
                       <div className="hb-stage">
                         <span className={`hb-pill ${TONE[r.status_tone] || "t-neutral"}`}>{r.status_label}</span>
                         {r.assessment_state && <span className="hb-chip d-muted">{r.assessment_state === "graded" ? "Graded" : r.assessment_state === "submitted" ? "Submitted" : r.assessment_state === "in_progress" ? "In progress" : "Sent"}</span>}
@@ -264,7 +264,7 @@ const CSS = `
 .hb-tab{position:relative;display:inline-flex;align-items:center;gap:7px;background:none;border:none;border-bottom:2px solid transparent;padding:9px 13px;margin-bottom:-1px;font:inherit;font-size:.88rem;font-weight:600;color:var(--muted,#787D84);cursor:pointer}
 .hb-tab:hover{color:var(--ink,#101418)}
 .hb-tab.on{color:var(--ink,#101418);border-bottom-color:var(--gold)}
-.hb-tab-n{font-family:var(--font-mono,ui-monospace);font-size:.72rem;font-weight:700;color:#fff;background:var(--faint,#B4B8BE);border-radius:999px;padding:1px 7px;min-width:20px;text-align:center}
+.hb-tab-n{font-family:var(--font-mono,ui-monospace);font-size:.72rem;font-weight:700;color:#475569;background:#e5e7eb;border-radius:999px;padding:1px 7px;min-width:20px;text-align:center}
 .hb-tab.on .hb-tab-n{background:var(--gold-deep)}
 .hb-toggles{display:flex;gap:7px}
 .hb-tgl{border:1px solid var(--line,#E4E4DF);background:#fff;border-radius:999px;padding:6px 13px;font:inherit;font-size:.8rem;font-weight:600;color:var(--muted,#787D84);cursor:pointer}
@@ -297,7 +297,7 @@ const CSS = `
 .hb-cb input{width:16px;height:16px;cursor:pointer}
 
 .hb-cand{display:flex;align-items:center;gap:11px;min-width:0}
-.hb-av{width:34px;height:34px;border-radius:9px;background:var(--bg-soft,#F0EFEA);display:grid;place-items:center;font-weight:700;font-size:.78rem;color:var(--ink-soft,#3A4048);flex:none}
+.hb-av{width:34px;height:34px;border-radius:9px;background:var(--bg-soft,#F0EFEA);border:1px solid var(--line,#E4E4DF);display:grid;place-items:center;font-weight:700;font-size:.78rem;color:var(--ink-soft,#3A4048);flex:none}
 .hb-cand-b{min-width:0}
 .hb-name{font-weight:600;font-size:.94rem;color:var(--ink,#101418);text-decoration:none}
 .hb-name:hover{color:var(--gold-deep);text-decoration:underline}
@@ -320,17 +320,17 @@ const CSS = `
 .hb-stage{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .hb-pill{font-family:var(--font-mono,ui-monospace);font-size:.63rem;font-weight:600;letter-spacing:.03em;text-transform:uppercase;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .hb-pill.t-neutral{color:var(--muted,#787D84);background:#EEEEEA}
-.hb-pill.t-active{color:var(--gold-deep);background:#F3ECDD}
+.hb-pill.t-active{color:#8a6418;background:#F3ECDD}
 .hb-pill.t-good{color:var(--green);background:#E6F0EA}
 .hb-pill.t-bad{color:var(--red);background:#F6E7E2}
 .hb-chip{font-size:.62rem;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .hb-chip.d-muted{color:var(--muted,#787D84);background:#EEEEEA}
 .hb-chip.d-over{color:var(--red);background:#F6E7E2}
 
-.hb-stars{display:inline-flex;gap:1px}
-.hb-star{background:none;border:none;cursor:pointer;font-size:1rem;line-height:1;color:var(--line,#DAD9D2);padding:1px;transition:.1s}
-.hb-star:hover{transform:scale(1.12)}
-.hb-star.on{color:var(--gold)}
+.hb-stars{display:inline-flex;gap:3px}
+.hb-star{background:none;border:none;cursor:pointer;font-size:1.05rem;line-height:1;color:#9aa3b0;padding:2px;transition:.1s}
+.hb-star:hover{transform:scale(1.12);color:var(--gold,#C9A96E)}
+.hb-star.on{color:var(--gold-deep,#A8842F)}
 .hb-star:disabled{cursor:default}
 
 .hb-app{display:flex;flex-direction:column;gap:1px;white-space:nowrap}
@@ -338,7 +338,7 @@ const CSS = `
 .hb-app-ago{font-size:.72rem;color:var(--faint,#A6ABB1)!important}
 
 .hb-int{display:inline-flex;gap:5px}
-.hb-ib{width:30px;height:30px;border-radius:8px;border:1px solid var(--line,#E4E4DF);background:#fff;display:grid;place-items:center;cursor:pointer;color:var(--faint,#A6ABB1);transition:.12s;flex:none}
+.hb-ib{width:32px;height:32px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;display:grid;place-items:center;cursor:pointer;color:#475569;transition:.12s;flex:none}
 .hb-ib:hover{border-color:currentColor}
 .hb-ib.yes:hover,.hb-ib.yes.on{color:#fff;background:var(--green);border-color:var(--green)}
 .hb-ib.maybe:hover,.hb-ib.maybe.on{color:#fff;background:var(--gold-deep);border-color:var(--gold-deep)}
@@ -354,9 +354,32 @@ const CSS = `
 .hb-clink:hover{color:var(--gold-deep,#A8842F);text-decoration:underline}
 .hb-cmail{max-width:180px}
 
+/* Standard, visible keyboard focus across every control (issue 8) */
+.hb a:focus-visible,.hb button:focus-visible,.hb input:focus-visible{outline:2px solid #233045;outline-offset:2px;border-radius:6px}
+
 @media(max-width:820px){
   .hb{padding:16px 14px 50px}
   .hb-c-exp{display:none}
   .hb-c-app{display:none}
+}
+
+/* Phone: the table reflows into stacked cards so Rating + Interest are never clipped (issue 1).
+   Row 1: checkbox + name/role · Row 2: stage pills · Row 3: stars (left) + interest (right). */
+@media(max-width:640px){
+  .hb-table,.hb-table tbody{display:block}
+  .hb-table thead{display:none}
+  .hb-table tr{display:grid;grid-template-columns:auto 1fr auto;grid-template-areas:"cb cand cand" "stage stage stage" "rate rate int";gap:10px;align-items:center;padding:13px 15px;border-bottom:1px solid var(--line,#EEEEEA)}
+  .hb-table tbody tr:last-child{border-bottom:none}
+  .hb-table td{display:block;padding:0!important;border:none!important}
+  .hb-cb{grid-area:cb;align-self:start;padding-top:2px!important;width:auto;text-align:left}
+  .hb-c-cand{grid-area:cand;min-width:0}
+  .hb-c-stage{grid-area:stage;min-width:0}
+  .hb-c-rate{grid-area:rate}
+  .hb-c-int{grid-area:int;justify-self:end}
+  .hb-table td.hb-c-exp,.hb-table td.hb-c-app{display:none}
+  .hb-stars{gap:5px}
+  .hb-star{font-size:1.25rem;padding:3px}
+  .hb-ib{width:36px;height:36px}
+  .hb-cmail{max-width:150px}
 }
 `;
