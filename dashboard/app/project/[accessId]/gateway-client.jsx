@@ -3027,7 +3027,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         installStatus: (sFacts.install_done || ["qc", "payment", "completion"].includes(projectStage)) ? "complete"
           : projectStage === "install" ? "in_progress"
           : realInstallDate ? "scheduled" : "awaiting",
-        closeoutAvailable: ["qc", "payment", "completion"].includes(projectStage) || !!sFacts.install_done,
+        // Closeout card: the stage gate is necessary but NOT sufficient — a project can reach QC with no
+        // QC-able devices yet, in which case the card would open to the empty "Nothing to QC yet." state.
+        // Gate on real content: toolMeta.qc.items (server count from the same installItemsFromProposal source
+        // QCChecklist renders) > 0, or a customer sign-off already on file. Presentation only — QC lifecycle
+        // rules and the canonical sign-off logic are untouched.
+        closeoutReady: (["qc", "payment", "completion"].includes(projectStage) || !!sFacts.install_done)
+          && (Number(toolMeta?.qc?.items) > 0 || !!sFacts.qc_customer_signed),
         closeoutSigned: !!sFacts.qc_customer_signed,
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
         paidInFull: !!custFin?.paidInFull,

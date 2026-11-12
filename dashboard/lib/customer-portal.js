@@ -100,8 +100,10 @@ export function portalCards(ctx = {}) {
   const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, stage);
   if (iStatus !== "awaiting") cards.push({ key: "install", view: "install", state: iStatus });
 
-  // Closeout: available once the project reaches QC / payment (or install marked done).
-  if (ctx.closeoutAvailable) cards.push({ key: "closeout", view: "closeout", state: ctx.closeoutSigned ? "signed" : "available" });
+  // Closeout: offer only when there is real customer-relevant QC content ready — never a card that opens to
+  // the empty "Nothing to QC yet." state. `closeoutReady` (computed in the gateway) folds the stage gate
+  // together with "QC actually has devices / a recorded sign-off"; stage alone is not enough.
+  if (ctx.closeoutReady) cards.push({ key: "closeout", view: "closeout", state: ctx.closeoutSigned ? "signed" : "available" });
 
   // Completion certificate: only when complete AND paid in full.
   if (ctx.complete && ctx.paidInFull) cards.push({ key: "completion", view: "completion", state: "available" });

@@ -113,6 +113,21 @@ test("portalCards: only applicable cards, in order, never empty placeholders", (
   assert.deepEqual(portalCards({ facts: {}, stage: "inquiry" }), []);
 });
 
+test("portalCards: closeout card only when QC content is actually ready (never an empty card)", () => {
+  const base = { proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "qc", facts: { install_done: true } };
+  // at QC stage but no QC content ready → NO closeout card (would open to the empty "Nothing to QC yet." state)
+  assert.ok(!portalCards({ ...base, closeoutReady: false }).map((c) => c.key).includes("closeout"));
+  // legacy stage-only availability is NOT sufficient — portalCards reads closeoutReady, not closeoutAvailable
+  assert.ok(!portalCards({ ...base, closeoutAvailable: true }).map((c) => c.key).includes("closeout"));
+  // QC content ready → closeout card appears, available state
+  const ready = portalCards({ ...base, closeoutReady: true });
+  assert.ok(ready.map((c) => c.key).includes("closeout"));
+  assert.equal(ready.find((c) => c.key === "closeout").state, "available");
+  // signed off → signed state
+  const signed = portalCards({ ...base, closeoutReady: true, closeoutSigned: true });
+  assert.equal(signed.find((c) => c.key === "closeout").state, "signed");
+});
+
 test("viewFromParams: validates ?view and maps legacy ?open", () => {
   assert.equal(viewFromParams({ view: "proposal" }), "proposal");
   assert.equal(viewFromParams({ view: "bogus" }), null);
