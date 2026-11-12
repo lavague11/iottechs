@@ -132,7 +132,9 @@ export default function GlobalSearch() {
           onKeyDown={onKeyDown} aria-label="Global search" autoComplete="off" />
       </div>
 
-      {open && (
+      {/* Only surface the popover when it has something to say — a query, or real recents. Showing a
+          zero-information "type to search" panel on focus used to cover the primary nav (issue 9). */}
+      {open && (hasQ || recentProjects.length > 0 || recentSearches.length > 0) && (
         <div className="gs-menu">
           {hasQ ? (
             loading && searched !== q.trim() ? (

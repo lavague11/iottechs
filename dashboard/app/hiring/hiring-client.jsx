@@ -249,7 +249,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
 
 const CSS = `
 .hb{--gold:#C9A96E;--gold-deep:#A8842F;--green:#2E7D5B;--red:#C4553D;--slate:#5E7C9C;--sage:#3F8F6A;
-  padding:22px 26px 60px;max-width:1240px;margin:0 auto}
+  padding:22px 26px 60px;max-width:1200px;margin:0 auto}
 .hb-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:18px}
 .hb h1{margin:0;font-size:1.5rem;font-weight:800;letter-spacing:-.02em;color:var(--ink,#101418)}
 .hb-sub{margin:3px 0 0;color:var(--muted,#787D84);font-size:.9rem}

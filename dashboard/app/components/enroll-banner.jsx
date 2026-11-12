@@ -58,9 +58,10 @@ const CSS = `
 .efb-txt{display:flex;flex-direction:column;gap:1px;min-width:0;line-height:1.35}
 .efb-txt b{font-size:.9rem;font-weight:800;color:#4a3c1c}
 .efb-txt span{font-size:.8rem;color:#7a6636}
-.efb-cta{margin-left:auto;flex:0 0 auto;white-space:nowrap;text-decoration:none;font-weight:800;font-size:.85rem;
-  color:#0B0F1A;background:linear-gradient(180deg,#E8CB94,#C9A96E);padding:9px 16px;border-radius:9px}
-.efb-cta:hover{filter:brightness(1.05)}
+/* Outlined, not filled — a one-off account nudge shouldn't be the strongest CTA on the page (issue 17). */
+.efb-cta{margin-left:auto;flex:0 0 auto;white-space:nowrap;text-decoration:none;font-weight:700;font-size:.85rem;
+  color:#8a6418;background:transparent;border:1px solid #d9bd86;padding:8px 15px;border-radius:9px}
+.efb-cta:hover{background:rgba(201,169,110,.12)}
 .efb-x{flex:0 0 auto;border:none;background:none;color:#b08f4f;cursor:pointer;padding:4px;border-radius:6px}
 .efb-x:hover{background:rgba(176,143,79,.12)}
 @media(max-width:640px){.efb-txt span{display:none}}

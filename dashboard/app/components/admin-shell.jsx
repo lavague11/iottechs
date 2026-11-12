@@ -1235,5 +1235,17 @@ const CSS = `
   .apx .pr-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
   .apx .pr-row .pr-bonus{display:none}
   .apx .crow .c-chips{flex-direction:column;gap:4px;align-items:flex-end}
+  /* Issue 7: reserve space so the fixed AI-core (bottom-left) and bug (bottom-right) controls never
+     cover the footer wordmark, copyright or links on a phone. */
+  .apx footer{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+}
+/* Issue 6: keep the mobile header on one line with ~16px clear to the right of the menu button. */
+@media(max-width:430px){
+  .apx .nav-top{gap:8px}
+  .apx-brand{min-width:0;flex-shrink:1}
+  .apx-brand .name{min-width:0}
+  .apx .admin-badge{display:none}       /* free room; the role shows in the drawer + user menu */
+  .apx .nav-right{flex:0 0 auto;gap:6px}
+  .apx .nav-right > *{flex:0 0 auto}
 }
 `;
