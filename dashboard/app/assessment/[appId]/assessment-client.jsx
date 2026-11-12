@@ -65,6 +65,17 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     return () => clearInterval(t);
   }, []);
 
+  // Resuming after a refresh/reopen: the unload beacon that counted this departure can land just after
+  // the page re-rendered, so pull the authoritative remaining time + leave count once on mount.
+  useEffect(() => {
+    if (!resuming || locked) return;
+    syncAssessmentAction(appId).then((r) => {
+      if (!r?.ok) return;
+      if (typeof r.remainingSec === "number") { deadlineRef.current = Date.now() + r.remainingSec * 1000; setLeft(r.remainingSec); }
+      if (typeof r.leaves === "number") setLeaves(r.leaves);
+    }).catch(() => {});
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
+
   // Anti-cheat: count every departure (tab hidden / refresh / close) server-side via a beacon, and on
   // return re-sync the real remaining time + leave count and show the "we noticed you left" notice.
   useEffect(() => {
