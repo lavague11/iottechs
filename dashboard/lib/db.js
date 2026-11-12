@@ -3256,7 +3256,7 @@ export function searchProjects(q) {
 export function resetPasswordByPhoneLast4(identifier, last4, newPassword) {
   const cred = String(identifier || "").trim().toLowerCase();
   if (!cred) return { error: "Enter your email or phone." };
-  if (String(newPassword || "").length < 6) return { error: "Password must be at least 6 characters." };
+  { const p = String(newPassword || ""); if (p.length < 8 || !/[A-Za-z]/.test(p) || !/\d/.test(p)) return { error: "Password needs at least 8 characters, with a letter and a number." }; }
   const l4 = String(last4 || "").replace(/\D/g, "").slice(-4);
   if (l4.length !== 4) return { error: "Enter the last 4 digits of your phone." };
 

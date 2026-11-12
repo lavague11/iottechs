@@ -1026,6 +1026,7 @@
     const pw=document.getElementById('svPw').value;
     const pw2=document.getElementById('svPw2').value;
     const pin=_demoPin; // auto-assigned last-4-of-phone; not a user field anymore
+    if(pw.length<8 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)){errEl.textContent='Password needs at least 8 characters, with a letter and a number.';errEl.style.display='block';return;}
     if(pw!==pw2){errEl.textContent='Passwords do not match.';errEl.style.display='block';return;}
     if(!document.getElementById('svAgree').checked){errEl.textContent='Please agree to the Terms & Conditions to continue.';errEl.style.display='block';return;}
     btn.disabled=true; btn.textContent='Creating account…';
@@ -1265,7 +1266,7 @@
       <form id="accountSetupForm">
         <div class="field">
           <label for="svPw">Password</label>
-          <input id="svPw" type="password" placeholder="Create a password (min 6 chars)" required minlength="6">
+          <input id="svPw" type="password" placeholder="8+ characters, letter & number" required minlength="8">
         </div>
         <div class="field">
           <label for="svPw2">Confirm Password</label>

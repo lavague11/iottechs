@@ -36,7 +36,7 @@ function speedStatus(mbps) {
 const suTitle = (s) => String(s || "").replace(/(^|[\s'-])(\p{L})/gu, (_, a, b) => a + b.toUpperCase());
 const suPhone = (s) => { const d = String(s || "").replace(/\D/g, "").slice(0, 10); if (!d) return ""; if (d.length <= 3) return d; if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`; return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`; };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const pwStrong = (p) => String(p || "").length >= 6 && /[A-Z]/.test(p);
+const pwStrong = (p) => { const s = String(p || ""); return s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s); };
 
 export default function LoginClient({ next }) {
   const [error, setError]         = useState(null);
@@ -217,7 +217,7 @@ export default function LoginClient({ next }) {
     if (!hasEmail && !hasPhone)                       { setError("Enter an email or phone number."); return; }
     if (hasEmail && !EMAIL_RE.test(su.email.trim()))  { setError("Enter a valid email address."); return; }
     if (su.phone.trim() && !hasPhone)                 { setError("Enter a valid 10-digit phone number."); return; }
-    if (!pwStrong(su.password))                       { setError("Password needs 6+ characters and a capital letter."); return; }
+    if (!pwStrong(su.password))                       { setError("Password needs at least 8 characters, with a letter and a number."); return; }
     if (su.password !== su.confirm)                   { setError("Passwords don't match."); return; }
     const fd = new FormData(e.target);
     startTransition(async () => {
@@ -416,7 +416,7 @@ export default function LoginClient({ next }) {
           <div className="lg-field"><label className="lg-label">Full name</label><input name="name" type="text" className="lg-input" placeholder="Your name" autoComplete="name" required autoFocus={newAcct} disabled={pending || granted} value={su.name} onChange={(e) => suSet("name", suTitle(e.target.value))} /></div>
           <div className="lg-field"><label className="lg-label">Email</label><input name="email" type="email" className="lg-input" placeholder="you@email.com" autoComplete="email" disabled={pending || granted} value={su.email} onChange={(e) => suSet("email", e.target.value.trim())} />{su.email && !EMAIL_RE.test(su.email) && <div className="lg-mini no">Invalid email</div>}</div>
           <div className="lg-field"><label className="lg-label">Phone</label><input name="phone" type="tel" className="lg-input" placeholder="(555) 123-4567" autoComplete="tel" inputMode="tel" disabled={pending || granted} value={su.phone} onChange={(e) => suSet("phone", suPhone(e.target.value))} /></div>
-          <div className="lg-field"><label className="lg-label">Password</label><PwInput name="password" placeholder="6+ characters, 1 capital" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 6+ characters & a capital"}</div>}</div>
+          <div className="lg-field"><label className="lg-label">Password</label><PwInput name="password" placeholder="8+ characters, letter & number" autoComplete="new-password" required disabled={pending || granted} value={su.password} onChange={(e) => suSet("password", e.target.value)} />{su.password && <div className={`lg-mini ${pwStrong(su.password) ? "ok" : "no"}`}>{pwStrong(su.password) ? "Looks good" : "Needs 8+ characters, a letter & a number"}</div>}</div>
           <div className="lg-field"><label className="lg-label">Confirm password</label><PwInput name="confirm" placeholder="••••••••" autoComplete="new-password" required disabled={pending || granted} value={su.confirm} onChange={(e) => suSet("confirm", e.target.value)} />{su.confirm && <div className={`lg-mini ${su.password === su.confirm ? "ok" : "no"}`}>{su.password === su.confirm ? "Passwords match" : "No match"}</div>}</div>
           {error && <div className="lg-err">{error}</div>}
           <button className="lg-btn" type="submit" disabled={pending || granted}>{pending ? "Creating…" : "Create account →"}</button>

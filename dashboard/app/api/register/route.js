@@ -19,8 +19,8 @@ export async function POST(request) {
 
   if (!password)
     return Response.json({ ok: false, error: "Password is required." }, { status: 400 });
-  if (password.length < 6)
-    return Response.json({ ok: false, error: "Password must be at least 6 characters." }, { status: 400 });
+  if (password.length < 8 || !/[A-Za-z]/.test(password) || !/\d/.test(password))
+    return Response.json({ ok: false, error: "Password needs at least 8 characters, with a letter and a number." }, { status: 400 });
   if (pin && !/^\d{4}$/.test(pin))
     return Response.json({ ok: false, error: "PIN must be exactly 4 digits." }, { status: 400 });
   if (!email && !phone)

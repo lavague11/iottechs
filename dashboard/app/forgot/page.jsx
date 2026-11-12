@@ -17,7 +17,7 @@ export default function ForgotPage() {
     e.preventDefault();
     setErr("");
     if (f.password !== f.confirm) { setErr("Passwords don't match."); return; }
-    if (f.password.length < 6) { setErr("Password must be at least 6 characters."); return; }
+    if (f.password.length < 8 || !/[A-Za-z]/.test(f.password) || !/\d/.test(f.password)) { setErr("Password needs at least 8 characters, with a letter and a number."); return; }
     startTx(async () => {
       const r = await resetPasswordAction(f);
       if (r?.error) setErr(r.error); else setDone(true);
@@ -78,7 +78,7 @@ export default function ForgotPage() {
                 <input className="fp-input" value={f.last4} onChange={(e) => set("last4", e.target.value.replace(/\D/g, "").slice(0, 4))} inputMode="numeric" maxLength={4} placeholder="••••" required />
               </label>
               <label className="fp-field"><span>New password</span>
-                <input className="fp-input" type="password" value={f.password} onChange={(e) => set("password", e.target.value)} placeholder="At least 6 characters" autoComplete="new-password" required minLength={6} />
+                <input className="fp-input" type="password" value={f.password} onChange={(e) => set("password", e.target.value)} placeholder="8+ characters, letter & number" autoComplete="new-password" required minLength={8} />
               </label>
               <label className="fp-field"><span>Confirm password</span>
                 <input className="fp-input" type="password" value={f.confirm} onChange={(e) => set("confirm", e.target.value)} placeholder="Re-enter password" autoComplete="new-password" required />
