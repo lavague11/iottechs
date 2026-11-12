@@ -165,8 +165,9 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
               </thead>
               <tbody>
                 {visible.map((r) => (
-                  <tr key={r.app_id} className={`${sel.has(r.app_id) ? "sel " : ""}${r.status === "declined" ? "dim" : ""}`}>
-                    <td className="hb-cb"><input type="checkbox" checked={sel.has(r.app_id)} onChange={() => toggleOne(r.app_id)} aria-label={`Select ${r.name}`} /></td>
+                  <tr key={r.app_id} className={`hb-rowclick ${sel.has(r.app_id) ? "sel " : ""}${r.status === "declined" ? "dim" : ""}`}
+                    onClick={() => router.push(`/onboarding/${r.app_id}`)} title="Open full application">
+                    <td className="hb-cb" onClick={(e) => e.stopPropagation()}><input type="checkbox" checked={sel.has(r.app_id)} onChange={() => toggleOne(r.app_id)} aria-label={`Select ${r.name}`} /></td>
                     <td>
                       <div className="hb-cand">
                         <span className="hb-av">{initials(r.name)}</span>
@@ -184,7 +185,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                         <div className="hb-exp">
                           {r.experience && <span className="hb-exp-yrs">{r.experience}</span>}
                           {r.skills && <span className="hb-exp-sk" title={r.skills}>{r.skills}</span>}
-                          {r.resume_name && <a className="hb-exp-res" href={`/api/apply/resume?id=${encodeURIComponent(r.app_id)}`} target="_blank" rel="noreferrer">{Icon.doc} Résumé</a>}
+                          {r.resume_name && <a className="hb-exp-res" href={`/api/apply/resume?id=${encodeURIComponent(r.app_id)}`} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>{Icon.doc} Résumé</a>}
                         </div>
                       ) : <span className="hb-muted">—</span>}
                     </td>
@@ -195,7 +196,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                         {r.overdue && <span className="hb-chip d-over" title={`In stage ${r.days_in_stage}d`}>Overdue {r.days_in_stage}d</span>}
                       </div>
                     </td>
-                    <td className="hb-c-rate">
+                    <td className="hb-c-rate" onClick={(e) => e.stopPropagation()}>
                       <div className="hb-stars" role="radiogroup" aria-label={`Rate ${r.name}`}>
                         {[1, 2, 3, 4, 5].map((n) => (
                           <button key={n} className={`hb-star${(r.rating || 0) >= n ? " on" : ""}`} disabled={pending}
@@ -206,7 +207,7 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                     <td className="hb-c-app">
                       <div className="hb-app"><span>{fmtDate(r.created_at)}</span><span className="hb-app-ago">{daysAgo(r.created_at)}</span></div>
                     </td>
-                    <td className="hb-c-int">
+                    <td className="hb-c-int" onClick={(e) => e.stopPropagation()}>
                       <div className="hb-int">
                         {INTEREST.map((i) => (
                           <button key={i.key} className={`hb-ib ${i.cls}${r.interest === i.key ? " on" : ""}`} title={i.title}
@@ -268,6 +269,7 @@ const CSS = `
 .hb-table thead th{text-align:left;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted,#787D84);padding:11px 14px;border-bottom:1px solid var(--line,#E4E4DF);white-space:nowrap}
 .hb-table tbody td{padding:12px 14px;border-bottom:1px solid var(--line,#EEEEEA);vertical-align:middle}
 .hb-table tbody tr:last-child td{border-bottom:none}
+.hb-table tbody tr.hb-rowclick{cursor:pointer}
 .hb-table tbody tr:hover{background:var(--bg-soft,#FAFAF8)}
 .hb-table tbody tr.sel{background:#FBF6EA}
 .hb-table tbody tr.dim{opacity:.55}
