@@ -297,7 +297,10 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
                   <dt>Email</dt><dd>{app.email ? <a href={`mailto:${app.email}`}>{app.email}</a> : "—"}</dd>
                   <dt>Based in</dt><dd>{app.address ? <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(app.address)}`} target="_blank" rel="noopener noreferrer">{app.address}</a> : "—"}</dd>
                   <dt>Availability</dt><dd>{app.availability || "—"}{app.start_date ? ` · from ${app.start_date}` : ""}</dd>
-                  <dt>Ready with</dt><dd>{[app.has_license && "License", app.has_vehicle && "Vehicle", app.has_tools && "Tools"].filter(Boolean).join(" · ") || "—"}</dd>
+                  <dt>Driver&rsquo;s license</dt><dd>{app.has_license ? "Yes" : "No"}</dd>
+                  <dt>Own vehicle</dt><dd>{app.has_vehicle ? "Yes" : "No"}</dd>
+                  <dt>Own tools</dt><dd>{app.has_tools ? "Yes" : "No"}</dd>
+                  {app.dob && <><dt>Date of birth</dt><dd>{app.dob}</dd></>}
                   <dt>Résumé</dt><dd>{app.resume_name
                     ? <a href={`/api/apply/resume?id=${encodeURIComponent(app.app_id)}`} target="_blank" rel="noopener noreferrer">{app.resume_name} ↓</a>
                     : <span className="ob-none">Not attached</span>}</dd>

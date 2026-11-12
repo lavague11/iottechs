@@ -149,7 +149,10 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
         {/* The list */}
         <div className="hb-wrap">
           {visible.length === 0 ? (
-            <div className="hb-empty">No candidates{tab === "all" ? "" : " in this stage"}.</div>
+            <div className="hb-empty">
+              No candidates{tab === "all" ? "" : " in this stage"}.
+              {(q || mine || overdue || tab !== "all") && <button className="hb-clear" onClick={() => { setQuery(""); setMine(false); setOverdue(false); setTab("all"); }}>Clear filters</button>}
+            </div>
           ) : (
             <table className="hb-table">
               <thead>
@@ -178,6 +181,12 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                             {r.source_label && <span className={`hb-src s-${r.source || "x"}`} title={`Source · ${r.source_label}`}>{r.source_label}</span>}
                             {r.owner_name && <span className="hb-owner" title={`Owner · ${r.owner_name}`}>{initials(r.owner_name)}</span>}
                           </div>
+                          {(r.phone || r.email) && (
+                            <div className="hb-cand-contact" onClick={(e) => e.stopPropagation()}>
+                              {r.phone && <a className="hb-clink" href={`tel:${String(r.phone).replace(/[^\d+]/g, "")}`}>{r.phone}</a>}
+                              {r.email && <a className="hb-clink hb-cmail" href={`mailto:${r.email}`} title={r.email}>{r.email}</a>}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -267,7 +276,7 @@ const CSS = `
 /* table */
 .hb-wrap{overflow-x:auto;border:1px solid var(--line,#E4E4DF);border-radius:13px;background:#fff}
 .hb-table{width:100%;border-collapse:collapse;font-size:.9rem}
-.hb-table thead th{text-align:left;font-size:.68rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted,#787D84);padding:11px 14px;border-bottom:1px solid var(--line,#E4E4DF);white-space:nowrap}
+.hb-table thead th{text-align:left;font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft,#3A4048);background:var(--bg-soft,#F6F6F3);padding:11px 14px;border-bottom:1px solid var(--line,#E4E4DF);white-space:nowrap}
 .hb-table tbody td{padding:12px 14px;border-bottom:1px solid var(--line,#EEEEEA);vertical-align:middle}
 .hb-table tbody tr:last-child td{border-bottom:none}
 .hb-table tbody tr.hb-rowclick{cursor:pointer}
@@ -328,6 +337,12 @@ const CSS = `
 .hb-bulk .hb-ib{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:#fff}
 
 .hb-empty{color:var(--faint,#A6ABB1);font-size:.9rem;padding:34px 16px;text-align:center;font-style:italic}
+.hb-clear{display:inline-block;margin-left:10px;background:none;border:1px solid var(--line,#E4E4DF);border-radius:999px;padding:4px 12px;font:inherit;font-size:.8rem;font-weight:600;font-style:normal;color:var(--gold-deep,#A8842F);cursor:pointer}
+.hb-clear:hover{border-color:var(--gold,#C9A96E)}
+.hb-cand-contact{display:flex;align-items:center;gap:10px;margin-top:3px;font-size:.76rem;min-width:0}
+.hb-clink{color:var(--muted,#787D84);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hb-clink:hover{color:var(--gold-deep,#A8842F);text-decoration:underline}
+.hb-cmail{max-width:180px}
 
 @media(max-width:820px){
   .hb{padding:16px 14px 50px}
