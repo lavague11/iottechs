@@ -1,10 +1,10 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getPublishedProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink, getProjectFinancialState, amountDueForPayment, secretValue } from "../../../lib/db";
+import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersByProject, getProjectExpenses, getProjectRequests, recordProposalView, getProposalViews, getProposalViewsWithGeo, getUserById, ensureBaseAccess, getActiveProposal, getPublishedProposal, getProjectPayments, surveyStageSatisfied, buildStageFacts, stageEnteredAt, getServiceCallByProject, getDiagnostics, getSvcInvoice, getSvcPayments, getSvcCameras, getProjectEvents, logProjectEvent, recordProjectView, getCustomerUserForProject, customerOwnsProjectAccount, resolveCustomerOwnership, repairCustomerLink, getProjectFinancialState, amountDueForPayment, secretValue, getToolData } from "../../../lib/db";
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
-import { customerPortalV2For, financeSummary } from "../../../lib/customer-portal";
+import { customerPortalV2For, financeSummary, pickUpcomingAppt, sanitizeAppt } from "../../../lib/customer-portal";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
 import ClosedProject from "./closed-project";
@@ -372,11 +372,21 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // the gateway only renders it when the effective view is the customer (cView === "customer").
   const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
   let customerFinance = null;
+  let scheduleAppt = null;
   if (customerPortalV2) {
     const fin = getProjectFinancialState(p.access_id);
     const dep = amountDueForPayment(p.access_id, "deposit");
     customerFinance = financeSummary(fin, dep?.ok ? dep.due : 0);
+    // Schedule authority: the SERVER picks the customer's upcoming appointment from the canonical
+    // `schedule` tool-blob and sanitizes it to customer-safe fields (no crew/roster/RSVP). The portal
+    // prefers this over its localStorage cache, so the appointment hero no longer depends on a
+    // client-side round-trip. One code path: the same pure pickUpcomingAppt() the unit tests pin.
+    try {
+      const td = getToolData(p.access_id, "schedule");
+      const events = td?.data ? (JSON.parse(td.data)?.events || []) : [];
+      scheduleAppt = sanitizeAppt(pickUpcomingAppt(events));
+    } catch { scheduleAppt = null; }
   }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} />;
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} scheduleAppt={scheduleAppt} />;
 }

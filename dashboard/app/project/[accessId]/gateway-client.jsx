@@ -1552,7 +1552,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, scheduleAppt = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
@@ -3039,7 +3039,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
-          appt={pickUpcomingAny()}
+          appt={scheduleAppt || pickUpcomingAny()}
           phases={gate.phases}
           currentPhaseKey={masterToPhaseKey(projectStage)}
           ctx={portalCtx}
@@ -4197,7 +4197,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, scheduleAppt = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4241,6 +4241,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       svcCall={svcCall}
       customerPortalV2={customerPortalV2}
       customerFinance={customerFinance}
+      scheduleAppt={scheduleAppt}
     />
   );
 

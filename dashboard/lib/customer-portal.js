@@ -36,6 +36,23 @@ export function pickUpcomingAppt(events, nowMs = Date.now()) {
   return future.length ? future[0].e : null;
 }
 
+// Customer-safe projection of a schedule event for the portal hero. Keeps ONLY what the customer may
+// see — kind/title (so apptType can label it), date, time, location, notes — and DROPS every staff-only
+// field: the invited crew/roster, RSVP confirmations, confirmed_at, ids, etc. This is what lets the
+// server hand the customer portal an appointment without leaking dispatch internals. Returns null for a
+// falsy or dateless event.
+export function sanitizeAppt(ev) {
+  if (!ev || !ev.date) return null;
+  return {
+    kind: ev.kind || null,
+    title: ev.title || null,
+    date: ev.date,
+    time: ev.time || null,
+    location: ev.location || null,
+    notes: ev.notes || null,
+  };
+}
+
 // Sanitized balance summary for the customer. `fin` = getProjectFinancialState(accessId) (null ⇒ no
 // published contract). `depositDue` = amountDueForPayment(accessId,"deposit").due. Exposes ONLY customer-safe
 // money — never cost/margin/processor IDs. `hasContract:false` ⇒ the portal hides the balance card entirely

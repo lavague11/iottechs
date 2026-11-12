@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import {
   eligibleForCustomerPortalV2, customerPortalV2For, pickUpcomingAppt, financeSummary,
   installStatusOf, proposalCardState, portalCards, viewFromParams, PORTAL_VIEWS, payable,
+  sanitizeAppt,
 } from "../lib/customer-portal.js";
 
 test("eligibility: install types A/B only, service-call C excluded", () => {
@@ -38,6 +39,41 @@ test("upcoming appointment: nearest future chosen; past ignored", () => {
   assert.equal(pickUpcomingAppt(null, now), null);
   // within the 1h grace window still counts
   assert.equal(pickUpcomingAppt([{ id: 9, date: "2026-11-05", time: "11:30" }], now)?.id, 9);
+});
+
+test("sanitizeAppt: customer-safe fields only — crew/roster/RSVP stripped", () => {
+  const raw = {
+    id: 7, kind: "install", title: "System Installation", date: "2026-11-10", time: "09:00",
+    location: "2503 Jay Pl", notes: "Gate code 1234",
+    invited: [{ email: "tech@iot.com", role: "tech" }],   // crew/roster — must not leak
+    confirmations: { "tech@iot.com": { status: "going" } }, // RSVP — must not leak
+    confirmed_at: "2026-11-01T10:00:00",
+  };
+  const safe = sanitizeAppt(raw);
+  assert.deepEqual(safe, {
+    kind: "install", title: "System Installation", date: "2026-11-10",
+    time: "09:00", location: "2503 Jay Pl", notes: "Gate code 1234",
+  });
+  // explicitly no staff-only keys survived
+  for (const k of ["invited", "confirmations", "confirmed_at", "id"]) assert.ok(!(k in safe));
+  // missing optionals null out; falsy/dateless events → null
+  assert.deepEqual(sanitizeAppt({ date: "2026-11-10" }), { kind: null, title: null, date: "2026-11-10", time: null, location: null, notes: null });
+  assert.equal(sanitizeAppt(null), null);
+  assert.equal(sanitizeAppt({ time: "09:00" }), null);   // no date → nothing to show
+});
+
+// The server's selection+sanitize path the portal now relies on is just these two pure helpers composed,
+// so pin the composition: pick upcoming, then project to customer-safe fields.
+test("server appt path: pickUpcomingAppt → sanitizeAppt leaks nothing internal", () => {
+  const now = new Date("2026-11-05T12:00:00").getTime();
+  const events = [
+    { id: 1, date: "2026-11-01", time: "09:00", title: "old", invited: [{ email: "a@b.c" }] },
+    { id: 2, date: "2026-11-10", time: "09:00", kind: "install", invited: [{ email: "crew@x.y" }], confirmations: { "crew@x.y": {} } },
+  ];
+  const safe = sanitizeAppt(pickUpcomingAppt(events, now));
+  assert.equal(safe.kind, "install");
+  assert.equal(safe.date, "2026-11-10");
+  assert.ok(!("invited" in safe) && !("confirmations" in safe));
 });
 
 test("balance summary: canonical fields, paid-in-full, no-contract hides card", () => {
