@@ -4639,7 +4639,11 @@ export function setApplicationStatus(appId, status, { actor_role, actor_name, re
               : status === "declined" ? ", declined_at = datetime('now','localtime')" : "";
   db.prepare(`UPDATE applications SET status = ?, portal = ?, stage = ?, decline_reason = COALESCE(?, decline_reason), updated_at = datetime('now','localtime')${extra} WHERE app_id = ? COLLATE NOCASE`)
     .run(status, portal, stage, status === "declined" ? (String(reason || "").slice(0, 400) || null) : null, String(appId));
-  logApplicationEvent(cur.app_id, { kind: "stage", detail: `${statusLabel(cur.status || cur.stage)} → ${statusLabel(status)}`, actor_role, actor_name });
+  // Only log a transition when the status actually changed — re-asserting the same status (e.g. on
+  // assessment submit while already in Assessment) must not create a redundant "X → X" timeline row.
+  if ((cur.status || cur.stage) !== status) {
+    logApplicationEvent(cur.app_id, { kind: "stage", detail: `${statusLabel(cur.status || cur.stage)} → ${statusLabel(status)}`, actor_role, actor_name });
+  }
   return getApplication(appId);
 }
 

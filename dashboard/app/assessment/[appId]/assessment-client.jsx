@@ -55,6 +55,10 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     }
   }
 
+  // Hide the floating bug-report FAB while the assessment is open so it never covers Next / Submit
+  // on a phone (BUG-043). Mirrors the e-sign signer's body.esg-open pattern.
+  useEffect(() => { document.body.classList.add("asx-open"); return () => document.body.classList.remove("asx-open"); }, []);
+
   // Countdown off the SERVER-anchored deadline (deadlineRef), not a client/localStorage clock — so a
   // refresh, a cleared storage, or a fresh incognito window can't rewind it. Until the exam is opened
   // (intro screen) there's no deadline and the clock just holds at the full limit.

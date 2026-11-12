@@ -90,8 +90,11 @@ export async function submitAssessmentAction(appId, responses, meta = {}) {
     opened_at: openedAt, leaves: cur.leaves || 0,
     timed_out: !!meta.timedOut || serverTimedOut,
   });
-  if (["applied", "assessment"].includes(a.app.status)) setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
-  try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 (explanations pending)`, actor_role: "system", actor_name: "Assessment" }); } catch {}
+  // They're already in Assessment (the exam opens there) — only promote from Applied, so submitting
+  // doesn't re-assert the same status and create a duplicate "Assessment → Assessment" row (BUG-045).
+  if (a.app.status === "applied") setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
+  // Score is out of 80 AUTO-GRADED points; the AI-graded explanation points (up to 20) bring it to 100.
+  try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 auto-graded points (explanation points pending; final out of 100)`, actor_role: "system", actor_name: "Assessment" }); } catch {}
   // AI grading of the explanations + profile is a multi-second Claude pass — run it AFTER the response
   // so the candidate's submit returns instantly (it was previously awaited, hanging "Submitting…").
   // after() runs the work once the response is sent; if unavailable, fire-and-forget on our persistent
