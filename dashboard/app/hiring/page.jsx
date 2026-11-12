@@ -35,7 +35,7 @@ export default async function HiringPage() {
       source: a.source || null, source_label: a.source_label || null,
       experience: a.experience || null, skills: a.skills || null,
       resume_name: a.resume_name || null,
-      phone: a.phone || null, email: a.email || null, availability: a.availability || null,
+      phone: a.phone || null, email: a.email || null, availability: a.availability || null, dob: a.dob || null,
       assessment_state: a.status === "assessment" ? (a.assessment?.status || "sent") : null,
     };
   });

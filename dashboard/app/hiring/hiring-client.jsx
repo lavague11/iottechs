@@ -29,6 +29,8 @@ const INTEREST = [
   { key: "maybe", title: "Maybe",          cls: "maybe" },
   { key: "no",    title: "Not interested", cls: "no" },
 ];
+const AVAIL_LABEL = { full: "Full time", part: "Part time", weekends: "Weekends", flexible: "Flexible" };
+function ageFrom(dob) { try { const d = new Date(String(dob) + "T00:00:00"); if (isNaN(d)) return null; return Math.floor((Date.now() - d) / (365.25 * 864e5)); } catch { return null; } }
 
 // Inline SVG icon set (no emoji — house rule).
 const Icon = {
@@ -186,6 +188,8 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
                           <Link href={`/onboarding/${r.app_id}`} className="hb-name">{r.name || "—"}</Link>
                           <div className="hb-cand-sub">
                             {r.position_label && <span>{r.position_label}</span>}
+                            {r.availability && <span className="hb-avail">{AVAIL_LABEL[r.availability] || r.availability}</span>}
+                            {r.dob && <span className="hb-dob" title={`DOB ${r.dob}`}>{r.dob}{ageFrom(r.dob) != null ? ` · ${ageFrom(r.dob)}` : ""}</span>}
                             {r.source_label && <span className={`hb-src s-${r.source || "x"}`} title={`Source · ${r.source_label}`}>{r.source_label}</span>}
                             {r.owner_name && <span className="hb-owner" title={`Owner · ${r.owner_name}`}>{initials(r.owner_name)}</span>}
                           </div>
@@ -349,6 +353,8 @@ const CSS = `
 .hb-empty{color:var(--faint,#A6ABB1);font-size:.9rem;padding:34px 16px;text-align:center;font-style:italic}
 .hb-clear{display:inline-block;margin-left:10px;background:none;border:1px solid var(--line,#E4E4DF);border-radius:999px;padding:4px 12px;font:inherit;font-size:.8rem;font-weight:600;font-style:normal;color:var(--gold-deep,#A8842F);cursor:pointer}
 .hb-clear:hover{border-color:var(--gold,#C9A96E)}
+.hb-avail{font-size:.68rem;font-weight:600;color:var(--slate,#5E7C9C);background:#EEF2F6;border-radius:999px;padding:1px 7px;white-space:nowrap}
+.hb-dob{font-size:.72rem;color:var(--muted,#787D84);font-variant-numeric:tabular-nums;white-space:nowrap}
 .hb-cand-contact{display:flex;align-items:center;gap:10px;margin-top:3px;font-size:.76rem;min-width:0}
 .hb-clink{color:var(--muted,#787D84);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hb-clink:hover{color:var(--gold-deep,#A8842F);text-decoration:underline}
