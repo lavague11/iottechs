@@ -83,6 +83,7 @@ export default function RecruitmentSteps({ appId, status, steps: stepsInit = {},
           const state = declined ? (scored ? "done" : "todo") : idx < curIdx ? "done" : idx === curIdx ? "cur" : "todo";
           return (
             <button key={s.key} className={`rs-step ${state}${sel === s.key ? " sel" : ""}`} onClick={() => selectStep(s.key)}>
+              {state === "cur" && <span className="rs-now">Now</span>}
               <span className="rs-dot">{state === "done" ? "✓" : i + 1}</span>
               <span className="rs-slabel">{s.label}</span>
               {scored && <span className="rs-sscore">{steps[s.key].score}/5</span>}
@@ -180,12 +181,19 @@ const CSS = `
 .rs{--gold-deep:#A8842F;--green:#2E7D5B;--red:#C4553D;--amber:#B0801F;--line:#E4E4DF;--muted:#787D84;--ink:#101418;--paper:#F4F4F2;
   border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px 18px;font-family:var(--font-sans,'Instrument Sans',sans-serif);margin-top:14px}
 .rs-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}
-.rs-h h3{margin:0;font-size:1.05rem;font-weight:800;color:var(--ink)}
+.rs-h h3{margin:0;font-family:'Bricolage Grotesque',sans-serif;font-size:1.05rem;font-weight:800;color:var(--ink)}
 .rs-cur{font-size:.78rem;color:var(--gold-deep);font-weight:600}
-.rs-stepper{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px}
-.rs-step{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer;min-width:76px;font:inherit}
+.rs-stepper{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin-bottom:14px;scroll-snap-type:x proximity}
+.rs-step{position:relative;flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:8px 11px;cursor:pointer;min-width:76px;font:inherit;scroll-snap-align:start}
 .rs-step:disabled{cursor:default;opacity:.7}
 .rs-step.sel{border-color:var(--gold-deep);background:#F6F0E2}
+/* "Now" tag marks the CURRENT stage, distinct from the gold SELECTED-panel style (issue 13). */
+.rs-now{position:absolute;top:-8px;left:50%;transform:translateX(-50%);font-family:var(--font-mono,ui-monospace);font-size:.52rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;background:var(--green);border-radius:20px;padding:1px 7px;white-space:nowrap}
+.rs-step.cur{margin-top:7px}
+/* Phone: fade the right edge so it's clear the strip scrolls to more stages (issue 13). */
+@media(max-width:560px){
+  .rs-stepper{-webkit-mask-image:linear-gradient(90deg,#000 90%,transparent);mask-image:linear-gradient(90deg,#000 90%,transparent)}
+}
 .rs-dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-family:var(--font-mono,ui-monospace);font-size:.72rem;font-weight:700;background:#fff;border:1px solid var(--line);color:var(--muted)}
 .rs-step.done .rs-dot{background:var(--green);color:#fff;border-color:transparent}
 .rs-step.cur .rs-dot{background:var(--gold-deep);color:#fff;border-color:transparent}
@@ -207,7 +215,7 @@ const CSS = `
 .rs-override-in{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:.84rem;outline:none}
 .rs-override-in:focus{border-color:var(--gold-deep)}
 .rs-override-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:9px}
-.rs-card-h{font-size:.9rem;font-weight:700;color:var(--ink);margin-bottom:11px;display:flex;justify-content:space-between}
+.rs-card-h{font-family:'Bricolage Grotesque',sans-serif;font-size:.95rem;font-weight:700;color:var(--ink);margin-bottom:11px;display:flex;justify-content:space-between}
 .rs-by{font-size:.72rem;color:var(--muted);font-weight:500}
 .rs-crit{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}
 .rs-crit-l{font-size:.86rem;color:var(--ink)}
@@ -229,10 +237,13 @@ const CSS = `
 .rs-decision.live{opacity:1}
 .rs-decision-h{font-size:.74rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:9px}
 .rs-decision-b{display:flex;gap:9px;flex-wrap:wrap}
-.rs-d{border:none;border-radius:9px;padding:10px 18px;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
+/* One consistent group (issue 14): Hire is the filled primary; Conditional and Not Selected are
+   matching white outlined secondaries in their semantic colour. The shared disabled rule then reads
+   uniformly instead of as three different states. */
+.rs-d{border:1px solid transparent;border-radius:9px;padding:10px 18px;font:inherit;font-weight:700;font-size:.88rem;cursor:pointer}
 .rs-d.hire{background:var(--green);color:#fff}
-.rs-d.cond{background:#F6EEDC;color:var(--amber)}
-.rs-d.decline{background:#fff;color:var(--red);border:1px solid #E7C6BC}
+.rs-d.cond{background:#fff;color:#8a6418;border-color:#e3c98f}
+.rs-d.decline{background:#fff;color:#b23b2a;border-color:#E7C6BC}
 .rs-d:disabled{opacity:.45;cursor:not-allowed}
 .rs-note{font-size:.76rem;color:var(--muted);margin-top:8px}
 `;

@@ -43,7 +43,9 @@ function EventIcon({ kind }) {
     </svg>
   );
 }
-function fmt(t) { return t ? String(t).replace("T", " ").slice(0, 16) : "—"; }
+// One date format across every card (issue 10) — the same friendly "Nov 12 · 3:45 PM" used by Stage
+// history, instead of a mix of ISO-style timestamps and friendly ones.
+function fmt(t) { return fmtWhen(t) || "—"; }
 function fmtWhen(t) {
   if (!t) return null;
   const d = new Date(String(t).replace(" ", "T"));
@@ -455,11 +457,12 @@ export default function AppReviewClient({ user, alerts, app, events = [], review
             ))}
           </ul>
           <div className="ob-note-row">
-            <input className="apx-input" placeholder="Add a private note (the applicant never sees this)…" value={note}
+            <input className="apx-input" placeholder="Add a private note…" value={note}
               onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === "Enter" && note.trim() && run(async () => { const r = await addAppNoteAction(app.app_id, note); if (r?.ok) setNote(""); return r; })} />
             <button className="ob-btn gold" disabled={pending || !note.trim()}
               onClick={() => run(async () => { const r = await addAppNoteAction(app.app_id, note); if (r?.ok) setNote(""); return r; })}>Add</button>
           </div>
+          <div className="ob-note-help">The applicant never sees this.</div>
         </div>
       </div>
       <style>{CSS}</style>
@@ -515,10 +518,10 @@ const CSS = `
 .apx .ob-next-eyebrow{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.58rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
 .apx .ob-next-label{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1.02rem;color:var(--ink);line-height:1.2}
 .apx .ob-next-detail{font-size:.83rem;color:var(--muted);line-height:1.4}
-.apx .ob-next-cta{flex:none;font-size:.85rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;border-radius:10px;padding:10px 18px;text-decoration:none;cursor:pointer;white-space:nowrap}
+.apx .ob-next-cta{flex:none;font-size:.85rem;font-weight:700;color:#0B0F1A;background:linear-gradient(180deg,#E8CB94,#C9A96E);border:none;border-radius:9px;padding:10px 18px;text-decoration:none;cursor:pointer;white-space:nowrap}
 .apx .ob-next-cta:disabled{opacity:.55;cursor:default}
-.apx .ob-next.t-warn .ob-next-cta{background:linear-gradient(135deg,#C9A24E,#B0801F)}
-.apx .ob-hist{padding:15px 18px}
+.apx .ob-next.t-warn .ob-next-cta{background:linear-gradient(180deg,#E8CB94,#C9A24E)}
+.apx .ob-hist{padding:15px 18px;margin-bottom:16px}   /* even 16px rhythm — was touching the row below (issue 11) */
 .apx .ob-hist-h{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:1rem;color:var(--ink);margin-bottom:12px}
 .apx .ob-hist-list{list-style:none;margin:0;padding:0}
 .apx .ob-hist-row{display:flex;align-items:center;gap:11px;padding:7px 0 7px 4px;position:relative}
@@ -533,7 +536,9 @@ const CSS = `
 .apx .ob-hist-row.todo .ob-hist-meta{color:var(--faint,#A6ABB1)}
 .apx .ob-hist-dur{font-family:var(--font-mono),'JetBrains Mono',ui-monospace,monospace;font-size:.68rem;color:var(--gold-deep,#A8842F);background:#F6F0E2;border-radius:20px;padding:2px 9px}
 .apx .ob-hist-row.cur .ob-hist-dur{color:#A8842F}
-.apx .ob-view-btn{font-size:.78rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border-radius:20px;padding:6px 16px;text-decoration:none;border:none;cursor:pointer}
+/* Demoted to an outlined secondary so the gold "Advance" CTA is the only filled gold action (issue 3). */
+.apx .ob-view-btn{font-size:.78rem;font-weight:700;color:#8a6418;background:#fff;border:1px solid #d9bd86;border-radius:9px;padding:6px 15px;text-decoration:none;cursor:pointer}
+.apx .ob-view-btn:hover{background:rgba(201,169,110,.1)}
 .apx .ob-view-btn:disabled{opacity:.5;cursor:default}
 .apx .ob-void-btn{background:#fff;color:#c9382b;border:1.5px solid #f0d3d0}
 .apx .ob-void-btn:hover{background:#fdecec}
@@ -587,7 +592,7 @@ const CSS = `
 .apx .ob-row .apx-input{flex:1;height:38px}
 .apx .ob-hint{margin-top:10px;font-size:.78rem;color:var(--muted)}
 .apx .ob-btn{height:38px;padding:0 18px;border-radius:9px;font-weight:700;font-size:.85rem;cursor:pointer;font-family:inherit;border:none;white-space:nowrap}
-.apx .ob-btn.gold{background:linear-gradient(135deg,#C9A96E,#b08f4f);color:#fff}
+.apx .ob-btn.gold{background:linear-gradient(180deg,#E8CB94,#C9A96E);color:#0B0F1A}
 .apx .ob-btn.ghost{background:#fff;border:1.5px solid var(--line);color:var(--ink)}
 .apx .ob-btn.ghost:hover{border-color:var(--ink)}
 .apx .ob-btn.bad{background:#c9382b;color:#fff}
@@ -605,7 +610,7 @@ const CSS = `
 .apx .ob-check.on .ob-check-box{background:#1c8a45;border-color:#1c8a45}
 .apx .ob-emg{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .apx .ob-vok{font-size:.72rem;font-weight:700;color:#1c8a45;background:#e7f6ec;border-radius:20px;padding:2px 10px}
-.apx .ob-vbtn{font-size:.72rem;font-weight:800;color:#fff;background:linear-gradient(135deg,#C9A96E,#b08f4f);border:none;border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit}
+.apx .ob-vbtn{font-size:.72rem;font-weight:700;color:#0B0F1A;background:linear-gradient(180deg,#E8CB94,#C9A96E);border:none;border-radius:20px;padding:4px 12px;cursor:pointer;font-family:inherit}
 .apx .ob-vbtn:hover{filter:brightness(1.05)}
 .apx .ob-vclear{font-size:.7rem;font-weight:700;color:var(--muted);background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline}
 .apx .ob-sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
@@ -622,4 +627,17 @@ const CSS = `
 .apx .ob-tl-meta{font-size:.74rem;color:var(--muted);margin-top:1px}
 .apx .ob-note-row{display:flex;gap:8px}
 .apx .ob-note-row .apx-input{flex:1;height:38px}
+.apx .ob-note-help{margin-top:6px;font-size:.74rem;color:var(--muted)}
+/* Issue 5: on a phone the progress bar and the %/stage readout stop sharing a cramped row, so the
+   four stage labels get full width and stop truncating to two-letter fragments. */
+@media(max-width:560px){
+  .apx .ob-rail{flex-direction:column;align-items:stretch;gap:12px}
+  .apx .ob-track{width:100%}
+  .apx .ob-readout{flex-direction:row;align-items:baseline;gap:8px;text-align:left}
+  .apx .ob-readout-l{margin-top:0}
+  /* labels wrap to two short lines instead of truncating to "IN REVI…" (issue 5) */
+  .apx .ob-lab{font-size:10px;letter-spacing:.04em;white-space:normal;align-items:flex-start;gap:5px}
+  .apx .ob-beacon{margin-top:2px}
+  .apx .ob-seg-l{overflow:visible;white-space:normal;text-overflow:clip;line-height:1.2}
+}
 `;
