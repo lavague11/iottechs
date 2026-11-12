@@ -353,8 +353,11 @@ export default function ApplyClient() {
               <div className="ap-nav">
                 {step > 1 && <button type="button" className="ap-btn ap-btn-ghost" onClick={back}>← Back</button>}
                 {step < 3
-                  ? <button type="button" className="ap-btn ap-btn-gold" onClick={next}>Continue →</button>
-                  : <button type="submit" className="ap-btn ap-btn-gold" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>}
+                  // Distinct keys so React REMOUNTS the button between steps instead of reusing the
+                  // same DOM node and merely flipping type button→submit mid-click — that reuse made
+                  // the step-2 Continue click also fire the form submit, creating a phantom application.
+                  ? <button key="continue" type="button" className="ap-btn ap-btn-gold" onClick={next}>Continue →</button>
+                  : <button key="submit" type="submit" className="ap-btn ap-btn-gold" disabled={busy}>{busy ? "Sending…" : "Submit application →"}</button>}
               </div>
           </form>
         </main>
