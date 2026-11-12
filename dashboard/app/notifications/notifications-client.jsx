@@ -66,8 +66,8 @@ export default function NotificationsClient({ user, alerts, items }) {
         <div className="page-head" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 12 }}>
           <div><h1>Notifications</h1><div className="ph-sub">{unread} unread · {items.length} total across every channel</div></div>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-ghost" onClick={markAll} disabled={pending || unread === 0}>Mark read</button>
-            <button className="btn btn-ghost" onClick={() => setConfirmClear(true)} disabled={pending || notifCount === 0} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Clear alerts</button>
+            {unread > 0 && <button className="btn btn-ghost" onClick={markAll} disabled={pending}>Mark read</button>}
+            {notifCount > 0 && <button className="btn btn-ghost" onClick={() => setConfirmClear(true)} disabled={pending} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Clear alerts</button>}
           </div>
         </div>
 

@@ -46,7 +46,10 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
   const [mine, setMine] = useState(false);
   const [overdue, setOverdue] = useState(false);
   const [sel, setSel] = useState(() => new Set());
+  const [sort, setSort] = useState(null);   // {key:'name'|'rating'|'applied', dir:1|-1} — null = default triage order
   const [pending, startTx] = useTransition();
+  const toggleSort = (key) => setSort((s) => s && s.key === key ? (s.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 });
+  const sortArrow = (key) => sort && sort.key === key ? (sort.dir === 1 ? " ↑" : " ↓") : "";
   const q = query.trim().toLowerCase();
   const isAdmin = user.role === "admin";
 
@@ -62,9 +65,14 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
 
   const visible = useMemo(() => {
     const t = TABS.find((x) => x.key === tab) || TABS[0];
-    return scoped.filter(t.test).sort((a, b) =>
+    const rows = scoped.filter(t.test);
+    if (sort) {
+      const val = (r) => sort.key === "name" ? (r.name || "").toLowerCase() : sort.key === "rating" ? (r.rating || 0) : String(r.created_at || "");
+      return rows.slice().sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * sort.dir; });
+    }
+    return rows.sort((a, b) =>
       (b.overdue - a.overdue) || (ORDER[a.status] ?? 99) - (ORDER[b.status] ?? 99) || String(b.created_at).localeCompare(String(a.created_at)));
-  }, [scoped, tab]);
+  }, [scoped, tab, sort]);
 
   const visibleIds = visible.map((r) => r.app_id);
   const allSelected = visibleIds.length > 0 && visibleIds.every((id) => sel.has(id));
@@ -158,11 +166,11 @@ export default function HiringBoard({ user, alerts, rows: initial = [] }) {
               <thead>
                 <tr>
                   <th className="hb-cb"><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" /></th>
-                  <th>Candidate</th>
+                  <th aria-sort={sort?.key === "name" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}><button className="hb-sort" onClick={() => toggleSort("name")}>Candidate{sortArrow("name")}</button></th>
                   <th className="hb-c-exp">Experience</th>
                   <th>Stage</th>
-                  <th className="hb-c-rate">Rating</th>
-                  <th className="hb-c-app">Applied</th>
+                  <th className="hb-c-rate" aria-sort={sort?.key === "rating" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}><button className="hb-sort" onClick={() => toggleSort("rating")}>Rating{sortArrow("rating")}</button></th>
+                  <th className="hb-c-app" aria-sort={sort?.key === "applied" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}><button className="hb-sort" onClick={() => toggleSort("applied")}>Applied{sortArrow("applied")}</button></th>
                   <th className="hb-c-int">Interest</th>
                 </tr>
               </thead>
@@ -277,6 +285,8 @@ const CSS = `
 .hb-wrap{overflow-x:auto;border:1px solid var(--line,#E4E4DF);border-radius:13px;background:#fff}
 .hb-table{width:100%;border-collapse:collapse;font-size:.9rem}
 .hb-table thead th{text-align:left;font-size:.68rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft,#3A4048);background:var(--bg-soft,#F6F6F3);padding:11px 14px;border-bottom:1px solid var(--line,#E4E4DF);white-space:nowrap}
+.hb-sort{background:none;border:none;padding:0;margin:0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:inherit;cursor:pointer}
+.hb-sort:hover{color:var(--gold-deep,#A8842F)}
 .hb-table tbody td{padding:12px 14px;border-bottom:1px solid var(--line,#EEEEEA);vertical-align:middle}
 .hb-table tbody tr:last-child td{border-bottom:none}
 .hb-table tbody tr.hb-rowclick{cursor:pointer}
