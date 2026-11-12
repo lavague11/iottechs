@@ -15,6 +15,8 @@
 <meta property="og:image:alt" content="IOT TECHS — Live monitoring that never sleeps. CCTV, access control, alarms, live monitoring.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://iot-techs.com/og-home.jpg">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -965,11 +967,22 @@
   // Demo form — step 1
   let _demoEmail='', _demoPhone='', _demoName='', _demoAccessId='', _demoPin='';
   const form=document.getElementById('demoForm');
+  var _dmErr=document.getElementById('dmErr');
+  function showDemoErr(msg){ if(_dmErr){ _dmErr.textContent=msg||''; _dmErr.style.display=msg?'block':'none'; } }
   form.addEventListener('submit',async function(e){
     e.preventDefault();
+    showDemoErr('');
+    const data=new FormData(form);
+    // Require a reachable contact method — a lead with no email AND no phone can't be followed up on.
+    const email=(data.get('email')||'').trim();
+    const phone=(data.get('phone')||'').trim();
+    const emailOk=/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email);
+    const phoneOk=phone.replace(/\D/g,'').length>=10;
+    if(!emailOk && !phoneOk){ showDemoErr('Add a valid email or phone so we can reach you.'); return; }
+    if(email && !emailOk){ showDemoErr('Enter a valid email address.'); return; }
+    if(phone && !phoneOk){ showDemoErr('Enter a valid phone number (at least 10 digits).'); return; }
     const btn=this.querySelector('button[type=submit]');
     btn.disabled=true; btn.textContent='Submitting…';
-    const data=new FormData(form);
     try{
       const res=await fetch('/api/demo',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({
@@ -996,9 +1009,11 @@
         }
       } else {
         btn.disabled=false; btn.textContent='Submit';
+        showDemoErr(json.error||'Something went wrong — please try again, or call us.');
       }
     }catch(err){
       btn.disabled=false; btn.textContent='Submit';
+      showDemoErr('Connection error — please try again.');
     }
   });
 
@@ -1591,7 +1606,6 @@
     if(d.type === 'iotcctv:lead'){
       // The calculator POSTs the lead to /api/leads/cctv itself (it has the floor-plan file + is same-origin).
       // Here the homepage just records the event for analytics — it never re-POSTs (no duplicate lead).
-      try{ console.log('[home] CCTV quote submitted', d.id, d.total); }catch(_){ }
       try{ if(window.gtag) gtag('event','quote_submitted',{ value:(d.total||0)/100 }); else if(window.dataLayer) dataLayer.push({ event:'quote_submitted', value:(d.total||0)/100 }); }catch(_){ }
     }
   });
