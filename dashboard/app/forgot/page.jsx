@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
 import { resetPasswordAction, requestPasswordResetByEmailAction } from "./actions";
 
 export default function ForgotPage() {
+  useEffect(() => { document.title = "Reset Password · IOT TECHS"; }, []);   // own tab title (client page can't export metadata)
   const [mode, setMode] = useState("email");   // "email" = emailed link (default) · "phone" = last-4 fallback
   const [f, setF] = useState({ identifier: "", last4: "", password: "", confirm: "" });
   const [err, setErr] = useState("");

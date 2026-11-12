@@ -3,6 +3,8 @@ import { getAllUsers, getLoginStatsMap } from "../../lib/db";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import UsersClient from "./users-client";
 
+export const metadata = { title: "Team & Users · IOT TECHS", robots: { index: false } };
+
 export default async function UsersPage() {
   const user = await getSessionUser();
   if (!["admin", "manager"].includes(user.role)) redirect("/dashboard");

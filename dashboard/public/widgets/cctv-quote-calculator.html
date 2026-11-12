@@ -1,5 +1,5 @@
-<!doctype html><html data-theme="light"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
-<title>Build Your CCTV System</title>
+<!doctype html><html lang="en" data-theme="light"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="description" content="Design your system online and get an instant estimate — cameras, point of sale, sound, or Toast. IOT TECHS, NYC & NJ."><link rel="icon" href="/icon.svg" type="image/svg+xml"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Build Your System · IOT TECHS</title>
 <style>
 /* Layout: one-screen app — ink top bar, horizontal slide track, ink bottom bar with live total. VAULT DARK palette. */
 :root{
@@ -1029,7 +1029,7 @@ const R = {
         </div>
         ${fld('phone','Phone','tel','(201) 555-0142',true,'tel','tel','next')}
         <div class="field"><label for="c_email">Email *</label>
-          <input id="c_email" type="email" value="${esc(c.email||'')}" data-contact="email" placeholder="jane@example.com" autocomplete="email" inputmode="email" enterkeyhint="next" spellcheck="false">
+          <input id="c_email" type="email" value="${esc(c.email||'')}" data-contact="email" placeholder="you@email.com" autocomplete="email" inputmode="email" enterkeyhint="next" spellcheck="false">
           ${c.emailSuggest?`<button type="button" class="email-sug" data-act="emailfix">Did you mean <b>${esc(c.emailSuggest)}</b>?</button>`:''}
           <span class="err" id="e_email"></span></div>
         ${fld('company','Company','text','Business name (optional)',false,'organization',null,'next')}
@@ -1275,7 +1275,6 @@ function submitLead(snapshot, fp){
   const file = (fp && fp.dataUrl && !fp.tooBig && !fp.error) ? dataUrlToFile(fp.dataUrl, fp.name, fp.type) : null;
   // The floor plan rides as a multipart FILE; strip its (possibly multi-MB) data URL from the JSON snapshot.
   var lean = snapshot; try{ lean = JSON.parse(JSON.stringify(snapshot)); if(lean.inputs && lean.inputs.contact) delete lean.inputs.contact.floorPlanImg; }catch(_){ }
-  try{ console.log('[CCTV] submitLead', snapshot.id, { total:snapshot.total, hasFile:!!file }); }catch(_){}
   // Create the real lead: POST { snapshot JSON, quote text, floor-plan file } to the CRM intake route.
   try{
     var fd = new FormData();
@@ -1286,7 +1285,7 @@ function submitLead(snapshot, fp){
     if(file) fd.append('floorplan', file, file.name || 'floorplan');
     fetch((typeof SPEC!=='undefined' && SPEC.lead && SPEC.lead.endpoint) || '/api/leads/cctv', { method:'POST', body:fd, credentials:'same-origin' })
       .then(function(r){ return r.json().catch(function(){ return null; }); })
-      .then(function(j){ try{ console.log('[CCTV] lead saved', j); }catch(_){ } })
+      .then(function(j){ /* lead saved */ })
       .catch(function(err){ try{ console.warn('[CCTV] lead POST failed', err); }catch(_){ } });
   }catch(_){ }
   // Notify the host page (homepage overlay) — analytics / UX only; it does NOT re-POST the lead.

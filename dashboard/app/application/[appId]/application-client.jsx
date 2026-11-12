@@ -139,6 +139,7 @@ function WelcomeToast({ appId }) {
 }
 
 export default function ApplicationClient({ app, events = [], staff, viewerName }) {
+  useEffect(() => { document.title = `Application ${app?.app_id || ""} · IOT TECHS`.replace("  ", " "); }, [app?.app_id]);
   const stepIdx = Math.max(0, STEPS.findIndex((s) => s.stages.includes(app.stage)));
   const first = (viewerName || app.name || "").trim().split(/\s+/)[0];
   const hired = app.stage === "hired";

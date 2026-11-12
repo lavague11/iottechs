@@ -4,6 +4,8 @@ import { getUserIdentity, getEnrollInvite } from "../../lib/db";
 import { Wordmark } from "../components/brand";
 import EnrollClient from "./enroll-client";
 
+export const metadata = { title: "Face ID Enrollment · IOT TECHS", robots: { index: false } };
+
 // Self-service enrolment (signed-in staff) OR invited enrolment via a one-time
 // ?token link (no login required — the token names the account).
 export default async function EnrollPage({ searchParams }) {

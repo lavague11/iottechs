@@ -12,7 +12,7 @@ export default function robots() {
         "/dev", "/dev/", "/manager", "/sales", "/tech", "/customers", "/finances", "/expenses",
         "/inventory", "/tickets", "/notifications", "/activity", "/operations", "/service-calls",
         "/id-scan", "/face-verify", "/identity", "/enroll", "/compliance", "/assessment",
-        "/apply", "/application", "/hiring", "/adt", "/pcp", "/portal", "/go", "/liveness", "/migrate",
+        "/application", "/hiring", "/pcp", "/portal", "/go", "/liveness", "/migrate",
       ],
     }],
     sitemap: `${SITE_ORIGIN}/sitemap.xml`,

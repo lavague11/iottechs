@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Wordmark } from "../components/brand";
 
 // "Track your application" landing. Collects the Application ID + PIN (last 4 of phone), verifies
 // via /api/app-pin-check (which mints the iot_app grant cookie), then routes to the status page.
 export default function TrackApplicationPage() {
+  useEffect(() => { document.title = "Track Your Application · IOT TECHS"; }, []);
   const [mode, setMode] = useState("email");   // email = email address (default) · id = Application ID
   const [appId, setAppId] = useState("");
   const [email, setEmail] = useState("");

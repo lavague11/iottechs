@@ -4,6 +4,8 @@ import { getSessionUser, getNotifSummary } from "../../lib/session";
 import { nextAction, effectiveDisposition, STAGE_SLA_DAYS } from "../../lib/hiring";
 import HiringBoard from "./hiring-client";
 
+export const metadata = { title: "Hiring Pipeline · IOT TECHS", robots: { index: false } };
+
 // The technician hiring pipeline board — every candidate across the three portals. Admin/manager
 // only (hiring is not a tech function). Each row carries the same triage signals as the detail page:
 // deterministic Next Action, owner, disposition, and days-in-stage / overdue.
