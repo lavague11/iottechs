@@ -70,7 +70,7 @@ export default function ApplyClient() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
-  const [experience, setExperience] = useState("1–3 years");
+  const [experience, setExperience] = useState("None yet");   // careers is "no experience needed" — don't pre-claim 1–3 yrs
   const [skills, setSkills] = useState("");
   const [hasLicense, setHasLicense] = useState(false);
   const [hasVehicle, setHasVehicle] = useState(false);
@@ -113,7 +113,16 @@ export default function ApplyClient() {
   // Prefill earliest-start with tomorrow (never Sunday) once mounted — keeps SSR/CSR markup identical.
   useEffect(() => { setStartDate((v) => v || nextStartDate()); }, []);
 
-  const titleCase = (s) => String(s).replace(/\S+/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  // Capitalize each run of letters (not each whitespace token) so hyphenated and apostrophe names
+  // survive — Anne-Marie and O'Brien keep their inner capitals instead of becoming Anne-marie / O'brien.
+  const titleCase = (s) => String(s).replace(/[\p{L}]+/gu, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  // A dialable US number: 10 digits, area code + exchange both start 2–9 (NANP), and not all one digit.
+  const phonePlausible = (v) => {
+    const d = String(v || "").replace(/\D/g, "");
+    if (d.length !== 10) return false;
+    if (/^(\d)\1{9}$/.test(d)) return false;        // 0000000000, 1111111111, …
+    return /^[2-9]\d{2}[2-9]\d{6}$/.test(d);         // area code & exchange can't start with 0 or 1
+  };
   // Live US phone formatting, capped at 10 digits → (646) 000-0000.
   const formatPhone = (v) => {
     // Drop a leading 1 first — no US area code starts with 1, so a leading 1 is always the
@@ -148,15 +157,17 @@ export default function ApplyClient() {
     const rawPhone = domVal("ap-phone", phone);
     const rawEmail = domVal("ap-email", email);
     const rawDob = domVal("ap-dob", dob);
+    const rawAddr = domVal("ap-address", address);
     const cleanName = titleCase(rawName.trim());
     if (!cleanName) return "Tell us your name.";
-    if (rawPhone.replace(/\D/g, "").length < 10) return "Enter a valid phone number (at least 10 digits).";
+    if (!phonePlausible(rawPhone)) return "Enter a valid 10-digit US phone number.";
     if (!emailOk(rawEmail)) return "Enter a valid email address.";
+    if (String(rawAddr || "").trim().length < 5) return "Enter your home address.";
     if (!/^\d{4}-\d{2}-\d{2}$/.test(rawDob)) return "Enter your date of birth.";
     const age = (Date.now() - new Date(rawDob + "T00:00:00").getTime()) / (365.25 * 24 * 3600 * 1000);
     if (Number.isNaN(age) || age > 100) return "Check your date of birth.";
     if (age < 18) return "You must be at least 18 to apply.";
-    setName(cleanName); setPhone(rawPhone); setEmail(rawEmail); setDob(rawDob);
+    setName(cleanName); setPhone(rawPhone); setEmail(rawEmail); setDob(rawDob); setAddress(rawAddr);
     return null;
   }
 
@@ -173,7 +184,7 @@ export default function ApplyClient() {
     setErr("");
     // name/phone/email were captured + validated leaving Step 2; guard anyway.
     const cleanName = titleCase(name.trim());
-    if (!cleanName || phone.replace(/\D/g, "").length < 10 || !emailOk(email)) {
+    if (!cleanName || !phonePlausible(phone) || !emailOk(email) || String(address || "").trim().length < 5) {
       setStep(2); setErr("Please finish your details."); return;
     }
     setBusy(true);
@@ -283,15 +294,16 @@ export default function ApplyClient() {
                 <div className="ap-pane">
                   <div className="ap-form-head"><h2>Tell us about yourself</h2></div>
                   <div className="ap-two">
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name</label>
-                      <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" /></div>
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone</label>
-                      <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" maxLength={14} /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-name">Full name <span className="ap-req" aria-hidden="true">*</span></label>
+                      <input id="ap-name" className="ap-in cap" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && setName(titleCase(name.trim()))} placeholder="Jane Smith" autoComplete="name" aria-required="true" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-phone">Phone <span className="ap-req" aria-hidden="true">*</span></label>
+                      <input id="ap-phone" className="ap-in" value={phone} onChange={(e) => setPhone(formatPhone(e.target.value))} placeholder="(646) 000-0000" autoComplete="tel" inputMode="tel" maxLength={14} aria-required="true" />
+                      <span className="ap-hint">10-digit US number</span></div>
                   </div>
                   <div className="ap-two">
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email</label>
-                      <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" /></div>
-                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-address">Address</label>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-email">Email <span className="ap-req" aria-hidden="true">*</span></label>
+                      <input id="ap-email" className="ap-in" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@email.com" autoComplete="email" aria-required="true" /></div>
+                    <div className="ap-fld"><label className="ap-label" htmlFor="ap-address">Address <span className="ap-req" aria-hidden="true">*</span></label>
                       <AddressAutocomplete id="ap-address" className="ap-in" value={address} onChange={setAddress} placeholder="Start typing your address…" autoComplete="off" /></div>
                   </div>
                   <div className="ap-two">
@@ -312,8 +324,8 @@ export default function ApplyClient() {
                   </div>
                   <div className="ap-two">
                     <div className="ap-fld">
-                      <label className="ap-label" htmlFor="ap-dob">Date of birth</label>
-                      <input id="ap-dob" className="ap-in" type="date" value={dob} onChange={(e) => setDob(e.target.value)} autoComplete="bday" />
+                      <label className="ap-label" htmlFor="ap-dob">Date of birth <span className="ap-req" aria-hidden="true">*</span></label>
+                      <input id="ap-dob" className="ap-in" type="date" value={dob} onChange={(e) => setDob(e.target.value)} autoComplete="bday" aria-required="true" />
                     </div>
                     <div className="ap-fld">
                       <label className="ap-label" htmlFor="ap-start">Earliest start</label>
@@ -336,11 +348,15 @@ export default function ApplyClient() {
                     </div>
                   ) : (
                     <label className="ap-upload ap-upload-lg">
-                      <input type="file" accept=".pdf,.doc,.docx,image/*" onChange={onResume} hidden />
+                      <input type="file" accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.heic" onChange={onResume} hidden />
                       <span className="ap-upload-ic"><Icon><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></Icon></span>
                       <span className="ap-upload-tx"><b>Upload resume</b><em>PDF, Word, or image · up to 4 MB</em></span>
                     </label>
                   )}
+                  <div className="ap-fld ap-fld-mt"><label className="ap-label" htmlFor="ap-skills">Skills &amp; certifications <span className="ap-opt">optional</span></label>
+                    <input id="ap-skills" className="ap-in" value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="Low-voltage, OSHA-10, fiber, ladder work…" maxLength={600} /></div>
+                  <div className="ap-fld ap-fld-mt"><label className="ap-label" htmlFor="ap-about">Anything else? <span className="ap-opt">optional</span></label>
+                    <textarea id="ap-about" className="ap-in" rows={3} value={about} onChange={(e) => setAbout(e.target.value)} placeholder="Tell us a bit about yourself" maxLength={2000} /></div>
                   <div className="ap-recap">
                     <span className="ap-recap-k">Applying for</span>
                     <span className="ap-recap-v">{(POSITIONS.find((p) => p.key === position) || {}).label}</span>
@@ -416,6 +432,9 @@ const CSS = `
 .ap-sub{color:var(--muted);margin:0;font-size:.92rem}
 .ap-label{display:block;font-weight:700;font-size:.82rem;margin:20px 0 9px;color:#2a3040}
 .ap-opt{font-weight:500;color:var(--muted)}
+.ap-req{color:var(--gold-deep);font-weight:700}
+.ap-hint{display:block;margin-top:5px;font-size:.72rem;color:var(--muted)}
+.ap-fld-mt{margin-top:4px}
 .ap-grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ap-pick{position:relative;display:flex;align-items:center;gap:12px;text-align:left;padding:14px 15px 14px 16px;border:1px solid var(--line);border-left:3px solid var(--line);border-radius:12px;background:var(--raise);cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s}
 .ap-pick:hover{border-color:#D9CBA9;background:#fff}

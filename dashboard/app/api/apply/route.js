@@ -57,8 +57,12 @@ export async function POST(request) {
     const phone = String(b.phone || "").trim();
     const email = String(b.email || "").trim();
     if (!name)  return Response.json({ ok: false, error: "Tell us your name." }, { status: 400 });
-    // Phone must be a real, dialable number (≥10 digits) — it also becomes their tracking PIN.
-    if (phone.replace(/\D/g, "").length < 10) return Response.json({ ok: false, error: "Enter a valid phone number (at least 10 digits)." }, { status: 400 });
+    // Phone must be a real, dialable US number — it also becomes their tracking PIN. Reject repeated
+    // digits (0000000000) and NANP-invalid area/exchange codes, not just "has 10 digits".
+    const pdig = phone.replace(/\D/g, "");
+    if (pdig.length !== 10 || /^(\d)\1{9}$/.test(pdig) || !/^[2-9]\d{2}[2-9]\d{6}$/.test(pdig)) {
+      return Response.json({ ok: false, error: "Enter a valid 10-digit US phone number." }, { status: 400 });
+    }
     // Email is required + must be well-formed: users.email is UNIQUE NOT NULL, so without a real one
     // the hire can't mint a login, and offers/updates go there.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return Response.json({ ok: false, error: "Enter a valid email address." }, { status: 400 });
