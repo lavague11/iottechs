@@ -5,7 +5,7 @@ import { cookies } from "next/headers";
 import { resolveApplicationRef, getApplicationAssessment, saveApplicationAssessment, setApplicationStatus, logApplicationEvent } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
-import { scoreCore } from "../../../lib/assessment-bank";
+import { scoreCore, ASSESSMENT_META } from "../../../lib/assessment-bank";
 import { gradeAssessmentAI } from "../../../lib/assessment-grade";
 import { P1_FLOW } from "../../../lib/hiring";
 
@@ -20,6 +20,39 @@ async function authApp(appId) {
   const parsed = tok ? await parseSvcToken(tok) : null;
   if (parsed?.svcId && String(parsed.svcId).toUpperCase() === String(app.app_id).toUpperCase()) return { ok: true, app, staff: false };
   return { ok: false };
+}
+
+const LIMIT_SEC = ASSESSMENT_META.timeLimitMin * 60;
+function remainingSecFrom(openedAt) {
+  const started = Date.parse(openedAt);
+  if (!started) return LIMIT_SEC;
+  return Math.max(0, LIMIT_SEC - Math.floor((Date.now() - started) / 1000));
+}
+
+// Open the exam: the timer is anchored SERVER-SIDE (opened_at), so a refresh, a storage wipe, or a
+// fresh incognito window can't reset the clock — each sync just reads the current remaining time.
+// Returns the authoritative remaining seconds + how many times they've left the page so far.
+export async function openAssessmentAction(appId) {
+  const a = await authApp(appId);
+  if (!a.ok) return { ok: false, error: "not-authorized" };
+  const cur = getApplicationAssessment(a.app.app_id) || {};
+  if (cur.status === "submitted" || cur.status === "graded") return { ok: false, error: "locked" };
+  let openedAt = cur.opened_at;
+  if (!openedAt) {
+    openedAt = new Date().toISOString();
+    saveApplicationAssessment(a.app.app_id, { ...cur, status: "in_progress", opened_at: openedAt, started_at: cur.started_at || openedAt, responses: cur.responses || {} });
+    if (a.app.status === "applied") setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
+  }
+  return { ok: true, openedAt, remainingSec: remainingSecFrom(openedAt), leaves: cur.leaves || 0, limitSec: LIMIT_SEC };
+}
+
+// Re-sync on return: current remaining time + leave count, without opening/mutating anything.
+export async function syncAssessmentAction(appId) {
+  const a = await authApp(appId);
+  if (!a.ok) return { ok: false, error: "not-authorized" };
+  const cur = getApplicationAssessment(a.app.app_id) || {};
+  if (cur.status === "submitted" || cur.status === "graded") return { ok: false, error: "locked" };
+  return { ok: true, remainingSec: cur.opened_at ? remainingSecFrom(cur.opened_at) : LIMIT_SEC, leaves: cur.leaves || 0 };
 }
 
 // Autosave in-progress answers. Once submitted, the assessment is locked.
@@ -43,16 +76,18 @@ export async function submitAssessmentAction(appId, responses, meta = {}) {
   if (cur.status === "submitted" || cur.status === "graded") return { ok: false, error: "locked" };
   const core = scoreCore(responses || {});
   const submittedAt = new Date().toISOString();
-  // opened_at = when the candidate actually opened the exam (client localStorage clock), so total
+  // opened_at is SERVER-owned (set in openAssessmentAction) — the authoritative clock anchor. total
   // time reflects the full sitting, not just first-answer → submit. timed_out = the 30-min clock ran
-  // out and it auto-submitted (vs a deliberate submit).
+  // out (server-checked, not just the client's word) or the client auto-submitted on timeout.
+  const openedAt = cur.opened_at || meta.openedAt || cur.started_at || submittedAt;
+  const serverTimedOut = remainingSecFrom(openedAt) <= 0;
   saveApplicationAssessment(a.app.app_id, {
     ...cur, status: "submitted", responses: responses || {},
     answerPoints: core.answerPoints, behavioralPoints: core.behavioralPoints, autoScore: core.autoScore,
     cats: core.cats, autoFlags: core.autoFlags,
     submitted_at: submittedAt, started_at: cur.started_at || submittedAt,
-    opened_at: meta.openedAt || cur.opened_at || cur.started_at || submittedAt,
-    timed_out: !!meta.timedOut,
+    opened_at: openedAt, leaves: cur.leaves || 0,
+    timed_out: !!meta.timedOut || serverTimedOut,
   });
   if (["applied", "assessment"].includes(a.app.status)) setApplicationStatus(a.app.app_id, "assessment", { actor_role: "system", actor_name: "Assessment" });
   try { logApplicationEvent(a.app.app_id, { kind: "note", detail: `Assessment submitted — auto-score ${core.autoScore}/80 (explanations pending)`, actor_role: "system", actor_name: "Assessment" }); } catch {}

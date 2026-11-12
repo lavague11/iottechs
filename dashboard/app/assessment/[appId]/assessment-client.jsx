@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Wordmark } from "../../components/brand";
 import { QUESTIONS, CATEGORIES, ASSESSMENT_META } from "../../../lib/assessment-bank";
-import { saveAssessmentProgressAction, submitAssessmentAction } from "./actions";
+import { saveAssessmentProgressAction, submitAssessmentAction, openAssessmentAction, syncAssessmentAction } from "./actions";
 
 const CAT_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.key, c.label]));
 const N = QUESTIONS.length;
@@ -11,15 +11,24 @@ const N = QUESTIONS.length;
 // Deck-style exam: one question on screen at a time (swipe / arrows / buttons), a per-question
 // flag-for-review, then a review screen (answered + flagged map) before submit. One-at-a-time
 // keeps the whole question bank off the page, so it can't be selected/copied wholesale.
-export default function AssessmentClient({ appId, firstName, responses: initial = {}, locked: lockedInit = false, staff = false }) {
+export default function AssessmentClient({ appId, firstName, responses: initial = {}, locked: lockedInit = false, staff = false, resuming = false, initialRemainingSec = null, initialLeaves = 0, limitSec = ASSESSMENT_META.timeLimitMin * 60 }) {
   const [resp, setResp] = useState(initial);
   const [locked, setLocked] = useState(lockedInit);
   const [saved, setSaved] = useState("idle");   // idle | saving | saved
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [left, setLeft] = useState(ASSESSMENT_META.timeLimitMin * 60);
-  const [mode, setMode] = useState("intro");     // intro | quiz | review
+  const [left, setLeft] = useState(initialRemainingSec != null ? initialRemainingSec : limitSec);
+  // Mid-exam refresh / return → straight back into the quiz (not the intro), with a resume notice.
+  const [mode, setMode] = useState(resuming ? "quiz" : "intro");     // intro | quiz | review
   const [cur, setCur] = useState(0);             // 0-based question index
+  const [leaves, setLeaves] = useState(initialLeaves);
+  const [resumeShown, setResumeShown] = useState(resuming);   // "we noticed you left" overlay
+  const [confirmSubmit, setConfirmSubmit] = useState(false);  // two-step submit when blanks remain
+  // Server-anchored deadline: wall-clock ms when time runs out. Only anchored once the exam is open —
+  // on resume it's seeded from the server's remaining seconds; a fresh load waits for Start. Re-synced
+  // on every return, so no client clock / cleared storage / new window can extend it.
+  const deadlineRef = useRef(resuming && initialRemainingSec != null ? Date.now() + initialRemainingSec * 1000 : null);
+  const leftPageRef = useRef(false);   // dedup: one leave per departure until we're visible again
   // The optional per-question note is hidden behind "Add a note" — but if the candidate already
   // wrote one (resuming), keep it open so they can see it.
   const [noteOpen, setNoteOpen] = useState(() => { const o = {}; for (const k in initial) if (initial[k]?.explanation) o[k] = true; return o; });
@@ -46,19 +55,47 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     }
   }
 
-  // Persist the exam start so the 30-minute countdown is continuous across reloads / navigation
-  // (a fresh mount used to reset it to 30:00). Cleared on submit, so an approved retake starts fresh.
+  // Countdown off the SERVER-anchored deadline (deadlineRef), not a client/localStorage clock — so a
+  // refresh, a cleared storage, or a fresh incognito window can't rewind it. Until the exam is opened
+  // (intro screen) there's no deadline and the clock just holds at the full limit.
   useEffect(() => {
-    const KEY = `asx_start_${appId}`;
-    const total = ASSESSMENT_META.timeLimitMin * 60;
-    let start = 0;
-    try { start = Number(localStorage.getItem(KEY)) || 0; } catch {}
-    if (!start) { start = Date.now(); try { localStorage.setItem(KEY, String(start)); } catch {} }
-    const tick = () => setLeft(Math.max(0, total - Math.floor((Date.now() - start) / 1000)));
+    const tick = () => { if (deadlineRef.current) setLeft(Math.max(0, Math.round((deadlineRef.current - Date.now()) / 1000))); };
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [appId]);
+  }, []);
+
+  // Anti-cheat: count every departure (tab hidden / refresh / close) server-side via a beacon, and on
+  // return re-sync the real remaining time + leave count and show the "we noticed you left" notice.
+  useEffect(() => {
+    if (mode === "intro" || locked) return;
+    const beaconLeave = () => {
+      if (leftPageRef.current) return;             // one count per departure
+      leftPageRef.current = true;
+      try {
+        const body = JSON.stringify({ appId });
+        if (navigator.sendBeacon) navigator.sendBeacon("/api/assessment/leave", new Blob([body], { type: "application/json" }));
+        else fetch("/api/assessment/leave", { method: "POST", body, headers: { "Content-Type": "application/json" }, keepalive: true });
+      } catch {}
+    };
+    const onVis = () => {
+      if (document.visibilityState === "hidden") beaconLeave();
+      else {
+        leftPageRef.current = false;
+        // Pull the authoritative remaining time + leave count, then surface the resume notice.
+        syncAssessmentAction(appId).then((r) => {
+          if (r?.ok) {
+            if (typeof r.remainingSec === "number") { deadlineRef.current = Date.now() + r.remainingSec * 1000; setLeft(r.remainingSec); }
+            if (typeof r.leaves === "number") setLeaves(r.leaves);
+          }
+          setResumeShown(true);
+        }).catch(() => setResumeShown(true));
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pagehide", beaconLeave);
+    return () => { document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", beaconLeave); };
+  }, [mode, locked, appId]);
 
   const answered = QUESTIONS.filter((q) => resp[q.n]?.answer).length;
   const allAnswered = answered === N;
@@ -120,24 +157,27 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
     if (dx < 0) go(1); else go(-1);        // swipe left → next, swipe right → previous
   };
 
+  // Blanks are allowed — a candidate may submit with questions unanswered (they're scored 0). The
+  // review screen does a light two-step confirm for that; a timeout submit (force) just sends.
+  function handleSubmitClick() {
+    if (busy) return;
+    if (!allAnswered && !confirmSubmit) { setConfirmSubmit(true); return; }
+    submit();
+  }
+
   async function submit(force = false) {
     stampCurrent();
-    // A manual submit still requires every question answered; a timeout submit (force) sends whatever
-    // is there so "ran out of time" is a real, recorded outcome instead of the exam hanging at 0:00.
-    if (!force && !allAnswered) { setErr(`${N - answered} question${N - answered === 1 ? "" : "s"} still need an answer.`); setMode("review"); return; }
     setBusy(true); setErr("");
-    // Fold per-question seconds into the payload, and attach the real open time + whether the clock ran out.
+    // Fold per-question seconds into the payload. opened_at is server-owned now, so we don't send it.
     const payload = {};
     for (const q of QUESTIONS) {
       const rr = resp[q.n]; const secs = Math.round(secsRef.current[q.n] || 0);
       if (rr || secs) payload[q.n] = { ...(rr || {}), ...(secs ? { secs } : {}) };
     }
-    let openedAt = null;
-    try { const s = Number(localStorage.getItem(`asx_start_${appId}`)); if (s) openedAt = new Date(s).toISOString(); } catch {}
     try {
-      const r = await submitAssessmentAction(appId, payload, { openedAt, timedOut: force || timedOut.current });
+      const r = await submitAssessmentAction(appId, payload, { timedOut: force || timedOut.current });
       if (r?.ok) {
-        try { localStorage.removeItem(`asx_start_${appId}`); localStorage.removeItem(`asx_secs_${appId}`); } catch {}
+        try { localStorage.removeItem(`asx_secs_${appId}`); } catch {}
         // Send them straight to their application page (status + next steps) instead of a dead-end
         // "submitted, close this page" screen. Keep busy=true so the button stays put during the nav.
         try { window.location.assign(`/application/${appId}`); return; } catch { setLocked(true); }
@@ -159,9 +199,31 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   const header = (
     <header className="asx-top">
       <a href="/go" aria-label="IOT TECHS home" className="asx-brand"><Wordmark height={22} /></a>
-      <div className="asx-timer" title="Recommended time"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2M9 2h6" /></svg>{mm}:{ss}</div>
+      <div className="asx-timer" title="Time remaining"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="13" r="8" /><path d="M12 9v4l2 2M9 2h6" /></svg>{mm}:{ss}</div>
     </header>
   );
+
+  // Shown when the candidate returns after leaving (tab switch / refresh / close). After 2+ departures
+  // it escalates to a final warning. The leave count is server-owned, so it survives refreshes.
+  const warnFinal = leaves >= 2;
+  const resumeOverlay = (resumeShown && mode !== "intro" && !locked) ? (
+    <div className="asx-resume" role="dialog" aria-modal="true" aria-label="You left the assessment">
+      <div className={`asx-resume-card${warnFinal ? " warn" : ""}`}>
+        <div className={`asx-resume-ic${warnFinal ? " warn" : ""}`}>
+          {warnFinal
+            ? <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+            : <svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>}
+        </div>
+        <h2>{warnFinal ? "Final warning" : "We noticed you left the page"}</h2>
+        <p>{warnFinal
+          ? "Do not leave the assessment again. Every time you leave is recorded for the review team."
+          : "Continue where you left off — your answers are saved."}</p>
+        <div className="asx-resume-time">Time remaining <b>{mm}:{ss}</b></div>
+        {leaves > 0 && <div className="asx-resume-leaves">You&rsquo;ve left the page {leaves} time{leaves === 1 ? "" : "s"}.</div>}
+        <button className="asx-resume-btn" onClick={() => setResumeShown(false)}>Continue assessment</button>
+      </div>
+    </div>
+  ) : null;
 
   // ── Submitted ────────────────────────────────────────────────────────────
   if (locked) return (
@@ -187,7 +249,13 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
           <li>You&rsquo;ll review everything on one screen before sending.</li>
         </ul>
         {staff && <p className="asx-staff">Staff preview — answers you submit here count as a real submission.</p>}
-        <button className="asx-start" onClick={() => { qEnter.current = Date.now(); setMode("quiz"); setCur(0); }}>Start</button>
+        <button className="asx-start" onClick={async () => {
+          qEnter.current = Date.now();
+          const r = await openAssessmentAction(appId).catch(() => null);
+          if (r?.error === "locked") { setLocked(true); return; }
+          if (r?.ok && typeof r.remainingSec === "number") { deadlineRef.current = Date.now() + r.remainingSec * 1000; setLeft(r.remainingSec); setLeaves(r.leaves || 0); }
+          leftPageRef.current = false; setMode("quiz"); setCur(0);
+        }}>Start</button>
       </main>
       <style>{CSS}</style>
     </div>
@@ -197,11 +265,12 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   if (mode === "review") return (
     <div className="asx" onCopy={guard} onContextMenu={guard} onCut={guard}>
       {header}
+      {resumeOverlay}
       <main className="asx-wrap asx-review">
         <h1 className="asx-reviewh">Review your answers</h1>
         <p className="asx-reviewp">
           {answered} of {N} answered{flaggedCount ? ` · ${flaggedCount} flagged` : ""}.
-          {allAnswered ? " You're ready to submit — tap any number to look again." : " Tap a number to finish it."}
+          {allAnswered ? " You're ready to submit — tap any number to look again." : " You can submit now — any blanks are scored 0 — or tap a number to finish them."}
         </p>
         <div className="asx-grid">
           {QUESTIONS.map((q, i) => {
@@ -220,13 +289,14 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
           <span><i className="lg todo" /> Not answered</span>
           <span><i className="lg flagged" /> Flagged</span>
         </div>
+        {confirmSubmit && !allAnswered && <div className="asx-confirmnote">{N - answered} question{N - answered === 1 ? "" : "s"} left blank — they'll be scored 0. Tap submit again to confirm.</div>}
         {err && <div className="asx-err">{err}</div>}
       </main>
       <footer className="asx-foot">
         <div className="asx-foot-in">
           <button className="asx-nav" onClick={() => setMode("quiz")}><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>Questions</button>
           <span className={`asx-sv ${saved}`}>{saved === "saving" ? "Saving…" : saved === "saved" ? "Saved" : ""}</span>
-          <button className="asx-submit" disabled={busy || !allAnswered} onClick={() => submit()}>{busy ? "Submitting…" : allAnswered ? "Submit assessment" : `${N - answered} left`}</button>
+          <button className="asx-submit" disabled={busy} onClick={handleSubmitClick}>{busy ? "Submitting…" : allAnswered ? "Submit assessment" : confirmSubmit ? `Submit — ${N - answered} blank` : "Submit"}</button>
         </div>
       </footer>
       <style>{CSS}</style>
@@ -239,6 +309,7 @@ export default function AssessmentClient({ appId, firstName, responses: initial 
   return (
     <div className="asx" onCopy={guard} onContextMenu={guard} onCut={guard}>
       {header}
+      {resumeOverlay}
       <main className="asx-wrap">
         <div className="asx-progress">
           <div className="asx-progress-top">
@@ -389,6 +460,21 @@ const CSS = `
 .asx-legend .lg.todo{border-style:dashed}
 .asx-legend .lg.flagged{box-shadow:0 0 0 2px var(--red);border-color:transparent}
 .asx-err{margin-top:16px;background:#F6E7E2;color:var(--red);border-radius:10px;padding:11px 14px;font-size:.9rem;font-weight:600}
+.asx-confirmnote{margin-top:16px;background:#FBF3E4;color:var(--gold-deep);border:1px solid #E7D4A6;border-radius:10px;padding:11px 14px;font-size:.88rem;font-weight:600}
+/* resume / left-the-page overlay */
+.asx-resume{position:fixed;inset:0;z-index:40;background:rgba(16,20,24,.55);backdrop-filter:blur(4px);display:grid;place-items:center;padding:22px}
+.asx-resume-card{background:var(--raise);border:1px solid var(--line);border-radius:18px;max-width:420px;width:100%;padding:28px 26px;text-align:center;box-shadow:0 30px 70px -30px rgba(16,20,24,.5)}
+.asx-resume-card.warn{border-color:var(--red)}
+.asx-resume-ic{width:60px;height:60px;border-radius:50%;background:#F3ECDD;color:var(--gold-deep);display:grid;place-items:center;margin:0 auto 16px}
+.asx-resume-ic.warn{background:#FBEDE9;color:var(--red)}
+.asx-resume-card h2{margin:0 0 8px;font-size:1.3rem;font-weight:800;letter-spacing:-.02em;color:var(--ink)}
+.asx-resume-card p{margin:0 0 16px;color:var(--ink-soft);font-size:.95rem;line-height:1.5}
+.asx-resume-time{display:inline-flex;align-items:center;gap:8px;font-size:.9rem;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:9px 16px;margin-bottom:10px}
+.asx-resume-time b{font-family:var(--font-mono,ui-monospace);font-size:1.05rem;color:var(--ink);font-variant-numeric:tabular-nums}
+.asx-resume-leaves{font-size:.8rem;color:var(--muted);margin-bottom:18px}
+.asx-resume-btn{background:var(--gold-deep);color:#fff;border:none;border-radius:11px;padding:13px 28px;font:inherit;font-weight:700;font-size:.98rem;cursor:pointer;transition:.15s}
+.asx-resume-card.warn .asx-resume-btn{background:var(--red)}
+.asx-resume-btn:hover{filter:brightness(1.07)}
 /* footer nav */
 .asx-foot{position:fixed;left:0;right:0;bottom:0;z-index:20;background:rgba(251,251,250,.94);backdrop-filter:blur(10px);
   border-top:1px solid var(--line)}

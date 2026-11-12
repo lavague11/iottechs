@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { resolveApplicationRef, getApplicationAssessment } from "../../../lib/db";
 import { parseSvcToken } from "../../../lib/auth";
 import { getSessionUser } from "../../../lib/session";
+import { ASSESSMENT_META } from "../../../lib/assessment-bank";
 import SvcGate from "../../service-call/[svcId]/svc-gate";
 import AppNotFound from "../../application/[appId]/app-not-found";
 import AssessmentClient from "./assessment-client";
@@ -34,6 +35,12 @@ export default async function AssessmentPage({ params }) {
 
   const a = getApplicationAssessment(app.app_id) || {};
   const locked = a.status === "submitted" || a.status === "graded";
+  // Server-anchored timer + resume state: if the exam was already opened, send down the remaining
+  // seconds (computed from the server-owned opened_at, NOT the client clock) and the leave count so a
+  // refresh resumes mid-exam instead of resetting. `resuming` drops them straight back into the quiz.
+  const limitSec = ASSESSMENT_META.timeLimitMin * 60;
+  const openedMs = a.opened_at ? Date.parse(a.opened_at) : 0;
+  const remainingSec = openedMs ? Math.max(0, limitSec - Math.floor((Date.now() - openedMs) / 1000)) : limitSec;
   return (
     <AssessmentClient
       appId={app.app_id}
@@ -41,6 +48,10 @@ export default async function AssessmentPage({ params }) {
       responses={a.responses || {}}
       locked={locked}
       staff={!!auth.staff}
+      resuming={!locked && !!a.opened_at}
+      initialRemainingSec={remainingSec}
+      initialLeaves={a.leaves || 0}
+      limitSec={limitSec}
     />
   );
 }
