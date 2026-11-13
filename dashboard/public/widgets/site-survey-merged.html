@@ -2353,9 +2353,13 @@
         // Going to Cameras (or Base) with the Layout draw dock open: close it FIRST, so the step echo
         // doesn't report bgTool:"draw" (which would snap the rail back to Layout). Then advance.
         if(bgToolOpen==="draw" && (m.focus==="devices" || m.step===0)){ exitBg(true); }
+        // Layout opens the Structure/draw editor DIRECTLY — do NOT goStep(1) first. buildPlanOver loads the
+        // aerial async before enterDraw opens, so a pre-emptive goStep(1) flashed the empty Placement canvas
+        // for that gap ("clicking Layout skips me to placement"). The draw tool's Done path (finishBackground)
+        // lands on Placement on its own, so nothing downstream needs the step pre-set.
+        if(m.focus==="layout" && typeof m.step==="number"){ contextualEdit(m.step); return; }   // Layout: walls, rooms, areas
         if(typeof m.step==="number") goStep(m.step);
         if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: device panel open, no draw dock
-        else if(m.focus==="layout" && typeof m.step==="number"){ contextualEdit(m.step); }   // Layout: open the structure/draw editor (walls, rooms, areas)
         else if(typeof m.step==="number") contextualEdit(m.step);               // Background → its editor
         return; }
       // Floor management from the host's top selector — reuse the SAME canonical floor functions as the
