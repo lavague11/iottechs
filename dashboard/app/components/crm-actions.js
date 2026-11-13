@@ -1,6 +1,8 @@
 "use server";
 import { headers } from "next/headers";
-import { searchCustomers, getCustomerSummary, findDuplicateCustomer, updateCustomerUser, getProjectsForCustomerId } from "../../lib/db";
+import { revalidatePath } from "next/cache";
+import { searchCustomers, getCustomerSummary, findDuplicateCustomer, updateCustomerUser, getProjectsForCustomerId,
+  getCustomerLocationsWithCounts, createCustomerLocation, updateCustomerLocation, archiveCustomerLocation, setPrimaryCustomerLocation, getCustomerLocation } from "../../lib/db";
 import { serviceCodeLabel } from "../../lib/spec";
 import { can } from "../../lib/roles";
 
@@ -52,4 +54,45 @@ export async function customerProjectsAction(id) {
   const rows = getProjectsForCustomerId(id).filter((p) => p.project_type !== "C")
     .map((p) => ({ access_id: p.access_id, service_code: p.service_code, service_label: serviceCodeLabel(p.service_code), address: p.address || "", stage: p.stage }));
   return { ok: true, rows: plain(rows) };
+}
+
+// ---- Customer Locations CRUD (staff) --------------------------------------------------------------
+function touchCustomer(id) { revalidatePath("/customers"); try { revalidatePath(`/customers/${id}`); } catch {} }
+
+export async function customerLocationsAction(customerId) {
+  if (!(await staffTok("customer.search"))) return { ok: false, rows: [] };
+  return { ok: true, rows: plain(getCustomerLocationsWithCounts(customerId)) };
+}
+
+export async function createLocationAction(customerId, data) {
+  if (!(await staffTok("customer.edit"))) return { ok: false, error: "Unauthorized." };
+  const r = createCustomerLocation(customerId, data || {});
+  if (r.error) return { ok: false, error: r.error };
+  touchCustomer(customerId);
+  return { ok: true, id: r.id, reused: !!r.reused, row: plain(r.row) };
+}
+
+export async function updateLocationAction(id, patch) {
+  if (!(await staffTok("customer.edit"))) return { ok: false, error: "Unauthorized." };
+  const r = updateCustomerLocation(id, patch || {});
+  if (r.error) return { ok: false, error: r.error };
+  touchCustomer(getCustomerLocation(id)?.customer_id);
+  return { ok: true, row: plain(r.row) };
+}
+
+export async function archiveLocationAction(id, on = true) {
+  if (!(await staffTok("customer.edit"))) return { ok: false, error: "Unauthorized." };
+  const cid = getCustomerLocation(id)?.customer_id;
+  const r = archiveCustomerLocation(id, on);
+  if (r.error) return { ok: false, error: r.error };
+  touchCustomer(cid);
+  return { ok: true };
+}
+
+export async function setPrimaryLocationAction(customerId, id) {
+  if (!(await staffTok("customer.edit"))) return { ok: false, error: "Unauthorized." };
+  const r = setPrimaryCustomerLocation(customerId, id);
+  if (r.error) return { ok: false, error: r.error };
+  touchCustomer(customerId);
+  return { ok: true };
 }

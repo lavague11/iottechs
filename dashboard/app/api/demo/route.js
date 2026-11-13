@@ -69,6 +69,16 @@ export async function POST(request) {
     }
     const { accessId, customerPin, userId } = created;
 
+    // Customer Locations: attach the project to a chosen location, or create one from a new-location
+    // payload and attach it. The project's address/company snapshot is already written above; this just
+    // links it. Best-effort — a location hiccup never fails project creation.
+    if ((body.locationId || body.newLocation) && userId) {
+      try {
+        const { attachProjectLocation } = await import("../../../lib/db");
+        attachProjectLocation(accessId, userId, { locationId: body.locationId || null, newLocation: body.newLocation || null });
+      } catch (e) { console.warn("[demo] attach location failed", e?.message || e); }
+    }
+
     // Auto-create customer account if doesn't exist (public/lead path only — a CRM pick or a checked
     // new client already has exactly one row and must not get a second).
     let accountCreated = false;

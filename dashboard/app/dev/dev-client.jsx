@@ -4,7 +4,7 @@ import { useState, useTransition, useRef } from "react";
 import Link from "next/link";
 import AdminShell from "../components/admin-shell";
 import ConfirmDialog from "../components/confirm-dialog";
-import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction, dismissSecretAction, restoreSecretAction } from "./actions";
+import { toggleDevTaskAction, addDevTaskAction, deleteDevTaskAction, saveSecretAction, clearSecretAction, dismissSecretAction, restoreSecretAction, runLocationsBackfillAction } from "./actions";
 import { setLoginTwoFactorAction } from "../login/actions";
 
 const ROUTE_BADGE = {
@@ -190,11 +190,22 @@ function KeyRow({ row, onFlash, onDismiss }) {
 function FeatureFlagsCard({ flags = {}, onFlash }) {
   const [on, setOn] = useState(!!flags.customerPortalV2);
   const [busy, setBusy] = useState(false);
+  const [bfBusy, setBfBusy] = useState(false);
+  const [bfResult, setBfResult] = useState("");
   const toggle = async () => {
     const next = !on; setBusy(true); setOn(next);
     const r = await saveSecretAction("CUSTOMER_PORTAL_V2", next ? "on" : "off").catch(() => ({ error: "Failed" }));
     setBusy(false);
     if (r?.error) { setOn(!next); onFlash?.(r.error); } else onFlash?.(next ? "Customer Portal V2 on" : "Customer Portal V2 off");
+  };
+  const runBackfill = async () => {
+    setBfBusy(true); setBfResult("");
+    const r = await runLocationsBackfillAction().catch(() => ({ error: "Failed" }));
+    setBfBusy(false);
+    if (r?.error) { onFlash?.(r.error); setBfResult(r.error); return; }
+    const rep = r.report || {};
+    const msg = `${rep.locationsCreated} new · ${rep.locationsReused} existing · ${rep.projectsLinked} projects + ${rep.serviceCallsLinked} calls linked`;
+    setBfResult(msg); onFlash?.("Locations backfill complete");
   };
   return (
     <div className="kv-card">
@@ -210,6 +221,13 @@ function FeatureFlagsCard({ flags = {}, onFlash }) {
           <div className="kv-sub" style={{ margin: 0 }}>Simplified customer project portal (install projects). Off = classic deck.</div>
         </div>
         <button className="kv-addbtn" disabled={busy} onClick={toggle} aria-pressed={on}>{on ? "On" : "Off"}</button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 2px", borderTop: "1px solid var(--dv-line,#eee)" }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>Customer Locations backfill</div>
+          <div className="kv-sub" style={{ margin: 0 }}>{bfResult || "Build locations from existing projects + service calls. Run once after deploy — idempotent."}</div>
+        </div>
+        <button className="kv-addbtn" disabled={bfBusy} onClick={runBackfill}>{bfBusy ? "Running…" : "Run"}</button>
       </div>
     </div>
   );

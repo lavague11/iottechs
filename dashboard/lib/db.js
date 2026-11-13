@@ -285,6 +285,10 @@ function init() {
   // many projects. Nullable + additive; contact_* stay as the project's historical contact snapshot.
   if (!cols.includes("customer_id"))        db.exec("ALTER TABLE projects ADD COLUMN customer_id INTEGER");
   db.exec("CREATE INDEX IF NOT EXISTS idx_projects_customer ON projects(customer_id)");
+  // Customer Locations: a project is done AT a location (customer_locations.id). Nullable — the backfill
+  // links existing rows; projects.address/company_name stay as the frozen per-job snapshot. See customer_locations below.
+  if (!cols.includes("location_id"))        db.exec("ALTER TABLE projects ADD COLUMN location_id INTEGER");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_location ON projects(location_id)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -557,8 +561,10 @@ function init() {
     ["customer_id", "INTEGER"], ["follow_up_of", "TEXT"],
     ["report_fingerprint", "TEXT"], ["tech_signed_name", "TEXT"], ["tech_signed_at", "TEXT"],
     ["customer_signed_name", "TEXT"], ["customer_signed_at", "TEXT"],
+    ["location_id", "INTEGER"],   // Customer Locations link (customer_locations.id); address stays on the row as snapshot
   ]) if (!svcCols.includes(col)) db.exec(`ALTER TABLE service_calls ADD COLUMN ${col} ${ddl}`);
   db.exec("CREATE INDEX IF NOT EXISTS idx_svc_customer ON service_calls(customer_id)");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_svc_location ON service_calls(location_id)");
   // One-time normalization: the first TRACE release's stage keys → the canonical status keys.
   for (const [from, to] of Object.entries(SVC_STATUS_ALIAS)) db.prepare("UPDATE service_calls SET stage = ? WHERE stage = ?").run(to, from);
 
@@ -1356,6 +1362,38 @@ function init() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_customer_notes_cust ON customer_notes(customer_id)`);
+
+  // Customer Locations — one customer, many places work happens (a customer with several businesses).
+  // The LIVING record of a place; a project/service_call attaches via location_id, while that job's
+  // address/company_name stay frozen on the row as the historical snapshot. (node:sqlite, not Postgres:
+  // INTEGER pk, TEXT timestamps, server-side access control — no RLS.) `norm` = normalized address key
+  // used for dedup across projects + service calls.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_locations (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id   INTEGER NOT NULL,
+      name          TEXT,
+      address       TEXT NOT NULL,
+      norm          TEXT NOT NULL,
+      place_id      TEXT,
+      lat           REAL,
+      lng           REAL,
+      property_type TEXT,
+      email         TEXT,
+      phone         TEXT,
+      contact_name  TEXT,
+      notes         TEXT,
+      is_primary    INTEGER DEFAULT 0,
+      archived_at   TEXT,
+      created_at    TEXT DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_cust_loc_customer ON customer_locations(customer_id)`);
+  // One location per real place per customer. Partial-unique on the normalized address (active rows),
+  // and on place_id when Google gave us one — so the backfill and manual adds can't duplicate a place.
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cust_loc_norm ON customer_locations(customer_id, norm) WHERE archived_at IS NULL`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_cust_loc_place ON customer_locations(customer_id, place_id) WHERE place_id IS NOT NULL AND archived_at IS NULL`);
 
   // Per-user "recently opened" projects — powers the dashboard launchpad. One row per (user, project),
   // bumped on every open, so the six most-recent DISTINCT projects a user touched are a cheap query.
@@ -3462,8 +3500,197 @@ export function searchCustomers(q, limit = 8) {
 export function getCustomerSummary(id) {
   const row = db.prepare(CUSTOMER_SUMMARY_SQL + " AND u.id=?").get(Number(id));
   if (!row) return null;
+  // Canonical locations (the modal's location picker reads these). `addresses` kept for back-compat.
+  const locations = getCustomerLocationsWithCounts(row.id);
   const addresses = db.prepare("SELECT address, MAX(access_id) AS access_id FROM projects WHERE customer_id=? AND address IS NOT NULL AND address<>'' GROUP BY address ORDER BY MAX(id) DESC LIMIT 5").all(row.id);
-  return { ...row, addresses };
+  return { ...row, locations, addresses };
+}
+
+// ============================ CUSTOMER LOCATIONS ============================
+// A customer's distinct places of business. Projects/service calls attach via location_id; each job's
+// address+company_name stay frozen on the row as the historical snapshot. Backfill builds these from the
+// jobs that already exist. See the customer_locations table + the Fix doc. Data layer only (no UI yet).
+
+// Dedup key for an address: lowercase, drop a trailing ", USA", strip punctuation, collapse whitespace.
+export function normalizeLocAddress(a) {
+  return String(a || "")
+    .toLowerCase()
+    .replace(/,?\s*usa\s*$/i, "")
+    .replace(/[.,#]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function getCustomerLocations(customerId, { includeArchived = false } = {}) {
+  const where = includeArchived ? "" : " AND archived_at IS NULL";
+  return db.prepare(`SELECT * FROM customer_locations WHERE customer_id = ?${where} ORDER BY is_primary DESC, id ASC`).all(Number(customerId));
+}
+
+// Idempotent, re-runnable backfill. One customer_locations row per (customer_id, normalized address),
+// built from projects + service_calls; links each job to its location; marks each customer's oldest
+// location primary. Deterministic — only rows that already carry a customer_id are touched. Returns a
+// report with the counts. adt_applications is intentionally excluded (it has no customer_id — would need
+// fuzzy identity matching; tracked as a follow-up).
+export function backfillCustomerLocations() {
+  const report = { locationsCreated: 0, locationsReused: 0, projectsLinked: 0, serviceCallsLinked: 0, unmatchedProjects: 0, unmatchedServiceCalls: 0, customersTouched: 0 };
+  const findLoc = db.prepare("SELECT id, name, property_type FROM customer_locations WHERE customer_id = ? AND norm = ? AND archived_at IS NULL");
+  const insLoc = db.prepare("INSERT INTO customer_locations (customer_id, name, address, norm, property_type) VALUES (?,?,?,?,?)");
+  const fillLoc = db.prepare("UPDATE customer_locations SET name = COALESCE(name, ?), property_type = COALESCE(property_type, ?), updated_at = datetime('now','localtime') WHERE id = ?");
+  const touched = new Set();
+
+  function ensureLocation(customerId, address, name, propertyType) {
+    const norm = normalizeLocAddress(address);
+    if (!customerId || !norm) return null;
+    const existing = findLoc.get(customerId, norm);
+    if (existing) {
+      if ((!existing.name && name) || (!existing.property_type && propertyType)) fillLoc.run(name || null, propertyType || null, existing.id);
+      report.locationsReused++; touched.add(customerId); return existing.id;
+    }
+    const r = insLoc.run(customerId, name || null, String(address).trim(), norm, propertyType || null);
+    report.locationsCreated++; touched.add(customerId); return Number(r.lastInsertRowid);
+  }
+
+  db.exec("BEGIN");
+  try {
+    // Projects newest-first, so the most recent non-empty company_name / property_type wins on fill.
+    for (const p of db.prepare("SELECT id, customer_id, address, company_name, property_type, location_id FROM projects WHERE customer_id IS NOT NULL AND address IS NOT NULL AND TRIM(address) <> '' ORDER BY id DESC").all()) {
+      const loc = ensureLocation(p.customer_id, p.address, p.company_name, p.property_type);
+      if (!loc) { report.unmatchedProjects++; continue; }
+      if (p.location_id !== loc) { db.prepare("UPDATE projects SET location_id = ? WHERE id = ?").run(loc, p.id); report.projectsLinked++; }
+    }
+    // Service calls share the same (customer, normalized-address) keyspace, so a call at a project's
+    // address reuses that location instead of making a second one.
+    for (const c of db.prepare("SELECT id, customer_id, address, location_id FROM service_calls WHERE customer_id IS NOT NULL AND address IS NOT NULL AND TRIM(address) <> '' ORDER BY id DESC").all()) {
+      const loc = ensureLocation(c.customer_id, c.address, null, null);
+      if (!loc) { report.unmatchedServiceCalls++; continue; }
+      if (c.location_id !== loc) { db.prepare("UPDATE service_calls SET location_id = ? WHERE id = ?").run(loc, c.id); report.serviceCallsLinked++; }
+    }
+    // One primary per customer — the oldest location, only where none is set yet.
+    for (const { customer_id } of db.prepare("SELECT DISTINCT customer_id FROM customer_locations WHERE archived_at IS NULL").all()) {
+      if (db.prepare("SELECT 1 FROM customer_locations WHERE customer_id = ? AND is_primary = 1 AND archived_at IS NULL").get(customer_id)) continue;
+      const oldest = db.prepare("SELECT id FROM customer_locations WHERE customer_id = ? AND archived_at IS NULL ORDER BY id ASC LIMIT 1").get(customer_id);
+      if (oldest) db.prepare("UPDATE customer_locations SET is_primary = 1 WHERE id = ?").run(oldest.id);
+    }
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
+  report.customersTouched = touched.size;
+  return report;
+}
+
+// Rollback: unlink every job and delete all locations (the nullable location_id columns remain, harmless).
+// Pairs with backfillCustomerLocations for a clean redo.
+export function rollbackCustomerLocations() {
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE projects SET location_id = NULL WHERE location_id IS NOT NULL").run();
+    db.prepare("UPDATE service_calls SET location_id = NULL WHERE location_id IS NOT NULL").run();
+    db.prepare("DELETE FROM customer_locations").run();
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
+  return { ok: true };
+}
+
+// Locations for a customer, each with how many projects / service calls sit at it. Primary first.
+export function getCustomerLocationsWithCounts(customerId, { includeArchived = false } = {}) {
+  const where = includeArchived ? "" : " AND l.archived_at IS NULL";
+  return db.prepare(`
+    SELECT l.*,
+      (SELECT COUNT(*) FROM projects p WHERE p.location_id = l.id) AS project_count,
+      (SELECT COUNT(*) FROM service_calls s WHERE s.location_id = l.id) AS service_count
+    FROM customer_locations l
+    WHERE l.customer_id = ?${where}
+    ORDER BY l.is_primary DESC, l.id ASC`).all(Number(customerId));
+}
+
+export function getCustomerLocation(id) {
+  return db.prepare("SELECT * FROM customer_locations WHERE id = ?").get(Number(id)) || null;
+}
+
+// Create a location for a customer — or REUSE the existing one for the same place (dedup guard: match on
+// place_id when present, else on the normalized address). Returns { id, reused, row }.
+export function createCustomerLocation(customerId, data = {}) {
+  const cid = Number(customerId);
+  if (!cid) return { error: "Customer required." };
+  const address = String(data.address || "").trim();
+  if (!address) return { error: "Address is required." };
+  const norm = normalizeLocAddress(address);
+  const placeId = data.place_id ? String(data.place_id).slice(0, 200) : null;
+  // Reuse an active location for the same place rather than making a duplicate.
+  let existing = placeId ? db.prepare("SELECT * FROM customer_locations WHERE customer_id=? AND place_id=? AND archived_at IS NULL").get(cid, placeId) : null;
+  if (!existing) existing = db.prepare("SELECT * FROM customer_locations WHERE customer_id=? AND norm=? AND archived_at IS NULL").get(cid, norm);
+  if (existing) return { id: existing.id, reused: true, row: existing };
+  const hasPrimary = db.prepare("SELECT 1 FROM customer_locations WHERE customer_id=? AND is_primary=1 AND archived_at IS NULL").get(cid);
+  const info = db.prepare(`
+    INSERT INTO customer_locations (customer_id, name, address, norm, place_id, lat, lng, property_type, email, phone, contact_name, notes, is_primary)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    cid, data.name ? String(data.name).slice(0, 200) : null, address, norm, placeId,
+    data.lat != null ? Number(data.lat) : null, data.lng != null ? Number(data.lng) : null,
+    data.property_type ? normalizePropertyType(data.property_type) : null,
+    data.email ? String(data.email).trim().slice(0, 200) : null,
+    data.phone ? String(data.phone).trim().slice(0, 40) : null,
+    data.contact_name ? String(data.contact_name).slice(0, 120) : null,
+    data.notes ? String(data.notes).slice(0, 1000) : null,
+    hasPrimary ? 0 : 1);   // first location becomes primary
+  return { id: Number(info.lastInsertRowid), reused: false, row: getCustomerLocation(info.lastInsertRowid) };
+}
+
+export function updateCustomerLocation(id, patch = {}) {
+  const loc = getCustomerLocation(id);
+  if (!loc) return { error: "Location not found." };
+  const cols = { name: 1, address: 1, place_id: 1, lat: 1, lng: 1, property_type: 1, email: 1, phone: 1, contact_name: 1, notes: 1 };
+  const sets = [], vals = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (!cols[k]) continue;
+    if (k === "address") { if (!String(v || "").trim()) return { error: "Address can't be empty." }; sets.push("address=?", "norm=?"); vals.push(String(v).trim(), normalizeLocAddress(v)); continue; }
+    if (k === "property_type") { sets.push("property_type=?"); vals.push(v ? normalizePropertyType(v) : null); continue; }
+    sets.push(`${k}=?`); vals.push(v === "" ? null : v);
+  }
+  if (!sets.length) return { ok: true, row: loc };
+  sets.push("updated_at=datetime('now','localtime')");
+  db.prepare(`UPDATE customer_locations SET ${sets.join(", ")} WHERE id=?`).run(...vals, Number(id));
+  return { ok: true, row: getCustomerLocation(id) };
+}
+
+// Archive (soft-delete) a location — refused while live projects still sit at it (lost ones don't count).
+export function archiveCustomerLocation(id, on = true) {
+  const loc = getCustomerLocation(id);
+  if (!loc) return { error: "Location not found." };
+  if (on) {
+    const active = db.prepare("SELECT COUNT(*) n FROM projects WHERE location_id=? AND lost_at IS NULL").get(Number(id)).n;
+    if (active > 0) return { error: `Can't archive — ${active} active project${active === 1 ? "" : "s"} still at this location.` };
+  }
+  db.prepare("UPDATE customer_locations SET archived_at=?, is_primary=CASE WHEN ? THEN 0 ELSE is_primary END, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(on ? new Date().toISOString() : null, on ? 1 : 0, Number(id));
+  return { ok: true };
+}
+
+export function setPrimaryCustomerLocation(customerId, id) {
+  const loc = getCustomerLocation(id);
+  if (!loc || loc.customer_id !== Number(customerId)) return { error: "Location not found." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE customer_locations SET is_primary=0 WHERE customer_id=?").run(Number(customerId));
+    db.prepare("UPDATE customer_locations SET is_primary=1, updated_at=datetime('now','localtime') WHERE id=?").run(Number(id));
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
+  return { ok: true };
+}
+
+// Attach a project (by access_id) to a location — an existing one (locationId) or a freshly created one
+// (newLocation payload). Used by /api/demo right after the project is created. Returns the location.
+export function attachProjectLocation(accessId, customerId, { locationId = null, newLocation = null } = {}) {
+  let locId = locationId ? Number(locationId) : null;
+  if (!locId && newLocation) {
+    const r = createCustomerLocation(customerId, newLocation);
+    if (r.error) return r;
+    locId = r.id;
+  }
+  if (!locId) return { error: "No location." };
+  // Guard: the location must belong to this customer.
+  const loc = getCustomerLocation(locId);
+  if (!loc || loc.customer_id !== Number(customerId)) return { error: "Location doesn't belong to this customer." };
+  db.prepare("UPDATE projects SET location_id=? WHERE access_id=?").run(locId, String(accessId));
+  return { ok: true, locationId: locId, row: loc };
 }
 
 // Duplicate check for the "New client" path: the customer that already owns this email or phone.

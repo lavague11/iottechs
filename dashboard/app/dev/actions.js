@@ -3,13 +3,21 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { parseToken } from "../../lib/auth";
-import { toggleDevTask, addDevTask, archiveAndDelete, setSecret, deleteSecret, dismissKey, restoreKey } from "../../lib/db";
+import { toggleDevTask, addDevTask, archiveAndDelete, setSecret, deleteSecret, dismissKey, restoreKey, backfillCustomerLocations } from "../../lib/db";
 
 async function requireAdmin() {
   const jar   = await cookies();
   const token = jar.get("iot_session")?.value;
   const actor = token ? await parseToken(token) : null;
   return actor?.role === "admin" ? actor : null;
+}
+
+// One-time (idempotent, re-runnable) Customer Locations backfill — builds customer_locations from the
+// existing projects + service calls and links them. Run once after deploying the feature. Admin only.
+export async function runLocationsBackfillAction() {
+  if (!(await requireAdmin())) return { error: "Unauthorized." };
+  try { const report = backfillCustomerLocations(); revalidatePath("/customers"); return { ok: true, report }; }
+  catch (e) { return { error: e?.message || "Backfill failed." }; }
 }
 
 export async function toggleDevTaskAction(id, done) {

@@ -7,10 +7,26 @@ import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import AdminShell, { NewProjectModal } from "../../components/admin-shell";
 import { STATUS, STATUS_TONE } from "../../../lib/spec";
-import { updateCustomerAction, customerProjectsAction } from "../../components/crm-actions";
+import { updateCustomerAction, customerProjectsAction, customerLocationsAction, createLocationAction, updateLocationAction, archiveLocationAction, setPrimaryLocationAction } from "../../components/crm-actions";
 import { createServiceCallAction } from "../../service-calls/actions";
 import { addCustomerNoteAction } from "./actions";
 import ProjectCardMenu from "../../components/project-card-menu";
+import AddressAutocomplete from "../../components/address-autocomplete";
+
+const AVAIL_PROP = { commercial: "Commercial", residential: "Residential" };
+const mapHref = (a) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(a || "")}`;
+
+// Bucket jobs under their location (order of first appearance), plus a trailing "No location" group.
+function groupJobsByLocation(jobs, locations) {
+  const nameById = new Map((locations || []).map((l) => [l.id, l.name || l.address]));
+  const groups = new Map();
+  for (const j of jobs) {
+    const key = j.location_id || 0;
+    if (!groups.has(key)) groups.set(key, { key, label: key ? (nameById.get(key) || "Location") : "No location", jobs: [] });
+    groups.get(key).jobs.push(j);
+  }
+  return [...groups.values()];
+}
 
 const STAGE_GROUP = { inquiry: "site_survey", site_survey: "site_survey", proposal: "site_survey", approval_deposit: "site_survey", schedule: "install", install: "install", qc: "install", payment: "completion", completion: "completion" };
 const money = (n) => "$" + (Math.round(+n || 0)).toLocaleString();
@@ -50,6 +66,118 @@ const CATS = [
   { key: "all", label: "All" }, { key: "open", label: "Active" }, { key: "pending", label: "Pending" },
   { key: "upgrade", label: "Upgrades" }, { key: "service", label: "Work Orders" }, { key: "completed", label: "Completed" },
 ];
+
+// Locations card — the customer's distinct places of business. One record per place; a project's
+// address stays frozen on the project. Add / Edit / Set primary / Archive (archive blocked while live
+// projects sit there). Server actions enforce the role; the UI hides edit for roles that lack it.
+function LocationForm({ f, setF, busy, err, onSave, onCancel, saveLabel }) {
+  const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
+  return (
+    <div className="np-f" style={{ border: "1px solid var(--line)", borderRadius: 12, padding: 14, background: "var(--bg-tint,#fafafa)", display: "grid", gap: 10 }}>
+      <div className="np-f"><label>Business name <span className="ap-opt" style={{ fontWeight: 500, color: "var(--muted)" }}>optional</span></label>
+        <AddressAutocomplete types={["establishment"]} className="apx-input" value={f.name} onChange={(v) => set("name", v)}
+          onPlace={(p) => setF((x) => ({ ...x, name: p.name || x.name, address: p.address || x.address, place_id: p.place_id || x.place_id, lat: p.lat ?? x.lat, lng: p.lng ?? x.lng }))} placeholder="e.g. J A Auto Body Inc" /></div>
+      <div className="np-f"><label>Address</label>
+        <AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => set("address", v)}
+          onPlace={(p) => setF((x) => ({ ...x, address: p.address || x.address, place_id: p.place_id || x.place_id, lat: p.lat ?? x.lat, lng: p.lng ?? x.lng }))} placeholder="Start typing, then choose the address" /></div>
+      <div className="np-row2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="np-f"><label>Property</label>
+          <div className="np-seg" role="radiogroup" aria-label="Property type" style={{ display: "flex" }}>
+            {[["commercial", "Commercial"], ["residential", "Residential"]].map(([k, t]) => (
+              <button type="button" key={k} role="radio" aria-checked={f.property_type === k} className={`np-seg-b${f.property_type === k ? " on" : ""}`} onClick={() => set("property_type", k)}>{t}</button>
+            ))}
+          </div>
+        </div>
+        <div className="np-f"><label>Site phone <span className="ap-opt" style={{ fontWeight: 500, color: "var(--muted)" }}>optional</span></label>
+          <input className="apx-input" type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="(201) 000-0000" /></div>
+      </div>
+      <div className="np-row2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div className="np-f"><label>Site email <span className="ap-opt" style={{ fontWeight: 500, color: "var(--muted)" }}>optional</span></label>
+          <input className="apx-input" type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="manager@business.com" /></div>
+        <div className="np-f"><label>Site contact <span className="ap-opt" style={{ fontWeight: 500, color: "var(--muted)" }}>optional</span></label>
+          <input className="apx-input" value={f.contact_name} onChange={(e) => set("contact_name", e.target.value)} placeholder="Manager's name" /></div>
+      </div>
+      <div className="np-f"><label>Notes <span className="ap-opt" style={{ fontWeight: 500, color: "var(--muted)" }}>gate code, parking, where the panel is</span></label>
+        <input className="apx-input" value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Optional" /></div>
+      {err && <div className="np-err">{err}</div>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <button className="btn btn-primary" onClick={onSave} disabled={busy || !f.address.trim()}>{busy ? "Saving…" : saveLabel}</button>
+        <button className="btn" style={{ border: "1px solid var(--line)", background: "#fff" }} onClick={onCancel} disabled={busy}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+const BLANK_LOC = { name: "", address: "", place_id: "", lat: null, lng: null, property_type: "commercial", email: "", phone: "", contact_name: "", notes: "" };
+
+function LocationsCard({ user, customerId, initial = [] }) {
+  const canEdit = !!user && ["admin", "manager", "sales"].includes(user.role);
+  const [locs, setLocs] = useState(initial);
+  const [mode, setMode] = useState(null);     // "add" | editId(number) | null
+  const [f, setF] = useState(BLANK_LOC);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function refresh() { const r = await customerLocationsAction(customerId); if (r?.ok) setLocs(r.rows); }
+  function openAdd() { setF({ ...BLANK_LOC }); setErr(""); setMode("add"); }
+  function openEdit(l) { setF({ name: l.name || "", address: l.address || "", place_id: l.place_id || "", lat: l.lat, lng: l.lng, property_type: l.property_type || "commercial", email: l.email || "", phone: l.phone || "", contact_name: l.contact_name || "", notes: l.notes || "" }); setErr(""); setMode(l.id); }
+  function cancel() { setMode(null); setErr(""); }
+  async function save() {
+    if (!f.address.trim()) { setErr("Address is required."); return; }
+    setBusy(true); setErr("");
+    const r = mode === "add" ? await createLocationAction(customerId, f) : await updateLocationAction(mode, f);
+    setBusy(false);
+    if (!r?.ok) { setErr(r?.error || "Couldn't save."); return; }
+    await refresh(); setMode(null);
+  }
+  async function archive(l) {
+    if (!window.confirm(`Archive "${l.name || l.address}"? It stays on past jobs but won't show for new ones.`)) return;
+    const r = await archiveLocationAction(l.id, true);
+    if (!r?.ok) { window.alert(r?.error || "Couldn't archive."); return; }
+    refresh();
+  }
+  async function makePrimary(l) { const r = await setPrimaryLocationAction(customerId, l.id); if (r?.ok) refresh(); }
+
+  if (!locs.length && !canEdit) return null;   // nothing to show a read-only viewer
+
+  return (
+    <div className="panel mb">
+      <div className="panel-head" style={{ flexWrap: "wrap", gap: 10 }}>
+        <h3>Locations ({locs.length})</h3>
+        {canEdit && mode !== "add" && <button className="btn" style={{ border: "1px solid var(--line)", background: "#fff", fontWeight: 600 }} onClick={openAdd}>+ Add location</button>}
+      </div>
+      <div style={{ padding: 16, display: "grid", gap: 12 }}>
+        {mode === "add" && <LocationForm f={f} setF={setF} busy={busy} err={err} onSave={save} onCancel={cancel} saveLabel="Add location" />}
+        {locs.length === 0 && mode !== "add" && <div style={{ color: "var(--muted)", fontSize: ".88rem", padding: "6px 2px" }}>No locations yet. Add the customer&rsquo;s place of business.</div>}
+        {locs.map((l) => mode === l.id ? (
+          <LocationForm key={l.id} f={f} setF={setF} busy={busy} err={err} onSave={save} onCancel={cancel} saveLabel="Save location" />
+        ) : (
+          <div key={l.id} style={{ border: "1px solid var(--line)", borderRadius: 12, padding: "12px 14px", display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <b style={{ fontSize: ".95rem" }}>{l.name || l.address}</b>
+                {l.is_primary ? <span style={chip("#b08f4f", "#faf4e8", "#ecd9b0")}>Primary</span> : null}
+                <span style={chip()}>{AVAIL_PROP[l.property_type] || "—"}</span>
+                <span style={chip()}>{l.project_count} project{l.project_count === 1 ? "" : "s"}</span>
+              </div>
+              {l.name && <a href={mapHref(l.address)} target="_blank" rel="noreferrer" style={{ fontSize: ".84rem", color: "var(--muted)", textDecoration: "none", display: "inline-block", marginTop: 3 }}>{l.address} ↗</a>}
+              {!l.name && <a href={mapHref(l.address)} target="_blank" rel="noreferrer" style={{ fontSize: ".82rem", color: "var(--muted)", textDecoration: "none" }}>Open map ↗</a>}
+              {(l.phone || l.email || l.contact_name) && <div style={{ fontSize: ".8rem", color: "var(--muted)", marginTop: 3 }}>{[l.contact_name, l.phone, l.email].filter(Boolean).join(" · ")}</div>}
+              {l.notes && <div style={{ fontSize: ".78rem", color: "var(--muted)", marginTop: 3, fontStyle: "italic" }}>{l.notes}</div>}
+            </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 10, fontSize: ".8rem", fontWeight: 600 }}>
+                <button className="np-link" onClick={() => openEdit(l)}>Edit</button>
+                {!l.is_primary && <button className="np-link" onClick={() => makePrimary(l)}>Set primary</button>}
+                <button className="np-link" style={{ color: "var(--red,#c0392b)" }} onClick={() => archive(l)}>Archive</button>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function CustomerHubClient({ user, alerts, hub }) {
   const router = useRouter();
@@ -157,6 +285,9 @@ export default function CustomerHubClient({ user, alerts, hub }) {
           </div>
         </div>
 
+        {/* Locations */}
+        <LocationsCard user={user} customerId={summary.id} initial={summary.locations || []} />
+
         {/* Projects */}
         <div className="panel mb">
           <div className="panel-head" style={{ flexWrap: "wrap", gap: 10 }}>
@@ -177,17 +308,25 @@ export default function CustomerHubClient({ user, alerts, hub }) {
             </div>
           </div>
           <div style={{ padding: 16 }}>
-            {visibleJobs.length === 0 ? (
-              <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--muted)", fontSize: ".88rem" }}>No projects.</div>
-            ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 }}>
-                {visibleJobs.map((j) => (
-                  <ProjectCardMenu key={j.access_id} role={user?.role} project={{ access_id: j.access_id, customer: hub?.customer?.name || j.customer, stage: j.stage, stageGroup: STAGE_GROUP[j.stage], contact_phone: hub?.customer?.phone, contact_email: hub?.customer?.email, archived: j.archived }}>
-                    <div style={{ display: "contents" }}><ProjectCard job={j} onOpen={() => router.push(`/project/${j.access_id}`)} /></div>
-                  </ProjectCardMenu>
-                ))}
-              </div>
-            )}
+            {(() => {
+              const renderJob = (j) => (
+                <ProjectCardMenu key={j.access_id} role={user?.role} project={{ access_id: j.access_id, customer: hub?.customer?.name || j.customer, stage: j.stage, stageGroup: STAGE_GROUP[j.stage], contact_phone: hub?.customer?.phone, contact_email: hub?.customer?.email, archived: j.archived }}>
+                  <div style={{ display: "contents" }}><ProjectCard job={j} onOpen={() => router.push(`/project/${j.access_id}`)} /></div>
+                </ProjectCardMenu>
+              );
+              const grid = (jobs) => <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 12 }}>{jobs.map(renderJob)}</div>;
+              if (visibleJobs.length === 0) return <div style={{ padding: "26px 12px", textAlign: "center", color: "var(--muted)", fontSize: ".88rem" }}>No projects.</div>;
+              // Group by location only when the customer actually has more than one place.
+              if ((summary.locations || []).length > 1) {
+                return <div style={{ display: "grid", gap: 16 }}>{groupJobsByLocation(visibleJobs, summary.locations).map((g) => (
+                  <div key={g.key}>
+                    <div style={{ fontSize: ".8rem", fontWeight: 700, color: "var(--muted)", marginBottom: 8, display: "flex", alignItems: "center", gap: 8 }}>{g.label}<span style={chip()}>{g.jobs.length}</span></div>
+                    {grid(g.jobs)}
+                  </div>
+                ))}</div>;
+              }
+              return grid(visibleJobs);
+            })()}
           </div>
         </div>
 

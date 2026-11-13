@@ -54,12 +54,17 @@ export function attachAutocomplete(input, { types = ["address"], onPlace } = {})
   loadPlaces().then((places) => {
     if (cancelled || !input || !places?.Autocomplete) return;
     // Google rejects mixing "address" + "establishment"; passing no `types` key returns both.
-    const opts = { fields: ["formatted_address", "name"] };
+    // place_id (free) enables location dedup; geometry gives lat/lng for dispatch + the satellite tools.
+    const opts = { fields: ["formatted_address", "name", "place_id", "geometry.location"] };
     if (Array.isArray(types) && types.length) opts.types = types;
     ac = new places.Autocomplete(input, opts);
     ac.addListener("place_changed", () => {
       const p = ac.getPlace();
-      if (p) onPlace?.({ name: p.name || "", address: p.formatted_address || "" });
+      if (p) {
+        const loc = p.geometry && p.geometry.location;
+        onPlace?.({ name: p.name || "", address: p.formatted_address || "", place_id: p.place_id || null,
+          lat: loc ? loc.lat() : null, lng: loc ? loc.lng() : null });
+      }
     });
     // Stop the browser autofill dropdown from fighting the Places dropdown. `autocomplete="off"`
     // alone is widely ignored by Chrome for address-looking fields, so also randomize the field
