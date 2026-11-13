@@ -22,7 +22,7 @@ const corpus = FILES.map(read).join("\n");
 
 // The complete set of `iot*` postMessage types across the shell + all four widgets. Frozen on purpose.
 const EXPECTED_TYPES = new Set([
-  "iotAerialRestore", "iotBgReady", "iotCaptureCancel", "iotCaptureCommit", "iotDrawBackdrop", "iotDrawFloor",
+  "iotAerialRestore", "iotBgReady", "iotCaptureCancel", "iotCaptureCommit", "iotDrawBackdrop", "iotDrawCommit", "iotDrawEmpty", "iotDrawFloor",
   "iotFloors", "iotLoadCapture", "iotMockup", "iotMockupCmd", "iotMockupComment",
   "iotMockupFullscreen", "iotMockupPhoto", "iotMockupRenamed", "iotMockupSelect", "iotOutlineLoad", "iotOutlineReady",
   "iotOutlineSave", "iotPlanLoad", "iotPlanReady", "iotPlanSave", "iotSurvey",

@@ -931,7 +931,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html?v=20261105-navfix"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
-    function drawSrc(){ return "draw-floorplan.html?v=20261113-fit"
+    function drawSrc(){ return "draw-floorplan.html?v=20261113-commit"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
@@ -1250,6 +1250,11 @@
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
       fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; if(fl===floors[curFloor]){ renderView(); reconcileLocations(); } queueSave(); });   // new Structure/rooms → refresh the room layer + re-resolve camera locations
+    // Draw tool had NOTHING drawn when the planner advanced (iotDrawCommit → no sketch): close the dock and
+    // move to Placement with the device panel open, mirroring finishBackground's landing. No plan to commit.
+    window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotDrawEmpty" || !ev.source || ev.source!==satFrame.contentWindow) return;
+      if(frozen()) { exitBg(true); return; }
+      exitBg(true); sideCollapsed=(window.innerWidth<=900); applySideCollapsed(); goStep(1); });
     // Draw tool's floor selector: it already flushed its plan (iotPlanSave, ordered before this) -> save this floor, switch, and reopen the structure editor on the new one (new &floor/&fid = fresh iotPlanReady/Load).
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawFloor"||!ev.source||ev.source!==satFrame.contentWindow) return;
       var i=m.i; if(frozen()||bgToolOpen!=="draw"||typeof i!=="number"||i%1!==0||i<0||i>=floors.length||i===curFloor) return;
@@ -2350,9 +2355,14 @@
         // satellite-capture-result lands the background on the map). The draw tool autosaves geometry, so
         // we just close it and advance.
         if(bgToolOpen==="satellite"){ try{ satFrame.contentWindow.postMessage({type:"iotCaptureCommit"}, "*"); }catch(e){} return; }
-        // Going to Cameras (or Base) with the Layout draw dock open: close it FIRST, so the step echo
-        // doesn't report bgTool:"draw" (which would snap the rail back to Layout). Then advance.
-        if(bgToolOpen==="draw" && (m.focus==="devices" || m.step===0)){ exitBg(true); }
+        // Advancing to Cameras/Placement with the Layout draw dock open: COMMIT the drawn structure first —
+        // ask the draw tool to run its Place-Cameras path (planSvg + bgCtx → the floor becomes hybrid-capable,
+        // so Placement renders the plan OVER the aerial, not a bare aerial). It replies with
+        // satellite-capture-result (a sketch exists) or iotDrawEmpty (nothing drawn); either reply closes the
+        // dock and advances. (Mirrors the satellite commit above; was exitBg(true), which skipped the commit.)
+        if(bgToolOpen==="draw" && m.focus==="devices"){ try{ satFrame.contentWindow.postMessage({type:"iotDrawCommit"}, "*"); }catch(e){} return; }
+        // Going BACK to Background with the draw dock open: just close it (geometry already autosaved).
+        if(bgToolOpen==="draw" && m.step===0){ exitBg(true); }
         // Layout opens the Structure/draw editor DIRECTLY — do NOT goStep(1) first. buildPlanOver loads the
         // aerial async before enterDraw opens, so a pre-emptive goStep(1) flashed the empty Placement canvas
         // for that gap ("clicking Layout skips me to placement"). The draw tool's Done path (finishBackground)

@@ -1465,10 +1465,12 @@
     var arr=planCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
     return { ftW:+pxToFeet(bb.w+2*m).toFixed(2), ftH:+pxToFeet(bb.h+2*m).toFixed(2) }; }
-  $("tDone").addEventListener("click", function(){ if(busy||planState!=="loaded") return;
-    // ONE BAR: "Place Cameras" is the Next control — it always advances (structure is optional; cameras can
-    // sit on the aerial / blank grid). When there IS a sketch, commit it first so it renders on the map;
-    // with nothing drawn, just advance (the host closes the draw tool and focuses devices). No blocking nudge.
+  // ONE BAR: "Place Cameras" is the Next control — it always advances (structure is optional; cameras can
+  // sit on the aerial / blank grid). When there IS a sketch, commit it first so it renders on the map;
+  // with nothing drawn, signal the host to just close + advance. No blocking nudge. Extracted so the
+  // planner's OWN "Placement" footer button can drive the exact same commit via iotDrawCommit (otherwise the
+  // host closed the dock WITHOUT committing, and the drawn structure never reached the Placement map).
+  function doneCommit(){ if(busy||planState!=="loaded") return;
     if(hasSketch()){
       closeLabel(); clearTimeout(_planT); _planT=null; writeLS(); postPlan();   // the floor record holds the final geometry BEFORE the result lands
       var scale=planFeet();
@@ -1479,7 +1481,12 @@
         if(vb){ try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(vb), vector:true, scale:scale, planSvg:planLayerSVG(), bgCtx:true}, "*"); }catch(e){} }
         else { try{ parent.postMessage({type:"satellite-capture-result", dataUrl:sketchSVG(), vector:true, scale:scale, planSvg:planLayerSVG()}, "*"); }catch(e){} } }
     }
-    try{ parent.postMessage({type:"iotSurveyNavGo", dir:"next"}, "*"); }catch(e){} });
+    else { try{ parent.postMessage({type:"iotDrawEmpty"}, "*"); }catch(e){} }   // nothing drawn → host closes the dock + advances to Placement (no stale layer)
+    try{ parent.postMessage({type:"iotSurveyNavGo", dir:"next"}, "*"); }catch(e){} }
+  $("tDone").addEventListener("click", doneCommit);
+  // The planner's own "Placement" footer button drives the advance too; it asks us to commit FIRST (identical
+  // to clicking Place Cameras) so the structure lands on the Placement map instead of being skipped.
+  window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.type!=="iotDrawCommit"||window.parent===window||ev.source!==parent) return; doneCommit(); });
     // planSvg (Phase 4 layer) rides the vector hand-off only — an AI-enhanced result carries none, so the survey stores null (never a stale layer).
 
   // ---- Satellite trace handoff: a building outline (fractions of the aerial + aspect ratio) seeds the
