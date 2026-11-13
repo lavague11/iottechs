@@ -3500,8 +3500,10 @@ export function searchCustomers(q, limit = 8) {
 export function getCustomerSummary(id) {
   const row = db.prepare(CUSTOMER_SUMMARY_SQL + " AND u.id=?").get(Number(id));
   if (!row) return null;
+  // Canonical locations (the modal's location picker reads these). `addresses` kept for back-compat.
+  const locations = getCustomerLocationsWithCounts(row.id);
   const addresses = db.prepare("SELECT address, MAX(access_id) AS access_id FROM projects WHERE customer_id=? AND address IS NOT NULL AND address<>'' GROUP BY address ORDER BY MAX(id) DESC LIMIT 5").all(row.id);
-  return { ...row, addresses };
+  return { ...row, locations, addresses };
 }
 
 // ============================ CUSTOMER LOCATIONS ============================
@@ -3586,6 +3588,109 @@ export function rollbackCustomerLocations() {
     db.exec("COMMIT");
   } catch (err) { db.exec("ROLLBACK"); throw err; }
   return { ok: true };
+}
+
+// Locations for a customer, each with how many projects / service calls sit at it. Primary first.
+export function getCustomerLocationsWithCounts(customerId, { includeArchived = false } = {}) {
+  const where = includeArchived ? "" : " AND l.archived_at IS NULL";
+  return db.prepare(`
+    SELECT l.*,
+      (SELECT COUNT(*) FROM projects p WHERE p.location_id = l.id) AS project_count,
+      (SELECT COUNT(*) FROM service_calls s WHERE s.location_id = l.id) AS service_count
+    FROM customer_locations l
+    WHERE l.customer_id = ?${where}
+    ORDER BY l.is_primary DESC, l.id ASC`).all(Number(customerId));
+}
+
+export function getCustomerLocation(id) {
+  return db.prepare("SELECT * FROM customer_locations WHERE id = ?").get(Number(id)) || null;
+}
+
+// Create a location for a customer — or REUSE the existing one for the same place (dedup guard: match on
+// place_id when present, else on the normalized address). Returns { id, reused, row }.
+export function createCustomerLocation(customerId, data = {}) {
+  const cid = Number(customerId);
+  if (!cid) return { error: "Customer required." };
+  const address = String(data.address || "").trim();
+  if (!address) return { error: "Address is required." };
+  const norm = normalizeLocAddress(address);
+  const placeId = data.place_id ? String(data.place_id).slice(0, 200) : null;
+  // Reuse an active location for the same place rather than making a duplicate.
+  let existing = placeId ? db.prepare("SELECT * FROM customer_locations WHERE customer_id=? AND place_id=? AND archived_at IS NULL").get(cid, placeId) : null;
+  if (!existing) existing = db.prepare("SELECT * FROM customer_locations WHERE customer_id=? AND norm=? AND archived_at IS NULL").get(cid, norm);
+  if (existing) return { id: existing.id, reused: true, row: existing };
+  const hasPrimary = db.prepare("SELECT 1 FROM customer_locations WHERE customer_id=? AND is_primary=1 AND archived_at IS NULL").get(cid);
+  const info = db.prepare(`
+    INSERT INTO customer_locations (customer_id, name, address, norm, place_id, lat, lng, property_type, email, phone, contact_name, notes, is_primary)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    cid, data.name ? String(data.name).slice(0, 200) : null, address, norm, placeId,
+    data.lat != null ? Number(data.lat) : null, data.lng != null ? Number(data.lng) : null,
+    data.property_type ? normalizePropertyType(data.property_type) : null,
+    data.email ? String(data.email).trim().slice(0, 200) : null,
+    data.phone ? String(data.phone).trim().slice(0, 40) : null,
+    data.contact_name ? String(data.contact_name).slice(0, 120) : null,
+    data.notes ? String(data.notes).slice(0, 1000) : null,
+    hasPrimary ? 0 : 1);   // first location becomes primary
+  return { id: Number(info.lastInsertRowid), reused: false, row: getCustomerLocation(info.lastInsertRowid) };
+}
+
+export function updateCustomerLocation(id, patch = {}) {
+  const loc = getCustomerLocation(id);
+  if (!loc) return { error: "Location not found." };
+  const cols = { name: 1, address: 1, place_id: 1, lat: 1, lng: 1, property_type: 1, email: 1, phone: 1, contact_name: 1, notes: 1 };
+  const sets = [], vals = [];
+  for (const [k, v] of Object.entries(patch)) {
+    if (!cols[k]) continue;
+    if (k === "address") { if (!String(v || "").trim()) return { error: "Address can't be empty." }; sets.push("address=?", "norm=?"); vals.push(String(v).trim(), normalizeLocAddress(v)); continue; }
+    if (k === "property_type") { sets.push("property_type=?"); vals.push(v ? normalizePropertyType(v) : null); continue; }
+    sets.push(`${k}=?`); vals.push(v === "" ? null : v);
+  }
+  if (!sets.length) return { ok: true, row: loc };
+  sets.push("updated_at=datetime('now','localtime')");
+  db.prepare(`UPDATE customer_locations SET ${sets.join(", ")} WHERE id=?`).run(...vals, Number(id));
+  return { ok: true, row: getCustomerLocation(id) };
+}
+
+// Archive (soft-delete) a location — refused while live projects still sit at it (lost ones don't count).
+export function archiveCustomerLocation(id, on = true) {
+  const loc = getCustomerLocation(id);
+  if (!loc) return { error: "Location not found." };
+  if (on) {
+    const active = db.prepare("SELECT COUNT(*) n FROM projects WHERE location_id=? AND lost_at IS NULL").get(Number(id)).n;
+    if (active > 0) return { error: `Can't archive — ${active} active project${active === 1 ? "" : "s"} still at this location.` };
+  }
+  db.prepare("UPDATE customer_locations SET archived_at=?, is_primary=CASE WHEN ? THEN 0 ELSE is_primary END, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(on ? new Date().toISOString() : null, on ? 1 : 0, Number(id));
+  return { ok: true };
+}
+
+export function setPrimaryCustomerLocation(customerId, id) {
+  const loc = getCustomerLocation(id);
+  if (!loc || loc.customer_id !== Number(customerId)) return { error: "Location not found." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE customer_locations SET is_primary=0 WHERE customer_id=?").run(Number(customerId));
+    db.prepare("UPDATE customer_locations SET is_primary=1, updated_at=datetime('now','localtime') WHERE id=?").run(Number(id));
+    db.exec("COMMIT");
+  } catch (err) { db.exec("ROLLBACK"); throw err; }
+  return { ok: true };
+}
+
+// Attach a project (by access_id) to a location — an existing one (locationId) or a freshly created one
+// (newLocation payload). Used by /api/demo right after the project is created. Returns the location.
+export function attachProjectLocation(accessId, customerId, { locationId = null, newLocation = null } = {}) {
+  let locId = locationId ? Number(locationId) : null;
+  if (!locId && newLocation) {
+    const r = createCustomerLocation(customerId, newLocation);
+    if (r.error) return r;
+    locId = r.id;
+  }
+  if (!locId) return { error: "No location." };
+  // Guard: the location must belong to this customer.
+  const loc = getCustomerLocation(locId);
+  if (!loc || loc.customer_id !== Number(customerId)) return { error: "Location doesn't belong to this customer." };
+  db.prepare("UPDATE projects SET location_id=? WHERE access_id=?").run(locId, String(accessId));
+  return { ok: true, locationId: locId, row: loc };
 }
 
 // Duplicate check for the "New client" path: the customer that already owns this email or phone.
