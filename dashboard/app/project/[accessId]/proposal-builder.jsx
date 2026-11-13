@@ -896,7 +896,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           key={s.key + i}
           svc={s}
           surveyImport={!readOnly && surveyFloors.length > 0 && s.key === "camera"
-            ? { floors: surveyFloors, onImport: (indices) => importSurvey(false, indices), onSync: syncCamerasFromSurvey }
+            ? { floors: surveyFloors, cameraCount: camRoster.length, onImport: (indices) => importSurvey(false, indices), onSync: syncCamerasFromSurvey }
             : undefined}
           showCost={showCost}
           readOnly={readOnly}

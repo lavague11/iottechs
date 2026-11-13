@@ -3295,11 +3295,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       };
       // Card verb reflects state: Create (never started) · Edit (started/submitted) · Completed (signed/done).
       const hubSections = [
-        // Customer-facing, in order. Closeout unlocks after the proposal is signed; Completion after QC sign-off.
-        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
+        // Customer-facing, in lifecycle order: Survey (walk the property) → Proposal (price it) → Addendum
+        // (add-ons after signing). Closeout unlocks after the proposal is signed; Completion after QC sign-off.
         // Site Survey is the single entry for both the floor plan (Map) and the camera photos/preview
         // (Photos) — System Preview merged in (toggle inside the tool). A preview-only job never needs a map.
         { key: "survey", title: "Site Survey", group: "customer", sub: (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.", action: (sHasSurvey || sHasMockup) ? "Edit" : "Create" },
+        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
         // Addendum — job add-ons / change-orders on top of the signed job (fills the slot System Preview left).
         { key: "addendum", title: "Addendum", group: "customer", sub: addonCount ? `${addonCount} add-on${addonCount === 1 ? "" : "s"}.` : "Job add-ons.", action: addonCount ? "Edit" : "Add" },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },

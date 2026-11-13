@@ -589,6 +589,13 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
 
   // ---- Camera system bar (Security Cameras only): count · NVR pick · per-slot drives ----
   const camCount = svc.items.filter((it) => it.sub).reduce((s, it) => s + (+it.qty || 0), 0);
+  // Out-of-sync nudge: the Site Survey is the source of truth for the camera LIST. When the survey holds
+  // cameras the proposal doesn't mirror (different count), surface a one-tap "Sync" by the header so staff
+  // don't have to dig into the gear menu. onSync REPLACES the camera lines with the survey's cameras (each a
+  // Full Camera Install named by location), so it two-tap confirms. Hidden once counts match (= in sync).
+  const [hdrSync, setHdrSync] = useState(false);
+  const surveyCamN = +surveyImport?.cameraCount || 0;
+  const camOutOfSync = !readOnly && svc.key === "camera" && !!surveyImport?.onSync && surveyCamN > 0 && surveyCamN !== camCount;
   const nvrItem = svc.items.find((it) => !it.sub && /^NVR/.test(it.name));
   const hddSlots = slotsFor(nvrItem?.name);
   const driveAt = (n) => svc.items.find((it) => it.slot === n);
@@ -1311,6 +1318,24 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             {svc.label}
             {svc.key === "camera" && camCount > 0 && <span className="prop-svc-count"> · {camCount} camera{camCount !== 1 ? "s" : ""}</span>}
           </span>
+        )}
+        {camOutOfSync && !renamingSvc && (
+          hdrSync ? (
+            <span className="prop-svc-syncc" role="group" aria-label="Confirm sync from survey">
+              <button type="button" className="prop-svc-sync-go" onClick={() => { surveyImport.onSync(); setHdrSync(false); }}>
+                Replace with {surveyCamN}
+              </button>
+              <button type="button" className="prop-svc-sync-x" aria-label="Cancel" onClick={() => setHdrSync(false)}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+              </button>
+            </span>
+          ) : (
+            <button type="button" className="prop-svc-sync" onClick={() => setHdrSync(true)}
+                    title={`Site Survey has ${surveyCamN} camera${surveyCamN !== 1 ? "s" : ""} — replace the list to match`}>
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+              Sync
+            </button>
+          )
         )}
         <span className="prop-svc-sp" />
         {!readOnly && (

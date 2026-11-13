@@ -232,6 +232,15 @@ const PROP_CSS = `
 .pvx .prop-svc-name{font-size:.98rem;font-weight:650;color:var(--dv-ink,#101418);letter-spacing:-.005em}
 .pvx .prop-svc-sub{font-size:.74rem;font-weight:500;color:var(--dv-meta,#787D84)}
 .pvx .prop-svc-count{font-size:.8rem;font-weight:500;color:var(--dv-meta,#787D84);letter-spacing:0}
+/* "Sync from survey" nudge by the camera header — gold pill, appears only when the survey + proposal camera counts differ */
+.pvx .prop-svc-sync{display:inline-flex;align-items:center;gap:5px;height:24px;margin-left:8px;padding:0 9px;border:1px solid var(--dv-gold,#C9A96E);border-radius:999px;background:var(--dv-gold-tint,#FBF6EA);color:var(--dv-gold-text,#8A6A1F);font-size:.72rem;font-weight:600;letter-spacing:.01em;cursor:pointer;flex-shrink:0;white-space:nowrap}
+.pvx .prop-svc-sync:hover{background:var(--dv-gold,#C9A96E);color:#fff}
+.pvx .prop-svc-sync svg{flex:none}
+.pvx .prop-svc-syncc{display:inline-flex;align-items:center;gap:4px;margin-left:8px;flex-shrink:0}
+.pvx .prop-svc-sync-go{height:24px;padding:0 11px;border:none;border-radius:999px;background:var(--dv-gold-text,#8A6A1F);color:#fff;font-size:.72rem;font-weight:600;cursor:pointer;white-space:nowrap}
+.pvx .prop-svc-sync-go:hover{filter:brightness(1.1)}
+.pvx .prop-svc-sync-x{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border:1px solid var(--dv-line,#E4E4DF);border-radius:999px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);cursor:pointer;line-height:0}
+.pvx .prop-svc-sync-x:hover{border-color:var(--dv-ink,#101418);color:var(--dv-ink,#101418)}
 .pvx .prop-sysbar{display:flex;flex-direction:column;align-items:stretch;gap:11px;padding:10px 0;border-top:1px solid var(--dv-line-soft,#EDEDE9);background:none}
 /* Slot editors (NVR / HDD / Displays) stack as full-width line-item rows — label · dropdown · price,
    one per line — so they scale on a phone instead of a non-wrapping row of columns. */
