@@ -11,7 +11,7 @@ import EnrollBanner from "./enroll-banner";
 import GlobalCommandBar from "./global-command-bar";
 import { NEW_PROJECT_SERVICES, DEFAULT_NEW_PROJECT_SERVICE, propertyAfterCompany } from "../../lib/spec";
 import { ReusePicker } from "../project/[accessId]/proposal-start";
-import { searchCustomersAction, customerSummaryAction, updateCustomerAction } from "./crm-actions";
+import { searchCustomersAction, customerSummaryAction, updateCustomerAction, customerLocationsAction, createLocationAction } from "./crm-actions";
 import { can } from "../../lib/roles";
 import { formatPhone, customerMeta } from "../../lib/crm";
 import GlobalSearch from "./global-search";
@@ -230,10 +230,15 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
     const c = res.customer;
     setClient(c); setCRows([]); setCq(""); setDup(null); setEditClient(false); setUpdateRecord(false);
     setF((p) => ({ ...p, name: c.name || "", company: c.company || "", email: c.email || "", phone: c.phone || "", propertyType: propertyAfterCompany(p.propertyType, propTouched, c.company || "") }));
+    // One location → preselect it; none → open the add form; many → let them pick.
+    setLocationId(null);
+    const locs = c.locations || [];
+    if (locs.length === 1) selectLocation(locs[0]);
+    else setAddingLoc(locs.length === 0);
   }
   function clearClient() {
-    setClient(null); setEditClient(false); setUpdateRecord(false);
-    setF((p) => ({ ...p, name: "", company: "", email: "", phone: "" }));
+    setClient(null); setEditClient(false); setUpdateRecord(false); setLocationId(null); setAddingLoc(false);
+    setF((p) => ({ ...p, name: "", company: "", email: "", phone: "", address: "" }));
   }
   function switchMode(m) { setClientMode(m); setDup(null); if (m === "new") clearClient(); }
   const [propTouched, setPropTouched] = useState(false);   // Property picked by hand → company no longer auto-sets it
@@ -244,6 +249,31 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [done, setDone] = useState(null);
+  // Customer Locations: the picked existing location, or an inline new-location form. Selecting one
+  // snapshots its address/company/property onto the project form. For a NEW client (no row yet) the typed
+  // address becomes a new-location payload sent with the project.
+  const [locationId, setLocationId] = useState(null);
+  const [addingLoc, setAddingLoc] = useState(false);
+  const [locForm, setLocForm] = useState({ name: "", address: "", place_id: "", lat: null, lng: null, property_type: "commercial", email: "", phone: "", contact_name: "", notes: "" });
+  const [locBusy, setLocBusy] = useState(false);
+  function selectLocation(l) {
+    setLocationId(l.id); setAddingLoc(false);
+    verifiedRef.current = l.address; setAddrVerified(true); setAddrWarned(false);
+    setF((p) => ({ ...p, address: l.address || p.address, company: l.name || p.company, propertyType: l.property_type || p.propertyType }));
+  }
+  async function saveNewLocation() {
+    if (!locForm.address.trim()) { setErr("Location address is required."); return; }
+    if (!client?.id) { setErr("Pick the client first."); return; }
+    setLocBusy(true); setErr("");
+    const r = await createLocationAction(client.id, locForm).catch(() => null);
+    setLocBusy(false);
+    if (!r?.ok) { setErr(r?.error || "Couldn't add the location."); return; }
+    const rows = (await customerLocationsAction(client.id).catch(() => null))?.rows || [];
+    setClient((c) => ({ ...c, locations: rows }));
+    const added = rows.find((x) => x.id === r.id) || { id: r.id, ...locForm };
+    selectLocation(added);
+    setLocForm({ name: "", address: "", place_id: "", lat: null, lng: null, property_type: "commercial", email: "", phone: "", contact_name: "", notes: "" });
+  }
   const svc = NEW_PROJECT_SERVICES.find((s) => s.code === f.serviceCode) || NEW_PROJECT_SERVICES[0];
   const setCompany = (v) => setF((p) => ({ ...p, company: v, propertyType: propertyAfterCompany(p.propertyType, propTouched, v) }));
   const setProperty = (v) => { setPropTouched(true); set("propertyType", v); };
@@ -262,6 +292,7 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState(null);   // { candidate, engine, cost } | null
   async function onImportFile(file) {
+    if (file && file.size > 10 * 1024 * 1024) { setErr("That file is over 10 MB — choose a smaller PDF or image."); return; }
     setImportFile(file || null); setExtracted(null);
     if (!file) return;
     setExtracting(true); setErr("");
@@ -298,6 +329,9 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
       return;
     }
     if (clientMode === "existing" && !client) { setErr("Pick the client."); return; }
+    // A known client must have a location chosen (or added); a new client types one that we create.
+    if (client && !locationId) { setErr(addingLoc ? "Add the location (or pick one) first." : "Pick or add a location for this project."); return; }
+    if (!client && !f.address.trim()) { setErr("Enter the service address."); return; }
     setErr(""); setBusy(true);
     // Explicit CRM write, and only then: the picked client's row changes ONLY through this switch.
     if (client && editClient && updateRecord) {
@@ -313,6 +347,9 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
     try {
       const body = { name: f.name, company: f.company, email: f.email, phone: f.phone, address: f.address, service: svc.label, propertyType: f.propertyType, message: f.message,
         client: client ? { mode: "existing", customerId: client.id } : { mode: "new", allowDuplicate: !!allowDuplicate },
+        // Location: an existing one for a known client, or a new-location payload for a new client.
+        locationId: client && locationId ? locationId : null,
+        newLocation: (!client && f.address.trim()) ? { name: f.company || null, address: f.address, place_id: locForm.place_id || null, lat: locForm.lat ?? null, lng: locForm.lng ?? null, property_type: f.propertyType } : null,
         startFrom: startFrom === "previous" && source ? { sourceProposalId: source.sourceProposalId, options: source.options } : null };
       const res = await fetch("/api/demo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json();
@@ -367,7 +404,7 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
               <h2 className="np-h">New Project</h2>
             </div>
             <form className="np-form" onSubmit={submit}>
-              {canSearch && (
+              {canSearch && !initialClientId && (
                 <div className="np-f"><label>Client</label>
                   <div className="np-seg" role="radiogroup" aria-label="Client">
                     {[["existing", "Existing"], ["new", "New"]].map(([k, t]) => (
@@ -432,11 +469,44 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
                   </div>
                 </div>
               )}
-              <div className="np-f"><label>Service Address {addrVerified && <span className="np-verified">✓ Verified</span>}</label><AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); }} placeholder="Start typing, then choose the address" />
-                {client?.addresses?.length > 0 && !addrVerified && (
-                  <div className="np-addr">
-                    {client.addresses.map((a) => <button type="button" key={a.address} className="np-chip" title={a.access_id} onClick={() => { verifiedRef.current = a.address; set("address", a.address); setAddrVerified(true); setAddrWarned(false); }}>{a.address}</button>)}
-                  </div>
+              {/* Location — for a known client, pick one of their places or add a new one (its address +
+                  company + property snapshot onto the project). For a new client, the typed address
+                  becomes a new location on create. */}
+              <div className="np-f">
+                <label>Location {locationId && <span className="np-verified">✓ Selected</span>}</label>
+                {client ? (
+                  <>
+                    {(client.locations || []).length > 0 && (
+                      <div className="np-locs">
+                        {(client.locations || []).map((l) => (
+                          <button type="button" key={l.id} className={`np-loc${locationId === l.id ? " on" : ""}`} onClick={() => selectLocation(l)}>
+                            <b className="np-loc-nm">{l.name || l.address}</b>
+                            {l.name && <span className="np-loc-ad">{l.address}</span>}
+                            <span className="np-loc-meta">{l.property_type === "residential" ? "Residential" : "Commercial"}{l.is_primary ? " · Primary" : ""}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {addingLoc ? (
+                      <div className="np-locadd">
+                        <AddressAutocomplete types={["establishment"]} className="apx-input" value={locForm.name} onChange={(v) => setLocForm((x) => ({ ...x, name: v }))} onPlace={(p) => setLocForm((x) => ({ ...x, name: p.name || x.name, address: p.address || x.address, place_id: p.place_id || x.place_id, lat: p.lat ?? x.lat, lng: p.lng ?? x.lng }))} placeholder="Business name (optional)" />
+                        <AddressAutocomplete className="apx-input" value={locForm.address} onChange={(v) => setLocForm((x) => ({ ...x, address: v }))} onPlace={(p) => setLocForm((x) => ({ ...x, address: p.address || x.address, place_id: p.place_id || x.place_id, lat: p.lat ?? x.lat, lng: p.lng ?? x.lng }))} placeholder="Address — start typing, then choose" />
+                        <div className="np-seg" role="radiogroup" aria-label="Property type" style={{ marginTop: 6 }}>
+                          {[["commercial", "Commercial"], ["residential", "Residential"]].map(([k, t]) => (
+                            <button type="button" key={k} role="radio" aria-checked={locForm.property_type === k} className={`np-seg-b${locForm.property_type === k ? " on" : ""}`} onClick={() => setLocForm((x) => ({ ...x, property_type: k }))}>{t}</button>
+                          ))}
+                        </div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                          <button type="button" className="np-ghost" onClick={saveNewLocation} disabled={locBusy || !locForm.address.trim()}>{locBusy ? "Adding…" : "Add & select"}</button>
+                          {(client.locations || []).length > 0 && <button type="button" className="np-link" onClick={() => setAddingLoc(false)}>Cancel</button>}
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className="np-addloc" onClick={() => setAddingLoc(true)}>+ Add location</button>
+                    )}
+                  </>
+                ) : (
+                  <AddressAutocomplete className="apx-input" value={f.address} onChange={(v) => { set("address", v); if (v !== verifiedRef.current) { setAddrVerified(false); setAddrWarned(false); } }} onPlace={(p) => { verifiedRef.current = p.address; set("address", p.address); setAddrVerified(true); setAddrWarned(false); setLocForm((x) => ({ ...x, place_id: p.place_id || x.place_id, lat: p.lat ?? x.lat, lng: p.lng ?? x.lng })); }} placeholder="Start typing, then choose the address" />
                 )}
               </div>
               <div className="np-row2">
@@ -470,10 +540,11 @@ export function NewProjectModal({ onClose, user = null, initialClientId = null }
                     {startFrom === "import" && (
                       <label className="np-ghost np-src">
                         {extracting ? "Reading proposal…" : importFile ? importFile.name : "Choose file"}
-                        <input type="file" accept="application/pdf,image/*" hidden onChange={(e) => onImportFile(e.target.files?.[0] || null)} />
+                        <input type="file" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/*" hidden onChange={(e) => onImportFile(e.target.files?.[0] || null)} />
                       </label>
                     )}
                   </div>
+                  {startFrom === "import" && !importFile && !extracting && <div className="np-filehelp">PDF or image of an existing proposal · up to 10 MB</div>}
                   {startFrom === "import" && extracted?.candidate && (
                     <div className="np-import-note">
                       ✓ Read by {extracted.engine === "claude" ? "Claude" : extracted.engine === "openai" ? "OpenAI" : "AI"}
@@ -1179,12 +1250,24 @@ const CSS = `
 .apx .np-cact{display:flex;gap:12px;flex-shrink:0}
 .apx .np-cact a,.apx .np-cact button,.apx .np-link{background:none;border:none;padding:0;font:inherit;font-size:.78rem;font-weight:600;color:var(--ink);cursor:pointer;text-decoration:underline}
 .apx .np-addr{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+/* Location picker */
+.apx .np-locs{display:flex;flex-direction:column;gap:7px}
+.apx .np-loc{display:flex;flex-direction:column;gap:1px;text-align:left;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;background:#fff;font-family:inherit;cursor:pointer;transition:.12s}
+.apx .np-loc:hover{border-color:#d9bd86}
+.apx .np-loc.on{border-color:var(--gold-deep,#A8842F);background:#fbf7ee}
+.apx .np-loc-nm{font-size:.88rem;color:var(--ink)}
+.apx .np-loc-ad{font-size:.78rem;color:var(--muted)}
+.apx .np-loc-meta{font-size:.68rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:2px}
+.apx .np-addloc{align-self:flex-start;margin-top:8px;background:none;border:1px dashed var(--line);border-radius:9px;padding:7px 13px;font:inherit;font-size:.8rem;font-weight:600;color:var(--gold-deep,#A8842F);cursor:pointer}
+.apx .np-addloc:hover{border-color:var(--gold,#C9A96E)}
+.apx .np-locadd{margin-top:8px;border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--bg-tint,#fafafa);display:grid;gap:8px}
+.apx .np-filehelp{font-size:.72rem;color:var(--muted);margin-top:5px}
 .apx .np-chip{padding:4px 10px;border:1px solid var(--line);border-radius:100px;background:#fff;font-family:inherit;font-size:.76rem;color:var(--ink);cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .apx .np-chip:hover{border-color:var(--ink)}
 .apx .np-dup{border:1px solid var(--line);border-left:3px solid var(--gold,#C9A96E);border-radius:10px;padding:10px 12px;font-size:.84rem;color:var(--ink)}
 .apx .np-dup b{display:block;margin-bottom:2px}
 .apx .np-check-l{display:flex;align-items:center;gap:8px;font-size:.8rem;color:var(--muted)}
-.apx .np-submit{flex:1;width:100%;padding:12px;background:var(--gold);color:var(--ink);border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
+.apx .np-submit{flex:1;width:100%;padding:12px;background:var(--ink,#101418);color:#fff;border:none;border-radius:12px;font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1rem;cursor:pointer;transition:.18s}
 .apx .np-submit:hover:not(:disabled){background:var(--ink);color:var(--gold)}
 .apx .np-submit:disabled{opacity:.6;cursor:not-allowed}
 .apx .np-ghost{padding:12px 18px;background:#fff;border:1px solid var(--line);border-radius:12px;font-family:inherit;font-weight:600;cursor:pointer;color:var(--ink)}
