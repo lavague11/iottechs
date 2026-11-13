@@ -946,7 +946,7 @@
           scanExit(function(){ showCompare(beforeSrc, afterUrl); });   // punch back in from space → reveal + before/after
         };
         ai.src="data:image/png;base64,"+d.b64;
-      }).catch(function(e){ scanOn(false); w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},2400); });
+      }).catch(function(e){ scanOn(false); w.classList.remove("busy"); msg(String(e.message||"Enhance failed")); setTimeout(function(){msg("");},7000); });
     },"image/png"); }
   // first wand click enhances; once enhanced, the wand opens a revision box (say what to change)
   function openRev(){ $("revBox").classList.add("on"); var i=$("revIn"); i.value=""; i.focus(); }

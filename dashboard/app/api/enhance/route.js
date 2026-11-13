@@ -82,7 +82,14 @@ export async function POST(req) {
     let d = await call("gpt-image-1.5");   // cheaper + preserves input framing better than gpt-image-2
     // model-name drift / unavailable → fall back a generation
     if (d?.error && /model/i.test(d.error.message || "")) d = await call("gpt-image-2");
-    if (d?.error) return Response.json({ error: d.error.message || "Enhance failed" }, { status: 502 });
+    if (d?.error) {
+      const m = d.error.message || "Enhance failed";
+      // Billing/quota is the #1 real-world cause — surface it plainly (it's an account action, not a bug).
+      if (/credit|quota|billing|insufficient|exceeded your current quota/i.test(m)) {
+        return Response.json({ error: "AI Enhance is paused — the OpenAI account is out of credits. Add credits at platform.openai.com (Settings ▸ Billing) to turn it back on." }, { status: 402 });
+      }
+      return Response.json({ error: m }, { status: 502 });
+    }
     const b64 = d?.data?.[0]?.b64_json;
     if (!b64) return Response.json({ error: "No image returned" }, { status: 502 });
     cacheSet(hash, b64);
