@@ -402,21 +402,21 @@
   // USER zoom/pan — a purely visual magnify on top of the base so you can draw rooms precisely. _uz=1 is
   // the fit view (no pan). Composed into _vk/_vx/_vy, so rel()/redraw()/label overlays all follow one path
   // and nothing exported changes (cells/ctxVB/planSvg/devices stay in world space).
-  var _uz=1, _utx=0, _uty=0, MAXZ=6;
+  var _uz=1, _utx=0, _uty=0, MAXZ=6, MINZ=0.3;   // MINZ<1 → zoom OUT below the fit, so an over-tight / mis-leveled aerial can always be shrunk to frame the whole structure
   function clampPan(){ var mx=(_uz-1)*W(), my=(_uz-1)*H();   // can't drag the content endlessly off-frame
     _utx=Math.max(-mx,Math.min(mx,_utx)); _uty=Math.max(-my,Math.min(my,_uty)); }
   function computeView(){ var b=baseView();
-    if(_uz<=1){ _uz=1; _utx=0; _uty=0; } else clampPan();     // at fit, snap pan to centred
+    if(_uz<=1){ _uz=Math.max(MINZ,_uz); _utx=0; _uty=0; } else clampPan();     // at/below fit the content stays centred (margins all round); above fit it pans
     _vk=b.vk*_uz; _vx=b.vx*_uz+_utx; _vy=b.vy*_uz+_uty; }
   // Set zoom to newUz keeping the world point under (fx,fy) [canvas px] fixed. No redraw (caller redraws).
   function setZoomAbout(fx, fy, newUz){
-    newUz=Math.max(1, Math.min(MAXZ, newUz));
+    newUz=Math.max(MINZ, Math.min(MAXZ, newUz));
     var wx=(fx-_vx)/_vk, wy=(fy-_vy)/_vk, b=baseView();
     _uz=newUz; _utx=fx - wx*b.vk*_uz - b.vx*_uz; _uty=fy - wy*b.vk*_uz - b.vy*_uz; }
   function zoomAbout(fx, fy, newUz){ setZoomAbout(fx, fy, newUz); computeView(); redraw(); updateZoomUI(); }
   function resetZoom(){ _uz=1; _utx=0; _uty=0; computeView(); redraw(); updateZoomUI(); }
   function canvasCenter(){ return { x:W()/2, y:H()/2 }; }
-  function updateZoomUI(){ var o=$("zoomOut"), f=$("zoomFit"); if(o) o.disabled=(_uz<=1); if(f) f.style.display=(_uz>1.001)?"":"none"; }
+  function updateZoomUI(){ var o=$("zoomOut"), f=$("zoomFit"); if(o) o.disabled=(_uz<=MINZ+0.001); if(f) f.style.display=(Math.abs(_uz-1)>0.001)?"":"none"; }   // Reset shows whenever zoomed EITHER way off the fit
   // ---- pinch-to-zoom + two-finger pan (touch) ----
   var _ptrs=new Map(), _pinching=false, _pp=null;
   function pinchGeom(){ var a=[]; _ptrs.forEach(function(v){ a.push(v); }); if(a.length<2) return null;

@@ -8,9 +8,9 @@ const h = readFileSync(new URL("../public/widgets/draw-floorplan.html", import.m
 
 test("user zoom/pan composes on the fit-to-fill base (one transform drives render + hit-test + overlays)", () => {
   assert.ok(/function baseView\(\)\{/.test(h), "fit-to-fill base factored out");
-  assert.ok(/var _uz=1, _utx=0, _uty=0, MAXZ=6;/.test(h), "user zoom/pan state + max");
+  assert.ok(/var _uz=1, _utx=0, _uty=0, MAXZ=6, MINZ=0\.3;/.test(h), "user zoom/pan state + max + MINZ<1 (zoom OUT below the fit)");
   assert.ok(/_vk=b\.vk\*_uz; _vx=b\.vx\*_uz\+_utx; _vy=b\.vy\*_uz\+_uty;/.test(h), "computeView folds user zoom/pan into _vk/_vx/_vy");
-  assert.ok(/if\(_uz<=1\)\{ _uz=1; _utx=0; _uty=0; \} else clampPan\(\);/.test(h), "fit view snaps pan to centred; zoomed view is pan-clamped");
+  assert.ok(/if\(_uz<=1\)\{ _uz=Math\.max\(MINZ,_uz\); _utx=0; _uty=0; \} else clampPan\(\);/.test(h), "at/below the fit the content stays centred (margins all round); zoomed-in view is pan-clamped");
   // rel() (pointer→world) is UNCHANGED — it already divides by the composed _vk/_vx/_vy, so cells land right at any zoom
   assert.ok(h.includes("function rel(e){ var r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left-_vx)/_vk, y:(e.clientY-r.top-_vy)/_vk}; }"), "pointer mapping goes through the composed view");
 });

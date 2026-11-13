@@ -32,10 +32,10 @@ test("backdrop draws BEHIND the areas (after clearRect, before drawStructure) vi
 });
 
 test("fit-to-fill view transform: aerial floors scale to fill the frame; pointer + overlays map through it; export untouched", () => {
-  // baseView derives one scale from the aerial plate box (contain) so the photo fills the canvas edge-to-edge;
+  // baseView derives one scale from the aerial plate box (CONTAIN) so the WHOLE photo is visible and traceable;
   // computeView then composes the user zoom/pan on top of it (both feed the SAME _vk/_vx/_vy).
   assert.ok(draw.includes("function baseView()") && draw.includes("function computeView()"), "fit-to-fill base + the composed view computation");
-  assert.ok(draw.includes("k=Math.max(W0/bw, H0/bh)"), "COVER fit → the aerial fills the full canvas (no blank grid borders); cells stay aligned via the same fit");
+  assert.ok(draw.includes("k=Math.min(W0/bw, H0/bh)"), "CONTAIN fit → the WHOLE aerial shows (a COVER fit cropped a portrait aerial so the structure couldn't be traced); cells stay aligned via the same fit");
   assert.ok(draw.includes("if(_bdImg && _seed && +_seed.sc>0){"), "only aerial floors fill; hand-drawn stay vk=1");
   assert.ok(draw.includes("_vk=b.vk*_uz; _vx=b.vx*_uz+_utx; _vy=b.vy*_uz+_uty;"), "user zoom/pan composes onto the fit base");
   // redraw paints through the view; pointer input inverse-maps through it; DOM overlays map through it.
