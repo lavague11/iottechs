@@ -1466,6 +1466,61 @@ function init() {
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_cctv_quote_leads_access ON cctv_quote_leads(access_id)`);
 
+  // ---- SOP Builder: standard-operating-procedure guides (photos + spoken steps → a clean how-to), and
+  // the Support Library they publish to. `business` is free text (SOPs are internal procedures, not tied to
+  // a customer row). Step images are /api/media URLs (draft) or data URLs; the ORIGINAL is always kept and
+  // `enhanced_path`/`use_enhanced` hold the optional AI-cleaned version. Publishing writes an immutable
+  // sop_versions snapshot and stamps status/slug — editing later mints the next version (old ones stay). ----
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sops (
+      id            TEXT PRIMARY KEY,
+      slug          TEXT,
+      title         TEXT NOT NULL DEFAULT 'New SOP',
+      business      TEXT,
+      category      TEXT,
+      transcript    TEXT,
+      status        TEXT NOT NULL DEFAULT 'draft',        -- draft | published | archived
+      visibility    TEXT NOT NULL DEFAULT 'internal',     -- internal | public
+      version       INTEGER NOT NULL DEFAULT 0,           -- bumped on each publish
+      created_by    TEXT,
+      created_by_id INTEGER,
+      created_at    TEXT DEFAULT (datetime('now','localtime')),
+      updated_at    TEXT DEFAULT (datetime('now','localtime')),
+      published_at  TEXT,
+      archived_at   TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sops_status ON sops(status, updated_at)`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sops_owner ON sops(created_by_id)`);
+  db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sops_slug ON sops(slug) WHERE slug IS NOT NULL`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sop_steps (
+      id            TEXT PRIMARY KEY,
+      sop_id        TEXT NOT NULL,
+      position      INTEGER NOT NULL DEFAULT 0,
+      title         TEXT,
+      instruction   TEXT,
+      target        TEXT,
+      where_hint    TEXT,                                 -- model field "where" (WHERE is SQL-reserved)
+      image_path    TEXT,
+      enhanced_path TEXT,
+      use_enhanced  INTEGER DEFAULT 0
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sop_steps_sop ON sop_steps(sop_id, position)`);
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sop_versions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      sop_id       TEXT NOT NULL,
+      version      INTEGER NOT NULL,
+      snapshot     TEXT NOT NULL,                         -- JSON { title, business, category, visibility, steps:[...] }
+      visibility   TEXT,
+      published_at TEXT DEFAULT (datetime('now','localtime')),
+      published_by TEXT
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_sop_versions_sop ON sop_versions(sop_id, version)`);
+
   // ---- Per-stage customer acceptances (site survey / mockup gating) ----
   db.exec(`
     CREATE TABLE IF NOT EXISTS stage_acceptances (
@@ -7241,6 +7296,117 @@ export function getMedia(id) {
 }
 export function voidMedia(id) {
   db.prepare("UPDATE media SET voided=1 WHERE id=?").run(String(id));
+}
+
+// ---- SOP Builder + Support Library -------------------------------------------------------------------
+// A step as stored, mapped back to the model's field names (where_hint → where, use_enhanced → useEnh).
+function sopStepOut(r) {
+  return { id: r.id, title: r.title || "", instruction: r.instruction || "", target: r.target || "",
+    where: r.where_hint || "", img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced };
+}
+// One SOP with its ordered steps (null if missing).
+export function getSop(id) {
+  const s = db.prepare("SELECT * FROM sops WHERE id=?").get(String(id));
+  if (!s) return null;
+  const steps = db.prepare("SELECT * FROM sop_steps WHERE sop_id=? ORDER BY position ASC").all(String(id)).map(sopStepOut);
+  return { ...s, steps };
+}
+// My SOPs list (builder landing). Scoped to the signed-in author by default; admin/manager may pass
+// all:true to see every non-archived SOP. Lightweight (no step bodies) + a thumbnail image path.
+export function listSops({ ownerId = null, all = false } = {}) {
+  const rows = all
+    ? db.prepare("SELECT * FROM sops WHERE status!='archived' ORDER BY updated_at DESC").all()
+    : db.prepare("SELECT * FROM sops WHERE status!='archived' AND created_by_id=? ORDER BY updated_at DESC").all(ownerId);
+  return rows.map((s) => {
+    const thumb = db.prepare("SELECT image_path, enhanced_path, use_enhanced FROM sop_steps WHERE sop_id=? AND image_path IS NOT NULL ORDER BY position ASC LIMIT 1").get(s.id);
+    const count = db.prepare("SELECT COUNT(*) n FROM sop_steps WHERE sop_id=?").get(s.id).n;
+    return { id: s.id, title: s.title, business: s.business, category: s.category, status: s.status, visibility: s.visibility,
+      slug: s.slug, updated_at: s.updated_at, steps: count,
+      thumb: thumb ? ((thumb.use_enhanced && thumb.enhanced_path) ? thumb.enhanced_path : thumb.image_path) : null };
+  });
+}
+// Create or replace a draft: upsert the sop row + fully rewrite its steps (the widget owns order/content).
+// Never touches status/slug/version/published_at — publishing does that. Returns the sop id.
+export function saveSopDraft({ id, title, business = null, category = null, transcript = "", steps = [], createdBy = null, createdById = null }) {
+  const sid = String(id || ("sop" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7)));
+  const existing = db.prepare("SELECT id FROM sops WHERE id=?").get(sid);
+  db.exec("BEGIN");
+  try {
+    if (existing) {
+      db.prepare("UPDATE sops SET title=?, business=?, category=?, transcript=?, updated_at=datetime('now','localtime') WHERE id=?")
+        .run(String(title || "New SOP").slice(0, 120), business, category, String(transcript || ""), sid);
+    } else {
+      db.prepare("INSERT INTO sops (id, title, business, category, transcript, created_by, created_by_id) VALUES (?,?,?,?,?,?,?)")
+        .run(sid, String(title || "New SOP").slice(0, 120), business, category, String(transcript || ""), createdBy, createdById);
+    }
+    db.prepare("DELETE FROM sop_steps WHERE sop_id=?").run(sid);
+    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced) VALUES (?,?,?,?,?,?,?,?,?,?)");
+    (Array.isArray(steps) ? steps : []).forEach((st, i) => {
+      ins.run(String(st.id || ("st" + i + Date.now().toString(36) + Math.random().toString(36).slice(2, 5))), sid, i,
+        String(st.title || "").slice(0, 120), String(st.instruction || "").slice(0, 1000),
+        String(st.target || "").slice(0, 200), String(st.where || "").slice(0, 80),
+        st.img || null, st.enh || null, st.useEnh ? 1 : 0);
+    });
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return sid;
+}
+export function deleteSop(id) {
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM sop_steps WHERE sop_id=?").run(String(id));
+    db.prepare("DELETE FROM sop_versions WHERE sop_id=?").run(String(id));
+    db.prepare("DELETE FROM sops WHERE id=?").run(String(id));
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+}
+// Publish: freeze an immutable snapshot into sop_versions, bump version, set status/visibility/slug. The
+// caller passes a unique slug (dedupe handled here with a numeric suffix on collision).
+export function publishSop(id, { visibility = "internal", publishedBy = null, slug = null } = {}) {
+  const sop = getSop(id);
+  if (!sop) throw new Error("SOP not found");
+  const vis = visibility === "public" ? "public" : "internal";
+  const version = (sop.version || 0) + 1;
+  // Unique slug: reuse the sop's existing slug, else the caller's suggestion, deduped against other sops.
+  let finalSlug = sop.slug || slug || ("sop-" + String(id).slice(-6));
+  if (!sop.slug) {
+    let base = finalSlug, n = 2;
+    while (db.prepare("SELECT id FROM sops WHERE slug=? AND id!=?").get(finalSlug, String(id))) finalSlug = `${base}-${n++}`;
+  }
+  const snapshot = JSON.stringify({ title: sop.title, business: sop.business, category: sop.category, visibility: vis,
+    steps: sop.steps.map((s) => ({ title: s.title, instruction: s.instruction, target: s.target, where: s.where,
+      img: (s.useEnh && s.enh) ? s.enh : s.img, original: s.img, enhanced: s.enh, useEnh: s.useEnh })) });
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO sop_versions (sop_id, version, snapshot, visibility, published_by) VALUES (?,?,?,?,?)")
+      .run(String(id), version, snapshot, vis, publishedBy);
+    db.prepare("UPDATE sops SET status='published', visibility=?, slug=?, version=?, published_at=datetime('now','localtime'), updated_at=datetime('now','localtime') WHERE id=?")
+      .run(vis, finalSlug, version, String(id));
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); throw e; }
+  return { slug: finalSlug, version };
+}
+// Support Library listing. Public SOPs always; internal ones only when includeInternal (signed-in staff).
+export function listPublishedSops({ includeInternal = false } = {}) {
+  const rows = includeInternal
+    ? db.prepare("SELECT * FROM sops WHERE status='published' ORDER BY published_at DESC").all()
+    : db.prepare("SELECT * FROM sops WHERE status='published' AND visibility='public' ORDER BY published_at DESC").all();
+  return rows.map((s) => {
+    const thumb = db.prepare("SELECT image_path, enhanced_path, use_enhanced FROM sop_steps WHERE sop_id=? AND image_path IS NOT NULL ORDER BY position ASC LIMIT 1").get(s.id);
+    const count = db.prepare("SELECT COUNT(*) n FROM sop_steps WHERE sop_id=?").get(s.id).n;
+    return { slug: s.slug, title: s.title, business: s.business, category: s.category, visibility: s.visibility,
+      published_at: s.published_at, steps: count,
+      thumb: thumb ? ((thumb.use_enhanced && thumb.enhanced_path) ? thumb.enhanced_path : thumb.image_path) : null };
+  });
+}
+// The player reads the latest published SNAPSHOT (immutable) — never the live draft rows.
+export function getPublishedSopBySlug(slug) {
+  const s = db.prepare("SELECT * FROM sops WHERE slug=? AND status='published'").get(String(slug));
+  if (!s) return null;
+  const v = db.prepare("SELECT * FROM sop_versions WHERE sop_id=? ORDER BY version DESC LIMIT 1").get(s.id);
+  let snap = {}; try { snap = JSON.parse(v?.snapshot || "{}"); } catch { snap = {}; }
+  return { slug: s.slug, title: snap.title || s.title, business: snap.business || s.business, category: snap.category || s.category,
+    visibility: s.visibility, version: v?.version || s.version, published_at: s.published_at, steps: Array.isArray(snap.steps) ? snap.steps : [] };
 }
 
 // The project's canonical camera list, derived from the Site Survey (tool "survey2"): every placed

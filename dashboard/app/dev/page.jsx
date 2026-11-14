@@ -15,7 +15,7 @@ export default async function DevPage() {
   // Display-safe key metadata only (masked values, source, timestamp) — never raw secrets.
   const secrets = listSecretsMeta(INTEGRATIONS);
   const twoFactor = { enabled: loginTwoFactorEnabled(), ready: smsVerifyConfigured(), provider: smsProvider() };
-  const flags = { customerPortalV2: secretValue("CUSTOMER_PORTAL_V2") === "on" };
+  const flags = { customerPortalV2: secretValue("CUSTOMER_PORTAL_V2") === "on", sopBuilder: secretValue("SOP_BUILDER") === "on" };
 
   return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} secrets={secrets} twoFactor={twoFactor} flags={flags} />;
 }
