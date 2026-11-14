@@ -1502,12 +1502,14 @@ function init() {
       instruction   TEXT,
       target        TEXT,
       where_hint    TEXT,                                 -- model field "where" (WHERE is SQL-reserved)
-      image_path    TEXT,
+      image_path    TEXT,                                 -- photo, or a poster frame for a video step
       enhanced_path TEXT,
-      use_enhanced  INTEGER DEFAULT 0
+      use_enhanced  INTEGER DEFAULT 0,
+      video_path    TEXT                                  -- a short clip (played, never AI-enhanced); image_path is its poster
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sop_steps_sop ON sop_steps(sop_id, position)`);
+  { const c = db.prepare("PRAGMA table_info(sop_steps)").all().map((x) => x.name); if (!c.includes("video_path")) db.exec("ALTER TABLE sop_steps ADD COLUMN video_path TEXT"); }
   db.exec(`
     CREATE TABLE IF NOT EXISTS sop_versions (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -7302,7 +7304,8 @@ export function voidMedia(id) {
 // A step as stored, mapped back to the model's field names (where_hint → where, use_enhanced → useEnh).
 function sopStepOut(r) {
   return { id: r.id, title: r.title || "", instruction: r.instruction || "", target: r.target || "",
-    where: r.where_hint || "", img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced };
+    where: r.where_hint || "", img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced,
+    video: r.video_path || null };
 }
 // One SOP with its ordered steps (null if missing).
 export function getSop(id) {
@@ -7340,12 +7343,12 @@ export function saveSopDraft({ id, title, business = null, category = null, tran
         .run(sid, String(title || "New SOP").slice(0, 120), business, category, String(transcript || ""), createdBy, createdById);
     }
     db.prepare("DELETE FROM sop_steps WHERE sop_id=?").run(sid);
-    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced) VALUES (?,?,?,?,?,?,?,?,?,?)");
+    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced, video_path) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
     (Array.isArray(steps) ? steps : []).forEach((st, i) => {
       ins.run(String(st.id || ("st" + i + Date.now().toString(36) + Math.random().toString(36).slice(2, 5))), sid, i,
         String(st.title || "").slice(0, 120), String(st.instruction || "").slice(0, 1000),
         String(st.target || "").slice(0, 200), String(st.where || "").slice(0, 80),
-        st.img || null, st.enh || null, st.useEnh ? 1 : 0);
+        st.img || null, st.enh || null, st.useEnh ? 1 : 0, st.video || null);
     });
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
@@ -7375,7 +7378,7 @@ export function publishSop(id, { visibility = "internal", publishedBy = null, sl
   }
   const snapshot = JSON.stringify({ title: sop.title, business: sop.business, category: sop.category, visibility: vis,
     steps: sop.steps.map((s) => ({ title: s.title, instruction: s.instruction, target: s.target, where: s.where,
-      img: (s.useEnh && s.enh) ? s.enh : s.img, original: s.img, enhanced: s.enh, useEnh: s.useEnh })) });
+      img: (s.useEnh && s.enh) ? s.enh : s.img, original: s.img, enhanced: s.enh, useEnh: s.useEnh, video: s.video || null })) });
   db.exec("BEGIN");
   try {
     db.prepare("INSERT INTO sop_versions (sop_id, version, snapshot, visibility, published_by) VALUES (?,?,?,?,?)")

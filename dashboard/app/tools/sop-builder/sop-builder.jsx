@@ -23,30 +23,40 @@ async function photoFrom(f) {
   try { const b = await createImageBitmap(f); const d = scaled(b, b.width, b.height); b.close && b.close(); if (d.length > 100) return d; } catch {}
   try { const i = await loadImg(await readURL(f)); return scaled(i, i.naturalWidth, i.naturalHeight); } catch { return null; }
 }
-function videoFrames(f) {
+// Grab ONE representative still from a video (a poster), used for display + as the frame the AI orders by.
+// The video itself is uploaded separately and played in the step; it is never AI-enhanced.
+function videoPoster(f) {
   return new Promise((res) => {
     const u = URL.createObjectURL(f), v = document.createElement("video");
     v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "auto"; v.src = u;
-    const out = []; let done = false;
-    const fin = () => { if (done) return; done = true; URL.revokeObjectURL(u); res(out); };
-    setTimeout(fin, 90000); v.onerror = fin;
+    let done = false;
+    const fin = (d) => { if (done) return; done = true; URL.revokeObjectURL(u); res(d || null); };
+    setTimeout(() => fin(null), 30000); v.onerror = () => fin(null);
     v.onloadedmetadata = async () => {
-      const d = v.duration; if (!isFinite(d) || d <= 0) return fin();
-      const n = Math.max(3, Math.min(20, Math.round(d / 3)));
+      const dur = v.duration; const t = isFinite(dur) && dur > 0 ? Math.min(dur * 0.1, 1) : 0;
       try { await v.play(); v.pause(); } catch {}
-      for (let i = 0; i < n; i++) {
-        await new Promise((r) => { const h = () => { v.removeEventListener("seeked", h); r(); }; v.addEventListener("seeked", h); v.currentTime = Math.min(d - 0.05, d * (i + 0.5) / n); setTimeout(r, 4000); });
-        try { out.push(scaled(v, v.videoWidth, v.videoHeight)); } catch {}
-      }
-      fin();
+      const grab = () => { try { fin(scaled(v, v.videoWidth, v.videoHeight)); } catch { fin(null); } };
+      const h = () => { v.removeEventListener("seeked", h); grab(); };
+      v.addEventListener("seeked", h);
+      try { v.currentTime = t; } catch { grab(); }
+      setTimeout(grab, 4000);
     };
   });
 }
-// Upload a data-URL to /api/media (staff-gated); returns the /api/media/:id URL, or null on failure.
+// Upload a data-URL (photo) to /api/media (staff-gated); returns the /api/media/:id URL, or null.
 async function uploadMedia(dataUrl) {
   try {
     const blob = await (await fetch(dataUrl)).blob();
     const fd = new FormData(); fd.append("file", blob, "photo.jpg");
+    const r = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" });
+    const j = await r.json().catch(() => ({}));
+    return j?.ok && j.url ? j.url : null;
+  } catch { return null; }
+}
+// Upload a raw video File to /api/media; returns the /api/media/:id URL (served back with its video mime), or null.
+async function uploadVideo(file) {
+  try {
+    const fd = new FormData(); fd.append("file", file, file.name || "clip.mp4");
     const r = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     return j?.ok && j.url ? j.url : null;
@@ -133,7 +143,7 @@ export default function SopBuilder({ canManage = false }) {
       const cur = next || sop; if (!cur) return;
       const r = await saveSopDraftAction({ id: cur.id, title: cur.title, business: cur.business, category: cur.category,
         transcript: cur.transcript || transcript,
-        steps: cur.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh })) });
+        steps: cur.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video })) });
       if (r?.ok && cur.id !== r.id) setSop((p) => (p ? { ...p, id: r.id } : p));
     }, 600);
   }, [sop, transcript]);
@@ -164,7 +174,13 @@ export default function SopBuilder({ canManage = false }) {
     for (const f of fs) {
       k++; setUpst(`Adding ${k} of ${fs.length}…`);
       if ((f.type || "").startsWith("video")) {
-        for (const d of await videoFrames(f)) { const id = uid(); setPhotos((p) => [...p, { id, dataUrl: d }]); uploadMedia(d).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x))); }
+        // Video: keep it AS a video (played, not enhanced). Grab a poster still for the grid + AI ordering,
+        // and upload the raw clip in parallel.
+        const poster = await videoPoster(f);
+        const id = uid();
+        setPhotos((p) => [...p, { id, dataUrl: poster || "", isVideo: true }]);
+        if (poster) uploadMedia(poster).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x)));
+        uploadVideo(f).then((vurl) => { if (vurl) setPhotos((p) => p.map((x) => x.id === id ? { ...x, video: vurl } : x)); else { bad++; setUpst("Couldn't upload a video (25MB max)."); } });
       } else {
         const d = await photoFrom(f);
         if (d) { const id = uid(); setPhotos((p) => [...p, { id, dataUrl: d }]); uploadMedia(d).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x))); }
@@ -203,7 +219,7 @@ export default function SopBuilder({ canManage = false }) {
       if (!r.ok) throw new Error(j.error || "Build failed");
       const steps = (j.steps || []).map((s) => {
         const ph = s.photoIndex != null ? photos[s.photoIndex] : null;
-        return { id: uid(), img: ph ? (ph.url || ph.dataUrl) : null, enh: null, useEnh: false,
+        return { id: uid(), img: ph ? (ph.url || ph.dataUrl) : null, enh: null, useEnh: false, video: ph?.video || null,
           title: s.title || "", instruction: s.instruction || "", target: s.target || "", where: s.where || "" };
       });
       const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", transcript: transcript.trim(), steps };
@@ -215,8 +231,8 @@ export default function SopBuilder({ canManage = false }) {
 
   /* ---------- enhance ---------- */
   async function enhanceSteps(list) {
-    const todo = list.filter((s) => s.img && !s.enh);
-    if (!todo.length) { toast("All photos are already enhanced."); return; }
+    const todo = list.filter((s) => s.img && !s.enh && !s.video);   // never enhance video steps — photos only
+    if (!todo.length) { toast("Nothing to enhance (videos stay as-is)."); return; }
     setBusy(true); let n = 0, fail = 0;
     for (const s of todo) {
       n++; setEst(`Enhancing photo ${n} of ${todo.length}… (about 20–40 sec each)`);
@@ -251,7 +267,7 @@ export default function SopBuilder({ canManage = false }) {
     if (!r?.ok) return toast(r?.error || "Couldn't open it.");
     const s = r.sop;
     setSop({ id: s.id, title: s.title, business: s.business || "", category: s.category || "", transcript: s.transcript || "",
-      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, title: x.title, instruction: x.instruction, target: x.target, where: x.where })) });
+      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where })) });
     setTab("build");
   }
   async function removeSop(id) {
@@ -265,7 +281,7 @@ export default function SopBuilder({ canManage = false }) {
     setBusy(true); setStatus("Publishing…");
     // Make sure the latest edits are saved first.
     await saveSopDraftAction({ id: sop.id, title: sop.title, business: sop.business, category: sop.category, transcript: sop.transcript || transcript,
-      steps: sop.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh })) });
+      steps: sop.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video })) });
     const r = await publishSopAction(sop.id, { visibility });
     setBusy(false); setStatus("");
     if (!r?.ok) return toast(r?.error || "Publish failed.");
@@ -301,9 +317,10 @@ export default function SopBuilder({ canManage = false }) {
             <div className="sopb-grid" ref={gridRef}>
               {photos.map((p, i) => (
                 <div className="sopb-tile" data-i={i} key={p.id}>
-                  <img src={p.dataUrl || p.url} alt={`Photo ${i + 1}`} />
+                  <img src={p.dataUrl || p.url || ""} alt={`Item ${i + 1}`} />
+                  {p.isVideo && <span className="vid">▶</span>}
                   <span className="n">{i + 1}</span>
-                  <button className="x" aria-label="Remove photo" onClick={(e) => { e.stopPropagation(); removePhoto(i); }}>✕</button>
+                  <button className="x" aria-label="Remove" onClick={(e) => { e.stopPropagation(); removePhoto(i); }}>✕</button>
                 </div>
               ))}
             </div>
@@ -335,7 +352,13 @@ export default function SopBuilder({ canManage = false }) {
             {sop.steps.map((s, i) => (
               <div className="sopb-step" data-i={i} key={s.id}>
                 <div className="sopb-hd"><span className="sopb-h" aria-label="Drag to reorder">≡</span><span>Step {i + 1} — hold ≡ to move</span></div>
-                {s.img && (
+                {s.video ? (
+                  <div className="sopb-ph">
+                    <video src={s.video} poster={s.img || undefined} controls playsInline preload="metadata" />
+                    <span className="tag">VIDEO</span>
+                    <span className="num">{i + 1}</span>
+                  </div>
+                ) : s.img && (
                   <div className="sopb-ph">
                     <img src={stepImg(s)} alt={`Step ${i + 1} photo`} />
                     {s.useEnh && s.enh && <span className="tag">ENHANCED</span>}
@@ -346,7 +369,8 @@ export default function SopBuilder({ canManage = false }) {
                   <input value={s.title} placeholder="Step title" onChange={(e) => editStep(s.id, "title", e.target.value)} />
                   <textarea rows={2} value={s.instruction} placeholder="What to do" onChange={(e) => editStep(s.id, "instruction", e.target.value)} />
                   <div className="sopb-acts">
-                    {s.img && (s.enh
+                    {/* Enhance is photo-only — a video step shows no Enhance / Original-Enhanced controls. */}
+                    {!s.video && s.img && (s.enh
                       ? (<><button className={s.useEnh ? "" : "on"} onClick={() => setUseEnh(s.id, false)}>Original</button>
                           <button className={s.useEnh ? "on" : ""} onClick={() => setUseEnh(s.id, true)}>Enhanced</button></>)
                       : (<button disabled={busy} onClick={() => enhanceSteps([s])}>🪄 Enhance</button>))}
@@ -428,7 +452,7 @@ function Player({ sop, onClose }) {
       onTouchEnd={(e) => { const d = e.changedTouches[0].clientX - sx.current; if (d < -60 && i < n - 1) setI(i + 1); else if (d > 60 && i > 0) setI(i - 1); }}>
       <div className="ph"><button className="sopb-ib" aria-label="Close" onClick={onClose}>✕</button><div><b>{sop.title}</b><span>Step {i + 1} of {n}</span></div></div>
       <div className="bars">{sop.steps.map((_, k) => <i className={k <= i ? "on" : ""} key={k} />)}</div>
-      <div className="mid">{img && <img src={img} alt="" />}<h2>{st.title}</h2><p>{st.instruction}</p></div>
+      <div className="mid">{st.video ? <video src={st.video} poster={st.img || undefined} controls playsInline /> : (img && <img src={img} alt="" />)}<h2>{st.title}</h2><p>{st.instruction}</p></div>
       <div className="nav">
         <button disabled={!i} onClick={() => setI(Math.max(0, i - 1))}>Back</button>
         <button className="nx" onClick={() => { if (i < n - 1) setI(i + 1); else onClose(); }}>{i === n - 1 ? "Done" : "Next"}</button>
@@ -460,6 +484,7 @@ const CSS = `
 .sopb-tile img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
 .sopb-tile .n{position:absolute;left:6px;top:6px;background:rgba(0,0,0,.75);border-radius:7px;padding:2px 8px;font-size:13px;font-weight:800}
 .sopb-tile .x{position:absolute;right:4px;top:4px;width:30px;height:30px;border-radius:50%;border:0;background:rgba(0,0,0,.75);font-size:15px;color:#fff}
+.sopb-tile .vid{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:20px;color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.85);pointer-events:none}
 .sopb-tile.drag{opacity:.35}
 .ghost{position:fixed;z-index:50;pointer-events:none;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.7);transform:scale(1.08);outline:3px solid var(--acc)}
 .ghost img{width:100%;height:100%;object-fit:cover}
@@ -479,7 +504,7 @@ const CSS = `
 .sopb-metain{flex:1;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;color:#fff}
 .sopb-step{background:var(--card);border:1px solid var(--line);border-radius:18px;margin-bottom:12px;overflow:hidden}
 .sopb-ph{position:relative;background:#000}
-.sopb-ph img{width:100%;max-height:340px;object-fit:contain;display:block}
+.sopb-ph img,.sopb-ph video{width:100%;max-height:340px;object-fit:contain;display:block;background:#000}
 .sopb-ph .tag{position:absolute;left:8px;top:8px;background:var(--acc);color:#000;font-size:11px;font-weight:800;border-radius:7px;padding:3px 8px}
 .sopb-ph .num{position:absolute;right:8px;top:8px;background:rgba(0,0,0,.75);border-radius:8px;padding:3px 9px;font-weight:800;font-size:13px}
 .sopb-bd{padding:12px}
@@ -504,7 +529,7 @@ const CSS = `
 .sopb-play .ph div{flex:1;min-width:0}.sopb-play .ph b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sopb-play .ph span{font-size:13px;color:var(--mut);font-weight:600}
 .sopb-play .bars{display:flex;gap:3px;padding:0 12px}.sopb-play .bars i{flex:1;height:3px;border-radius:2px;background:#333}.sopb-play .bars i.on{background:var(--acc)}
 .sopb-play .mid{flex:1;overflow:auto;padding:12px 16px}
-.sopb-play .mid img{width:100%;max-height:56dvh;object-fit:contain;border-radius:16px;background:#111;display:block;margin-bottom:14px}
+.sopb-play .mid img,.sopb-play .mid video{width:100%;max-height:56dvh;object-fit:contain;border-radius:16px;background:#111;display:block;margin-bottom:14px}
 .sopb-play h2{font-size:24px;font-weight:800;margin-bottom:8px}.sopb-play p{font-size:19px;line-height:1.45}
 .sopb-play .nav{display:flex;gap:10px;padding:10px 12px calc(12px + env(safe-area-inset-bottom))}
 .sopb-play .nav button{flex:1;min-height:56px;border-radius:14px;border:1px solid var(--line);background:var(--card);font-size:18px;font-weight:800;color:#fff}

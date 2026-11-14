@@ -75,6 +75,20 @@ export async function POST(req) {
   if (!buf.length) return Response.json({ ok: false, error: "empty file" }, { status: 400 });
   if (buf.length > MAX_BYTES) return Response.json({ ok: false, error: "file too large" }, { status: 413 });
 
+  // Video: a SOP step can hold a short clip (played, never AI-enhanced). Stored raw (no image pipeline).
+  // Only for a signed-in staff upload with no project scope (the SOP Builder path) — project/customer/
+  // applicant uploads stay image-only. Capped tighter than images since BLOBs live in the DB.
+  const isVideo = typeof file.type === "string" && file.type.startsWith("video/");
+  if (isVideo) {
+    const allowVideo = !projectAccessId && ["admin", "manager", "sales", "tech"].includes(p.role);
+    if (!allowVideo) return Response.json({ ok: false, error: "videos not allowed here" }, { status: 422 });
+    if (buf.length > 25 * 1024 * 1024) return Response.json({ ok: false, error: "video too large (25MB max)" }, { status: 413 });
+    const id = crypto.randomBytes(16).toString("hex");
+    try { insertMedia({ id, projectAccessId: null, kind: "sop-video", mime: file.type, bytes: buf, w: null, h: null, createdBy: who }); }
+    catch (e) { return Response.json({ ok: false, error: "store failed: " + (e?.message || e) }, { status: 500 }); }
+    return Response.json({ ok: true, id, url: `/api/media/${id}`, video: true });
+  }
+
   let img;
   try { img = await processImage(buf, file.name, file.type); }
   catch (e) { console.error("[media] could not process image:", e?.message || e); return Response.json({ ok: false, error: "could not decode image: " + (e?.message || e) }, { status: 422 }); }

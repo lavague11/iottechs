@@ -30,7 +30,7 @@ export default function SopPlayer({ sop }) {
       </div>
       <div className="bars">{steps.map((_, k) => <i className={k <= i ? "on" : ""} key={k} />)}</div>
       <div className="mid">
-        {st.img && <img src={st.img} alt="" />}
+        {st.video ? <video src={st.video} poster={st.img || undefined} controls playsInline preload="metadata" /> : (st.img && <img src={st.img} alt="" />)}
         <h2>{st.title}</h2>
         <p>{st.instruction}</p>
       </div>
@@ -55,7 +55,7 @@ const CSS = `
 .sopv .bars i{flex:1;height:3px;border-radius:2px;background:#333}
 .sopv .bars i.on{background:var(--acc)}
 .sopv .mid{flex:1;overflow:auto;padding:12px 16px}
-.sopv .mid img{width:100%;max-height:56dvh;object-fit:contain;border-radius:16px;background:#111;display:block;margin:0 auto 14px}
+.sopv .mid img,.sopv .mid video{width:100%;max-height:56dvh;object-fit:contain;border-radius:16px;background:#111;display:block;margin:0 auto 14px}
 .sopv h2{font-size:24px;font-weight:800;margin-bottom:8px}
 .sopv p{font-size:19px;line-height:1.45;white-space:pre-wrap}
 .sopv .nav{display:flex;gap:10px;padding:10px 12px calc(12px + env(safe-area-inset-bottom));max-width:720px;width:100%;margin:0 auto}
