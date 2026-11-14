@@ -190,6 +190,8 @@ function KeyRow({ row, onFlash, onDismiss }) {
 function FeatureFlagsCard({ flags = {}, onFlash }) {
   const [on, setOn] = useState(!!flags.customerPortalV2);
   const [busy, setBusy] = useState(false);
+  const [sopOn, setSopOn] = useState(!!flags.sopBuilder);
+  const [sopBusy, setSopBusy] = useState(false);
   const [bfBusy, setBfBusy] = useState(false);
   const [bfResult, setBfResult] = useState("");
   const toggle = async () => {
@@ -197,6 +199,12 @@ function FeatureFlagsCard({ flags = {}, onFlash }) {
     const r = await saveSecretAction("CUSTOMER_PORTAL_V2", next ? "on" : "off").catch(() => ({ error: "Failed" }));
     setBusy(false);
     if (r?.error) { setOn(!next); onFlash?.(r.error); } else onFlash?.(next ? "Customer Portal V2 on" : "Customer Portal V2 off");
+  };
+  const toggleSop = async () => {
+    const next = !sopOn; setSopBusy(true); setSopOn(next);
+    const r = await saveSecretAction("SOP_BUILDER", next ? "on" : "off").catch(() => ({ error: "Failed" }));
+    setSopBusy(false);
+    if (r?.error) { setSopOn(!next); onFlash?.(r.error); } else onFlash?.(next ? "SOP Builder on" : "SOP Builder off");
   };
   const runBackfill = async () => {
     setBfBusy(true); setBfResult("");
@@ -221,6 +229,13 @@ function FeatureFlagsCard({ flags = {}, onFlash }) {
           <div className="kv-sub" style={{ margin: 0 }}>Simplified customer project portal (install projects). Off = classic deck.</div>
         </div>
         <button className="kv-addbtn" disabled={busy} onClick={toggle} aria-pressed={on}>{on ? "On" : "Off"}</button>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 2px", borderTop: "1px solid var(--dv-line,#eee)" }}>
+        <div>
+          <div style={{ fontWeight: 600 }}>SOP Builder</div>
+          <div className="kv-sub" style={{ margin: 0 }}>Photo + voice → step-by-step guides, published to the Support Library. Staff tool at /tools/sop-builder.</div>
+        </div>
+        <button className="kv-addbtn" disabled={sopBusy} onClick={toggleSop} aria-pressed={sopOn}>{sopOn ? "On" : "Off"}</button>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 2px", borderTop: "1px solid var(--dv-line,#eee)" }}>
         <div>
