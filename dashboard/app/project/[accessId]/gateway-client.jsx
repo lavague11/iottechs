@@ -3026,6 +3026,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             );
             return (
               <div style={padOvl}>
+                {/* Activation QR (read-only) — shown once staff have uploaded it, from the same lp.system_qr the
+                    staff closeout card writes. "Render only when real": no empty stub before it exists. */}
+                {lp.system_qr && (
+                  <div style={{ marginBottom: 14 }}>
+                    <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
+                      systemQr={lp.system_qr} readOnly />
+                  </div>
+                )}
                 <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
                   role="customer" readOnly signoff={sign} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
                   onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
@@ -3257,6 +3265,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             const sign = (<QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances}
               onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />);
             return (<div style={ovl(820)}>
+              {/* Activation QR sits at the TOP of closeout — techs upload the device QR here (and see it once
+                  saved); it was missing from the Staff Hub entirely, so staff couldn't view the uploaded code
+                  that the customer sees. Same tool/source (lp.system_qr) as the customer's read-only card. */}
+              <div style={{ marginBottom: 14 }}>
+                <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
+                  systemQr={lp.system_qr} readOnly={viewOnly} />
+              </div>
               <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
                 role={cView} signoff={sign} meta={toolMeta?.qc} acceptances={acceptances}
                 onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }}
