@@ -82,6 +82,7 @@ const NAV_GROUPS = [
     { heading: "Utilities" },
     { key: "qr",      label: "QR Codes",        href: "/support/qr" },
     { key: "support", label: "Support Library", href: "/support" },
+    { key: "guides",  label: "Guides",          href: "/guides" },
   ]},
   { key: "admin-grp", label: "Admin", items: [
     { key: "users",      label: "Users",        href: "/users" },
@@ -100,7 +101,7 @@ const isNavLink = (it) => it && !it.heading && it.href;
 //   sales   — their pages only: Pipeline, Projects, Customers, Tickets, Support Library.
 // (tech keeps its own tight flat nav below — grouping would bury its /tech home.)
 const NAV_DENY  = { manager: new Set(["dev", "archives"]) };
-const NAV_ALLOW = { sales: new Set(["sales", "projects", "customers", "tickets", "support"]) };
+const NAV_ALLOW = { sales: new Set(["sales", "projects", "customers", "tickets", "support", "guides"]) };
 function navItemVisible(role, key) {
   if (role === "admin") return true;
   if (NAV_ALLOW[role]) return NAV_ALLOW[role].has(key);
