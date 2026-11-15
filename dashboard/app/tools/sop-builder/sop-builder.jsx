@@ -53,10 +53,12 @@ async function uploadMedia(dataUrl) {
     return j?.ok && j.url ? j.url : null;
   } catch { return null; }
 }
-// Upload a raw video File to /api/media; returns the /api/media/:id URL (served back with its video mime), or null.
-async function uploadVideo(file) {
+// Upload a raw File to /api/media; returns the /api/media/:id URL, or null. Used for videos AND for photos
+// the browser can't decode client-side (iPhone HEIC on desktop Chrome): /api/media converts HEIC→JPEG
+// server-side and serves it back at the returned URL.
+async function uploadFileRaw(file, fallbackName = "file") {
   try {
-    const fd = new FormData(); fd.append("file", file, file.name || "clip.mp4");
+    const fd = new FormData(); fd.append("file", file, file.name || fallbackName);
     const r = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" });
     const j = await r.json().catch(() => ({}));
     return j?.ok && j.url ? j.url : null;
@@ -180,11 +182,22 @@ export default function SopBuilder({ canManage = false }) {
         const id = uid();
         setPhotos((p) => [...p, { id, dataUrl: poster || "", isVideo: true }]);
         if (poster) uploadMedia(poster).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x)));
-        uploadVideo(f).then((vurl) => { if (vurl) setPhotos((p) => p.map((x) => x.id === id ? { ...x, video: vurl } : x)); else { bad++; setUpst("Couldn't upload a video (25MB max)."); } });
+        uploadFileRaw(f, "clip.mp4").then((vurl) => { if (vurl) setPhotos((p) => p.map((x) => x.id === id ? { ...x, video: vurl } : x)); else { bad++; setUpst("Couldn't upload a video (25MB max)."); } });
       } else {
         const d = await photoFrom(f);
         if (d) { const id = uid(); setPhotos((p) => [...p, { id, dataUrl: d }]); uploadMedia(d).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x))); }
-        else bad++;
+        else {
+          // The browser couldn't decode it client-side — almost always an iPhone HEIC/HEIF. Upload the raw
+          // file; /api/media converts HEIC→JPEG server-side, then we fetch the converted JPEG back for the
+          // grid preview + the AI build call (which needs the image bytes).
+          const id = uid();
+          const url = await uploadFileRaw(f, "photo.heic");
+          if (url) {
+            let du = "";
+            try { du = await readURL(new File([await (await fetch(url, { credentials: "same-origin" })).blob()], "c.jpg", { type: "image/jpeg" })); } catch {}
+            setPhotos((p) => [...p, { id, dataUrl: du, url }]);
+          } else { bad++; setUpst("Couldn't read a photo (HEIC)."); }
+        }
       }
     }
     setUpst(bad ? `Couldn't read ${bad} file(s).` : "");
@@ -313,7 +326,7 @@ export default function SopBuilder({ canManage = false }) {
           <div className="sopb-sec">
             <div className="sopb-lbl"><b>1</b> Photos</div>
             <label className="sopb-up">⬆️ Add photos<small>Pick as many as you want. Hold &amp; drag a photo to move it.</small>
-              <input type="file" accept="image/*,video/*" multiple onChange={onFiles} /></label>
+              <input type="file" accept="image/*,.heic,.heif,video/*" multiple onChange={onFiles} /></label>
             <div className="sopb-grid" ref={gridRef}>
               {photos.map((p, i) => (
                 <div className="sopb-tile" data-i={i} key={p.id}>
