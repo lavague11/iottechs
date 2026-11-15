@@ -23,7 +23,7 @@ const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateStri
 const fmtTime = (t) => { try { const [h, m] = String(t).split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; const hh = ((h + 11) % 12) + 1; return `${hh}:${String(m).padStart(2, "0")} ${ap}`; } catch { return t; } };
 const apptType = (a) => (a?.kind === "install" || /install/i.test(a?.title || "")) ? "Installation" : (a?.kind === "survey" || /survey/i.test(a?.title || "")) ? "Site Survey" : (a?.title || "Appointment");
 
-const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Work Order", expenses: "Expenses" };
+const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Work Order", expenses: "Expenses", systemqr: "System QR" };
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,

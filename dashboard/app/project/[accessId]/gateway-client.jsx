@@ -1907,6 +1907,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     install_photos:      acceptLoaded ? (toolMeta?.media?.installPhotos || 0) > 0 : !!lp.install_photos,
     install_confirmed:   acceptLoaded ? !!toolMeta?.schedule?.installConfirmed : !!lp.install_confirmed,
     completion_docs:     !!lp.completed_at,
+    // Work order (server facts): submitted = the office froze it; accepted = a technician signed it.
+    // (proposalData is the live row, so submitting in the sheet flips the card without a reload.)
+    work_order_submitted: !!lp.work_order_submitted || !!proposalData?.wo_finalized_at,
+    work_order_accepted:  !!lp.work_order_accepted || !!proposalData?.tech_signed_name,
     proposal_status:   pubProposalStatus,
     proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
     deposit_submitted: lp.deposit_submitted,
@@ -3170,6 +3174,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const qcSigned = !!sFacts.qc_customer_signed;
       const isComplete = !!sFacts.completion_docs || projState === "COMPLETE";
       const hubAppt = staffAppt || pickUpcomingAny();
+      // Work Order state reads the CANONICAL record, not one half of it. There are three separate signals:
+      // the office's Submit freezes the WO (facts.work_order_submitted = proposals.wo_finalized_at), the tech's
+      // acceptance stamps tech_accepted, and a tech's own submission lands in the `work_orders` table. The card
+      // used to check `work_orders` alone, so a work order the office had submitted still read "Create".
+      const woSigned = !!(sFacts.work_order_accepted || sFacts.tech_accepted);
+      const woSubmitted = !!sFacts.work_order_submitted;
+      const woStarted = woSigned || woSubmitted || !!workOrders?.length;
       const simple3 = threeStepPhases(masterToPhaseKey(projectStage));   // Simple view = 3 steps: Consulting · Install · Completion
 
       const renderStaffOverlay = (key, onCloseOverlay) => {
@@ -3290,6 +3301,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 currentUser={currentUser} project={lp} view={view} apptKind="install"
                 defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
             </div>);
+          // Activation QR on its own card (internal): upload / replace / decode the code the customer scans.
+          case "systemqr":
+            return (<div style={ovl(680)}>
+              <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
+                systemQr={lp.system_qr} readOnly={viewOnly} />
+            </div>);
           case "workorder":
             return (<div style={ovl(820)}>
               {/* The work order IS the proposal, re-priced at tech payout — editable while creating,
@@ -3358,7 +3375,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
-        { key: "workorder", title: "Work Order", group: "internal", sub: workOrders?.length ? (installDone ? "Install complete." : hubAppt ? "Scheduled." : "Created.") : "Create the work order.", action: workOrders?.length ? "Edit" : "Create", done: !!workOrders?.length, ownHeader: true },
+        { key: "workorder", title: "Work Order", group: "internal",
+          sub: installDone ? "Install complete." : woSigned ? "Accepted by the tech." : woSubmitted ? "Awaiting tech signature."
+            : workOrders?.length ? (hubAppt ? "Scheduled." : "Created.") : "Create the work order.",
+          action: woStarted ? "Edit" : "Create", done: woStarted, ownHeader: true },
+        // Activation QR — the code the customer scans to set up the cameras in the app. Staff upload/replace
+        // it here (the same tool also sits at the top of Closeout); the customer sees it read-only.
+        { key: "systemqr", title: "System QR", group: "internal", sub: lp.system_qr ? "Saved." : "Upload the activation code.", action: lp.system_qr ? "Edit" : "Add", done: !!lp.system_qr, ownHeader: true },
       ];
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.

@@ -2914,6 +2914,14 @@ export function buildStageFacts(accessId) {
     proposal_signed: !!prop?.signed_name && (!prop?.signed_fingerprint ||
       prop.signed_fingerprint === proposalFingerprint(prop.payload, prop.tax_rate, prop.deposit_pct)),
     tech_accepted: !!prop?.tech_signed_name,
+    // ---- Work order: has one been submitted / accepted, on ANY version? ----
+    // Three separate signals exist and a surface that reads only one gets it wrong: the office's Submit
+    // freezes the WO (proposals.wo_finalized_at), the technician's acceptance stamps tech_signed_name, and a
+    // technician's OWN submission is a row in `work_orders`. These two are deliberately version-agnostic —
+    // `tech_accepted` above is contractual (published version only), so a WO frozen or signed against an
+    // earlier version left the Staff Hub card reading "Create" after the office had already submitted it.
+    work_order_submitted: !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND wo_finalized_at IS NOT NULL LIMIT 1").get(String(accessId)),
+    work_order_accepted: !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND tech_signed_name IS NOT NULL LIMIT 1").get(String(accessId)),
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
     deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
     final_balance_paid: finalBalancePaid,
