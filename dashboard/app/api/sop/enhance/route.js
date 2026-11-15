@@ -26,17 +26,21 @@ export async function POST(req) {
   if (!m) return Response.json({ error: "No image" }, { status: 400 });
   if (m[2].length > MAX_DATAURL) return Response.json({ error: "Photo is too large to enhance." }, { status: 413 });
 
-  const prompt = enhancePrompt({ title: body?.title, instruction: body?.instruction, target: body?.target, where: body?.where });
+  const prompt = enhancePrompt({ title: body?.title, instruction: body?.instruction, target: body?.target, where: body?.where, note: body?.note });
   const buf = Buffer.from(m[2], "base64");
   const model = secretValue("SOP_IMAGE_MODEL") || SOP_IMAGE_MODEL_DEFAULT;
+  // Full-size, full-detail output (owner request). size:auto keeps the photo's aspect; high quality keeps the
+  // resolution/detail instead of a softened medium render. Both vault-overridable.
+  const quality = secretValue("SOP_IMAGE_QUALITY") || "high";
+  const size = secretValue("SOP_IMAGE_SIZE") || "auto";
 
   async function call(mdl) {
     const fd = new FormData();
     fd.append("model", mdl);
     fd.append("image[]", new Blob([buf], { type: m[1] }), "photo.jpg");
     fd.append("prompt", prompt);
-    fd.append("size", "auto");
-    fd.append("quality", "medium");
+    fd.append("size", size);
+    fd.append("quality", quality);
     fd.append("output_format", "jpeg");
     const ctrl = new AbortController();
     const killer = setTimeout(() => ctrl.abort(), 90000);

@@ -32,10 +32,13 @@ export function enhancePrompt(step = {}) {
   const instruction = String(step.instruction || "").trim();
   const target = String(step.target || "").trim();
   const where = String(step.where || "").trim();
+  const note = String(step.note || "").replace(/[\r\n]+/g, " ").trim().slice(0, 300);   // operator's editable tweak for THIS photo
   const circle = target
     ? ` Then draw one bright yellow circle with a short yellow arrow pointing at ${target}${where ? ` (${where} of the photo)` : ""}.`
     : "";
-  return `Make this photo a clear illustration for a how-to guide step: "${title}. ${instruction}". Improve lighting, sharpness, contrast and remove glare.${circle} Keep everything else exactly as it is — do not add, remove or change any real objects, text, labels, numbers, buttons or screens, and keep the same framing.`;
+  const extra = note ? ` ${note}.` : "";
+  // Primary goal (owner): clean up the shot — denoise, de-clutter, and make the product/equipment the clear focus.
+  return `Clean up this photo so it works as a clear, professional illustration for a how-to guide step: "${title}. ${instruction}". Reduce noise and grain, fix the lighting, sharpness and contrast, and remove glare. De-clutter the scene — gently de-emphasize or softly blur the busy background so the main product or equipment being worked on is the clear focus of the shot.${circle}${extra} Keep everything else exactly as it is — do not add, remove or change any real objects, text, labels, numbers, buttons or screens, and keep the same framing.`;
 }
 
 // ---- Post-processing of Claude's steps (handoff §5) ----------------------------------------------------

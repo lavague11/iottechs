@@ -19,13 +19,17 @@ test("user instruction wraps the transcript as untrusted data + asks for the exa
   assert.equal(sopUserInstruction("x".repeat(9000)).includes("x".repeat(8000)), true);
 });
 
-test("enhance prompt: circle sentence only when target is present", () => {
+test("enhance prompt: cleanup goal + circle only when target + editable note", () => {
   const withTarget = enhancePrompt({ title: "Open panel", instruction: "Flip it.", target: "the red switch", where: "upper right" });
+  assert.ok(/Clean up this photo/.test(withTarget), "leads with the cleanup goal");
+  assert.ok(/Reduce noise/.test(withTarget) && /background/.test(withTarget), "denoise + declutter background");
   assert.ok(/bright yellow circle/.test(withTarget));
   assert.ok(/the red switch \(upper right of the photo\)/.test(withTarget));
   assert.ok(/do not add, remove or change any real objects/.test(withTarget));
   const noTarget = enhancePrompt({ title: "Overview", instruction: "Look at it.", target: "", where: "" });
   assert.ok(!/yellow circle/.test(noTarget), "no circle sentence without a target");
+  const noted = enhancePrompt({ title: "x", instruction: "y", note: "blur the background more" });
+  assert.ok(/blur the background more/.test(noted), "operator's note is appended to the prompt");
 });
 
 test("normalizeSopResult: keeps Claude's order, ignores bad/duplicate photo indexes", () => {

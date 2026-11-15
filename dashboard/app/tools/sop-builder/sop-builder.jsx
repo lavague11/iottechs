@@ -121,6 +121,8 @@ export default function SopBuilder({ canManage = false }) {
   const [status, setStatus] = useState("");
   const [upst, setUpst] = useState("");
   const [dragOver, setDragOver] = useState(false);
+  const [enhEdit, setEnhEdit] = useState(null);   // step id whose enhance prompt is being edited
+  const [enhNote, setEnhNote] = useState("");      // the operator's tweak for that re-enhance
   const [busy, setBusy] = useState(false);
   const [est, setEst] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -250,25 +252,31 @@ export default function SopBuilder({ canManage = false }) {
   }
 
   /* ---------- enhance ---------- */
-  async function enhanceSteps(list) {
-    const todo = list.filter((s) => s.img && !s.enh && !s.video);   // never enhance video steps — photos only
+  // note = an operator tweak appended to the cleanup prompt; force = re-enhance even an already-enhanced step.
+  async function runEnhance(list, note = "", force = false) {
+    const todo = list.filter((s) => s.img && !s.video && (force || !s.enh));   // never enhance video steps — photos only
     if (!todo.length) { toast("Nothing to enhance (videos stay as-is)."); return; }
     setBusy(true); let n = 0, fail = 0;
     for (const s of todo) {
       n++; setEst(`Enhancing photo ${n} of ${todo.length}… (about 20–40 sec each)`);
       try {
-        const srcBlob = await (await fetch(s.img)).blob();
+        const srcBlob = await (await fetch(s.img)).blob();   // always enhance from the ORIGINAL photo
         const dataUrl = await readURL(new File([srcBlob], "o.jpg", { type: srcBlob.type || "image/jpeg" }));
         const r = await fetch("/api/sop/enhance", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: dataUrl, title: s.title, instruction: s.instruction, target: s.target, where: s.where }) });
+          body: JSON.stringify({ image: dataUrl, title: s.title, instruction: s.instruction, target: s.target, where: s.where, note }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Enhance failed");
         const url = await uploadMedia(j.b64) || j.b64;
-        patchSop((p) => ({ ...p, steps: p.steps.map((x) => x.id === s.id ? { ...x, enh: url, useEnh: true } : x) }));
+        patchSop((p) => ({ ...p, steps: p.steps.map((x) => x.id === s.id ? { ...x, enh: url, useEnh: true, note } : x) }));
       } catch (e) { fail++; setEst(e.message); if (/key|out of credits|internet|paused/i.test(e.message)) break; await sleep(800); }
     }
     if (!fail) setEst(`Enhanced ${todo.length} photo${todo.length > 1 ? "s" : ""} ✓ — tap Original to compare.`);
     setBusy(false);
+  }
+  const enhanceSteps = (list) => runEnhance(list);
+  function addStep() {
+    patchSop((p) => ({ ...p, steps: [...p.steps, { id: uid(), title: "", instruction: "", target: "", where: "", img: null, enh: null, useEnh: false, video: null }] }));
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 60);
   }
 
   /* ---------- step edits ---------- */
@@ -397,15 +405,27 @@ export default function SopBuilder({ canManage = false }) {
                     {/* Enhance is photo-only — a video step shows no Enhance / Original-Enhanced controls. */}
                     {!s.video && s.img && (s.enh
                       ? (<><button className={s.useEnh ? "" : "on"} onClick={() => setUseEnh(s.id, false)}>Original</button>
-                          <button className={s.useEnh ? "on" : ""} onClick={() => setUseEnh(s.id, true)}>Enhanced</button></>)
+                          <button className={s.useEnh ? "on" : ""} onClick={() => setUseEnh(s.id, true)}>Enhanced</button>
+                          <button title="Edit the prompt & re-enhance" onClick={() => { setEnhEdit(enhEdit === s.id ? null : s.id); setEnhNote(s.note || ""); }}>Redo</button></>)
                       : (<button disabled={busy} onClick={() => enhanceSteps([s])}>🪄 Enhance</button>))}
                     <button aria-label="Delete step" onClick={() => delStep(i)}>🗑</button>
                   </div>
+                  {!s.video && enhEdit === s.id && (
+                    <div className="sopb-enhedit">
+                      <input value={enhNote} autoFocus placeholder="Tweak the cleanup — e.g. blur the background more, brighten the label, remove cable clutter"
+                        onChange={(e) => setEnhNote(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { runEnhance([s], enhNote.trim(), true); setEnhEdit(null); } }} />
+                      <button className="go" disabled={busy} onClick={() => { runEnhance([s], enhNote.trim(), true); setEnhEdit(null); }}>Redo</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
           <div className="sopb-row" style={{ marginTop: 6 }}>
+            <button className="sopb-btn" onClick={addStep}>＋ Add step</button>
+          </div>
+          <div className="sopb-row" style={{ marginTop: 8 }}>
             <button className="sopb-btn" onClick={startOver}>↺ Start over</button>
             <button className="sopb-btn w" onClick={() => setPlayer({ sop, i: 0 })}>▶ Play</button>
           </div>
@@ -487,8 +507,8 @@ function Player({ sop, onClose }) {
 }
 
 const CSS = `
-.sopb{--bg:#000;--card:#131315;--line:#2b2b30;--mut:#9d9da4;--acc:#FFD60A;--grad:linear-gradient(90deg,#f58529,#dd2a7b,#8134af);
-  background:var(--bg);color:#fff;font:16px/1.4 -apple-system,system-ui,sans-serif;max-width:640px;margin:auto;padding:14px 16px 60px;min-height:100dvh;border-radius:14px}
+.sopb{--bg:#0c0e11;--card:#16181c;--line:#2a2d33;--mut:#9aa0ab;--acc:#C9A96E;--acc-ink:#101418;--acc-soft:rgba(201,169,110,.14);
+  background:var(--bg);color:#f2f3f5;font:16px/1.45 -apple-system,system-ui,sans-serif;max-width:640px;margin:auto;padding:14px 16px 60px;min-height:100dvh;border-radius:14px}
 .sopb *{box-sizing:border-box}
 .sopb button,.sopb input,.sopb textarea{font:inherit;color:inherit}
 .sopb button{cursor:pointer;touch-action:manipulation}
@@ -497,7 +517,7 @@ const CSS = `
 .sopb-ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:16px;color:#fff;display:inline-flex;align-items:center;justify-content:center}
 .sopb-tabs{display:flex;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:4px;margin-bottom:16px}
 .sopb-tabs button{flex:1;border:0;background:none;padding:10px;border-radius:10px;font-weight:700;color:var(--mut)}
-.sopb-tabs button.on{background:#fff;color:#000}
+.sopb-tabs button.on{background:var(--acc);color:var(--acc-ink)}
 .sopb-sec{margin-bottom:18px}
 .sopb-lbl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
 .sopb-lbl b{background:#fff;color:#000;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
@@ -515,13 +535,13 @@ const CSS = `
 .ghost{position:fixed;z-index:50;pointer-events:none;border-radius:12px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.7);transform:scale(1.08);outline:3px solid var(--acc)}
 .ghost img{width:100%;height:100%;object-fit:cover}
 .sopb-talk{position:relative}
-.sopb-talk textarea{width:100%;min-height:150px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 14px 70px;font-size:17px;resize:vertical;color:#fff}
-.sopb-mic{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);width:62px;height:62px;border-radius:50%;border:0;background:#fff;color:#000;font-size:26px;box-shadow:0 4px 16px rgba(0,0,0,.5)}
-.sopb-mic.on{background:#ff3b30;color:#fff;animation:sopbp 1.2s infinite}
-@keyframes sopbp{0%{box-shadow:0 0 0 0 rgba(255,59,48,.6)}70%{box-shadow:0 0 0 18px rgba(255,59,48,0)}100%{box-shadow:0 0 0 0 rgba(255,59,48,0)}}
+.sopb-talk textarea{width:100%;min-height:140px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:13px 52px 13px 13px;font-size:16px;resize:vertical;color:#f2f3f5}
+.sopb-mic{position:absolute;right:10px;bottom:10px;width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:var(--bg);color:var(--acc);font-size:16px;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+.sopb-mic.on{background:#c4553d;color:#fff;border-color:#c4553d;animation:sopbp 1.2s infinite}
+@keyframes sopbp{0%{box-shadow:0 0 0 0 rgba(196,85,61,.55)}70%{box-shadow:0 0 0 12px rgba(196,85,61,0)}100%{box-shadow:0 0 0 0 rgba(196,85,61,0)}}
 .sopb-btn{width:100%;min-height:52px;border-radius:16px;border:1px solid var(--line);background:var(--card);font-weight:800;font-size:17px;color:#fff}
-.sopb-btn.go{background:var(--grad);border:0;color:#fff}
-.sopb-btn.w{background:#fff;color:#000;border:0}
+.sopb-btn.go{background:var(--acc);border:0;color:var(--acc-ink)}
+.sopb-btn.w{background:var(--card);color:#f2f3f5;border:1px solid var(--line)}
 .sopb-btn:disabled{opacity:.45}
 .sopb-row{display:flex;gap:8px}.sopb-row .sopb-btn{flex:1}
 .sopb-status{text-align:center;color:var(--mut);font-size:14px;min-height:20px;margin-top:10px}
@@ -539,8 +559,12 @@ const CSS = `
 .sopb-bd input{font-size:19px;font-weight:800}
 .sopb-bd textarea{font-size:16px;resize:none;min-height:48px}
 .sopb-acts{display:flex;gap:6px;margin-top:8px}
-.sopb-acts button{flex:1;min-height:42px;border-radius:12px;border:1px solid var(--line);background:#1c1c20;font-weight:700;font-size:14px;color:#fff}
-.sopb-acts button.on{background:#fff;color:#000}
+.sopb-acts button{flex:1;min-height:42px;border-radius:12px;border:1px solid var(--line);background:#1c1f24;font-weight:700;font-size:14px;color:#f2f3f5}
+.sopb-acts button.on{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.sopb-enhedit{display:flex;gap:6px;margin-top:8px}
+.sopb-enhedit input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:13px;color:#f2f3f5}
+.sopb-enhedit button{min-height:40px;padding:0 15px;border-radius:10px;border:1px solid var(--line);background:#1c1f24;color:#f2f3f5;font-weight:700;font-size:13px;white-space:nowrap}
+.sopb-enhedit button.go{background:var(--acc);color:var(--acc-ink);border:0}
 .sopb-hd{display:flex;align-items:center;gap:6px;padding:8px 12px 0;color:var(--mut);font-size:13px}
 .sopb-hd .sopb-h{touch-action:none;font-size:20px;padding:4px 8px;cursor:grab}
 .sopb-lib{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;margin-bottom:10px;flex:1;text-align:left;color:#fff}

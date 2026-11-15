@@ -43,7 +43,7 @@ export default function SopPlayer({ sop }) {
 }
 
 const CSS = `
-.sopv{--card:#131315;--line:#2b2b30;--mut:#9d9da4;--acc:#FFD60A;position:fixed;inset:0;background:#000;color:#fff;
+.sopv{--card:#16181c;--line:#2a2d33;--mut:#9aa0ab;--acc:#C9A96E;position:fixed;inset:0;background:#0c0e11;color:#f2f3f5;
   font:16px/1.45 -apple-system,system-ui,sans-serif;display:flex;flex-direction:column;z-index:1}
 .sopv *{box-sizing:border-box}
 .sopv .ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:#fff;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;flex:none}

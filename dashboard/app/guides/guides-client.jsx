@@ -54,12 +54,12 @@ export default function GuidesClient({ sops = [], staff = false, canBuild = fals
 }
 
 const CSS = `
-.supl{--bg:#0b0b0c;--card:#131315;--line:#2b2b30;--mut:#9d9da4;--acc:#FFD60A;background:var(--bg);color:#fff;
+.supl{--bg:#0c0e11;--card:#16181c;--line:#2a2d33;--mut:#9aa0ab;--acc:#C9A96E;background:var(--bg);color:#f2f3f5;
   font:16px/1.45 -apple-system,system-ui,sans-serif;min-height:100dvh;max-width:860px;margin:auto;padding:max(18px,env(safe-area-inset-top)) 16px 60px}
 .supl *{box-sizing:border-box}
 .supl-head-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .supl-top h1{font-size:28px;font-weight:800;letter-spacing:-.4px}
-.supl-build{background:linear-gradient(90deg,#f58529,#dd2a7b,#8134af);color:#fff;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;padding:10px 14px;white-space:nowrap}
+.supl-build{background:var(--acc);color:#101418;text-decoration:none;font-weight:800;font-size:14px;border-radius:12px;padding:10px 14px;white-space:nowrap}
 .supl-top p{color:var(--mut);margin-top:4px}
 .supl-search{margin:16px 0 12px}
 .supl-search input{width:100%;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:16px;color:#fff}
