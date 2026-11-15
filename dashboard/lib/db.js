@@ -3,6 +3,7 @@ import { mkdirSync, copyFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
+import { SOP_STEP_REAL_SQL, SOP_STEP_UNTAGGED_SQL } from "./sop-model.js";
 import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
@@ -7416,7 +7417,7 @@ export function listPublishedSops({ includeInternal = false } = {}) {
 export function searchSopSteps({ q = "", limit = 80 } = {}) {
   const t = String(q || "").trim().toLowerCase();
   const like = `%${t}%`;
-  const where = `s.status != 'archived' AND st.title IS NOT NULL AND trim(st.title) != ''` +
+  const where = SOP_STEP_REAL_SQL +
     (t ? ` AND (lower(st.title) LIKE ? OR lower(st.instruction) LIKE ? OR lower(st.tags) LIKE ? OR lower(s.title) LIKE ?)` : ``);
   const args = t ? [like, like, like, like, limit] : [limit];
   const rows = db.prepare(
@@ -7434,6 +7435,30 @@ export function searchSopSteps({ q = "", limit = 80 } = {}) {
     guideTitle: r.guide_title || "", guideSlug: r.guide_slug || null,
     thumb: (r.use_enhanced && r.enhanced_path) ? r.enhanced_path : (r.image_path || null),
   }));
+}
+
+// Auto-tagging: steps created before tagging existed have empty tags. ONE shared predicate
+// (SOP_STEP_UNTAGGED_SQL in sop-model.js) so the list and the count can't disagree.
+export function listUntaggedSopSteps(limit = 40) {
+  const n = Math.max(1, Math.min(200, Number(limit) || 40));
+  return db.prepare(
+    `SELECT st.id, st.title, st.instruction, s.title AS guide_title
+     FROM sop_steps st JOIN sops s ON s.id = st.sop_id
+     WHERE ${SOP_STEP_UNTAGGED_SQL}
+     ORDER BY s.updated_at DESC, st.sop_id ASC, st.position ASC, st.id ASC
+     LIMIT ?`
+  ).all(n).map((r) => ({ id: r.id, title: r.title || "", instruction: r.instruction || "", guide: r.guide_title || "" }));
+}
+export function countUntaggedSopSteps() {
+  return db.prepare(`SELECT COUNT(*) n FROM sop_steps st JOIN sops s ON s.id = st.sop_id WHERE ${SOP_STEP_UNTAGGED_SQL}`).get().n;
+}
+// Writes ONLY sop_steps.tags (published snapshots in sop_versions stay immutable). Returns the stored tag ARRAY,
+// or null when nothing was written (empty after normTags, or no row changed).
+export function setSopStepTags(id, tags) {
+  const t = normTags(tags);
+  if (!t) return null;
+  if (db.prepare("UPDATE sop_steps SET tags=? WHERE id=?").run(t, id).changes <= 0) return null;
+  return t.split(",").filter(Boolean);
 }
 
 // The player reads the latest published SNAPSHOT (immutable) — never the live draft rows.

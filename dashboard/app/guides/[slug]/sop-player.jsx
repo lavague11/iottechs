@@ -25,7 +25,7 @@ export default function SopPlayer({ sop }) {
       onTouchEnd={(e) => { const d = e.changedTouches[0].clientX - sx.current; if (d < -60 && i < n - 1) setI(i + 1); else if (d > 60 && i > 0) setI(i - 1); }}>
       <style>{CSS}</style>
       <div className="ph">
-        <Link className="ib" href="/guides" aria-label="Back to guides">✕</Link>
+        <Link className="ib" href="/guides" aria-label="Back to guides" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></Link>
         <div><b>{sop.title}</b><span>{n ? `Step ${i + 1} of ${n}` : "No steps"}</span></div>
       </div>
       <div className="bars">{steps.map((_, k) => <i className={k <= i ? "on" : ""} key={k} />)}</div>
