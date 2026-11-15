@@ -13,7 +13,24 @@
   --tech: #2f7d5a;
   --shadow: 0 3px 14px rgba(11, 15, 26, .07);
   --shadow-lg: 0 6px 20px rgba(11, 15, 26, .12);
+
+  /* ---- Floating-tools lane ----
+     Maya (bottom-left) and the bug reporter + help widget (bottom-right) float above every page.
+     ONE set of tokens so the two sides can't drift apart or land on each other:
+       --dock-bottom  where a tool sits above the bottom edge
+       --dock-stack   where a SECOND tool on the same side sits (above the first)
+       --dock-lane    what a scrolling page reserves, so the last row never parks under a button
+     Any new floating control positions itself from these — never a hand-typed bottom/right. */
+  --dock-gap: 14px;
+  --dock-btn: 44px;                                   /* the tallest floating button */
+  --dock-safe: env(safe-area-inset-bottom, 0px);      /* iPhone home-indicator strip */
+  --dock-bottom: calc(var(--dock-gap) + var(--dock-safe));
+  --dock-stack: calc(var(--dock-bottom) + var(--dock-btn) + 10px);
+  --dock-lane: calc(var(--dock-btn) + var(--dock-gap) * 2 + var(--dock-safe));
 }
+
+/* Anchor jumps + scrollIntoView stop short of the lane, so a scrolled-to row isn't under a button. */
+html { scroll-padding-bottom: var(--dock-lane); }
 
 * { box-sizing: border-box; }
 
@@ -28,7 +45,7 @@ html, body {
 
 .mono { font-family: Menlo, Consolas, monospace; letter-spacing: .4px; }
 
-.wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px 70px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 22px var(--dock-lane); }
 
 /* ---- Masthead ---- */
 .masthead { background: var(--ink); border-bottom: 3px solid var(--gold); padding: 28px 0 0; }

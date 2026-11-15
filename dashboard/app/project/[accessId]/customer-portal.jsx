@@ -388,7 +388,7 @@ export const PORTAL_CSS = `
 .cpv-menu button.on{color:var(--ink);font-weight:700}
 .cpv-menu-head{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding:8px 11px 4px}
 .cpv-menu-lock{margin-top:3px;border-top:1px solid var(--line)!important;border-radius:0 0 8px 8px}
-.cpv-main{max-width:640px;margin:0 auto;padding:20px 16px 90px;display:flex;flex-direction:column;gap:16px}
+.cpv-main{max-width:640px;margin:0 auto;padding:20px 16px calc(var(--dock-lane) + 18px);display:flex;flex-direction:column;gap:16px}
 .cpv-kick{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--meta);margin-bottom:9px}
 .cpv-hero{background:var(--raise);border:1px solid var(--line);border-left:3px solid var(--tone,var(--gold));border-radius:16px;padding:20px 22px}
 .cpv-hero-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
@@ -452,7 +452,9 @@ export const PORTAL_CSS = `
 .cpv-ovl-x{background:none;border:0;color:var(--ink-soft);cursor:pointer;display:flex;padding:4px;flex:0 0 auto}
 .cpv-ovl-x:hover{color:var(--ink)}
 .cpv-ovl-title{font-weight:700;color:var(--ink)}
-.cpv-ovl-body{flex:1;overflow-y:auto;background:#fff}
+/* Reserve the floating-tools lane so a tool's last row (survey device cards, proposal totals) is
+   never parked under the Maya orb or the bug reporter at the end of the scroll. */
+.cpv-ovl-body{flex:1;overflow-y:auto;background:#fff;padding-bottom:var(--dock-lane)}
 /* The proposal reads like a document — give it a touch more size than the dense staff view. */
 .cpv-ovl.v-proposal .cpv-ovl-body{font-size:16.5px;line-height:1.55}
 .cpv-install{padding:22px 18px;max-width:640px;margin:0 auto}

@@ -948,7 +948,7 @@ const CSS = `
    give the survey/tool the full screen and let the roster scroll beneath it (a sliver peeks to
    hint there's more below). Bigger canvas = room to place and aim icons with a finger. */
 @media (max-width:700px){
-  .dv-overlay-body{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .dv-overlay-body{display:block;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:var(--dock-lane)}
   .dv-overlay-body>.ss-embed{height:calc(100dvh - 120px)}
   .dv-overlay-body>.sd-wrap{margin:0;border-left:0;border-right:0;border-radius:0}
 }

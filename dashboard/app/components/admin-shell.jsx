@@ -1281,7 +1281,9 @@ const CSS = `
 .apx .np-mono{font-family:Menlo,Consolas,monospace;letter-spacing:.06em}
 .apx .np-pin{font-family:Menlo,Consolas,monospace;font-size:1.1rem;letter-spacing:.2em;color:var(--gold-deep)}
 @media(max-width:620px){.apx .np-row2{grid-template-columns:1fr}}
-.apx footer{background:var(--ink);color:#9aa1b3;margin-top:40px;padding:28px 0}
+/* The footer is the last thing on every admin page, so it carries the floating-tools lane — the
+   Maya orb and bug reporter rest on the dark band instead of on the wordmark / copyright / links. */
+.apx footer{background:var(--ink);color:#9aa1b3;margin-top:40px;padding:28px 0 var(--dock-lane)}
 .apx .foot-inner{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;font-size:.88rem}
 .apx footer .apx-brand .name{color:#fff}
 .apx footer a:hover{color:#fff}
@@ -1319,9 +1321,6 @@ const CSS = `
   .apx .pr-row{grid-template-columns:minmax(0,1fr) auto auto;gap:8px}
   .apx .pr-row .pr-bonus{display:none}
   .apx .crow .c-chips{flex-direction:column;gap:4px;align-items:flex-end}
-  /* Issue 7: reserve space so the fixed AI-core (bottom-left) and bug (bottom-right) controls never
-     cover the footer wordmark, copyright or links on a phone. */
-  .apx footer{padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
 }
 /* Issue 6: keep the mobile header on one line with ~16px clear to the right of the menu button. */
 @media(max-width:430px){

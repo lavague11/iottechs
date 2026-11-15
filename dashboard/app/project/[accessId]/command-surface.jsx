@@ -652,7 +652,9 @@ const Speaker = () => <svg width="13" height="13" viewBox="0 0 24 24" fill="none
 
 // ---- Ultra-minimal floating "AI Core" dock (bottom-left) ----
 const COREBAR_CSS = `
-.aicore-dock{position:fixed;left:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-family:inherit}
+/* Bottom-LEFT of the shared floating-tools lane (tokens in globals.css); the bug reporter + help
+   widget own the right side. Pages reserve --dock-lane so this never covers the last row. */
+.aicore-dock{position:fixed;left:var(--dock-gap,14px);bottom:var(--dock-bottom,14px);z-index:60;display:flex;flex-direction:column;align-items:flex-start;gap:8px;font-family:inherit}
 .aicore-shell{display:flex;align-items:center;gap:0}
 .aicore-btn{position:relative;flex:none;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:#0B0F1A;box-shadow:0 6px 20px rgba(11,15,26,.45),0 0 0 1px rgba(201,169,110,.32);cursor:pointer;display:grid;place-items:center;overflow:hidden;transition:transform .16s,box-shadow .16s}
 .aicore-btn:hover{transform:translateY(-1px) scale(1.04);box-shadow:0 10px 26px rgba(11,15,26,.5),0 0 0 1px rgba(201,169,110,.55)}
@@ -683,15 +685,15 @@ const COREBAR_CSS = `
 .aicore-cand{display:flex;align-items:center;gap:7px;border:1px solid rgba(201,169,110,.25);background:transparent;color:#EDE4D3;border-radius:8px;padding:6px 9px;font-size:12px;cursor:pointer;text-align:left}
 .aicore-cand span{flex:none;width:17px;height:17px;border-radius:50%;background:#C9A96E;color:#0B0F1A;font-size:10px;display:grid;place-items:center}
 .aicore-cand:hover:not(:disabled){border-color:#C9A96E}
-.aicore-diag{position:fixed;left:12px;bottom:70px;width:min(84vw,340px);max-height:42vh;overflow-y:auto;background:rgba(11,15,26,.95);color:#d7dce6;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 1px rgba(201,169,110,.3);padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;line-height:1.5;z-index:61}
+.aicore-diag{position:fixed;left:var(--dock-gap,14px);bottom:var(--dock-stack,68px);width:min(84vw,340px);max-height:42vh;overflow-y:auto;background:rgba(11,15,26,.95);color:#d7dce6;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.5),0 0 0 1px rgba(201,169,110,.3);padding:6px 8px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10.5px;line-height:1.5;z-index:61}
 .aicore-diaghd{display:flex;align-items:center;justify-content:space-between;color:#C9A96E;font-size:9.5px;letter-spacing:.4px;text-transform:uppercase;padding-bottom:3px;margin-bottom:3px;border-bottom:1px solid rgba(201,169,110,.2)}
 .aicore-diaghd button{border:0;background:transparent;color:#9aa6bd;font-size:15px;line-height:1;cursor:pointer;padding:0 2px}
 .aicore-diagln{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .aicore-diagln .t{color:#7b8296}.aicore-diagln b{color:#EDE4D3;font-weight:600}.aicore-diagln .d{color:#9aecb0}
+/* The dock/diag positions come from the lane tokens (safe area included) — only the bar needs
+   narrowing so it can't run under the bug reporter on the opposite side. */
 @media (max-width:560px){
-  .aicore-dock{left:12px;bottom:calc(12px + env(safe-area-inset-bottom))}
   .aicore-bar{max-width:calc(100vw - 92px)}
-  .aicore-diag{bottom:calc(66px + env(safe-area-inset-bottom))}
 }
 @media (prefers-reduced-motion: reduce){.aicore-btn,.aicore-bar,.aicore-dot{animation:none;transition:none}}
 `;

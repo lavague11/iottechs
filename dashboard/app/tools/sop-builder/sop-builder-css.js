@@ -1,6 +1,6 @@
 export const CSS = `
 .sopb{--bg:#0c0e11;--card:#16181c;--line:#2a2d33;--mut:#9aa0ab;--acc:#C9A96E;--acc-ink:#101418;--acc-soft:rgba(201,169,110,.14);
-  background:var(--bg);color:#f2f3f5;font:16px/1.45 -apple-system,system-ui,sans-serif;max-width:640px;margin:auto;padding:14px 16px 60px;min-height:100dvh;border-radius:14px}
+  background:var(--bg);color:#f2f3f5;font:16px/1.45 -apple-system,system-ui,sans-serif;max-width:640px;margin:auto;padding:14px 16px var(--dock-lane,72px);min-height:100dvh;border-radius:14px}
 .sopb *{box-sizing:border-box}
 .sopb button,.sopb input,.sopb textarea{font:inherit;color:inherit}
 .sopb button{cursor:pointer;touch-action:manipulation}

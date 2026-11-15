@@ -7,7 +7,8 @@ import { useState, useEffect, useRef } from "react";
 import { aiCustomerStatusAction, aiCustomerInterpretAction, aiCustomerCommentAction, aiCustomerFeedbackAction } from "./ai-actions";
 
 const CSS = `
-.cust-ai{position:fixed;right:18px;bottom:18px;z-index:60;font:14px/1.45 system-ui,-apple-system,sans-serif}
+/* Same side as the bug reporter — sit one slot ABOVE it (--dock-stack) so they never overlap. */
+.cust-ai{position:fixed;right:var(--dock-gap,14px);bottom:var(--dock-stack,68px);z-index:60;font:14px/1.45 system-ui,-apple-system,sans-serif}
 .cust-ai-fab{display:inline-flex;align-items:center;gap:7px;padding:10px 14px;border-radius:999px;border:1px solid rgba(185,138,46,.5);
   background:#14181c;color:#e8c061;font-weight:600;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.35)}
 .cust-ai-fab:hover{background:#1a1f24}
