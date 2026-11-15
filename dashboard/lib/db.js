@@ -1505,11 +1505,14 @@ function init() {
       image_path    TEXT,                                 -- photo, or a poster frame for a video step
       enhanced_path TEXT,
       use_enhanced  INTEGER DEFAULT 0,
-      video_path    TEXT                                  -- a short clip (played, never AI-enhanced); image_path is its poster
+      video_path    TEXT,                                 -- a short clip (played, never AI-enhanced); image_path is its poster
+      tags          TEXT                                  -- comma-separated search tags (e.g. "camera,nvr,reset") for the step library
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sop_steps_sop ON sop_steps(sop_id, position)`);
-  { const c = db.prepare("PRAGMA table_info(sop_steps)").all().map((x) => x.name); if (!c.includes("video_path")) db.exec("ALTER TABLE sop_steps ADD COLUMN video_path TEXT"); }
+  { const c = db.prepare("PRAGMA table_info(sop_steps)").all().map((x) => x.name);
+    if (!c.includes("video_path")) db.exec("ALTER TABLE sop_steps ADD COLUMN video_path TEXT");
+    if (!c.includes("tags")) db.exec("ALTER TABLE sop_steps ADD COLUMN tags TEXT"); }
   db.exec(`
     CREATE TABLE IF NOT EXISTS sop_versions (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -7302,10 +7305,15 @@ export function voidMedia(id) {
 
 // ---- SOP Builder + Support Library -------------------------------------------------------------------
 // A step as stored, mapped back to the model's field names (where_hint → where, use_enhanced → useEnh).
+// Normalize a tags value (array or comma string) → a clean comma string of short lowercase tags.
+function normTags(tags) {
+  const arr = Array.isArray(tags) ? tags : String(tags || "").split(",");
+  return [...new Set(arr.map((t) => String(t || "").toLowerCase().trim().replace(/\s+/g, " ")).filter(Boolean))].slice(0, 12).join(",").slice(0, 300);
+}
 function sopStepOut(r) {
   return { id: r.id, title: r.title || "", instruction: r.instruction || "", target: r.target || "",
     where: r.where_hint || "", img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced,
-    video: r.video_path || null };
+    video: r.video_path || null, tags: r.tags ? r.tags.split(",").map((t) => t.trim()).filter(Boolean) : [] };
 }
 // One SOP with its ordered steps (null if missing).
 export function getSop(id) {
@@ -7343,12 +7351,12 @@ export function saveSopDraft({ id, title, business = null, category = null, tran
         .run(sid, String(title || "New SOP").slice(0, 120), business, category, String(transcript || ""), createdBy, createdById);
     }
     db.prepare("DELETE FROM sop_steps WHERE sop_id=?").run(sid);
-    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced, video_path) VALUES (?,?,?,?,?,?,?,?,?,?,?)");
+    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced, video_path, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
     (Array.isArray(steps) ? steps : []).forEach((st, i) => {
       ins.run(String(st.id || ("st" + i + Date.now().toString(36) + Math.random().toString(36).slice(2, 5))), sid, i,
         String(st.title || "").slice(0, 120), String(st.instruction || "").slice(0, 1000),
         String(st.target || "").slice(0, 200), String(st.where || "").slice(0, 80),
-        st.img || null, st.enh || null, st.useEnh ? 1 : 0, st.video || null);
+        st.img || null, st.enh || null, st.useEnh ? 1 : 0, st.video || null, normTags(st.tags));
     });
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }
@@ -7378,7 +7386,7 @@ export function publishSop(id, { visibility = "internal", publishedBy = null, sl
   }
   const snapshot = JSON.stringify({ title: sop.title, business: sop.business, category: sop.category, visibility: vis,
     steps: sop.steps.map((s) => ({ title: s.title, instruction: s.instruction, target: s.target, where: s.where,
-      img: (s.useEnh && s.enh) ? s.enh : s.img, original: s.img, enhanced: s.enh, useEnh: s.useEnh, video: s.video || null })) });
+      img: (s.useEnh && s.enh) ? s.enh : s.img, original: s.img, enhanced: s.enh, useEnh: s.useEnh, video: s.video || null, tags: s.tags || [] })) });
   db.exec("BEGIN");
   try {
     db.prepare("INSERT INTO sop_versions (sop_id, version, snapshot, visibility, published_by) VALUES (?,?,?,?,?)")
@@ -7402,6 +7410,32 @@ export function listPublishedSops({ includeInternal = false } = {}) {
       thumb: thumb ? ((thumb.use_enhanced && thumb.enhanced_path) ? thumb.enhanced_path : thumb.image_path) : null };
   });
 }
+// Step library: search every guide's steps (with their photo) so a step can be reused in another guide.
+// Internal staff tool — spans all non-archived guides (shared knowledge), newest guides first, titled steps
+// only (skips blank/divider rows). `q` matches the step title/instruction or the guide title.
+export function searchSopSteps({ q = "", limit = 80 } = {}) {
+  const t = String(q || "").trim().toLowerCase();
+  const like = `%${t}%`;
+  const where = `s.status != 'archived' AND st.title IS NOT NULL AND trim(st.title) != ''` +
+    (t ? ` AND (lower(st.title) LIKE ? OR lower(st.instruction) LIKE ? OR lower(st.tags) LIKE ? OR lower(s.title) LIKE ?)` : ``);
+  const args = t ? [like, like, like, like, limit] : [limit];
+  const rows = db.prepare(
+    `SELECT st.id, st.title, st.instruction, st.target, st.where_hint, st.image_path, st.enhanced_path, st.use_enhanced, st.video_path, st.tags,
+            s.title AS guide_title, s.slug AS guide_slug, s.updated_at
+     FROM sop_steps st JOIN sops s ON s.id = st.sop_id
+     WHERE ${where}
+     ORDER BY s.updated_at DESC, st.position ASC
+     LIMIT ?`
+  ).all(...args);
+  return rows.map((r) => ({
+    title: r.title || "", instruction: r.instruction || "", target: r.target || "", where: r.where_hint || "",
+    img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced, video: r.video_path || null,
+    tags: r.tags ? r.tags.split(",").map((x) => x.trim()).filter(Boolean) : [],
+    guideTitle: r.guide_title || "", guideSlug: r.guide_slug || null,
+    thumb: (r.use_enhanced && r.enhanced_path) ? r.enhanced_path : (r.image_path || null),
+  }));
+}
+
 // The player reads the latest published SNAPSHOT (immutable) — never the live draft rows.
 export function getPublishedSopBySlug(slug) {
   const s = db.prepare("SELECT * FROM sops WHERE slug=? AND status='published'").get(String(slug));

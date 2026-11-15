@@ -1,7 +1,7 @@
 "use server";
 
 import { getSessionUser } from "../../../lib/session";
-import { secretValue, saveSopDraft, getSop, listSops, deleteSop, publishSop } from "../../../lib/db";
+import { secretValue, saveSopDraft, getSop, listSops, deleteSop, publishSop, searchSopSteps } from "../../../lib/db";
 import { canEditSop, sopSlug } from "../../../lib/sop-model";
 
 // All SOP mutations are staff-only (office + tech). The AI calls live in /api/sop/* (same gate); these
@@ -38,6 +38,14 @@ export async function saveSopDraftAction({ id, title, business, category, transc
       createdBy: u.name || u.email || "staff", createdById: u.id });
     return { ok: true, id: sid };
   } catch (e) { return { error: e?.message || "Save failed" }; }
+}
+
+// Step library: search every guide's steps (title/instruction/tags/guide) so one can be reused.
+export async function searchStepsAction(q = "") {
+  const u = await staff();
+  if (!u) return { error: "Forbidden" };
+  try { return { ok: true, steps: searchSopSteps({ q: String(q || "").slice(0, 80) }) }; }
+  catch (e) { return { error: e?.message || "Search failed" }; }
 }
 
 export async function deleteSopAction(id) {

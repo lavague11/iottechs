@@ -5,7 +5,8 @@
 // the DB), and drafts/library persist to node:sqlite via server actions. Look is kept from the prototype
 // (black, gradient primary) scoped under .sopb. Mobile-first; drag-reorder works by touch and mouse.
 import { useState, useRef, useEffect, useCallback } from "react";
-import { saveSopDraftAction, listSopsAction, getSopAction, deleteSopAction, publishSopAction } from "./actions";
+import { Wordmark } from "../../components/brand";
+import { saveSopDraftAction, listSopsAction, getSopAction, deleteSopAction, publishSopAction, searchStepsAction } from "./actions";
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -125,6 +126,10 @@ export default function SopBuilder({ canManage = false }) {
   const [enhNote, setEnhNote] = useState("");      // the operator's tweak for that re-enhance
   const [importOpen, setImportOpen] = useState(false);
   const [importList, setImportList] = useState(null);   // other guides available to import as continuation steps
+  const [libOpen, setLibOpen] = useState(false);        // step library search
+  const [libQuery, setLibQuery] = useState("");
+  const [libSteps, setLibSteps] = useState(null);
+  const libTimer = useRef(null);
   const [busy, setBusy] = useState(false);
   const [est, setEst] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -150,7 +155,7 @@ export default function SopBuilder({ canManage = false }) {
       const cur = next || sop; if (!cur) return;
       const r = await saveSopDraftAction({ id: cur.id, title: cur.title, business: cur.business, category: cur.category,
         transcript: cur.transcript || transcript,
-        steps: cur.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video })) });
+        steps: cur.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video, tags: s.tags })) });
       if (r?.ok && cur.id !== r.id) setSop((p) => (p ? { ...p, id: r.id } : p));
     }, 600);
   }, [sop, transcript]);
@@ -244,7 +249,7 @@ export default function SopBuilder({ canManage = false }) {
       const steps = (j.steps || []).map((s) => {
         const ph = s.photoIndex != null ? photos[s.photoIndex] : null;
         return { id: uid(), img: ph ? (ph.url || ph.dataUrl) : null, enh: null, useEnh: false, video: ph?.video || null,
-          title: s.title || "", instruction: s.instruction || "", target: s.target || "", where: s.where || "" };
+          title: s.title || "", instruction: s.instruction || "", target: s.target || "", where: s.where || "", tags: s.tags || [] };
       });
       const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", transcript: transcript.trim(), steps };
       setSop(next); saveDraftSoon(next); setStatus("");
@@ -277,7 +282,7 @@ export default function SopBuilder({ canManage = false }) {
   }
   const enhanceSteps = (list) => runEnhance(list);
   function addStep() {
-    patchSop((p) => ({ ...p, steps: [...p.steps, { id: uid(), title: "", instruction: "", target: "", where: "", img: null, enh: null, useEnh: false, video: null }] }));
+    patchSop((p) => ({ ...p, steps: [...p.steps, { id: uid(), title: "", instruction: "", target: "", where: "", img: null, enh: null, useEnh: false, video: null, tags: [] }] }));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 60);
   }
   // Continuation guides: pull another guide's steps into this one (a copy), so a procedure can branch into a
@@ -292,13 +297,22 @@ export default function SopBuilder({ canManage = false }) {
     const r = await getSopAction(id);
     if (!r?.ok) return toast(r?.error || "Couldn't import that guide.");
     const incoming = (r.sop.steps || []).map((x) => ({ id: uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video,
-      title: x.title, instruction: x.instruction, target: x.target, where: x.where }));
+      title: x.title, instruction: x.instruction, target: x.target, where: x.where, tags: x.tags || [] }));
     if (!incoming.length) return toast("That guide has no steps.");
     // A labelled divider marks where the imported guide begins; its steps follow and are fully editable here.
-    const divider = { id: uid(), img: null, enh: null, useEnh: false, video: null, title: `↳ ${title || r.sop.title}`, instruction: "", target: "", where: "" };
+    const divider = { id: uid(), img: null, enh: null, useEnh: false, video: null, title: `↳ ${title || r.sop.title}`, instruction: "", target: "", where: "", tags: [] };
     patchSop((p) => ({ ...p, steps: [...p.steps, divider, ...incoming] }));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 80);
     toast(`Imported ${incoming.length} step${incoming.length === 1 ? "" : "s"} from “${title || r.sop.title}”.`);
+  }
+  // Step library: search individual steps (by title / instruction / tags / guide) across every guide, add one.
+  async function runLibSearch(q) { setLibSteps(null); const r = await searchStepsAction(q); setLibSteps(r?.ok ? r.steps : []); }
+  function openLibrary() { setLibOpen(true); setLibQuery(""); runLibSearch(""); }
+  function onLibQuery(v) { setLibQuery(v); clearTimeout(libTimer.current); libTimer.current = setTimeout(() => runLibSearch(v), 250); }
+  function addLibStep(st) {
+    patchSop((p) => ({ ...p, steps: [...p.steps, { id: uid(), img: st.img, enh: st.enh, useEnh: st.useEnh, video: st.video,
+      title: st.title, instruction: st.instruction, target: st.target, where: st.where, tags: st.tags || [] }] }));
+    toast(`Added “${st.title}”.`);
   }
 
   /* ---------- step edits ---------- */
@@ -317,7 +331,7 @@ export default function SopBuilder({ canManage = false }) {
     if (!r?.ok) return toast(r?.error || "Couldn't open it.");
     const s = r.sop;
     setSop({ id: s.id, title: s.title, business: s.business || "", category: s.category || "", transcript: s.transcript || "",
-      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where })) });
+      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where, tags: x.tags || [] })) });
     setTab("build");
   }
   async function removeSop(id) {
@@ -331,7 +345,7 @@ export default function SopBuilder({ canManage = false }) {
     setBusy(true); setStatus("Publishing…");
     // Make sure the latest edits are saved first.
     await saveSopDraftAction({ id: sop.id, title: sop.title, business: sop.business, category: sop.category, transcript: sop.transcript || transcript,
-      steps: sop.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video })) });
+      steps: sop.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video, tags: s.tags })) });
     const r = await publishSopAction(sop.id, { visibility });
     setBusy(false); setStatus("");
     if (!r?.ok) return toast(r?.error || "Publish failed.");
@@ -350,6 +364,14 @@ export default function SopBuilder({ canManage = false }) {
   return (
     <div className="sopb">
       <style>{CSS}</style>
+      <div className="sopb-nav">
+        <a href="/dashboard" className="sopb-nav-back" aria-label="Back to dashboard">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          Dashboard
+        </a>
+        <a href="/dashboard" className="sopb-nav-logo" aria-label="IOT TECHS — dashboard"><Wordmark height={15} /></a>
+        <span className="sopb-nav-sp" />
+      </div>
       <div className="sopb-top">
         <h1>SOP Builder</h1>
       </div>
@@ -423,6 +445,8 @@ export default function SopBuilder({ canManage = false }) {
                 <div className="sopb-bd">
                   <input value={s.title} placeholder="Step title" onChange={(e) => editStep(s.id, "title", e.target.value)} />
                   <textarea rows={2} value={s.instruction} placeholder="What to do" onChange={(e) => editStep(s.id, "instruction", e.target.value)} />
+                  <input className="sopb-tagin" value={(s.tags || []).join(", ")} placeholder="tags for search — e.g. camera, nvr, reset"
+                    onChange={(e) => editStep(s.id, "tags", e.target.value.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))} />
                   <div className="sopb-acts">
                     {/* Enhance is photo-only — a video step shows no Enhance / Original-Enhanced controls. */}
                     {!s.video && s.img && (s.enh
@@ -445,8 +469,9 @@ export default function SopBuilder({ canManage = false }) {
             ))}
           </div>
           <div className="sopb-row" style={{ marginTop: 6 }}>
-            <button className="sopb-btn" onClick={addStep}>＋ Add step</button>
-            <button className="sopb-btn" onClick={openImport}>⤵ Import guide</button>
+            <button className="sopb-btn" onClick={addStep}>＋ Step</button>
+            <button className="sopb-btn" onClick={openLibrary}>⊞ Steps</button>
+            <button className="sopb-btn" onClick={openImport}>⤵ Guide</button>
           </div>
           <div className="sopb-row" style={{ marginTop: 8 }}>
             <button className="sopb-btn" onClick={startOver}>↺ Start over</button>
@@ -512,6 +537,37 @@ export default function SopBuilder({ canManage = false }) {
         </div>
       )}
 
+      {/* step library — search any step across all guides and add it */}
+      {libOpen && (
+        <div className="sopb-sheet" onClick={(e) => { if (e.target.classList.contains("sopb-sheet")) setLibOpen(false); }}>
+          <div className="in sopb-libsheet">
+            <div className="sopb-libhead">
+              <b style={{ fontSize: 18 }}>Step library</b>
+              <button type="button" className="sopb-ib" aria-label="Close" onClick={() => setLibOpen(false)}>✕</button>
+            </div>
+            <input className="sopb-libsearch" value={libQuery} autoFocus placeholder="Search steps — e.g. camera, reset, nvr, cable"
+              onChange={(e) => onLibQuery(e.target.value)} />
+            <div className="sopb-libgrid">
+              {libSteps === null ? <div className="sopb-empty">Searching…</div>
+                : libSteps.length === 0 ? <div className="sopb-empty">{libQuery ? "No steps match." : "No steps yet."}</div>
+                : libSteps.map((st, k) => (
+                  <div className="sopb-libcard" key={k}>
+                    <div className="sopb-libthumb">
+                      {st.video ? <video src={st.video} poster={st.thumb || undefined} muted playsInline preload="metadata" /> : (st.thumb ? <img src={st.thumb} alt="" /> : <span className="sopb-libph">◻</span>)}
+                    </div>
+                    <div className="sopb-libmeta">
+                      <div className="t">{st.title}</div>
+                      <div className="m">{st.guideTitle}</div>
+                      {st.tags?.length > 0 && <div className="sopb-libtags">{st.tags.slice(0, 5).map((tg, j) => <span key={j} className="sopb-tag" onClick={() => onLibQuery(tg)}>{tg}</span>)}</div>}
+                    </div>
+                    <button type="button" className="sopb-btn go sopb-libadd" onClick={() => addLibStep(st)}>Add</button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* player */}
       {player && <Player sop={player.sop} onClose={() => setPlayer(null)} />}
 
@@ -555,6 +611,11 @@ const CSS = `
 .sopb *{box-sizing:border-box}
 .sopb button,.sopb input,.sopb textarea{font:inherit;color:inherit}
 .sopb button{cursor:pointer;touch-action:manipulation}
+.sopb-nav{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:12px;padding-top:2px}
+.sopb-nav-back{display:inline-flex;align-items:center;gap:4px;justify-self:start;color:var(--mut);text-decoration:none;font-size:13px;font-weight:600;padding:6px 9px;border-radius:9px;white-space:nowrap}
+.sopb-nav-back:hover{color:#f2f3f5;background:var(--card)}
+.sopb-nav-logo{justify-self:center;color:#f2f3f5;display:inline-flex;text-decoration:none}
+.sopb-nav-sp{justify-self:end}
 .sopb-top{display:flex;align-items:center;gap:10px;margin-bottom:14px}
 .sopb-top h1{flex:1;font-size:24px;font-weight:800;letter-spacing:-.4px}
 .sopb-ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:16px;color:#fff;display:inline-flex;align-items:center;justify-content:center}
@@ -619,6 +680,21 @@ const CSS = `
 .sopb-hint{font-size:13px;color:var(--mut);margin-top:6px}
 .sopb-implist{max-height:48vh;overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:8px}
 .sopb-implist .sopb-lib{width:100%;margin-bottom:0}
+.sopb-tagin{width:100%;background:transparent;border:1px solid transparent;border-radius:10px;padding:5px 8px;margin-left:-8px;margin-top:3px;font-size:12.5px;color:var(--mut)}
+.sopb-tagin:focus{border-color:var(--line);background:var(--bg);outline:0;color:#f2f3f5}
+.sopb-tag{display:inline-block;background:var(--acc-soft);color:var(--acc);border:1px solid rgba(201,169,110,.3);border-radius:999px;padding:2px 8px;font-size:11px;font-weight:600;margin:3px 4px 0 0;cursor:pointer}
+.sopb-libsheet{max-width:640px}
+.sopb-libhead{display:flex;align-items:center;justify-content:space-between}
+.sopb-libsearch{width:100%;margin-top:12px;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px;color:#f2f3f5}
+.sopb-libgrid{max-height:52vh;overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.sopb-libcard{display:flex;gap:11px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:9px}
+.sopb-libthumb{width:62px;height:62px;border-radius:10px;overflow:hidden;background:#000;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.sopb-libthumb img,.sopb-libthumb video{width:100%;height:100%;object-fit:cover}
+.sopb-libph{color:#333;font-size:24px}
+.sopb-libmeta{flex:1;min-width:0}
+.sopb-libmeta .t{font-weight:700;font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sopb-libmeta .m{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sopb-libadd{width:auto;min-height:38px;padding:0 16px;flex-shrink:0}
 .sopb-play{position:fixed;inset:0;background:#000;z-index:1300;display:flex;flex-direction:column;color:#fff}
 .sopb-play .ph{padding:max(10px,env(safe-area-inset-top)) 12px 6px;display:flex;align-items:center;gap:10px}
 .sopb-play .ph div{flex:1;min-width:0}.sopb-play .ph b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sopb-play .ph span{font-size:13px;color:var(--mut);font-weight:600}
