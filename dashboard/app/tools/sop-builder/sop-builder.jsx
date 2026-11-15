@@ -123,6 +123,8 @@ export default function SopBuilder({ canManage = false }) {
   const [dragOver, setDragOver] = useState(false);
   const [enhEdit, setEnhEdit] = useState(null);   // step id whose enhance prompt is being edited
   const [enhNote, setEnhNote] = useState("");      // the operator's tweak for that re-enhance
+  const [importOpen, setImportOpen] = useState(false);
+  const [importList, setImportList] = useState(null);   // other guides available to import as continuation steps
   const [busy, setBusy] = useState(false);
   const [est, setEst] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -278,6 +280,26 @@ export default function SopBuilder({ canManage = false }) {
     patchSop((p) => ({ ...p, steps: [...p.steps, { id: uid(), title: "", instruction: "", target: "", where: "", img: null, enh: null, useEnh: false, video: null }] }));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 60);
   }
+  // Continuation guides: pull another guide's steps into this one (a copy), so a procedure can branch into a
+  // reusable sub-guide (e.g. a troubleshooting guide that continues into "Factory reset the camera").
+  async function openImport() {
+    setImportOpen(true); setImportList(null);
+    const r = await listSopsAction();
+    setImportList(r?.ok ? (r.sops || []).filter((s) => s.id !== sop?.id) : []);
+  }
+  async function importGuide(id, title) {
+    setImportOpen(false);
+    const r = await getSopAction(id);
+    if (!r?.ok) return toast(r?.error || "Couldn't import that guide.");
+    const incoming = (r.sop.steps || []).map((x) => ({ id: uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video,
+      title: x.title, instruction: x.instruction, target: x.target, where: x.where }));
+    if (!incoming.length) return toast("That guide has no steps.");
+    // A labelled divider marks where the imported guide begins; its steps follow and are fully editable here.
+    const divider = { id: uid(), img: null, enh: null, useEnh: false, video: null, title: `↳ ${title || r.sop.title}`, instruction: "", target: "", where: "" };
+    patchSop((p) => ({ ...p, steps: [...p.steps, divider, ...incoming] }));
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 80);
+    toast(`Imported ${incoming.length} step${incoming.length === 1 ? "" : "s"} from “${title || r.sop.title}”.`);
+  }
 
   /* ---------- step edits ---------- */
   const editStep = (id, field, value) => patchSop((p) => ({ ...p, steps: p.steps.map((s) => s.id === id ? { ...s, [field]: value } : s) }));
@@ -424,6 +446,7 @@ export default function SopBuilder({ canManage = false }) {
           </div>
           <div className="sopb-row" style={{ marginTop: 6 }}>
             <button className="sopb-btn" onClick={addStep}>＋ Add step</button>
+            <button className="sopb-btn" onClick={openImport}>⤵ Import guide</button>
           </div>
           <div className="sopb-row" style={{ marginTop: 8 }}>
             <button className="sopb-btn" onClick={startOver}>↺ Start over</button>
@@ -464,6 +487,26 @@ export default function SopBuilder({ canManage = false }) {
             <div className="sopb-row" style={{ marginTop: 14 }}>
               <button className="sopb-btn" onClick={() => doPublish("internal")}>Internal</button>
               <button className="sopb-btn w" onClick={() => doPublish("public")}>Public</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* import a guide into this one */}
+      {importOpen && (
+        <div className="sopb-sheet" onClick={(e) => { if (e.target.classList.contains("sopb-sheet")) setImportOpen(false); }}>
+          <div className="in">
+            <b style={{ fontSize: 18 }}>Import a guide</b>
+            <div className="sopb-hint">Its steps are copied in as a continuation — reorder or edit them after.</div>
+            <div className="sopb-implist">
+              {importList === null ? <div className="sopb-empty">Loading…</div>
+                : importList.length === 0 ? <div className="sopb-empty">No other guides to import yet.</div>
+                : importList.map((s) => (
+                  <button key={s.id} type="button" className="sopb-lib" onClick={() => importGuide(s.id, s.title)}>
+                    <img src={s.thumb || ""} alt="" />
+                    <span><div className="t">{s.title}</div><div className="m">{s.steps} step{s.steps === 1 ? "" : "s"}{s.category ? ` · ${s.category}` : ""}</div></span>
+                  </button>
+                ))}
             </div>
           </div>
         </div>
@@ -574,6 +617,8 @@ const CSS = `
 .sopb-sheet{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1200;display:flex;align-items:flex-end}
 .sopb-sheet .in{background:#141416;width:100%;max-width:640px;margin:auto auto 0;border-radius:22px 22px 0 0;padding:18px 16px calc(20px + env(safe-area-inset-bottom))}
 .sopb-hint{font-size:13px;color:var(--mut);margin-top:6px}
+.sopb-implist{max-height:48vh;overflow:auto;margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.sopb-implist .sopb-lib{width:100%;margin-bottom:0}
 .sopb-play{position:fixed;inset:0;background:#000;z-index:1300;display:flex;flex-direction:column;color:#fff}
 .sopb-play .ph{padding:max(10px,env(safe-area-inset-top)) 12px 6px;display:flex;align-items:center;gap:10px}
 .sopb-play .ph div{flex:1;min-width:0}.sopb-play .ph b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sopb-play .ph span{font-size:13px;color:var(--mut);font-weight:600}
