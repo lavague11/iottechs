@@ -120,6 +120,7 @@ export default function SopBuilder({ canManage = false }) {
   const [sop, setSop] = useState(null);           // {id,title,business,category,steps:[...]}
   const [status, setStatus] = useState("");
   const [upst, setUpst] = useState("");
+  const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [est, setEst] = useState("");
   const [toasts, setToasts] = useState([]);
@@ -170,8 +171,12 @@ export default function SopBuilder({ canManage = false }) {
   }, [sop, patchSop]);
 
   /* ---------- photos in ---------- */
-  async function onFiles(e) {
-    const fs = [...e.target.files]; e.target.value = "";
+  // Shared by the file picker AND drag-and-drop. Dropped HEIC files from Windows often arrive with an empty
+  // MIME type, so we don't gate on type here — photoFrom() tries to decode, and anything it can't (HEIC)
+  // falls back to a raw /api/media upload that converts it server-side.
+  async function addFiles(fileList) {
+    const fs = [...(fileList || [])];
+    if (!fs.length) return;
     let k = 0, bad = 0;
     for (const f of fs) {
       k++; setUpst(`Adding ${k} of ${fs.length}…`);
@@ -202,6 +207,8 @@ export default function SopBuilder({ canManage = false }) {
     }
     setUpst(bad ? `Couldn't read ${bad} file(s).` : "");
   }
+  function onFiles(e) { const fl = [...e.target.files]; e.target.value = ""; addFiles(fl); }
+  function onDrop(e) { e.preventDefault(); setDragOver(false); if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files); }
   function removePhoto(i) {
     setPhotos((p) => { const c = [...p]; const [r] = c.splice(i, 1);
       toast("Photo removed.", { label: "Undo", fn: () => setPhotos((q) => { const x = [...q]; x.splice(i, 0, r); return x; }) }); return c; });
@@ -325,7 +332,12 @@ export default function SopBuilder({ canManage = false }) {
         <>
           <div className="sopb-sec">
             <div className="sopb-lbl"><b>1</b> Photos</div>
-            <label className="sopb-up">⬆️ Add photos<small>Pick as many as you want. Hold &amp; drag a photo to move it.</small>
+            <label className={`sopb-up${dragOver ? " drop" : ""}`}
+                   onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
+                   onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
+                   onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+                   onDrop={onDrop}>
+              {dragOver ? "Drop photos or videos here" : "⬆️ Add photos"}<small>Pick as many as you want, or drag &amp; drop. iPhone HEIC is fine.</small>
               <input type="file" accept="image/*,.heic,.heif,video/*" multiple onChange={onFiles} /></label>
             <div className="sopb-grid" ref={gridRef}>
               {photos.map((p, i) => (
@@ -489,7 +501,8 @@ const CSS = `
 .sopb-sec{margin-bottom:18px}
 .sopb-lbl{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px}
 .sopb-lbl b{background:#fff;color:#000;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:12px}
-.sopb-up{display:block;position:relative;overflow:hidden;border:2px dashed #3a3a40;border-radius:16px;padding:18px;text-align:center;font-weight:700}
+.sopb-up{display:block;position:relative;overflow:hidden;border:2px dashed #3a3a40;border-radius:16px;padding:18px;text-align:center;font-weight:700;transition:border-color .12s,background .12s}
+.sopb-up.drop{border-color:var(--acc);background:rgba(255,214,10,.08)}
 .sopb-up small{display:block;color:var(--mut);font-weight:500;font-size:12px;margin-top:3px}
 .sopb-up input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
 .sopb-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
