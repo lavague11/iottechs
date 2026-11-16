@@ -304,3 +304,122 @@ options:
 
 Option 2 matches what is already in the file. It needs Ahmed's call because it changes the feel of
 every tap on a room, on touch most of all.
+
+---
+
+## B11 — a legacy survey renders as an EMPTY survey in the new viewer (O·161)
+
+**Live, customer-facing, and the opposite of what the migration report claimed.** Found by cloning a
+real legacy project and opening it.
+
+Spec section O has two adjacent lines that were treated as one item:
+
+- **O·161** — "Legacy surveys keep their floorplan + cameras but render in the new viewer."
+- **O·162** — "Floorplan viewer fixes: blank 'Approximately ___ total' (hide if no area), blurred
+  dimension labels, and the scale bar shows '1 m'. Use feet."
+
+**O·162 is closed.** Those three readouts belonged to the legacy portal viewer that section M deleted.
+None of the strings exists anywhere in rendering code any more — `Approximately` survives only inside
+this run's own migration-report prose, and there is no scale-bar or metre formatting code left at all.
+
+**O·161 is not closed, and nothing in the run addressed it.** The two surveys are different documents:
+
+| | legacy `survey` | current `survey2` |
+|---|---|---|
+| background | `floors[].B.img` (+ `imgRatio`, `imgRotate`, `zoom`, `sat`) | `floors[].bg` |
+| devices | `floors[].markers` | `floors[].devices` |
+| rooms | `floors[].B.rooms` / `B.strokes` | `floors[].plan` |
+| scale | `floors[].B.ftWide` | `floors[].scale` |
+
+The project page reads **`survey2` only**. Nothing converts a legacy blob into it. The admin surveys
+list does read both (`lib/db.js:2131-2132` LEFT JOINs `survey2` and `survey` for counts and thumbnails),
+which is why the data looks present from the office and absent from the portal.
+
+**Reproduced** on `ASC-TEST-LEG`, a throwaway clone of `CSC0119` (Sunrise Deli — a 9,586-byte legacy
+survey with a background image and a marker). The portal renders:
+
+> Layout · Draw the structure first — Devices · **No cameras yet — tap Add camera to start.**
+
+The source row was not touched; the clone is local-only and can be deleted with
+`DELETE FROM projects WHERE access_id='ASC-TEST-LEG'` plus the matching `project_tool_data` rows.
+
+**Locally 37 projects carry a legacy `survey` blob**, and the ones with no `survey2` alongside are the
+affected set. The production count is not knowable from here.
+
+**The migration report is wrong on this point and has been corrected.** It asserted that "legacy survey
+blobs need no data change" because "the floorplan/device model is already shared". Sharing the *model*
+does not help when nothing maps the *old shape* onto it.
+
+**Why this was not just fixed:** it needs a legacy→survey2 adapter, and the risk is not the plumbing but
+the coordinate systems. `survey2` stores devices as a PERCENT of the floor image (`lib/survey2-model.js`);
+the legacy markers sit in a pixel space with their own `zoom {s,tx,ty}` and `imgRatio`. Get that
+conversion wrong and every camera lands in the wrong place on a document the customer is asked to
+approve — visibly plausible and silently incorrect. It also decides whether the adapter runs on READ
+(display only, no fingerprint movement, legacy projects have no survey2 acceptance to void) or as a
+one-time WRITE in the section-O migration (touches `toolFingerprint`, so it is RED).
+
+**Decision needed:** read-time adapter or migration write? And is this worth doing at all, or do the
+affected legacy projects simply not need their old surveys shown? Recommended: a read-time adapter in
+`lib/survey2-model.js`, verified by rendering a cloned legacy project and comparing marker positions
+against the legacy viewer's own geometry before anything is shown to a customer.
+
+---
+
+## B12 — RED: the signer refuses `?sign=` in exactly the state "Sign" is shown for
+
+Found by the verifier on O·166, one level below what O·166 could fix. **Signature path — RED.**
+
+`proposal-customer-view.jsx:239-253` matches `?sign=<x>` against the proposal OPTION id and then
+refuses it with a toast if that option is already in `accepted`:
+
+```js
+if (match && accepted.has(match.id))   // "That option is already signed."
+```
+
+It conflates **accepted** with **signed**, and `selectProposalOption` (`lib/db.js:7058` →
+`_writeOptSets:7051`) writes `accepted_options` at accept time, long before any signature exists.
+Simulating the handler line for line with `want="1"`:
+
+| state | result |
+|---|---|
+| sent, 1 option, nothing accepted | signer **opens** |
+| sent, 2 options, nothing accepted | toast "Open a proposal option to review and sign." — no signer |
+| **accepted, unsigned, 1 option** | toast "That option is already signed." — **no signer** |
+| **accepted, unsigned, 2 options** | toast — **no signer** |
+
+The bottom two rows are the "awaiting signature" state. A deep link that says *Sign* lands the
+customer on the proposal with a toast and no signer.
+
+A second, smaller point: `sign=1` is the wrong grammar. Everything that emits this link
+(`proposal-actions.js:217,274`, `request-signature-sheet.jsx:20`) emits `sign=<optionKey>`; the literal
+`1` only works because of a single-option fallback.
+
+**Done instead:** O·166's Sign CTA drops the `sign` param and deep-links to `?open=proposal`, which
+always works. The customer reaches the proposal and signs from there; they are never shown a toast.
+A test pins the absence of the param and the presence of the offending guard, so re-adding the param
+means reading this first.
+
+**Decision needed:** should the guard test *signed* rather than *accepted*? That is the signature path
+and the RED lane says consult. Note the same guard governs the links in the signature-request email, so
+it is not only this CTA — it is latent there only because those links are sent before acceptance.
+
+---
+
+## B13 — "addendum awaiting signature → Sign" was never implemented (part of the addendum cluster)
+
+Spec O·166 says *"Proposal/**addendum** awaiting signature → Sign"*. Only the proposal half exists.
+`customerTodo` (`lib/customer-action.js:56-70`) has no addendum branch at all, so a project whose only
+outstanding item is an unsigned change order falls through to a plain "Open" — on the card **and** in
+the required-actions banner above the list, which reads the same engine.
+
+The pieces are there: `resolveCustomerRequiredActions` (`lib/db.js:7297`) → `requiredActionsFromState`
+(`lib/proposal.js:1057`) already emits `{documentType: "change_order", action: "signature"}`, and
+`?open=addendum` is already in the gateway's `OPEN_TOOL_NAMES`.
+
+**0 projects are in that state today**, so nothing is misbehaving right now.
+
+**Not done because** adding a branch to `customerTodo` changes the required-actions banner as well as
+the card, and it lands in the middle of the addendum cluster that is already waiting on you — **B2**
+(addendum e-sign needs a schema rebuild), **B3** (no row-per-version storage), **B4** (the A1 filename).
+Deciding B2/B3 decides what an addendum signature even is; building a CTA that points at it first would
+be guessing. Fold this into whatever you choose there.

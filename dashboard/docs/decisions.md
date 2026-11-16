@@ -741,3 +741,48 @@ One related repair: `tests/enhanced-plan.test.mjs` brace-extracts the widget's h
 `new Function` sandbox with stubbed globals, and `IOTDrawGeom` was not among them. Rather than stub the
 geometry module, the real one is now injected — a stub would have let the sandbox and the shipping code
 drift apart silently, which is the same disease.
+
+## D23 — a passing test suite is not evidence that a link goes anywhere
+
+O·166's first attempt shipped seven green tests and four real defects, and the two facts are related.
+
+Every one of those tests asserted either the **shape** of what `projectCardAction` returned
+(`{label:"Sign", href:"…?open=proposal&sign=1"}`) or the **text** of the source that produced it. Not
+one asserted that the thing on the other end of the link existed. So the suite was perfectly happy
+with a button that said *Sign* on a project with no proposal, pointing at an overlay the portal drops
+on sight — which is what 9 of 41 action-bearing cards in the live database actually did.
+
+The root cause is worth naming because it will recur: `stageFloorFacts` deliberately **invents** facts
+from the stored stage (`proposal_status: "accepted"` for anything at `approval_deposit` or later). That
+is correct for its purpose — a status pill must not regress to "Build proposal" on a finished job — and
+wrong the moment a *button* is derived from the same object. A label may be optimistic; a promise may
+not. The card now carries `actionable`, read from the unfloored facts, and absent means not
+established, so a caller that forgets it promises nothing rather than everything.
+
+Two habits came out of it:
+
+- **Gate a CTA on the same predicate the destination gates itself on.** The payment leg calls the
+  portal's own `payable()` rather than re-deriving "is money owed". Two rules that must agree will
+  eventually stop agreeing; one rule cannot.
+- **Count it on real rows.** The convincing evidence was not a unit test but running the card model
+  over all 130 projects and counting how many CTAs pointed at nothing: 9 before, 0 after. A pure
+  function test proves the function; a sweep proves the feature.
+
+This is the same lesson as D20 (a green suite hid a file that did not compile) arriving from the other
+direction. There it was a class of error no test *parsed*; here it was a class no test *followed*.
+
+## D24 — the verifier earns its cost on the rejections, not the approvals
+
+Worth recording plainly, because the run's orchestration rules make a verifier pass look like
+ceremony. Across this run the reviewers and verifiers rejected seven sections, one of them twice, and
+**every rejection found something real** — attribution stripped from customer PDFs, a credit cropped
+by the export window, three ways Undo could restore the wrong device, and now four defects in a
+94-line change that had a green suite and a clean build.
+
+The pattern in the misses is consistent: the author tests what they built, the verifier tests what the
+user will meet. Three of O·166's four defects were only visible by leaving the diff — tracing
+`?sign=` into the signer's own guard, tracing `?open=` into the portal's overlay availability, and
+checking whether the card element had a click handler at all. None of that is in the file you changed.
+
+So: when a change hands the user a new path through the product, the review has to walk the path, not
+read the diff. Budget for that rather than treating the rejection as rework.

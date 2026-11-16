@@ -530,7 +530,7 @@ The money and e-sign halves are **not** here and were not worked around — see 
 
 ## Still open
 
-**Ten items need Ahmed** — `docs/blocked.md` B1–B10. Every section of the spec is otherwise built.
+**Thirteen items need Ahmed** — `docs/blocked.md` B1–B13. Every section of the spec is otherwise built.
 
 The four that block the rest of section I:
 
@@ -551,10 +551,21 @@ The two that cost money or trust rather than time:
 - **B8** — **14 projects are currently telling their customers a proposal is ready to review when none
   was ever published.**
 
-And one that is a design decision rather than a defect:
+One more that is live and customer-facing:
+
+- **B11** — a legacy survey renders as an EMPTY survey in the portal. Nothing maps the old
+  `floors[].B.img` / `floors[].markers` shape onto `survey2`, which is all the project page reads, so a
+  legacy-only project shows "Draw the structure first" and "No cameras yet" while the office list shows
+  its data. Reproduced on a clone of a real legacy project.
+
+And three that are design or signature decisions rather than defects to fix blind:
 
 - **B10** — the ordinary Room gesture cannot create a nested room; only Stairs mode and the polygon
   shape can. Picking the gesture is Ahmed's call.
+- **B12** — the signer refuses `?sign=` in exactly the accepted-but-unsigned state, because its guard
+  tests *accepted* rather than *signed*. RED.
+- **B13** — "addendum awaiting signature → Sign" was never built; it belongs with the B2/B3 addendum
+  decisions.
 
 Both carried-forward unverified items are now closed. Section D's credit was rendered on a canvas at
 four output sizes and read back: the plate sits inside the image at every size, the font clamps from 12
@@ -566,7 +577,7 @@ and the gesture gap above.
 
 ## State of the branch
 
-Thirteen commits on `origin/site-survey-fixes`. **Nothing on `main`** — still at `25916493`, the SEO
+Fifteen commits on `origin/site-survey-fixes`. **Nothing on `main`** — still at `25916493`, the SEO
 commit that predates this run — and **nothing deployed**.
 
 | | |
@@ -584,6 +595,7 @@ commit that predates this run — and **nothing deployed**.
 | `904df9d6` | E — drawing tools |
 | `515373b6` | D — tile watermark and the rendered credit |
 | `ce2d750b` | E round 2 — a nested room no longer buries its container name (found in a browser) |
+| `7eca6950` | O·165 + O·166 — projects before the quick actions; a real per-project action |
 
 Four commits each cover two sections, because those pairs co-edited single files too deeply to split
 without producing a commit that doesn't compile. Each says so in its message rather than pretending
@@ -593,8 +605,42 @@ otherwise. Where files were shared between sections that *could* be separated �
 carries only its own work. `site-survey-merged.html` was edited by three sections at once; its
 `SAT_SRC` and `drawSrc` cache-busters sit on adjacent lines and were separated individually.
 
-Suite: **1235 at baseline → 1536 passing, 0 failing.** `npm run build` compiles clean from a cleared
+Suite: **1235 at baseline → 1547 passing, 0 failing.** `npm run build` compiles clean from a cleared
 `.next`.
+
+## O·165 + O·166 — the two items this report once called built · `7eca6950`
+
+An audit of the spec file against the code found two sub-items of section O that had never been built,
+after the run had been reported complete. Both were on `/my-projects`: the page still put the quick
+actions above the project list, and every card still offered a generic `Open →`.
+
+**O·165** moved the quick actions below the projects and the service calls, and shrank them — heading
+1.35→1.05rem and muted, card padding 12/16→9/12, icon 34→28px, grid min 168→150.
+
+**O·166** replaced `Open →` with Approve / Review / Sign / Pay / View, deep-linked through the
+gateway's existing `?open=` vocabulary, plus a small Reschedule beside Open when there is an
+appointment — pointing at the real `/appt/<token>` flow, using the same signed token the appointment
+email already sends that customer.
+
+**The verifier rejected the first attempt and was right four times.** The one that mattered: a CTA
+promised things that do not exist. `stageFloorFacts` invents `proposal_status: "accepted"` for any
+project parked at `approval_deposit` or later — correct for a status label, wrong for a button — so
+**9 of 41 action-bearing cards pointed at an overlay the portal drops**, landing the customer on the
+portal home. A card parked at `approval_deposit` with no proposal at all said **Sign**. Cards now carry
+an `actionable` gate read from the *unfloored* facts, with the payment leg reusing the portal's own
+`payable()` so the card and the overlay agree by construction rather than by two rules kept in step.
+Re-run over all 130 real projects: **26 action-bearing cards, 0 pointing at nothing.**
+
+The other three: Completed sat below the todo, so a finished project with a lagging stored stage read
+"Approve" instead of "View"; `?sign=1` is refused by the signer in exactly the state Sign is shown for
+(dropped — the guard is the signature path, so it went to the owner as **B12**); and "card click still
+opens the project page" had never been true, so the card body became a click target that defers to any
+link or control inside it, with the title as a real anchor for keyboard users.
+
+Worth recording about the tests: the first attempt's seven tests all passed, and none of them would
+have caught any of the four. They asserted the shape of what the function returned and the text of the
+source, never that the target on the other end of the link existed. The gate tests added since check
+reality, and the count across the live database is the evidence, not the shape.
 
 Two housekeeping notes for whoever works here next. The repo carries **~315 untracked zero-byte files**
 (`dashboard/app/div`, `dashboard/app/it.heading`, and many in the root) from an old shell-quoting bug
