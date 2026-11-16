@@ -32,7 +32,9 @@ import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
-import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
+import { toolCardState, toolDone } from "../../../lib/tool-card";
+import { proposalCardAction } from "../../../lib/addendum-display";
+import { ToolApproveBar,ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
@@ -3172,6 +3174,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const sHasMockup = !!(toolMeta?.mockup?.has || custFacts.mockup_has);
       const pStatus = resolverFacts.proposal_status;
       const pSigned = !!resolverFacts.proposal_signed;
+      const sSurveyDone = toolDone(toolMeta?.survey, acceptances?.submit_site_survey, acceptances?.site_survey);
       const installDone = !!sFacts.install_done;
       const qcSigned = !!sFacts.qc_customer_signed;
       const isComplete = !!sFacts.completion_docs || projState === "COMPLETE";
@@ -3372,10 +3375,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // (add-ons after signing). Closeout unlocks after the proposal is signed; Completion after QC sign-off.
         // Site Survey is the single entry for both the floor plan (Map) and the camera photos/preview
         // (Photos) — System Preview merged in (toggle inside the tool). A preview-only job never needs a map.
-        { key: "survey", title: "Site Survey", group: "customer", sub: (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.", action: (sHasSurvey || sHasMockup) ? "Edit" : "Create" },
-        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
-        // Addendum — job add-ons / change-orders on top of the signed job (fills the slot System Preview left).
-        { key: "addendum", title: "Addendum", group: "customer", sub: addonCount ? `${addonCount} add-on${addonCount === 1 ? "" : "s"}.` : "Job add-ons.", action: addonCount ? "Edit" : "Add" },
+        // Survey is done when the office's submission (or the customer's approval) still matches the
+        // survey's content fingerprint — an edit after approval re-opens the card.
+        { key: "survey", title: "Site Survey", group: "customer", sub: sSurveyDone ? "Submitted." : (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.",
+          ...toolCardState({ done: sSurveyDone, started: sHasSurvey || sHasMockup }) },
+        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", ...toolCardState({ done: pSigned, started: !!pStatus }),
+          // Addenda live inside the Proposal now (no separate card): the done chip carries the count.
+          action: proposalCardAction(toolCardState({ done: pSigned, started: !!pStatus }).action, toolMeta?.addendum?.count) },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.

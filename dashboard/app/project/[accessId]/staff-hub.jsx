@@ -265,7 +265,7 @@ export default function StaffHub({
                 {shown.map((c) => (
                   <button key={c.key} className={`cpv-card${c.locked ? " locked" : ""}`} disabled={c.locked} onClick={() => !c.locked && open(c.view || c.key, { sign: c.sign })}>
                     <div className="cpv-card-main">
-                      <div className="cpv-card-title">{c.title}{c.done ? " ✓" : ""}</div>
+                      <div className="cpv-card-title">{c.title}{c.done && <svg className="cpv-card-ck" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Done" style={{ marginLeft: 6, verticalAlign: "-2px", color: "var(--green)" }}><path d="M20 6 9 17l-5-5"/></svg>}</div>
                       <div className="cpv-card-sub">{c.locked ? (c.lockMsg || "Locked") : c.sub}</div>
                     </div>
                     <span className={`cpv-card-act${c.done ? " done" : ""}`}>

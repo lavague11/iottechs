@@ -15,6 +15,8 @@ import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseP
 import RequestSignatureSheet from "./request-signature-sheet";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
+import InstallAddendum from "./install-addendum";
+import { proposalIsSigned, canStartAddendum } from "../../../lib/addendum-display";
 import { saveFillableProposalPdf } from "../../../lib/proposal-acroform";
 import { ProposalStart, ImportSheet, PricingReview, UseForAnother } from "./proposal-start";
 import { applyPrices } from "../../../lib/proposal-reuse";
@@ -291,6 +293,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const canRecordPayment = ["admin", "manager"].includes(role)
     && (pubVersion != null || ["sent", "changes_requested", "accepted"].includes(status));
   const [payModalOpen, setPayModalOpen] = useState(false);
+  // + Addendum: only once a version has been signed; the editor opens below the footer, inside this view.
+  const [addendumOpen, setAddendumOpen] = useState(false);
+  const canAddendum = canStartAddendum({ signed: proposalIsSigned(meta), canBuild: can(role, "addendum.build") });
   const opt = payload.options.find((o) => o.id === activeOpt) || payload.options[0];
   // Services actually in this proposal (union across options — config is project-wide). Proposal
   // Configuration only surfaces these, never the whole company catalog. Reactive: adding/removing a
@@ -1244,7 +1249,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
         emailAsk={emailAsk} onEmailSend={async () => { setEmailAsk(false); await emailToCustomer(); }} onEmailDismiss={() => setEmailAsk(false)}
         onSend={send} onRevise={revise} onRequestSign={() => setSigSheet(true)} onCancelRevision={cancelRev}
         dlBusy={dlBusy} onDownload={handleDownload}
-        canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)} />
+        canRecordPayment={canRecordPayment} onRecordPayment={() => setPayModalOpen(true)}
+        canAddendum={canAddendum && !addendumOpen} onAddendum={() => setAddendumOpen(true)} />
+    )}
+    {embedded && canAddendum && addendumOpen && (
+      <InstallAddendum accessId={accessId} role={role} readOnly={false} embedded composeOnly customerName={customerName} onClose={() => setAddendumOpen(false)} />
     )}
     <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
       onClose={() => setPayModalOpen(false)} showToast={showToast}

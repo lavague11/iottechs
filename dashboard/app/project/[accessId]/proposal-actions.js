@@ -19,6 +19,7 @@ import {
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
 import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
+import { addendumLabel } from "../../../lib/addendum-display";
 import { can, ROLE_KEYS } from "../../../lib/roles";
 import { paymentsForViewer } from "../../../lib/customer-portal";
 import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
@@ -67,12 +68,14 @@ export async function getProposalHistoryAction(accessId) {
   const sent = (getProposalHistory(accessId) || [])
     .filter((p) => p.sent_at)
     .map((p) => ({ version: p.version, sent_at: p.sent_at, sent_by_name: p.sent_by_name || null, status: p.status, signed_at: p.signed_at || null, signed_name: p.signed_name || null }));
-  return { ok: true, versions: sent, addenda: addendumEntries(accessId, tok.role).map((s) => ({ id: s.id, title: s.title, status: s.status, sentAt: s.sentAt, edited: !!s.edited })) };
+  return { ok: true, versions: sent, addenda: addendumEntries(accessId, tok.role).map((s) => ({ id: s.id, label: s.label, title: s.title, status: s.status, sentAt: s.sentAt, signedAt: s.signature?.at || null, edited: !!s.edited })) };
 }
 function addendumEntries(accessId, role) {
   let list = [];
   try { list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []; } catch { list = []; }
-  return list.map((a) => buildAddendumSnapshot(a, role)).filter(Boolean);
+  // label = A<position in the stored array> — display only, derived here, never persisted. Position is taken
+  // BEFORE filtering so an entry awaiting pricing does not shift the numbers of the ones after it.
+  return list.map((a, i) => { const s = buildAddendumSnapshot(a, role); return s ? { ...s, label: addendumLabel(i) } : null; }).filter(Boolean);
 }
 // One sent version as a read-only snapshot (staff only). The compare target is the CURRENT working draft.
 export async function getProposalVersionAction(accessId, version) {

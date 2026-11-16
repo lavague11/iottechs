@@ -2,6 +2,7 @@
 import { useState, useRef } from "react";
 import { acceptStageAction, submitToolAction } from "./proposal-actions";
 import { postToolData } from "./tool-sync";
+import { acceptanceCurrent } from "../../../lib/tool-card";
 
 // The tools write to localStorage and mirror to the server on a ~5s poll (tool-sync.js). A Submit
 // clicked inside that window would be rejected server-side ("no data yet") — so before submitting,
@@ -55,7 +56,7 @@ export async function submitTool(accessId, stageKey, on = true) {
 //  - surveySatisfied() is the shared gate: every tool WITH data must be currently approved.
 
 export function toolAccepted(meta, acceptance) {
-  return !!(acceptance && acceptance.fingerprint === meta?.fingerprint);
+  return acceptanceCurrent(meta, acceptance);
 }
 export function surveySatisfied(toolMeta, acceptances) {
   if (!toolMeta) return true;

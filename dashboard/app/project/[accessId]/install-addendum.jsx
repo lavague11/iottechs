@@ -22,7 +22,9 @@ const fmtStamp = (iso) => { if (!iso) return ""; try { return new Date(iso).toLo
 // Prefill the addendum title so the office has a sensible starting point: "Add-on · <today>".
 const defaultTitle = () => `Add-on · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
-export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false }) {
+// composeOnly: opened from the Proposal footer ("+ Addendum") — shows just the builder (the list lives under
+// SENT VERSIONS) and calls onClose once it is done (created / cancelled / email prompt answered).
+export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false, composeOnly = false, onClose }) {
   const isCustomer = role === "customer";
   const isTech = role === "tech";
   // The technician can create an on-site add-on too, but only logs the WORK — pricing (customer charge
@@ -34,9 +36,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const showPayout = can(role, "addendum.payout.view");          // office + tech see the tech payout; customer + sales never do
 
   const [addendums, setAddendums] = useState([]);
-  const [building, setBuilding] = useState(false);
+  const [building, setBuilding] = useState(composeOnly);
   const [editingId, setEditingId] = useState(null);  // office is pricing an existing (tech-submitted) add-on
-  const [draft, setDraft] = useState(null);      // { title, items, discount } the builder opens with
+  const [draft, setDraft] = useState(() => (composeOnly ? { title: defaultTitle(), items: [], discount: "" } : null));      // { title, items, discount } the builder opens with
   const [signId, setSignId] = useState(null);
   const [signErr, setSignErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -80,6 +82,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     setBusy(true);
     await saveToolDataAction(accessId, "addendum", JSON.stringify({ addendums: next }));
     setBusy(false);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("iot:addendum-changed"));   // SENT VERSIONS refetches
   }
 
   const custTotal = (a) => addendumTotals(a).total; // customer price, less any discount (shared formula)
@@ -87,6 +90,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   const approvedTotal = addendums.filter((a) => a.status === "approved").reduce((s, a) => s + custTotal(a), 0);
 
   // ---- Builder (office) ---- the form itself is AddendumBuilder (the Proposal's item picker).
+  useEffect(() => { if (composeOnly && !building && !emailPrompt) onClose?.(); }, [composeOnly, building, emailPrompt, onClose]);
   const closeBuilder = () => { setDraft(null); setBuilding(false); setEditingId(null); };
   // Office prices a tech-submitted add-on: load it into the builder (with any existing values) so the
   // office can fill in the customer price + payout, then Save writes back to the same record.
@@ -177,7 +181,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
       )}
 
       {/* The customer never sees an add-on still awaiting office pricing. */}
-      {addendums.filter((a) => !(isCustomer && a.needsPricing)).map((a) => {
+      {!composeOnly && addendums.filter((a) => !(isCustomer && a.needsPricing)).map((a) => {
         const ct = custTotal(a), tt = techTotal(a);
         return (
           <div key={a.id} className={`adn-card ${a.status}`}>
@@ -276,7 +280,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         <AddendumBuilder key={editingId || "new"} accessId={accessId} canPrice={canPrice} editing={!!editingId} init={draft} busy={busy}
           submitLabel={editingId ? "Save pricing" : !canPrice ? "Submit add-on" : "Create addendum"}
           onSubmit={createAddendum} onCancel={closeBuilder} />
-      ) : (
+      ) : !composeOnly && (
         <button type="button" className="adn-newbtn" onClick={() => { setDraft({ title: defaultTitle(), items: [], discount: "" }); setBuilding(true); }}>+ New addendum</button>
       ))}
 

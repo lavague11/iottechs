@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { getProposalHistoryAction, getProposalVersionAction, getAddendumSnapshotAction } from "./proposal-actions";
 import VersionSnapshot, { Chevron } from "./proposal-version-snapshot";
+import { addendumRowText } from "../../../lib/addendum-display";
 
 const fmt = (d) => { if (!d) return ""; try { return new Date(String(d).replace(" ", "T")).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); } catch { return String(d).slice(0, 10); } };
 
@@ -14,11 +15,18 @@ export default function ProposalVersionLog({ accessId, fileBase = null, customer
   const [open, setOpen] = useState(null);      // "v:<n>" | "a:<id>"
   const [snaps, setSnaps] = useState({});      // key → snapshot (fetched on first open)
   const [busy, setBusy] = useState(false);
+  const [tick, setTick] = useState(0);
+  // An addendum created/changed in the editor below the proposal refreshes this list (no shared state needed).
+  useEffect(() => {
+    const bump = () => setTick((t) => t + 1);
+    window.addEventListener("iot:addendum-changed", bump);
+    return () => window.removeEventListener("iot:addendum-changed", bump);
+  }, []);
   useEffect(() => {
     let live = true;
     getProposalHistoryAction(accessId).then((r) => { if (live) { setVersions(r?.ok ? r.versions : []); setAddenda(r?.ok ? (r.addenda || []) : []); } }).catch(() => { if (live) setVersions([]); });
     return () => { live = false; };
-  }, [accessId]);
+  }, [accessId, tick]);
   if (!versions || (versions.length === 0 && addenda.length === 0)) return null;
 
   // Refetch on every open: the snapshot carries its diff against the working draft, which may have moved.
@@ -61,13 +69,9 @@ export default function ProposalVersionLog({ accessId, fileBase = null, customer
           v.signed_at
             ? <span className="pvl-badge signed">Signed{v.signed_name ? ` · ${v.signed_name}` : ""} · {fmt(v.signed_at)}</span>
             : <span className="pvl-badge">{v.status === "superseded" ? "Superseded" : "Sent"}</span>))}
-        {addenda.map((a) => row(`a:${a.id}`, () => getAddendumSnapshotAction(accessId, a.id),
-          <>
-            <span className="pvl-v">Add-on</span>
-            <span className="pvl-when">{a.title}</span>
-            {a.sentAt && <span className="pvl-by">{fmt(a.sentAt)}</span>}
-          </>,
-          <span className={`pvl-badge${a.status === "approved" && !a.edited ? " signed" : ""}`}>{a.edited ? "Edited" : a.status === "approved" ? "Signed" : a.status === "voided" ? "Voided" : a.status === "declined" ? "Declined" : "Pending"}</span>))}
+        {addenda.map((a, i) => row(`a:${a.id}`, () => getAddendumSnapshotAction(accessId, a.id),
+          <span className="pvl-v pvl-a">{addendumRowText(a, a.label ? Number(a.label.slice(1)) - 1 : i)}</span>,
+          null))}
       </div>
     </section>
   );
@@ -81,6 +85,7 @@ const CSS = `
 .pvl-list>div:first-child .pvl-row{border-top:0}
 .pvl-row:hover,.pvl-row:focus-visible{background:var(--dv-raise,#f0f2f7)}
 .pvl-v{font-weight:800;color:var(--dv-ink,var(--ink,#101418));font-variant-numeric:tabular-nums;min-width:30px}
+.pvl-a{min-width:0;font-weight:600}
 .pvl-when{color:var(--dv-ink,var(--ink,#101418))}
 .pvl-by{color:var(--dv-meta,var(--meta,#787D84))}
 .pvl-sp{flex:1}
