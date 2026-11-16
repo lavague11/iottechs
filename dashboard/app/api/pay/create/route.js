@@ -18,7 +18,9 @@ async function mayPay(accessId) {
   if (sess?.role === "customer" && customerOwnsProjectAccount(accessId, { userId: sess.id, email: sess.email })) return true;
   const accRaw = jar.get("iot_access")?.value;
   const acc = accRaw ? await parseAccessToken(accRaw) : null;
-  return !!(acc && String(acc.accessId) === String(accessId));
+  // A PIN grant is also issued to techs; amounts due are customer money (D12), so the grant must be a CUSTOMER
+  // one for this very project — same shape as lib/esign/access.mayReadSignDoc, which excludes tech even with a PIN.
+  return !!(acc && acc.role === "customer" && String(acc.accessId) === String(accessId));
 }
 
 // Resolve a service call → its canonical id + companion project (for auth). Null when not found.

@@ -2,7 +2,7 @@
 // instead of the stage deck. Pure (the secretValue read stays in the server layer); mirrors the Customer
 // Portal V2 resolver exactly. The hub is presentation only: the same tools open from its cards, in staff
 // (editable) mode, so no lifecycle / role / money logic changes.
-import { eligibleForCustomerPortalV2 } from "./customer-portal";
+import { eligibleForCustomerPortalV2 } from "./customer-portal.js";
 
 // Same eligibility as the customer portal: install projects (type A/B). Service calls (type C) keep their
 // own gateway, so they stay on the deck.
@@ -53,4 +53,39 @@ export function simpleProgressPct(f = {}) {
   if (f.mockupDone) c += 10;
   if (f.proposalStarted) c += 6;
   return Math.min(30, c);
+}
+
+// The ONE mapping from project facts → simpleProgressPct inputs. The gateway used to build this object inline,
+// so "what percent is this project at" lived inside a component where a test (and a second caller) couldn't
+// reach it. Staff hub and customer portal both call this with the same facts, so they cannot disagree.
+//   resolverFacts — the object handed to resolveProjectStatus (proposal_status, proposal_signed …)
+//   sFacts/custFacts — stage-floored / raw lifecycle facts; hasInstallAppt — a real install appointment
+//   finance — financeSummary (balanceOwed only counts when there is a contract that isn't paid in full)
+export function progressFromFacts({ resolverFacts = {}, sFacts = {}, custFacts = {}, hasInstallAppt = false, completed = false, finance = null, proposalStarted = false } = {}) {
+  return simpleProgressPct({
+    proposalSent:    !!resolverFacts.proposal_status,
+    signed:          !!resolverFacts.proposal_signed,
+    scheduled:       !!(hasInstallAppt || sFacts.install_confirmed),
+    installDone:     !!sFacts.install_done,
+    qcDone:          !!custFacts.qc_customer_signed,
+    completed:       !!completed,
+    balanceOwed:     !!(finance && finance.hasContract && !finance.paidInFull),
+    surveyDone:      !!custFacts.survey_done,
+    mockupDone:      !!custFacts.mockup_done,
+    proposalStarted: !!proposalStarted,
+  });
+}
+
+// The ONE mapping from the canonical project STATE (project-status.resolveProjectStatus) → the 3-step rail.
+// Derived from state alone — never the stored stage column, which goes stale — so the step can't disagree
+// with the percent (both come from the same facts). AWAITING_DEPOSIT and earlier = Consulting;
+// READY_TO_SCHEDULE … INSTALL_IN_PROGRESS = Install; AWAITING_FINAL_PAYMENT / COMPLETE = Completion.
+// CLOSED_NOT_COMPLETED has no forward position, so the caller supplies `fallbackPhaseKey` (stored stage's phase).
+const STATE_TO_PHASE = {
+  READY_TO_SCHEDULE: "ph_install", INSTALL_SCHEDULED: "ph_install", INSTALL_IN_PROGRESS: "ph_install",
+  AWAITING_FINAL_PAYMENT: "ph_wrap", COMPLETE: "ph_complete",
+};
+export function threeStepForState(state, fallbackPhaseKey = "ph_survey") {
+  if (state === "CLOSED_NOT_COMPLETED") return threeStepPhases(fallbackPhaseKey);
+  return threeStepPhases(STATE_TO_PHASE[state] || "ph_survey");
 }

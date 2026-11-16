@@ -1,19 +1,14 @@
 "use client";
 import { svcIsOpen, svcStepIndex } from "../../lib/svc-status";
+import { statusToneHex } from "../../lib/project-status";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { skipOutsideClose } from "../../lib/outside-click";
 import Link from "next/link";
 import { logoutAction } from "../login/actions";
-import { PHASES, phasesForType, masterToPhaseKey, phaseLabelOf } from "../../lib/spec";
 import { TaglinePill, Wordmark } from "../components/brand";
 import AddressAutocomplete from "../components/address-autocomplete";
-
-// Customers see a 5-phase journey (Consulting · Proposal · Install · Closeout · Completion) — the
-// same bar the project page shows — NOT the 9 internal sub-stages. Map each project's raw stage to
-// its phase and count against the phases that apply to its type (service calls have fewer).
-const phaseListFor = (p) => (p?.type ? phasesForType(p.type) : PHASES);
 
 // PIN masked by default; the eye reveals it for 10 seconds, then it re-hides.
 function PinReveal({ pin }) {
@@ -41,32 +36,19 @@ function PinReveal({ pin }) {
   );
 }
 
-// Project kind, from the access-id type letter: A = a full new system, B = an add-on (extra
-// cameras/upgrade to an existing system), C = a service call. Shown as a pill so a customer with
-// several "Security Cameras" entries can tell a system apart from an add-on or a service visit.
+// Project kind: A = a full new system, B = an add-on, C = a service call. Only the non-default kinds
+// get a chip — a plain new system needs no label.
 const KIND = {
-  A: { label: "New System",   cls: "k-new" },
   B: { label: "Add-on",       cls: "k-addon" },
   C: { label: "Service Call", cls: "k-svc" },
 };
-// The type letter is the access-id's first char (A/B/C), falling back to the `type` column.
-const kindOf = (p) => KIND[String(p.type || (p.access_id || "")[0] || "").toUpperCase()] || null;
-function stageNum(p)   { const k = masterToPhaseKey(p.stage); const l = phaseListFor(p); const i = l.findIndex((x) => x.key === k); return i < 0 ? 1 : i + 1; }
-function stageTotal(p) { return phaseListFor(p).length; }
-function stagePct(p)   { return Math.round((stageNum(p) / stageTotal(p)) * 100); }
-function stageLabel(p) { return phaseLabelOf(masterToPhaseKey(p.stage)); }
+const kindOf = (p) => KIND[p.kind] || null;
 
+// Status / stage / percent are computed on the server (lib/my-projects-card.js) from the same
+// resolvers as the staff portal — the card only displays them.
 function filterState(p) {
-  if (p.stage === "completion" || p.category === "completed") return "completed";
-  if (p.category === "closed"  || p.status  === "closed")    return "closed";
-  return "open";
-}
-function statusBadge(p) {
-  const state = filterState(p);
-  if (state === "completed") return { label: "Completed",  cls: "s-done" };
-  if (state === "closed")    return { label: "Closed",     cls: "s-gray" };
-  if (["proposal","approval_deposit"].includes(p.stage)) return { label: "Needs Review", cls: "s-review" };
-  return { label: "In Progress", cls: "s-active" };
+  const k = p.status?.key;
+  return k === "done" ? "completed" : k === "closed" ? "closed" : "open";
 }
 function initials(name) { return (name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase(); }
 function firstName(name) { return (name||"").trim().split(/\s+/)[0]||""; }
@@ -200,7 +182,7 @@ function ExistingProjectForm({ user, projects, openSvcProjectIds, actionLabel, p
         <label>Select Project</label>
         <select value={projectId} onChange={e=>{setProjectId(e.target.value); setCamera("");}} required>
           {projects.map(p=>(
-            <option key={p.access_id} value={p.access_id}>{p.service||p.service_code} — {p.address||p.customer} ({p.access_id})</option>
+            <option key={p.access_id} value={p.access_id}>{p.service} — {p.address||p.title} ({p.access_id})</option>
           ))}
         </select>
       </div>
@@ -615,16 +597,21 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-proj:hover{border-color:rgba(201,169,110,.6);box-shadow:0 14px 30px -18px rgba(14,19,32,.35)}
         .cp-proj .p-top{display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap}
         .cp-proj h4{font-family:'Bricolage Grotesque',sans-serif;font-size:1.08rem;font-weight:700}
-        .cp-proj .p-addr{color:var(--muted);font-size:.9rem;margin-bottom:14px}
+        .cp-proj .p-addr{display:block;color:var(--muted);font-size:.9rem;margin-bottom:4px}
+        .cp-proj .p-addr:hover{color:var(--ink);text-decoration:underline}
         .cp-kind{font-size:.66rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:3px 10px;border-radius:100px;border:1px solid transparent}
         .cp-kind.k-new{background:#eef1f8;color:#3a4a72;border-color:#d6def0}
         .cp-kind.k-addon{background:#f8f0e0;color:var(--gold-deep,#a8894e);border-color:#e6d3a8}
         .cp-kind.k-svc{background:#fdecec;color:#b03a3a;border-color:#f0c9c9}
-        .cp-status{font-size:.74rem;font-weight:700;letter-spacing:.02em;padding:4px 11px;border-radius:100px;text-transform:uppercase}
-        .s-active{background:var(--accent-soft);color:var(--accent)}
-        .s-review{background:#faf4e8;color:var(--gold-deep)}
-        .s-done{background:var(--green-soft);color:var(--green)}
-        .s-gray{background:var(--bg-tint);color:var(--muted)}
+        .cp-proj{border-left:3px solid var(--st,var(--line))}
+        .cp-status{display:inline-flex;align-items:center;gap:7px;font-size:.78rem;font-weight:700;color:var(--st,var(--muted))}
+        .cp-status em{font-style:normal;font-weight:500;color:var(--muted)}
+        .cp-status em::before{content:"\\00b7";margin-right:7px}
+        .cp-dot{width:8px;height:8px;border-radius:50%;background:var(--st,var(--muted))}
+        .p-svc{display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--muted);margin-bottom:12px}
+        .cp-steps{display:flex;gap:16px;font-size:.78rem;font-weight:600;color:var(--muted);margin-bottom:6px}
+        .cp-steps .past{color:var(--ink)}
+        .cp-steps .now{color:var(--st,var(--ink));font-weight:700}
         .cp-bar{height:7px;border-radius:100px;background:var(--bg-tint);overflow:hidden;max-width:420px}
         .cp-bar span{display:block;height:100%;border-radius:100px;background:linear-gradient(90deg,var(--gold),var(--gold-deep))}
         .cp-stage{font-size:.82rem;color:var(--muted);margin-top:8px}
@@ -742,7 +729,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                   {notifCount===0 && <div className="cp-no-notif">You're all caught up.</div>}
                   {actionItems.map(p=>(
                     <a key={p.access_id} href={`/project/${p.access_id}`} className="cp-np-item" style={{textDecoration:"none",color:"inherit"}}>
-                      <span className="cp-np-dot"/><div><div className="cp-np-title">{p.todo.label}</div><div className="cp-np-sub">{p.customer}</div></div>
+                      <span className="cp-np-dot"/><div><div className="cp-np-title">{p.todo.label}</div><div className="cp-np-sub">{p.title}</div></div>
                     </a>
                   ))}
                 </div>
@@ -787,7 +774,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                           <svg viewBox="0 0 24 24"><rect x="4.5" y="11" width="15" height="9.5" rx="2"/><path d="M8 11V7.5a4 4 0 0 1 8 0V11"/></svg>
                         )}
                       </span>
-                      <div className="cp-req-body"><div className="r-title">{p.todo.label}</div><div className="r-sub">{p.customer}{p.address?` · ${p.address}`:""}</div></div>
+                      <div className="cp-req-body"><div className="r-title">{p.todo.label}</div><div className="r-sub">{p.title}{p.address?` · ${p.address}`:""}</div></div>
                       <span className="cp-req-cta">{p.todo.cta} →</span>
                     </a>
                   );
@@ -850,22 +837,27 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                 {visible.length===0
                   ? <div className="cp-empty-proj">No projects in this view.</div>
                   : visible.map(p=>{
-                      const pct   = stagePct(p);
-                      const snum  = stageNum(p);
-                      const total = stageTotal(p);
-                      const slbl  = stageLabel(p);
-                      const badge = statusBadge(p);
+                      const st = p.status;
                       return (
-                        <div key={p.access_id} className="cp-proj">
+                        <div key={p.access_id} className="cp-proj" style={{ "--st": st.color || "var(--muted)" }}>
                           <div>
                             <div className="p-top">
-                              <h4>{p.service||p.service_code}</h4>
-                              {kindOf(p) && <span className={`cp-kind ${kindOf(p).cls}`}>{kindOf(p).label}</span>}
-                              <span className={`cp-status ${badge.cls}`}>{badge.label}</span>
+                              <h4>{p.title}</h4>
+                              <span className="cp-status"><i className="cp-dot" />{st.label}{st.detail ? <em>{st.detail}</em> : null}</span>
                             </div>
-                            <div className="p-addr">{p.customer}{p.address?` · ${p.address}`:""}</div>
-                            <div className="cp-bar"><span style={{width:`${pct}%`}}/></div>
-                            <div className="cp-stage">Stage {snum} of {total} · <b>{slbl}{p.date?` — ${p.date}`:""}</b></div>
+                            {p.address && <a className="p-addr" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}`} target="_blank" rel="noreferrer">{p.address}</a>}
+                            <div className="p-svc">{p.service}{kindOf(p) && <span className={`cp-kind ${kindOf(p).cls}`}>{kindOf(p).label}</span>}</div>
+                            {p.pct != null && (
+                              <>
+                                <div className="cp-steps">
+                                  {p.steps.map((x) => (
+                                    <span key={x.key} className={x.key === p.step.key ? "now" : x.unlocked ? "past" : ""}>{x.label}</span>
+                                  ))}
+                                </div>
+                                <div className="cp-bar"><span style={{width:`${p.pct}%`}}/></div>
+                                <div className="cp-stage"><b>{p.pct}%</b>{p.appt ? ` · ${p.appt.kind} ${p.appt.date}${p.appt.time ? `, ${p.appt.time}` : ""}` : ""}</div>
+                              </>
+                            )}
                             <div className="cp-p-foot">
                               {p.customer_pin && <PinReveal pin={String(p.customer_pin)} />}
                               <button className={`cp-copy${copiedId===p.access_id?" copied":""}`} onClick={()=>copyLink(p)}>
@@ -900,7 +892,7 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                       <div>
                         <div className="p-top">
                           <h4>{c.issue || "Service call"}</h4>
-                          <span className={`cp-status ${step === 3 ? "done" : "active"}`}>{lbl}</span>
+                          <span className="cp-status" style={{ "--st": statusToneHex(step === 3 ? "green" : "neutral") }}>{lbl}</span>
                         </div>
                         <div className="p-addr">{c.svc_id}{c.created_at ? ` · Opened ${String(c.created_at).slice(0, 10)}` : ""}</div>
                         <div className="cp-bar"><span style={{ width: `${Math.round((step / 3) * 100)}%` }} /></div>

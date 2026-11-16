@@ -94,7 +94,7 @@ export async function POST(req) {
   });
   saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
   const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
-  try { logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, actor: name }); } catch { /* non-fatal */ }
+  try { logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name }); } catch { /* non-fatal */ }
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch { /* non-fatal */ }
   try { const { revalidatePath } = await import("next/cache"); revalidatePath(`/project/${accessId}`); } catch { /* non-fatal */ }
   return Response.json({ ok: true, addendums: sanitize(list, tok.role) });

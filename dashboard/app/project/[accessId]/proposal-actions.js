@@ -20,6 +20,7 @@ import {
 import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
 import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
 import { can, ROLE_KEYS } from "../../../lib/roles";
+import { paymentsForViewer } from "../../../lib/customer-portal";
 import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailPaymentReminder } from "../../../lib/email";
@@ -89,10 +90,15 @@ export async function getAddendumSnapshotAction(accessId, addendumId) {
 
 export async function getCustomerFinanceAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };
-  const { financeSummary } = await import("../../../lib/customer-portal");
+  // canReadProject admits any logged-in tech; customer money is capability-gated (D12) — a technician must
+  // never be able to pull the balance by calling this action directly, so check the capability itself.
+  const tok = await getSessionRole();
+  if (!can(tok?.role, "customer.financials.view")) return { ok: false };
+  const { financeSummary, paymentsSummary } = await import("../../../lib/customer-portal");
   const fin = getProjectFinancialState(accessId);
   const dep = amountDueForPayment(accessId, "deposit");
-  return { ok: true, finance: financeSummary(fin, dep?.ok ? dep.due : 0) };
+  const finance = financeSummary(fin, dep?.ok ? dep.due : 0);
+  return { ok: true, finance, payments: finance.hasContract ? paymentsSummary(getProjectPayments(accessId)) : [] };
 }
 
 export async function getProposalAction(accessId) {
@@ -566,7 +572,7 @@ export async function signAddendumAction(accessId, addendumId, sign) {
     history: [...(a.history || []), { verb: wasResign ? "re-signed" : "approved", at, by: name }] });
   saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
   const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
-  logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, actor: name });
+  logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name });
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch {}
   await revalidate(accessId);
   return { ok: true, addendums: list };
@@ -677,8 +683,10 @@ export async function getLiveSnapshotAction(accessId) {
       accepted_options: (() => { try { return JSON.parse(proposal.accepted_options || "[]"); } catch { return []; } })(),
       tech_signed_name: proposal.tech_signed_name,
     } : null,
-    paymentsCount: payments.length,
-    paymentsConfirmedTotal: confirmed.reduce((s, x) => s + (+x.amount || 0), 0),
+    // Money figures ride the same capability as every other customer-money read: a tech/vendor polling this
+    // gets neither the count nor the confirmed total (the client only diffs them, so null is stable).
+    paymentsCount: can(tok.role, "customer.financials.view") ? payments.length : null,
+    paymentsConfirmedTotal: can(tok.role, "customer.financials.view") ? confirmed.reduce((s, x) => s + (+x.amount || 0), 0) : null,
     acceptances: Object.fromEntries(Object.entries(acceptances || {}).map(([k, v]) => [k, !!v])),
   };
 }
@@ -722,13 +730,16 @@ export async function getApprovalDataAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };   // gate: this returns the payment ledger + signatures — never cross-project
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
+  // Money is capability-gated (D12): a technician/vendor gets no ledger and no add-on retail; a customer gets
+  // the ledger with staff-internal columns stripped (paymentsForViewer); the office gets it whole.
+  const money = can(role, "customer.financials.view");
   return {
     ok: true,
     // Approval & Deposit is contractual (signatures, money owed) — read the published version.
     proposal: sanitizeProposal(getPublishedProposal(accessId), role),
-    payments: getProjectPayments(accessId),
+    payments: paymentsForViewer(role, getProjectPayments(accessId), money),
     acceptances: getStageAcceptances(accessId),
-    addons: getApprovedAddons(accessId),  // approved job-site add-ons fold into the amount owed
+    addons: money ? getApprovedAddons(accessId) : { total: 0, list: [] },  // approved job-site add-ons fold into the amount owed
   };
 }
 
@@ -819,7 +830,7 @@ export async function recordPaymentAction(accessId, payment) {
   // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
-  return { ok: true, stage, payments };
+  return { ok: true, stage, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 export async function deletePaymentAction(accessId, id) {
   const tok = await getSessionRole();
@@ -839,11 +850,11 @@ export async function deletePaymentAction(accessId, id) {
   try {
     if (before) {
       const amt = "$" + (+before.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      logProjectEvent(accessId, { kind: "request", label: `Payment canceled — ${amt}${before.kind ? ` · ${before.kind}` : ""}`, actor: actorName(tok) });
+      logProjectEvent(accessId, { kind: "request", label: `Payment canceled — ${amt}${before.kind ? ` · ${before.kind}` : ""}`, money: true, actor: actorName(tok) });
     }
   } catch { /* best-effort */ }
   await revalidate(accessId);
-  return { ok: true, payments };
+  return { ok: true, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 // Admin/manager correction: void a customer signature so the agreement can be re-signed.
 // The proposal record is preserved (signature fields cleared only).
@@ -885,14 +896,15 @@ export async function confirmPaymentAction(accessId, id) {
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
-  return { ok: true, stage, payments };
+  return { ok: true, stage, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 
 // The Job Log derives payment events from the payment records, so existing deposits/payments show
 // (not just ones made after logging was added). Read-gated to the people on the project.
 export async function getPaymentsForLogAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false, payments: [] };
-  return { ok: true, payments: getProjectPayments(accessId) };
+  const role = (await getSessionRole())?.role;
+  return { ok: true, payments: paymentsForViewer(role, getProjectPayments(accessId), can(role, "customer.financials.view")) };
 }
 
 // Canonical outstanding customer actions (proposal signature, change orders, PCP approval) — powers the
@@ -1200,7 +1212,13 @@ export async function resolveNotePublicAction(accessId, id, approve) {
 export async function getEventsAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || tok.role === "customer" || !(await canReadProject(accessId))) return { ok: false, events: [] };
-  return { ok: true, events: getProjectEvents(accessId) };
+  let events = getProjectEvents(accessId);
+  // Event labels that carry a dollar figure are flagged `money` where they are logged (logProjectEvent). A role
+  // without customer-money access (tech, vendor) never receives those rows — a marker, not a regex over text.
+  // Structured flag is the gate; the regex is the net for anything unflagged or free text (the AI label
+  // interpolates model output). The column defaults to 0, so without the net an unflagged event fails OPEN.
+  if (!can(tok.role, "customer.financials.view")) events = events.filter((e) => !e.money && !/\$\s?\d/.test(String(e.label || "")));
+  return { ok: true, events };
 }
 // Log a call the instant a staff member taps the Call button.
 export async function logCallAction(accessId, targetName) {

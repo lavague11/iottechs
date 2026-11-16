@@ -1348,6 +1348,9 @@ function init() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_events_project ON project_events(project_access_id)`);
+  // Structured money marker: events whose label carries a dollar figure are flagged at the call site, and the
+  // activity feed filters on THIS (never on a regex over display text) for roles without customer-money access.
+  try { const ec = db.prepare("PRAGMA table_info(project_events)").all().map((c) => c.name); if (!ec.includes("money")) { db.exec("ALTER TABLE project_events ADD COLUMN money INTEGER DEFAULT 0"); db.exec("UPDATE project_events SET money=1 WHERE label LIKE '%$%'"); /* one-time backfill of history: conservatively flag every legacy label carrying a $ */ } } catch { /* already there */ }
 
   // Customer-level log — the CRM activity note a rep adds against the whole client ("called, left VM"),
   // not tied to one project. The customer hub merges these with the per-project Job Log and service-call
@@ -3136,14 +3139,14 @@ export function resolveCustomerOwnership(accessId, { userId = null, email = null
   const proj = getJobByAccessId(accessId);
   if (!proj) return { owner: false, reason: "PROJECT_NOT_FOUND" };
   const row = userId ? getUserById(userId) : null;
-  const digits = (s) => String(s || "").replace(/\D/g, "");
   const acctEmail = String(email || row?.email || "").trim().toLowerCase();
   const projEmail = String(proj.contact_email || "").trim().toLowerCase();
-  const acctPhone = digits(row?.phone);
-  const projPhone = digits(proj.contact_phone);
+  // Normalized (crm.phoneKey: digits, leading US "1" dropped) so "+1 646…", "646.555.0142" and "(646) 555-0142" agree.
+  const acctPhone = phoneKey(row?.phone);
+  const projPhone = phoneKey(proj.contact_phone);
   if (userId && proj.customer_id != null && Number(proj.customer_id) === Number(userId)) return { owner: true, reason: "OWNER_ID" };
   if (acctEmail && projEmail && acctEmail === projEmail) return { owner: true, reason: "OWNER_EMAIL" };
-  if (acctPhone.length >= 7 && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
+  if (acctPhone && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
   // Explicit access roster — an admin-shared or inquiry-granted customer (a canonical, PERSISTED link,
   // by user_id once repaired, else by the email it was granted under). Survives a later contact edit.
   try {
@@ -3326,6 +3329,27 @@ export function getProjectsByContactEmail(email) {
   if (!email) return [];
   return db.prepare("SELECT * FROM projects WHERE LOWER(contact_email) = ? ORDER BY id DESC")
     .all(String(email).trim().toLowerCase()).map(decorate);
+}
+
+// A customer's projects under the CANONICAL ownership rule (email OR phone OR customer_id OR explicit
+// roster) — the dashboard used to match contact_email only, so a project created with just a phone
+// never appeared. SQL only NARROWS to candidates; customerOwnsProjectAccount is the sole judge, so
+// this can never widen ownership beyond what the project page itself allows.
+export function getOwnedProjectsForCustomer({ userId = null, email = null, phone = null } = {}) {
+  const em = normalizeEmail(email);
+  const pk = phoneKey(phone);
+  const where = [], args = [];
+  if (em) { where.push("LOWER(TRIM(contact_email)) = ?"); args.push(em); }
+  if (pk) where.push("COALESCE(contact_phone,'') <> ''");          // narrowed in JS by phoneKey below
+  if (userId) {
+    where.push("customer_id = ?"); args.push(Number(userId));
+    where.push("access_id IN (SELECT project_access_id FROM project_assignments WHERE role='customer' AND user_id = ?)"); args.push(Number(userId));
+  }
+  if (em) { where.push("access_id IN (SELECT project_access_id FROM project_assignments WHERE role='customer' AND LOWER(TRIM(user_email)) = ?)"); args.push(em); }
+  if (!where.length) return [];
+  return db.prepare(`SELECT * FROM projects WHERE ${where.join(" OR ")} ORDER BY id DESC`).all(...args)
+    .filter((r) => customerOwnsProjectAccount(r.access_id, { userId, email: em }))
+    .map(decorate);
 }
 
 // The e-sign landing path for a customer who still owes a signature, else null. The login flows use it to
@@ -7948,9 +7972,9 @@ export function getRecentBusinessEvents(limit = 6) {
     ORDER BY e.id DESC LIMIT ?
   `).all(Number(limit)).map((r) => ({ ...r }));
 }
-export function logProjectEvent(accessId, { kind, label, actor }) {
-  db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor) VALUES (?,?,?,?)")
-    .run(String(accessId), String(kind || "note").slice(0, 30), String(label || "").slice(0, 300) || null, String(actor || "").slice(0, 120) || null);
+export function logProjectEvent(accessId, { kind, label, actor, money = false }) {
+  db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor, money) VALUES (?,?,?,?,?)")
+    .run(String(accessId), String(kind || "note").slice(0, 30), String(label || "").slice(0, 300) || null, String(actor || "").slice(0, 120) || null, money ? 1 : 0);
   return getProjectEvents(accessId);
 }
 export function setProjectPoc(accessId, { name, phone }) {

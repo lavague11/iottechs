@@ -45,9 +45,10 @@ import { customerPointer, customerAnnouncement, customerAction } from "../../../
 import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
+import PortalSurvey from "./portal-survey";
 import StaffHub from "./staff-hub";
 import ProposalVersionLog from "./proposal-version-log";
-import { threeStepPhases, simpleProgressPct } from "../../../lib/staff-hub";
+import { threeStepForState, progressFromFacts } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
@@ -1558,12 +1559,13 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
   const [custFin, setCustFin] = useState(customerFinance);
-  const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) setCustFin(r.finance); }).catch(() => {}); };
+  const [custPays, setCustPays] = useState(customerPayments);   // customer-safe ledger rows (paymentsSummary)
+  const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) { setCustFin(r.finance); setCustPays(r.payments || []); } }).catch(() => {}); };
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
@@ -2840,12 +2842,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Add expense — opens the project's Expenses form in a modal; submitting files it to the shared
         // expenses ledger (submitProjectExpense), so it shows in the /expenses portal. Internal submitters only.
         ["admin", "manager", "tech"].includes(cView) && !previewRole && { label: "Add expense", icon: DVI.cash, onClick: (e) => { e.preventDefault(); setExpModal(true); } },
-        { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
+        can(cView, "project.contact.save") && { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
         { label: "Share", icon: DVI.share, onClick: (e) => { e.preventDefault(); shareProjectLink(lp.access_id, lp.customer, () => showLiveToast("Project link copied")); } },
       ].filter(Boolean),
       // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
       contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },
-      canEdit: ["admin", "manager", "sales", "tech", "customer"].includes(cView) && !previewRole,
+      canEdit: can(cView, "project.contact.edit") && !previewRole,
       onSave: async (vals) => { const r = await updateProjectInfoAction(lp.access_id, vals); if (r?.ok) setLocalProj((p) => ({ ...p, ...vals })); return r; },
       // Service line — admin/manager can correct a mis-filed job right from the contact edit.
       service_code: lp.service_code || "",
@@ -2904,24 +2906,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       install_done: sFacts.install_done,
       completed_at: sFacts.completion_docs,
       final_paid: sFacts.final_balance_paid,
-      closed_not_completed: !!lp.closed_at && !sFacts.completion_docs,
+      closed_not_completed: !!lp.lost_at && !sFacts.completion_docs,   // closeProject stamps lost_at (there is no closed_at column)
     };
     const projState = acceptLoaded ? resolveProjectStatus(resolverFacts, projectStage) : null;
     // Milestone progress for the Simple-view rail (hub + customer portal) — bug #83. ONE source for both
     // the percentage readout and the segment fills, so they always agree.
     const _simpleFin = staffFinance || customerFinance;
-    const simplePct = simpleProgressPct({
-      proposalSent:    !!resolverFacts.proposal_status,
-      signed:          !!resolverFacts.proposal_signed,
-      scheduled:       !!(pickAppt("install") || sFacts.install_confirmed),
-      installDone:     !!sFacts.install_done,
-      qcDone:          !!custFacts.qc_customer_signed,
-      completed:       projCompleted,
-      balanceOwed:     !!(_simpleFin && _simpleFin.hasContract && !_simpleFin.paidInFull),
-      surveyDone:      !!custFacts.survey_done,
-      mockupDone:      !!custFacts.mockup_done,
-      proposalStarted: !!proposalData?.payload,
+    const simplePct = progressFromFacts({
+      resolverFacts, sFacts, custFacts, finance: _simpleFin, completed: projCompleted,
+      hasInstallAppt: !!pickAppt("install"), proposalStarted: !!proposalData?.payload,
     });
+    // The 3-step rail derives from the SAME state the chip shows (never the stored stage, which lags) — staff
+    // hub and customer portal both read this one value. Until the facts load there is no state, and painting
+    // the stored stage instead would flash the stale step (the "Consulting" screenshot) for a round-trip — so
+    // the rail simply isn't drawn yet (both hosts render it only when phases is non-empty).
+    const rail3 = projState ? threeStepForState(projState, masterToPhaseKey(projectStage)) : { phases: [], currentKey: null };
     const dateSuffix = projState === "INSTALL_SCHEDULED" && realInstallDate ? ` · ${fmtDate(realInstallDate)}` : "";
     let statusChip = null;
     if (projState && isCustomerView) {
@@ -3012,10 +3011,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           }
           case "survey":
             return (
-              <div style={{ height: "100%" }}>
-                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView noApproval noRoster
-                  propertyType={lp.property_type || "commercial"} customerName={lp.contact_name || lp.customer} hasData />
-              </div>
+              <PortalSurvey accessId={lp.access_id} project={lp} meta={toolMeta?.survey || { has: false }}
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey}
+                preview={!!previewRole} onApprove={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
             );
           case "mockup":
             return (
@@ -3112,9 +3110,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
+          payments={custPays}
+          contact={deckCustomer}
+          log={deckLog}
           appt={portalAppt}
-          phases={threeStepPhases(masterToPhaseKey(projectStage)).phases}
-          currentPhaseKey={threeStepPhases(masterToPhaseKey(projectStage)).currentKey}
+          phases={rail3.phases}
+          currentPhaseKey={rail3.currentKey}
           progressPct={simplePct}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
@@ -3182,7 +3183,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const woSigned = !!(sFacts.work_order_accepted || sFacts.tech_accepted);
       const woSubmitted = !!sFacts.work_order_submitted;
       const woStarted = woSigned || woSubmitted || !!workOrders?.length;
-      const simple3 = threeStepPhases(masterToPhaseKey(projectStage));   // Simple view = 3 steps: Consulting · Install · Completion
+      const simple3 = rail3;   // Simple view = 3 steps: Consulting · Install · Completion (derived from state, see rail3)
 
       const renderStaffOverlay = (key, onCloseOverlay) => {
         switch (key) {
@@ -3583,7 +3584,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     <span className="pv-addr-arrow">→</span>
                   </a>
                   <div className="pv-hactions">
-                    {["admin","manager","sales","tech","customer"].includes(view) && (
+                    {can(view,"project.contact.edit") && (
                       <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||"",service_code:lp.service_code||""});setPinVal(lp.customer_pin||"");setPinCustom(!!lp.pin_custom);setHEditing(true);}}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Edit info
@@ -4570,7 +4571,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4615,6 +4616,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       customerPortalV2={customerPortalV2}
       customerFinance={customerFinance}
       customerAppt={customerAppt}
+      customerPayments={customerPayments}
       staffHub={staffHub}
       staffFinance={staffFinance}
       staffAppt={staffAppt}

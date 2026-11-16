@@ -92,7 +92,7 @@ export default function LeadInfoStep({ accessId, project, preview, onConfirmed }
             ) : (
               <button type="button" className="lis-save" disabled={preview || !agreed} onClick={confirm}>Looks right — Confirm</button>
             )}
-            <button type="button" className="lis-edit" onClick={() => setEditing(true)}>Edit</button>
+            {!project.info_confirmed_at && <button type="button" className="lis-edit" onClick={() => setEditing(true)}>Edit</button>}
           </div>
         </>
       )}

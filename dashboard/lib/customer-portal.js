@@ -41,7 +41,7 @@ export function pickUpcomingAppt(events, nowMs = Date.now()) {
 // money — never cost/margin/processor IDs. `hasContract:false` ⇒ the portal hides the balance card entirely
 // (no misleading $0 before anything is sent).
 export function financeSummary(fin, depositDue = 0) {
-  if (!fin) return { hasContract: false, total: 0, paid: 0, balance: 0, amountDueNow: 0, depositDue: 0, paidInFull: false, financialState: "none" };
+  if (!fin) return { hasContract: false, pendingPayments: 0, total: 0, paid: 0, balance: 0, amountDueNow: 0, depositDue: 0, paidInFull: false, financialState: "none" };
   const total = Math.round((+fin.total || 0) * 100) / 100;
   const paid = Math.round((+fin.paid || 0) * 100) / 100;
   const balance = Math.round((fin.balance != null ? +fin.balance : Math.max(0, total - paid)) * 100) / 100;
@@ -52,6 +52,8 @@ export function financeSummary(fin, depositDue = 0) {
     amountDueNow: Math.round((+fin.amountDueNow || 0) * 100) / 100,
     depositDue: Math.round((+depositDue || 0) * 100) / 100,
     paidInFull,
+    // Submitted-but-unconfirmed money (informational — a pending row can be an abandoned checkout).
+    pendingPayments: Math.round((+fin.pendingPayments || 0) * 100) / 100,
     financialState: fin.financialState || "none",
     // Pending addendums: shown as a separate "awaiting approval" line, NOT added to the amount due
     // until the customer approves (then they fold into `total`/`balance` automatically).
@@ -144,4 +146,66 @@ export function viewFromParams({ view, open } = {}) {
   const map = { proposal: "proposal", survey: "survey", site_survey: "survey", mockup: "mockup", deposit: "payment", payment: "payment" };
   if (open && map[open]) return map[open];
   return null;
+}
+
+// The ONLY fields of a schedule event a customer may receive. A whitelist, not a blacklist: crew, invitees,
+// confirmations, and the free-text `notes` (technician instructions, access concerns) are staff-internal and
+// can never ride along, whatever the event grows to carry. Server-side — page.jsx calls this before the prop.
+export const APPT_PUBLIC_FIELDS = Object.freeze(["kind", "title", "date", "time", "location"]);
+export function sanitizeAppt(ev) {
+  if (!ev || !ev.date) return null;
+  const out = {};
+  for (const k of APPT_PUBLIC_FIELDS) out[k] = ev[k] || null;
+  return out;
+}
+
+// Customer-safe payment ledger rows: what was paid, when, how, and whether staff has confirmed receipt.
+// Never the recorder's name, internal note, processor ids, fee internals or proof photos. Voided and
+// zero-amount rows are not payments. Newest first.
+export const PAYMENT_PUBLIC_FIELDS = Object.freeze(["id", "amount", "method", "kind", "paid_at", "status"]);
+export function paymentsSummary(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((p) => p && (+p.amount || 0) > 0 && p.status !== "void")
+    .map((p) => {
+      const o = {};
+      for (const k of PAYMENT_PUBLIC_FIELDS) o[k] = p[k] ?? null;
+      o.amount = Math.round((+p.amount || 0) * 100) / 100;
+      return o;
+    });
+}
+
+// "Render only when real" in one place: which blocks the portal home draws. No contract → no balance card
+// (never a misleading $0); no appointment → no appointment card; no recorded payment → no payments list; no
+// saved survey → no survey entry. The component reads these booleans and nothing else decides.
+export function portalBlocks({ finance = null, appt = null, ctx = {}, payments = [] } = {}) {
+  const avail = viewAvailability(ctx, finance);
+  return {
+    appointment: !!appt,
+    balance: !!finance?.hasContract,
+    payments: !!finance?.hasContract && (payments || []).length > 0,
+    survey: avail.survey,
+    proposal: avail.proposal,
+  };
+}
+
+// THE gate for the raw payment ledger (project_payments rows carry recorder, note, processor ids, fee and proof
+// photos). Every server action that returns payments goes through this, so the rule lives in one place:
+//   · no `customer.financials.view` (tech, vendor, anyone else) → nothing at all
+//   · customer → whitelisted columns, plus `source`/`created_at`, and — ONLY on their own submissions
+//     (source === "customer") — the note, proof photos and their own name, which they authored
+//   · office roles → the full ledger
+// `canSeeFinancials` is passed in so this module stays free of the roles import cycle.
+export function paymentsForViewer(role, rows, canSeeFinancials) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!canSeeFinancials) return [];
+  if (role !== "customer") return list;
+  return list.filter((p) => p && p.status !== "void").map((p) => {
+    const o = {};
+    for (const k of PAYMENT_PUBLIC_FIELDS) o[k] = p[k] ?? null;
+    o.amount = Math.round((+p.amount || 0) * 100) / 100;
+    o.source = p.source ?? null;
+    o.created_at = p.created_at ?? null;
+    if (p.source === "customer") { o.note = p.note ?? null; o.photos = p.photos || []; o.recorded_by = p.recorded_by ?? null; }
+    return o;
+  });
 }

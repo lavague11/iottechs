@@ -50,6 +50,11 @@ const CAPS = {
   "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client
   "customer.create":     ["admin", "manager", "sales"],                     // create a client with a project
   "customer.edit":       ["admin", "manager"],                              // "Update client record" from the form
+  // Project header icons. A customer gets Navigate + Share only: adding the contact to an address book and
+  // editing the project's contact record are staff actions. `project.contact.edit` is enforced by
+  // `updateProjectInfoAction` (server) — the header merely reads it to decide whether to draw the pencil.
+  "project.contact.edit": ["admin", "manager", "sales", "tech"],
+  "project.contact.save": ["admin", "manager", "sales", "tech", "readonly"],   // "add person" (vCard)
   "customer.duplicate.override": ["admin", "manager"],                      // "Create new anyway" past a duplicate warning
   "cost.view":           ["admin", "manager"],
   // SEO engine (lib/seo.js, /dev/seo). Internal marketing tooling — staff only; customers never touch it.
