@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Site Survey — Background as one step</title>
 <style>
-  :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--r:10px}
+  :root{color-scheme:light;--ink:#101112;--muted:#6b7076;--line:#e3e5e8;--soft:#f6f7f8;--gold:#b98a2e;--danger:#b23b3b;--r:10px}
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{height:100%;margin:0}
   body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
@@ -283,7 +283,12 @@
   .bgstrip .back{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--ink)}
   .bgstrip .back:hover{border-color:var(--ink)}
   .bgstriplbl{font-size:12px;color:var(--muted)}
-  #saveErr{position:fixed;top:0;left:0;right:0;z-index:9999;display:none;padding:7px 14px;text-align:center;font-size:12px;font-weight:600;color:#fff;background:#b23b3b}
+  #saveErr{position:fixed;top:0;left:0;right:0;z-index:9999;display:none;padding:7px 14px;text-align:center;font-size:12px;font-weight:600;color:#fff;background:var(--danger)}
+  /* Load failure: this device's copy couldn't be read. Carries the one way out (drop the local copy and
+     re-seed from the server), because a plain reload would re-read the same unreadable copy. */
+  #loadErr{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:9999;display:none;align-items:center;gap:10px;max-width:92vw;padding:9px 10px 9px 14px;border-radius:var(--r);color:#fff;background:var(--danger);font-size:12.5px;font-weight:600;line-height:1.35;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+  #loadErrFix{flex:none;height:28px;padding:0 11px;border:1px solid rgba(255,255,255,.6);border-radius:8px;background:transparent;color:#fff;font:700 12px/1 inherit;cursor:pointer}
+  #loadErrFix:hover{background:rgba(255,255,255,.14)}
   #bgWiz .steps{padding:9px 16px 10px}
 
   /* Background tab: top-left = Edit background + Enhance (direct). The rare "Create Hybrid Floor Plan" lives in a bottom-right ••• drop-up (#planMore), clear of the bottom-left utils. */
@@ -931,7 +936,7 @@
 
     var satFrame=document.getElementById("satFrame");
     var SAT_SRC="satellite-capture.html?v=20261105-navfix"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
-    function drawSrc(){ return "draw-floorplan.html?v=20261113-commit"
+    function drawSrc(){ return "draw-floorplan.html?v=20261116-sectionL"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
       +(SURVEY_BIZ?"&biz="+encodeURIComponent(SURVEY_BIZ):""); }
@@ -959,7 +964,9 @@
     // enter background-build mode: satellite tool fills the canvas, its bar takes the bottom
     // Seamless: a background tool (satellite OR draw-floorplan) fills the canvas while the universal
     // Background · Setup · Submit bar stays put. Both post `satellite-capture-result` back → applyBackground.
+    var layoutOpening=false, layoutOpeningT=null;   // in-flight guard: buildPlanOver loads the image async before bgToolOpen is set, so two openers (the host's re-ask + the 90ms timer) must not both start a build
     function openBgTool(src, source){
+      layoutOpening=false; clearTimeout(layoutOpeningT);
       pendingBgSource=source; var reloaded=ensureBgToolSrc(src);
       if(reloaded) showBgLoading(); else hideBgLoading();   // a fresh (re)load → veil until the tool is ready; a warm iframe is instant
       satFrame.style.display="block";
@@ -1031,7 +1038,8 @@
     // used to pile up inline and overflow the 5MB localStorage / 8MB server caps, which made the WHOLE
     // survey2 blob (incl. the devices) fail to save → dropped camera edits. Inline src → upload first,
     // record the URL; an already-URL src records immediately.
-    function saveVersionsSoon(){ try{ localStorage.setItem(PKEY, serialize()); }catch(e){} pushServer(lastJson=serialize()); }
+    function saveVersionsSoon(){ if(!stateLoaded) return;   // SAVE GATE — this runs from an async upload callback, so it can fire long after a failed restore; serialize() would stringify the empty placeholder
+      try{ localStorage.setItem(PKEY, serialize()); }catch(e){} pushServer(lastJson=serialize()); }
     function recordBgVersion(f, src, kind){ if(!f||!src) return;
       if(typeof src==="string" && src.indexOf("data:")===0){ uploadBackground(src, function(url){ if(f && url && url.indexOf("data:")!==0){ pushVersion(f, "bgVersions", "bgActive", { src:url, kind:kind||"enhanced" }); saveVersionsSoon(); } }); }
       else pushVersion(f, "bgVersions", "bgActive", { src:src, kind:kind||"enhanced" }); }
@@ -1063,7 +1071,7 @@
     // carrying its "what it sees" view photo — so the survey + mockup + Visualize walkthrough can be
     // shown end-to-end without any manual placement. Staff only (hidden for read-only customers).
     function loadSample(){
-      if(RO) return; var A="/samples/", R=RANGE;
+      if(RO||!stateLoaded) return; var A="/samples/", R=RANGE;   // SAVE GATE — it REPLACES floors wholesale and POSTs; never over a survey we failed to read
       floors=[{ name:"Property", bg:A+"survey-aerial.jpg", bgSource:{ type:"sample", name:"Sample aerial" }, started:true, devices:[
         { k:"cam", x:34, y:49, aim:150, aimed:true, fov:34, range:R, name:"Side Yard",         photo:A+"cam-1-sideyard.jpg", photoName:"Side Yard",     cid:"cSAMPLE01" },
         { k:"cam", x:47, y:71, aim:190, aimed:true, fov:40, range:R, name:"Front Driveway",    photo:A+"cam-2-driveway.jpg", photoName:"Front Driveway", cid:"cSAMPLE02" },
@@ -1076,9 +1084,9 @@
       // Visualize walkthrough BOTH derive each camera's photo from the survey (single source of truth),
       // so they stay in sync. We deliberately do NOT write a separate mockup store here: a second copy
       // of the photos is exactly what drifts out of sync with the survey.
-      try {
-        fetch("/api/tool-data",{ method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify({ accessId:PID, tool:"survey2", data:localStorage.getItem(PKEY) }) }).catch(function(){});
-      } catch(e){}
+      // This goes through pushServer, NOT a second raw fetch: pushServer is the one route to the server
+      // row, so the save gate and the clear-intent flag can't be bypassed by a new call site.
+      pushServer(lastJson=serialize());
     }
     document.getElementById("doorSample").addEventListener("click", loadSample);
     // "Edit background" → reopen the SAME tool that built this floor's background so you can re-level, re-enhance, or
@@ -1249,7 +1257,7 @@
       if(frozen() || !fl) return;   // submitted/approved/read-only → geometry is locked
       var p=m.plan, ok=false; try{ ok=!!(p && typeof p==="object" && !Array.isArray(p) && Array.isArray(p.cells) && Array.isArray(p.rooms) && JSON.stringify(p).length<=400000); }catch(e){ ok=false; }
       if(!ok) return;   // malformed / oversized → ignore (this lands in server-synced data)
-      fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; if(fl===floors[curFloor]){ renderView(); reconcileLocations(); } queueSave(); });   // new Structure/rooms → refresh the room layer + re-resolve camera locations
+      fl.plan=m.plan; if(p.cells.length>0) fl.legacyIdx=null; if(fl===floors[curFloor]){ renderView(); reconcileLocations(); emitSurveyStep(); } queueSave(); });   // new Structure/rooms → refresh the room layer + re-resolve camera locations; tell the host (Layout's Next follows the real structure the moment it is drawn)
     // Draw tool had NOTHING drawn when the planner advanced (iotDrawCommit → no sketch): close the dock and
     // move to Placement with the device panel open, mirroring finishBackground's landing. No plan to commit.
     window.addEventListener("message", function(ev){ if(!ev.data || ev.data.type!=="iotDrawEmpty" || !ev.source || ev.source!==satFrame.contentWindow) return;
@@ -2347,6 +2355,10 @@
       // an edit and stays office-only.
       if(m.cmd==="floor"){ if(typeof m.i==="number" && m.i!==curFloor) switchFloor(m.i); return; }
       if(RO) return;
+      // The host rail tells us which of ITS five steps the user is on, so a reopen can resume there
+      // (section L "Save last_step per survey"). The widget just persists the string — it owns the blob;
+      // the rail owns the step. Debounced like any other edit.
+      if(m.cmd==="railStep"){ var rs=normRail(m.step); if(rs && rs!==railStep){ railStep=rs; queueSave(); } return; }
       // Host rail drives the survey's internal Background/Plan step (and focuses the device panel for the
       // Cameras step). Reuses the existing goStep — no second step state. bgReady gate still applies in goStep.
       if(m.cmd==="step"){
@@ -2354,6 +2366,7 @@
         // advances — never ignored. The satellite capture commits via its Done path (iotCaptureCommit →
         // satellite-capture-result lands the background on the map). The draw tool autosaves geometry, so
         // we just close it and advance.
+        if(bgToolOpen==="satellite" && m.step===0){ emitSurveyStep(); return; }   // (emit: tells the host where we are, clearing its Background request) Background while the background editor is already open: you are there — never commit it as if advancing
         if(bgToolOpen==="satellite"){ try{ satFrame.contentWindow.postMessage({type:"iotCaptureCommit"}, "*"); }catch(e){} return; }
         // Advancing to Cameras/Placement with the Layout draw dock open: COMMIT the drawn structure first —
         // ask the draw tool to run its Place-Cameras path (planSvg + bgCtx → the floor becomes hybrid-capable,
@@ -2367,6 +2380,7 @@
         // aerial async before enterDraw opens, so a pre-emptive goStep(1) flashed the empty Placement canvas
         // for that gap ("clicking Layout skips me to placement"). The draw tool's Done path (finishBackground)
         // lands on Placement on its own, so nothing downstream needs the step pre-set.
+        if(m.focus==="view" && typeof m.step==="number"){ goStep(m.step); return; }   // show the step only — a passive resume / floor switch never opens an editor
         if(m.focus==="layout" && typeof m.step==="number"){ contextualEdit(m.step); return; }   // Layout: walls, rooms, areas
         if(typeof m.step==="number") goStep(m.step);
         if(m.focus==="devices"){ sideCollapsed=false; applySideCollapsed(); }   // Cameras: device panel open, no draw dock
@@ -2446,18 +2460,59 @@
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
+    // ---- THE SAVE GATE (section L: "survey data is not being saved") -------------------------------
+    // `floors` above is a PLACEHOLDER — one empty floor — that exists only until restore() has read the
+    // saved blob. snapFloor() copies the live editor state (bgData / curFloorScale / devices) onto
+    // floors[curFloor], so running it over that placeholder REPLACES a real saved floor with an empty
+    // one; save() then writes that empty blob to localStorage AND POSTs it to the server, destroying the
+    // cameras, rooms, scale and step. restore() swallowed every exception (its catch only called
+    // renderFloorTabs), so any throw inside it left the placeholder in memory and the next queued
+    // save — 400ms later — overwrote the good row with nothing, silently.
+    // stateLoaded is the gate: NOTHING serializes or writes until restore() has finished successfully.
+    // A failed restore leaves it false, so the saved data is never overwritten; the user gets a banner
+    // and a reload recovers (the row is untouched).
+    var stateLoaded=false, restoreFailed=false;
+    // A failed restore must not be a dead end: a plain reload re-reads the SAME unreadable local copy, so
+    // the banner carries "Use the saved copy" — it asks the host to drop this device's local draft (the
+    // host owns the localStorage + IndexedDB mirror) and reload, which re-seeds from the intact server row.
+    // The editor also goes read-only (frozen() returns true while restoreFailed) so nobody types into a
+    // surface whose every write the gate is throwing away.
+    function failRestore(){
+      restoreFailed=true; stateLoaded=false;
+      try{ setStatus(); }catch(e){}
+      try{ document.body.classList.add("frozen","loadfailed"); }catch(e){}
+      loadErr(true);
+      try{ renderFloorTabs(); }catch(e){}
+      try{ parent.postMessage({ type:"iotSurveyLoadFailed", project:PID }, "*"); }catch(e){} }
+    function discardLocalCopy(){ try{ parent.postMessage({ type:"iotSurveyDiscardLocal", project:PID }, "*"); }catch(e){} }
+    function loadErr(on){ var b=document.getElementById("loadErr");
+      if(!b){ if(!on) return; b=document.createElement("div"); b.id="loadErr"; b.setAttribute("role","alert");
+        b.innerHTML='<span>Couldn’t open this device’s copy of the survey — nothing was changed.</span>';
+        var btn=document.createElement("button"); btn.type="button"; btn.id="loadErrFix"; btn.textContent="Use the saved copy";
+        btn.addEventListener("click", discardLocalCopy); b.appendChild(btn);
+        document.body.appendChild(b); }
+      b.style.display=on?"flex":"none"; }
     function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
     function ensureFloorIds(){ var seen={}; floors.forEach(function(f){ if(!f) return; if(!f.id || seen[f.id]){ f.id=null; f.id=newFloorId(); } seen[f.id]=1; }); }   // backfill + dedupe (a later floor sharing an id gets a fresh one)
     ensureFloorIds();
     function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null,placed:(d.placed!==false)}; }); }
-    function snapFloor(){ var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }
+    function snapFloor(){ if(!stateLoaded) return; var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }   // !stateLoaded → the in-memory floor is the placeholder; snapping it would erase the saved floor
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); clearTimeout(sugT); sugT=setTimeout(refreshSugs,350); }   // refreshSugs repaints the suggestion rows only (a move/aim/zone edit can change them)
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
     // header label and office Submit react the instant a floor/device lands — no server poll wait.
     function reportHost(){ try{ var real=floors.filter(function(f){ return f.started || (f.devices&&f.devices.length); });
       parent.postMessage({ type:"iotSurvey", project:PID, floorCount:real.length, hasContent:real.length>0, submitted:submitted }, "*"); }catch(e){} }
     var lastJson=null;   // freshest serialization kept in memory, so the SERVER push never depends on a successful localStorage write (the server has no 5 MB cap → a full local cache can't lose a change)
-    function serialize(){ snapFloor(); return JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, gridMode:gridMode, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen }); }
+    // railStep — the HOST rail's step ("background"|"layout"|"cameras"|"views"|"review"). The widget only
+    // has two internal steps (0 Background · 1 Setup); the five spec steps live in the planner shell, so the
+    // step a reopen must land on is the rail's, not curStep. Stored ADDITIVELY as `lastStep` (the approval
+    // fingerprint in lib/tool-data.js ignores it) and read back by lib/survey-state.js surveyLastStep().
+    var railStep=null;
+    // editedAfterSubmit — the SURVEY is marked, not the session: reopening a submitted survey for edits
+    // has to survive a refresh (and reach another device), so it rides in the blob and is cleared by the
+    // next submit. Additive, like lastStep, so the approval fingerprint never sees it.
+    var editedAfterSubmit=false;
+    function serialize(){ snapFloor(); return JSON.stringify({ floors:floors, curFloor:curFloor, step:curStep, lastStep:railStep, editedAfterSubmit:editedAfterSubmit, dim:dimmed, submitted:submitted, iconSize:ISZ, showFov:showFovState, gridMode:gridMode, sideCollapsed:sideCollapsed, allAngles:showAllAngles, bgTool:bgToolOpen }); }
     // The SERVER is the source of truth. pushServer reports GENUINE failures (a >8MB reject or a network
     // error) so a lost camera edit can never be silent — but it debounces, because a transient reject
     // during an in-flight image upload self-heals on the very next (shrunk-blob) save.
@@ -2465,12 +2520,25 @@
     function serverSaveState(ok){ if(RO) return;
       if(ok){ if(_srvFailT){ clearTimeout(_srvFailT); _srvFailT=null; } saveErr(false); return; }
       if(_srvFailT) return; _srvFailT=setTimeout(function(){ _srvFailT=null; saveErr(true); }, 2500); }
-    function pushServer(json){ if(RO||!PID||!json) return;
-      try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:json})})
+    // SAVE GATE, last line of defence: pushServer is the ONE route to the server row, so gating it here
+    // closes every bypass — present and future — regardless of which caller forgot its own check.
+    // allowEmpty: the server refuses to replace a survey that HAS content with an empty one unless the
+    // write declares that emptying it IS the intent. `clearIntent` is set by the two real UI actions that
+    // can legitimately empty a survey — Start Over on the only floor, and deleting the only floor — and is
+    // consumed by the very next push. It is deliberately NOT set on every push: a flag that is always on
+    // is not a guard, and the whole point is that an empty blob arriving by accident (a stale copy, a
+    // failed restore, a mirror) must be refused. The host's mirrors (tool-sync's autosync, flushDraft)
+    // never set it at all, because they cannot tell a deliberate clear from a stale copy.
+    // This stops accidents, not a hostile client — the role checks do that.
+    var clearIntent=false;
+    function pushServer(json){ if(RO||!PID||!json) return; if(!stateLoaded) return;
+      var intent=clearIntent; clearIntent=false;   // one declared clear authorizes exactly one write
+      try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:json,allowEmpty:intent})})
         .then(function(r){ if(!r||!r.ok) return {error:1}; return r.json().catch(function(){ return {ok:1}; }); })
         .then(function(j){ serverSaveState(!(j&&j.error)); })
         .catch(function(){ serverSaveState(false); }); }catch(e){ serverSaveState(false); } }
-    function save(){ var json; try{ json=serialize(); }catch(e){ json=null; } if(json) lastJson=json;
+    function save(){ if(!stateLoaded) return;   // SAVE GATE — see stateLoaded above; a pre-restore (or failed-restore) save would overwrite the saved row with the empty placeholder
+      var json; try{ json=serialize(); }catch(e){ json=null; } if(json) lastJson=json;
       var ok=false; if(json){ try{ localStorage.setItem(PKEY, json); ok=true; }catch(e){ ok=false; } }
       if(!ok && json) reclaimInlineImages();   // local cache full → shrink the blob (inline images → /api/media URLs); localStorage is only a cache
       if(json) pushServer(json);               // ALWAYS persist to the server — the device edits must never live only in a (possibly full) local cache
@@ -2483,7 +2551,7 @@
     // the saved blob holds small URLs instead of multi-MB base64 — the real cause of the quota overflow.
     // One pass at a time; each swap re-saves so the cache shrinks as uploads land. Offline → no-op (URLs come later).
     var reclaiming=false;
-    function reclaimInlineImages(){ if(RO||!PID||reclaiming) return;
+    function reclaimInlineImages(){ if(RO||!PID||reclaiming||!stateLoaded) return;   // SAVE GATE — it re-serializes and writes, so it must never run over the placeholder
       var tasks=[]; floors.forEach(function(f){ if(!f) return;
         // f.bg is the ONE fingerprinted image (survey2Meaning hashes it), so swapping it inline->URL would
         // change the fingerprint and void a customer approval. Only migrate it while UNSUBMITTED; a
@@ -2500,11 +2568,12 @@
       });
       if(!tasks.length) return; reclaiming=true;
       var i=0; (function next(){ if(i>=tasks.length){ reclaiming=false; return; } var t=tasks[i++];
-        uploadBackground(t.src, function(url){ if(url && url.indexOf("data:")!==0){ t.set(url); try{ localStorage.setItem(PKEY, serialize()); saveErr(false); }catch(e){} pushServer(lastJson=serialize()); renderView(); } next(); }); })(); }
+        uploadBackground(t.src, function(url){ if(url && url.indexOf("data:")!==0 && stateLoaded){ t.set(url); try{ localStorage.setItem(PKEY, serialize()); saveErr(false); }catch(e){} pushServer(lastJson=serialize()); renderView(); } next(); }); })(); }   // stateLoaded: an async upload callback can land after a failed restore
     // Immediate server flush for DISCRETE actions (Use Outline, Done/background set, duplicate, delete) — the 5s autosync poll
     // otherwise means a fast tab-close could lose them. localStorage stays the working copy; this also pushes the FRESH
     // serialization now (not a re-read of localStorage, which could be stale/empty after a quota failure).
-    function flushNow(){ var json; try{ json=serialize(); }catch(e){ json=lastJson||localStorage.getItem(PKEY); } if(json) lastJson=json;
+    function flushNow(){ var json; if(!stateLoaded) return;   // SAVE GATE — same reason as save()
+      try{ json=serialize(); }catch(e){ json=lastJson||localStorage.getItem(PKEY); } if(json) lastJson=json;
       try{ localStorage.setItem(PKEY, json); }catch(e){ reclaimInlineImages(); }   // cache full is benign — shrink the blob; the server push below is the real save + reports genuine failures
       reportHost(); pushServer(json); }
     function applyDim(){ document.body.classList.toggle("dimmed",dimmed); var b=document.getElementById("dimMenuBtn"); if(b) b.classList.toggle("on",dimmed); }
@@ -2520,6 +2589,11 @@
     // ctx-framed opaque bg (bgCtx) — so one plate (the ctx extent) holds all three and device %-coords stay valid in every view.
     // Floors outlined in the 4.1-only window (ctx+planSvg, no bgCtx) are NON-capable → single view, unchanged (no ctx-extent overlay on a tight bbox bg).
     function hybridCapable(f){ return !!(f && f.ctx && f.ctx.src && f.planSvg && f.bgCtx); }
+    // Is there a REAL structure on this floor — a plan with at least one cell or room? A plan OBJECT is
+    // authoritative: an empty one ({cells:[],rooms:[]}, what the draw tool saves after you erase everything) is
+    // not a structure even on a hybrid floor, whose planSvg/bgCtx outlive Done. The hybrid flags only count for a
+    // legacy floor with no plan object. Mirrors lib/survey-rail.js floorHasStructure (a test keeps the two identical).
+    function floorHasStructure(f){ if(!f||typeof f!=="object") return false; var p=f.plan; if(p&&typeof p==="object"&&!Array.isArray(p)) return (Array.isArray(p.cells)&&p.cells.length>0)||(Array.isArray(p.rooms)&&p.rooms.length>0); return hybridCapable(f); }
     // ONE place that drives the two layers (#aerialImg behind, #stageImg the plan) by the floor's view. #scene stays sized to
     // sceneAspect (from floor.bg); for a capable floor floor.bg is ctx-framed so its aspect == the ctx/planSvg aspect → all layers line up 1:1.
     // View presets (presentation only, one canonical geometry): Full / Layered / Plan. Legacy satellite→full, hybrid→layered; default Layered.
@@ -2865,8 +2939,8 @@
       var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); });
       var so=document.getElementById("moreStartOver"); if(so) so.addEventListener("click", function(){ closeMoreSheet(); startOverFloor(); });
       var vl=document.getElementById("moreVersList"); if(vl) vl.addEventListener("click", function(e){ var b=e.target.closest(".versThumb"); if(b) restoreVersion(b.getAttribute("data-vid")); }); })();
-    function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor();
-      if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); queueSave(); return; }
+    function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor(); clearIntent=true;   // a delete may legitimately leave the survey empty — declare it (see pushServer)
+      if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); flushNow(); return; }   // deleting the ONLY floor empties the survey → flush it now, while the intent is declared
       var wasCur=(curFloor===i);
       floors.splice(i,1);
       floors.forEach(function(f,idx){ if(/^Floor \d+$/.test(f.name)) f.name="Floor "+(idx+1); });   // renumber only default-named floors; keep custom names
@@ -2885,15 +2959,17 @@
       f.plan=null; f.outlineDraft=null; f.ctx=null; f.planSvg=null; f.bgCtx=false;
       f.view=null; f.sides=null; f.grid=null; f.planXf=null; f.zonesMigrated=false; f.boundary=null; f.zones=[]; f.devices=[]; }
     function startOverFloor(){ if(frozen()) return; var f=floors[curFloor]; if(!f) return;
-      var go=function(){ resetFloorRecord(floors[curFloor]); loadFloor(curFloor); renderFloorTabs(); goStep(0); flushNow(); };   // discrete+destructive → flush now; loadFloor(0)/goStep(0) land on the chooser and re-emit bgReady:false,hasPlan:false
+      var go=function(){ resetFloorRecord(floors[curFloor]); loadFloor(curFloor); renderFloorTabs(); goStep(0); clearIntent=true; flushNow(); };   // discrete+destructive → flush now; on the ONLY floor this empties the survey, so declare the clear (see pushServer); loadFloor(0)/goStep(0) land on the chooser and re-emit bgReady:false,hasPlan:false
       if(floorHasWork(f)) askConfirm("Start over on "+(f.name||("Floor "+(curFloor+1)))+"? This clears the current setup for this floor and returns it to background selection. Your last submitted version is not deleted.", go, "Start Over");
       else go();   // nothing meaningful to lose → straight to the chooser, no scary confirm (owner's #20)
     }
     // A submitted survey is locked for editing (staff must Unsubmit to change it) — same as the customer's
     // read-only view, but staff keep the Unsubmit control. frozen() gates every edit action below.
-    function frozen(){ return RO || submitted; }
+    // restoreFailed also freezes: every write is being refused by the save gate, so an interactive editor
+    // would be a surface that silently throws the user's work away.
+    function frozen(){ return RO || submitted || restoreFailed; }
     function setStatus(){
-      var froze = submitted && !RO;                       // staff, submitted → lock the map's edit tools
+      var froze = (submitted || restoreFailed) && !RO;    // staff, submitted or unreadable → lock the map's edit tools
       document.body.classList.toggle("frozen", froze);
       if(froze){ if(angleMode) setAngleMode(false); if(armedK) arm(null); if(selId!=null) select(null); if(regionMode) setRegionMode(false); }
       var pill=document.querySelector(".pill"); if(!pill) return;
@@ -2903,42 +2979,79 @@
       else { lbl="Draft"; col="var(--gold)"; }
       pill.innerHTML='<span class="g" style="background:'+col+'"></span>'+lbl;
       if(typeof updateBgActions==="function") updateBgActions(); }   // submit/unsubmit flips frozen() → re-gate the floor actions
-    function submit(){ snapFloor(); pinAllFloorsActiveVersions(); submitted=true; setStatus(); save();   // pin each floor's active bg/ctx version so the reviewed/approved image is never ring-buffered away
+    function submit(){ snapFloor(); pinAllFloorsActiveVersions(); submitted=true; editedAfterSubmit=false; setStatus(); save();   // pin each floor's active bg/ctx version so the reviewed/approved image is never ring-buffered away; a (re)submit clears the edited mark
       try{ parent.postMessage({type:"iotSurvey2Submit", project:PID, floors:floors.length}, "*"); }catch(e){}
       if(curStep===2) goStep(2); }
     // Office pulls it back for edits — clears the awaiting state and tells the host to unsubmit server-side.
-    function unsubmit(){ submitted=false; approved=false; setStatus(); save();
+    function unsubmit(){ if(submitted) editedAfterSubmit=true; submitted=false; approved=false; setStatus(); save();
       try{ parent.postMessage({type:"iotSurvey2Unsubmit", project:PID}, "*"); }catch(e){}
       if(curStep===2) goStep(2); }
     // Host feeds the SERVER's truth (submitted / customer-approved) so the nav tag reflects reality even
-    // after an edit invalidates a prior submission.
+    // after an edit invalidates a prior submission. Submitted → not-submitted is a reopen wherever it came
+    // from (this device's Unsubmit, "Edit survey" in the host, or another device), so it marks the survey.
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.project!==PID||m.type!=="iotSurveySubmitState") return;
-      submitted=!!m.submitted; approved=!!m.approved; setStatus(); if(curStep===2) goStep(2); });
+      var reopen = submitted && !m.submitted;
+      submitted=!!m.submitted; approved=!!m.approved;
+      if(m.submitted) editedAfterSubmit=false; else if(reopen) editedAfterSubmit=true;
+      if(reopen || m.submitted) queueSave();
+      setStatus(); if(curStep===2) goStep(2); });
     // Canonical propertyType (and biz) for room-name suggestions — the parent posts the latest; we keep it
     // so the NEXT time Draw opens it uses the current value (no iframe remount, no lost survey state).
     window.addEventListener("message", function(ev){ var m=ev.data; if(!m||m.project!==PID||m.type!=="iotSurveyContext") return;
       if(m.propertyType) SURVEY_PROP = String(m.propertyType).toLowerCase()==="residential" ? "residential" : "commercial";
       if(typeof m.biz==="string" && m.biz) SURVEY_BIZ = m.biz; });
-    function restore(){ try{ var s=localStorage.getItem(PKEY); if(!s){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; } var st=JSON.parse(s); if(!st){ applySettings(); applySideCollapsed(); renderFloorTabs(); return; }
-      dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
-      if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles;
-      gridMode = (typeof st.gridMode==="number") ? Math.max(0,Math.min(2,st.gridMode|0)) : (st.showGrid===true?2:0);   // migrate the legacy on/off grid: on→Full, else Off (new default OFF)
-      applySettings();   // settings before floors render (FOV + all-angles default OFF)
-      sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
-      if(st.floors&&st.floors.length){ st.floors.forEach(function(f,i){ if(f && !f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
-        floors=st.floors.filter(function(f){ return f && typeof f==="object"; }).map(function(f){ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),zonesMigrated:!!f.zonesMigrated,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,bgVersions:validVersions(f.bgVersions),ctxVersions:validVersions(f.ctxVersions),bgActive:(typeof f.bgActive==="string"?f.bgActive:null),ctxActive:(typeof f.ctxActive==="string"?f.ctxActive:null),devices:f.devices||[],started:!!f.started}); }); }   // keep bgSource + real-world scale + draw geometry + bg/aerial version history (+ any future fields) so the plan reopens correctly
-      else if(st.bg || (st.devices&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
-      ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
-      curFloor=Math.min(st.curFloor||0, floors.length-1);
-      loadFloor(curFloor); renderFloorTabs();
-      goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
-      if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
-      // Refresh mid-edit → reopen the build tool right where they left off (draw geometry is per-floor persisted).
-      if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ if(st.bgTool==="draw") enterDraw(); else { var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); } }   // satellite reopens AS LEVELED
-      // Proactively migrate any inline images (esp. bg/aerial version history) to /api/media URLs so an
-      // already-bloated blob self-heals on load, before the next edit overflows localStorage.
-      if(!RO) setTimeout(reclaimInlineImages, 800);
-    }catch(e){ renderFloorTabs(); } }
+    // One floor's normalization, isolated: a single corrupt floor must not cost the whole survey. If the
+    // normalizers (validGrid / bdValidBoundary / zValidZones / validVersions) throw on it, the raw floor is
+    // kept as-is rather than the entire restore aborting.
+    function normFloor(f){ try{ return Object.assign({}, f, {id:f.id||null,name:f.name||"Floor",bg:f.bg||null,bgSource:f.bgSource||null,scale:f.scale||null,aerial:f.aerial||null,plan:f.plan||null,outlineDraft:f.outlineDraft||null,ctx:f.ctx||null,planSvg:f.planSvg||null,bgCtx:f.bgCtx||false,view:(typeof f.view==="string")?f.view:null,sides:(f.sides&&typeof f.sides==="object")?f.sides:null,grid:validGrid(f.grid),zonesMigrated:!!f.zonesMigrated,boundary:bdValidBoundary(f.boundary),zones:zValidZones(f.zones),legacyIdx:(f.legacyIdx!=null && isFinite(+f.legacyIdx)) ? +f.legacyIdx : null,bgVersions:validVersions(f.bgVersions),ctxVersions:validVersions(f.ctxVersions),bgActive:(typeof f.bgActive==="string"?f.bgActive:null),ctxActive:(typeof f.ctxActive==="string"?f.ctxActive:null),devices:Array.isArray(f.devices)?f.devices:[],started:!!f.started}); }catch(e){ return f; } }
+    var RAIL_STEPS=["background","layout","cameras","views","review"];   // mirrors lib/survey-state.js RAIL_STEPS
+    function normRail(s){ s=String(s||"").toLowerCase(); return RAIL_STEPS.indexOf(s)>=0 ? s : null; }
+    // RESTORE — reopen the saved survey. Three phases, deliberately separated (section L):
+    //   1. read + parse: nothing saved → the in-memory placeholder IS the state, so saving is safe.
+    //   2. load the DATA (floors → loadFloor, which populates bgData/scale/devices from floors[curFloor]).
+    //      A throw here leaves the editor out of step with `floors`, so stateLoaded stays FALSE and every
+    //      write is blocked — the saved row keeps the real survey and a reload recovers it.
+    //   3. UI (tabs, step, reopening a build tool): a throw here is cosmetic and must NOT block saving.
+    // "Nothing was saved" and "something was saved that I could not read" are DIFFERENT. Only the first
+    // may open the save gate. A stored string that won't parse (or parses to a non-object) is a READ
+    // FAILURE: the server row is probably fine, so the gate stays shut and the user is offered a way out.
+    function restore(){
+      var raw=null; try{ raw=localStorage.getItem(PKEY); }catch(e){ raw=null; }
+      var stored = (raw!=null && String(raw).trim()!=="");
+      var st=null, unreadable=false;
+      if(stored){ try{ st=JSON.parse(raw); }catch(e){ unreadable=true; } if(!unreadable && (!st || typeof st!=="object")) unreadable=true;
+        if(!unreadable && st.floors!=null && !Array.isArray(st.floors)) unreadable=true; }   // it CLAIMS to have floors in a shape we cannot read — never overwrite whatever that is
+      if(unreadable){ failRestore(); return; }                                                          // something IS saved here and we could not read it → never overwrite it
+      if(!stored){ try{ applySettings(); applySideCollapsed(); renderFloorTabs(); }catch(e){} stateLoaded=true; return; }   // fresh project: nothing to lose
+      try{
+        dimmed=!!st.dim; submitted=!!st.submitted; applyDim(); setStatus();
+        if(typeof st.iconSize==="number") ISZ=st.iconSize; showFovState=!!st.showFov; showAllAngles=!!st.allAngles;
+        gridMode = (typeof st.gridMode==="number") ? Math.max(0,Math.min(2,st.gridMode|0)) : (st.showGrid===true?2:0);   // migrate the legacy on/off grid: on→Full, else Off (new default OFF)
+        applySettings();   // settings before floors render (FOV + all-angles default OFF)
+        sideCollapsed=!!st.sideCollapsed; applySideCollapsed();
+        railStep=normRail(st.lastStep);   // the rail step the user was on (host-owned; see serialize)
+        editedAfterSubmit=!!st.editedAfterSubmit;   // the "Edited after submit" mark belongs to the survey, not the session
+        if(Array.isArray(st.floors) && st.floors.length){
+          var raw=st.floors.filter(function(f){ return f && typeof f==="object"; });
+          raw.forEach(function(f,i){ if(!f.id && f.legacyIdx==null) f.legacyIdx=i; });   // pre-id floor → remember its ORIGINAL index (the draw tool's legacy iot_struct_<pid>_<i> key), once, before ids are backfilled
+          if(raw.length) floors=raw.map(normFloor);   // keep bgSource + real-world scale + draw geometry + bg/aerial version history (+ any future fields) so the plan reopens correctly
+        }
+        else if(st.bg || (Array.isArray(st.devices)&&st.devices.length)){ floors=[{id:null,name:"Floor 1",bg:st.bg||null,aerial:null,plan:null,legacyIdx:0,devices:st.devices||[],started:true}]; }   // migrate single-floor save
+        ensureFloorIds();   // backfill ids on old saves (existing ids are kept)
+        curFloor=Math.max(0, Math.min(+st.curFloor||0, floors.length-1));
+        loadFloor(curFloor);   // bgData / bgHasImage / curFloorScale / devices now mirror floors[curFloor]
+        stateLoaded=true;      // ← the save gate opens only here: memory and the saved blob agree
+      }catch(e){ failRestore(); return; }
+      try{
+        renderFloorTabs();
+        goStep(bgHasImage ? (typeof st.step==="number"?st.step:1) : 0);
+        if(curStep===0){ sideCollapsed=true; applySideCollapsed(); }   // on the Background step the panel stays hidden
+        // Refresh mid-edit → reopen the build tool right where they left off (draw geometry is per-floor persisted).
+        if(!RO && !submitted && (st.bgTool==="draw"||st.bgTool==="satellite")){ if(st.bgTool==="draw") enterDraw(); else { var was=bgToolSrc; enterBg(); postAerialRestore(bgToolSrc!==was); } }   // satellite reopens AS LEVELED
+        // Proactively migrate any inline images (esp. bg/aerial version history) to /api/media URLs so an
+        // already-bloated blob self-heals on load, before the next edit overflows localStorage.
+        if(!RO) setTimeout(reclaimInlineImages, 800);
+      }catch(e){ try{ renderFloorTabs(); }catch(_e2){} } }
 
     // move: drag the icon (place mode only — in angle mode the icon is fixed, you set aim/length instead)
     function dragMove(el,d){ var dot=el.querySelector(".devDot");
@@ -3040,8 +3153,11 @@
       var f=floors[curFloor]||{};
       if(step===0){ var cb=document.getElementById("changeBgBtn"); if(cb) cb.click(); return; }   // Background → reopen the bg editor
       if(step===1){
-        if(hybridCapable(f) || (f.plan && (f.plan.cells||f.plan.rooms))){ enterDraw(); return; }   // plan exists → edit the Structure
-        if(canBuild(f)){ var bp=document.getElementById("buildPlanBtn"); if(bp) bp.click(); }       // aerial, no plan yet → start the plan tool
+        if(layoutOpening) return;                           // an opener is already mid-flight (async image load) — never start a second build
+        layoutOpening=true; clearTimeout(layoutOpeningT); layoutOpeningT=setTimeout(function(){ layoutOpening=false; }, 2500);
+        if(floorHasStructure(f) || (f.plan && typeof f.plan==="object")){ enterDraw(); return; }   // plan exists (even erased) → edit the Structure
+        if(canBuild(f)){ var bp=document.getElementById("buildPlanBtn"); if(bp) bp.click(); return; }   // aerial, no plan yet → start the plan tool
+        enterDraw();   // a library/upload background with no aerial: Layout still opens the draw tool over the floor's own image (iotDrawBackdrop) — never a dead end
       }
     }
     function goStep(idx){
@@ -3108,7 +3224,8 @@
       document.body.classList.toggle("cambar", dock==="cameras");
       updateCamBtns();
       parent.postMessage({ type:"iotSurveyStep", project:PID, step:curStep, bgTool:bgToolOpen||null, dock:dock,
-        bgReady:!!bgHasImage, hasPlan:!!(hybridCapable(lf) || (lf.plan && (lf.plan.cells||lf.plan.rooms))), camCount:camCount }, "*");
+        bgReady:!!bgHasImage, hasPlan:floorHasStructure(lf), camCount:camCount,
+        lastStep:railStep, loaded:stateLoaded, loadFailed:restoreFailed }, "*");   // lastStep = the saved rail step (reopen resumes there); loadFailed = restore failed, the host must not treat an empty roster as "no cameras"
     }catch(e){} }
     // Next is gone — Done (draw tool) advances Background→Setup automatically, and the Background/Setup
     // step tabs are the manual navigation. renderSubmitCtl kept as a no-op so existing call sites are safe.

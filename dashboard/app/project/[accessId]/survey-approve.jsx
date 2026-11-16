@@ -1,6 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { acceptStageAction, submitToolAction } from "./proposal-actions";
+import { postToolData } from "./tool-sync";
 
 // The tools write to localStorage and mirror to the server on a ~5s poll (tool-sync.js). A Submit
 // clicked inside that window would be rejected server-side ("no data yet") — so before submitting,
@@ -15,14 +16,16 @@ async function flushDraft(accessId, stageKey) {
   try {
     const raw = localStorage.getItem(d.key(accessId));
     if (raw == null) return null;
-    // Plain fetch, not a Server Action — same reason as tool-sync.js (large photo payloads
-    // break the Turbopack dev-mode Flight stream when passed as action arguments).
-    const res = await fetch("/api/tool-data", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ accessId, tool: d.tool, data: raw }),
-    });
-    const r = await res.json();
+    // Through the ONE validated host POST (tool-sync.js postToolData), not a second raw fetch. This is
+    // the worst place to skip the gate: section L put this flush on the "Edit survey" path
+    // (submitTool → flushDraft → submitToolAction), so it runs BEFORE the unlock permission check and is
+    // what the lock banner's own way-forward button calls — including when this device's copy is the
+    // corrupt one the widget just refused to open. postToolData uses a plain fetch rather than a Server
+    // Action for the original reason (large photo payloads break the Turbopack dev-mode Flight stream).
+    const r = await postToolData(accessId, d.tool, raw);
+    if (r?.refused) {
+      return `This device’s copy of the ${LABEL[stageKey] || "tool"} can’t be read, so it wasn’t sent — the saved version is untouched. Reload and choose “Use the saved copy”.`;
+    }
     // Surface a failed push (payload too big / rejected) — otherwise the submit that follows
     // errors with a misleading "add something to the tool first".
     if (r?.error) return `Couldn't sync the ${LABEL[stageKey] || "tool"} to the server: ${r.error}`;

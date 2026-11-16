@@ -1014,7 +1014,7 @@ export async function proposalLayoutMetaAction(accessId) {
   // normally /api/media URLs now, so the old scan both missed built layouts AND could show empty ones.
   return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
-export async function saveToolDataAction(accessId, tool, data) {
+export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false } = {}) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
@@ -1023,7 +1023,10 @@ export async function saveToolDataAction(accessId, tool, data) {
   if (typeof data !== "string" || data.length > 8_000_000) return { error: "Bad payload." };
   // Who may write each tool: survey/mockup = office; schedule = office + customer; install
   // checklist = office + the technician doing the work.
-  const editors = tool === "schedule" ? ["admin", "manager", "sales", "customer"]
+  // survey/survey2: the tech on site may write it (can(role,"survey.edit")) — unlocking a survey a tech
+  // then cannot save would strand their edits in one browser. Mirrors /api/tool-data's POST gate.
+  const editors = tool === "survey" || tool === "survey2" ? ROLE_KEYS.filter((r) => can(r, "survey.edit"))
+    : tool === "schedule" ? ["admin", "manager", "sales", "customer"]
     : tool === "install" ? ["admin", "manager", "tech"]
     : tool === "addendum" ? ["admin", "manager", "sales", "tech", "customer"]  // office builds/prices, tech logs work (unpriced), customer approves
     : tool === "receiving" ? ["admin", "manager", "sales", "tech"]     // office/tech mark gear received
@@ -1045,9 +1048,19 @@ export async function saveToolDataAction(accessId, tool, data) {
   } else if (tool === "addendum") {
     payload = await reconcileAddendumWrite(accessId, data, tok);
   }
+  // Same server-side refusal as /api/tool-data's POST: an EMPTY survey never replaces one that HAS
+  // content unless the caller declares that intent. The two write paths must agree, or the guard is only
+  // as strong as which one a caller happens to use.
+  if (!allowEmpty && (tool === "survey2" || tool === "survey") && !survey2OrSurveyHasData(tool, payload)) {
+    const existing = getToolData(accessId, tool);
+    if (existing?.data && survey2OrSurveyHasData(tool, existing.data)) {
+      return { error: "Refused: that would replace the saved survey with an empty one." };
+    }
+  }
   const saved = saveToolData(accessId, tool, payload, actorName(tok));
   return { ok: true, saved: { updated_at: saved.updated_at } };
 }
+const survey2OrSurveyHasData = (tool, raw) => (tool === "survey2" ? survey2HasData(raw) : surveyHasData(raw));
 
 function mergeCustomerAddendumWrite(accessId, data) {
   let incoming;
@@ -1329,8 +1342,18 @@ export async function overrideQcCustomerAction(accessId) {
 // and the customer can't approve a draft that hasn't been submitted at its current state.
 export async function submitToolAction(accessId, tool, on = true) {
   const tok = await getSessionRole();
-  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Only the office can submit this for review." };
+  if (!tok) return { error: "Not authenticated." };
   if (!["site_survey", "mockup"].includes(tool)) return { error: "Bad tool." };
+  // SUBMIT and UNLOCK are separate permissions (section L, rule 7), and for the SITE SURVEY both include
+  // the tech — they walk the site, so they may reopen it, edit it (see the editor map in
+  // saveToolDataAction / /api/tool-data) and send it back for approval. The mockup stays office-only.
+  // Enforced here, on the server, not by whether the button rendered.
+  if (tool === "site_survey") {
+    const cap = on ? "survey.submit" : "survey.unlock";
+    if (!can(tok.role, cap)) return { error: on ? "You can't submit this survey for review." : "You can't reopen a submitted survey." };
+  } else if (!STAFF_EDIT.has(tok.role)) {
+    return { error: on ? "Only the office can submit this for review." : "Only the office can change this." };
+  }
   const meta = getToolMeta(accessId);
   const has  = tool === "site_survey" ? meta.survey.has : meta.mockup.has;
   if (on && !has) return { error: "Add something to the tool before submitting it." };
@@ -1352,6 +1375,14 @@ export async function submitToolAction(accessId, tool, on = true) {
     logProjectEvent(accessId, {
       kind: wasSubmitted ? "resubmit" : "submit",
       label: `${noun} ${wasSubmitted ? "resubmitted" : "submitted to customer"}${extra}`,
+      actor: actorName(tok),
+    });
+  } else if (wasSubmitted) {
+    // Reopening a submitted document is an audit event — "Edited after submit" has to be on the record,
+    // not just in the banner of whoever clicked it.
+    logProjectEvent(accessId, {
+      kind: "unsubmit",
+      label: `${tool === "site_survey" ? "Site survey" : "Mockups"} reopened for edits after submit`,
       actor: actorName(tok),
     });
   }

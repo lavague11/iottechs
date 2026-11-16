@@ -19,7 +19,7 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
 });
 
 test("rail drives the survey's internal step via postMessage (Background→0, Plan→1, Cameras→1+devices); Views/Review shell-only", () => {
-  assert.ok(shell.includes('if (step === "background") surveyCmd({ cmd: "step", step: 0 });'), "Background → survey step 0");
+  assert.ok(shell.includes('if (step === "background") surveyCmd({ cmd: "step", step: 0, ...(view ? { focus: "view" } : {}) });'), "Background → survey step 0 (view focus only on a passive resume)");
   assert.ok(shell.includes('else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });'), "Layout → survey step 1 (structure toolset)");
   assert.ok(shell.includes('else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });'), "Cameras → survey step 1 + device focus");
   // paneMode keeps both iframes mounted (visibility only); Views flips to the mockup pane
@@ -31,10 +31,9 @@ test("the shell follows the survey's step echo (iotSurveyStep) for the live indi
   assert.ok(shell.includes('else if (m.type === "iotSurveyStep")'), "shell handles the survey step echo");
   // Round 3 (ONE BAR): the rail mirrors the survey's own `dock` echo — satellite→Base, draw→Layout,
   // cameras→Cameras — so the footer-hide and the in-canvas dock can never disagree; Views/Review are kept.
-  assert.ok(shell.includes('setDockState(m.dock || null);'), "the shell tracks which in-canvas dock the survey shows");
-  assert.ok(shell.includes('if (m.dock === "satellite") return "background";') && shell.includes('if (m.dock === "draw") return "layout";') && shell.includes('if (m.dock === "cameras") return "cameras";'), "the rail follows the dock echo");
-  assert.ok(shell.includes('if (cur === "views" || cur === "review") return cur;'), "a dock echo never yanks the rail off Views/Review");
-  assert.ok(shell.includes('const inCanvasBar = paneMode === "plan" && !!dockState;'), "the footer hides whenever a dock is up in the plan pane");
+  // Section A: the dock→rail mapping moved to lib/survey-rail.js railFromEcho (pure, tested in survey-rail.test.mjs).
+  assert.ok(shell.includes("railFromEcho(railRef.current, m.dock || null, pendingRef.current"), "the rail follows the dock echo through the pure rules");
+  assert.ok(!shell.includes("inCanvasBar") && !shell.includes("dockState"), "no dead footer-hide state: the footer renders on every step");
   assert.ok(shell.includes("setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });"), "completion signals come from the echo");
 });
 
@@ -54,6 +53,6 @@ test("contextual editing: a host step navigation opens that step's editor (Backg
   assert.ok(survey.includes("function contextualEdit(step){"), "contextualEdit exists");
   assert.ok(/if\(RO \|\| frozen\(\) \|\| bgToolOpen \|\| !bgHasImage\) return;/.test(survey), "contextualEdit is guarded: read-only / frozen / already-in-a-tool / no background");
   assert.ok(survey.includes('if(step===0){ var cb=document.getElementById("changeBgBtn"); if(cb) cb.click(); return; }'), "Background reopens via the existing #changeBgBtn path (stored image — no re-capture / enhance)");
-  assert.ok(/if\(hybridCapable\(f\) \|\| \(f\.plan && \(f\.plan\.cells\|\|f\.plan\.rooms\)\)\)\{ enterDraw\(\); return; \}/.test(survey), "Floor Plan edits the Structure when a plan already exists");
-  assert.ok(/if\(canBuild\(f\)\)\{ var bp=document\.getElementById\("buildPlanBtn"\); if\(bp\) bp\.click\(\); \}/.test(survey), "Floor Plan on an aerial-not-yet-plan floor starts the plan tool (same #buildPlanBtn as the FAB)");
+  assert.ok(/if\(floorHasStructure\(f\) \|\| \(f\.plan && typeof f\.plan===\"object\"\)\)\{ enterDraw\(\); return; \}/.test(survey), "Floor Plan edits the Structure when a plan already exists");
+  assert.ok(/if\(canBuild\(f\)\)\{ var bp=document\.getElementById\("buildPlanBtn"\); if\(bp\) bp\.click\(\); return; \}/.test(survey), "Floor Plan on an aerial-not-yet-plan floor starts the plan tool (same #buildPlanBtn as the FAB)");
 });

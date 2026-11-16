@@ -4,7 +4,9 @@ import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
-import { subscribeSyncStatus } from "./tool-sync";
+import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
+import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
+import { stepAfter, stepBefore, railFromEcho, layoutNextOk } from "../../../lib/survey-rail";
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
@@ -27,7 +29,8 @@ export default function SystemPlanner({
   // contextual nav footer (staff): canonical submit/approve/continue wiring from the gateway
   surveyOk = false, onContinue = null, onSubmitTool = null, onUnsubmitTool = null, onClose = null,
   svMeta = null, mkMeta = null, acceptances = null,
-  initialStep = "layout",   // which rail step to open on ("layout" | "cameras" | "views" | "review")
+  canUnlock = false,        // can(role,"survey.unlock") — may this viewer reopen a submitted survey? (enforced again server-side)
+  initialStep = null,       // forces a rail step ("layout" | "cameras" | "views" | "review"); null → resume the saved last step
 }) {
   // ONE Consulting rail: Background · Plan · Cameras · Views · Review. railStep is the source of truth.
   // Background/Plan/Cameras are the SAME survey pane — the rail drives its internal step via postMessage
@@ -35,8 +38,16 @@ export default function SystemPlanner({
   // mounted (visibility toggles only) so a draft never reloads. paneMode picks which pane is visible.
   // NAV-FIX §7: on load/refresh, staff always open in a MAP step (never Photos / Camera Angles). Default to
   // the given step unless it's "views" — then open Layout (Map). The customer branch keeps its own entry.
+  // SECTION L: the rail step is the "last_step" a reopen must resume at. It is persisted in the survey2
+  // blob (additive `lastStep`) by the widget, and read back from the SERVER row below — so Edit → always
+  // landing on Layout is gone. An explicit initialStep (a deep link) still wins.
   const [railStep, setRailStep] = useState(() => customer ? (initialStep || "layout") : (initialStep && initialStep !== "views" ? initialStep : "layout"));
+  const navTouched = useRef(!!initialStep);   // once the user (or a deep link) picks a step, the saved step stops being adopted
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
+  const railRef = useRef(railStep);   // latest rail step for the message handler (its effect closes over first render)
+  railRef.current = railStep;
+  const pendingRef = useRef(null);   // the step the shell asked the survey for and hasn't seen arrive (see railFromEcho)
+  const [synced, setSynced] = useState(false);   // the survey iframe has LOADED its saved state — from then on ITS hasPlan signal outranks the saved copy
   const paneMode = railStep === "views" ? "views" : railStep === "review" ? "review" : "plan";
   // Views optionality (P5): if the mockup was never started, show a Start/Skip strip instead of a second
   // build screen. Local state gives instant feedback; onSkipViews persists the skip for the phase gate.
@@ -45,11 +56,10 @@ export default function SystemPlanner({
   const persistSkip = (v) => { setSkipped(v); if (onSkipViews) Promise.resolve(onSkipViews(v)).catch(() => {}); };
   const [walkOpen, setWalkOpen] = useState(false);
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
-  const [roster, setRoster] = useState([]);      // the DEVICES roster (camera account) — shared across both modes
+  const [liveRoster, setRoster] = useState([]);  // the survey iframe's LIVE device echo; `roster` (below) falls back to the SAVED list
   const [curFloor, setCurFloor] = useState(0);
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
   const [bgTool, setBgTool] = useState(null);     // "draw" | "satellite" | null — which build tool is open inside the survey (from iotSurveyStep)
-  const [dockState, setDockState] = useState(null); // "satellite" | "draw" | "cameras" | null — the in-canvas bar the survey is showing (ONE BAR: footer hides whenever a dock is up)
   const rootRef = useRef(null);
   const navRef = useRef({});   // latest Back/Next actions for the one-bar in-canvas nav (message handler reads this)
   // Devices roster: expanded by default (desktop unchanged); collapsed on a phone after mount so the list
@@ -66,7 +76,12 @@ export default function SystemPlanner({
 
   // Floor management — the top selector drives the survey iframe's canonical floor functions by cmd
   // (switch/add/rename/duplicate/delete). Floor logic lives once, in the widget; the shell only asks.
-  const goFloor = (i) => { if (i === curFloor) return; setCurFloor(i); surveyCmd({ cmd: "floor", i }); };
+  const goFloor = (i) => {
+    if (i === curFloor) return; setCurFloor(i); surveyCmd({ cmd: "floor", i });
+    // On Background the new floor must SHOW its Background (view only — no editor): a floor switch otherwise
+    // leaves the widget on the Setup canvas while the rail still says Background.
+    if (railRef.current === "background") { pendingRef.current = "background"; surveyCmd({ cmd: "step", step: 0, focus: "view" }); }
+  };
   // NAV-FIX §8: adding a floor after submit UNLOCKS the survey (so the new floor is editable), then adds it.
   const addFloor = () => { if (surveySubmitted && onUnsubmitTool) { try { Promise.resolve(onUnsubmitTool("site_survey")).catch(() => {}); } catch { /* best-effort unlock */ } } surveyCmd({ cmd: "addFloor" }); };
   const duplicateFloor = () => surveyCmd({ cmd: "duplicateFloor" });
@@ -149,18 +164,16 @@ export default function SystemPlanner({
       // within Setup (step 1) we only auto-advance OFF Background; an explicit Plan/Cameras/Review stays put.
       else if (m.type === "iotSurveyStep") {
         setSig({ bgReady: !!m.bgReady, hasPlan: !!m.hasPlan, camCount: +m.camCount || 0 });
+        // Only a LOADED survey's hasPlan is trustworthy: an echo before restore() finishes (or after it failed)
+        // reports an empty floor, and trusting it would hide a saved structure behind "Draw the structure first".
+        if (m.loaded && !m.loadFailed) setSynced(true);
         setBgTool(m.bgTool || null);
-        setDockState(m.dock || null);
-        // ONE BAR: the rail mirrors the dock the survey is actually showing — satellite→Base, draw→Layout,
-        // cameras (the map)→Cameras — so the planner's footer-hide and the dock agree exactly. Views/Review
-        // are shell-only (no survey dock), so a dock echo never yanks the rail off them.
-        setRailStep((cur) => {
-          if (cur === "views" || cur === "review") return cur;
-          if (m.dock === "satellite") return "background";
-          if (m.dock === "draw") return "layout";
-          if (m.dock === "cameras") return "cameras";
-          return cur === "background" ? "layout" : cur;   // no dock (chooser) → keep the old Background→Layout nudge
-        });
+        // ONE BAR: the rail mirrors the dock the survey is actually showing (railFromEcho owns the rules and
+        // never skips a step). Views/Review are shell-only, so a dock echo never yanks the rail off them.
+        const r = railFromEcho(railRef.current, m.dock || null, pendingRef.current, typeof m.step === "number" ? m.step : null);
+        pendingRef.current = r.pending;
+        if (r.step !== railRef.current) { railRef.current = r.step; setRailStep(r.step); }
+        if (r.reissue) surveyCmd({ cmd: "step", step: 1, focus: "layout" });   // a background commit lands on the Setup canvas — open the Layout editor it owes us
       }
       // A photo attached in the mockup wrote the survey2 blob server-side but can't touch the live survey
       // iframe. Relay it (by stable cid) so the survey updates its device, re-emits iotSurveyDevices, and
@@ -172,6 +185,28 @@ export default function SystemPlanner({
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, [accessId]);
+
+  // Load the survey placements + view photos once, for the walkthrough (same shape SystemVisualize used).
+  // This is also the DATABASE-FIRST read for section L: the saved survey2 blob is what the saved device
+  // roster and the resumed rail step come from, before the iframe has said anything.
+  const [sv, setSv] = useState(null);
+  const [mk, setMk] = useState(null);
+  useEffect(() => {
+    let live = true;
+    Promise.all([
+      getToolDataAction(accessId, "survey2").catch(() => null),
+      getToolDataAction(accessId, "mockup").catch(() => null),
+    ]).then(([s, m]) => { if (!live) return; setSv(s?.saved?.data || null); setMk(m?.saved?.data || null); });
+    return () => { live = false; };
+  }, [accessId, walkOpen]);
+
+  // ONE SAVED DEVICE LIST (section L's "View 1 of 8 · CAM 1" vs "No cameras yet"). `liveRoster` is the
+  // survey iframe's live echo; it is empty until the iframe loads and reports — and stayed empty for good
+  // after a failed restore — while Camera Angles read the server row through getProjectCameras and showed
+  // 8 cameras. The saved blob is now the fallback, so both surfaces read the same list and the Devices
+  // strip never claims "No cameras yet" while the database holds devices.
+  const savedRoster = useMemo(() => rosterFromSurvey(sv), [sv]);
+  const roster = liveRoster.length ? liveRoster : savedRoster;
 
   // Bridge the survey's LIVE device roster (canonical by cid: name/tag/photo) into the CCTV mockup grid,
   // so renaming a camera in the Devices strip (or on the survey map) updates the Views/mockup tiles
@@ -198,18 +233,6 @@ export default function SystemPlanner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey]);
 
-  // Load the survey placements + view photos once, for the walkthrough (same shape SystemVisualize used).
-  const [sv, setSv] = useState(null);
-  const [mk, setMk] = useState(null);
-  useEffect(() => {
-    let live = true;
-    Promise.all([
-      getToolDataAction(accessId, "survey2").catch(() => null),
-      getToolDataAction(accessId, "mockup").catch(() => null),
-    ]).then(([s, m]) => { if (!live) return; setSv(s?.saved?.data || null); setMk(m?.saved?.data || null); });
-    return () => { live = false; };
-  }, [accessId, walkOpen]);
-
   const floors = useMemo(() => {
     try { const d = JSON.parse(sv); return (d.floors || []).filter((f) => f.bg)
       .map((f) => ({ name: f.name || "Floor", bg: f.bg, scale: f.scale || null, aerial: f.aerial || null, devices: f.devices || [], zones: f.zones || [], boundary: f.boundary || null, sides: f.sides || null, plan: f.plan || null, ctx: f.ctx || null, cams: (f.devices || []).filter((x) => x.k === "cam") })); }
@@ -224,11 +247,31 @@ export default function SystemPlanner({
   const camCount = floors.reduce((n, f) => n + (f.cams || []).length, 0);
   const canWalk = hasCams || camCount > 0;
 
+  // RESUME THE LAST STEP — load from the database first, then render. The saved step is adopted exactly
+  // once, and only while the user hasn't navigated (a deep-linked initialStep also counts as navigation).
+  // A saved "background" resumes on Background — where the user left off. It only SHOWS the step (view focus):
+  // a passive restore never opens the background editor; only a click does. Submitted surveys
+  // resume on Approval in review mode — surveyLastStep decides that from the server's acceptance row.
+  const stepAdopted = useRef(false);
+  useEffect(() => {
+    if (sv == null || stepAdopted.current || navTouched.current) return;
+    stepAdopted.current = true;
+    const want = surveyLastStep(sv, { submitted: !!surveySubmitted });
+    if (customer) return;                        // the customer's entry is their own (floor pager), never the staff rail
+    if (want !== railStep) goRail(want, { view: true });   // same path as a click, so the pane/toolset lands exactly where it would
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sv, surveySubmitted]);
+
   // Navigate the rail. Background/Plan/Cameras drive the SAME survey pane's internal step (postMessage,
   // no reload); Views/Review are shell-only. Internal users can jump to any completed section freely.
-  const goRail = (step) => {
+  const goRail = (step, { view = false } = {}) => {
+    navTouched.current = true;
+    railRef.current = step;
+    pendingRef.current = step === "layout" || step === "background" ? step : null;   // cleared when it arrives (railFromEcho)
     setRailStep(step);
-    if (step === "background") surveyCmd({ cmd: "step", step: 0 });
+    // Persist it as the survey's last step (the widget owns the blob; we only tell it where we are).
+    surveyCmd({ cmd: "railStep", step });
+    if (step === "background") surveyCmd({ cmd: "step", step: 0, ...(view ? { focus: "view" } : {}) });
     else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });     // Layout toolset — draw structure / rooms / areas
     else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });    // Cameras toolset — place + aim cameras
     // views / review: shell state only — both iframes stay mounted (no map reload between Layout ↔ Cameras)
@@ -321,12 +364,15 @@ export default function SystemPlanner({
   // NAV-FIX §3/§4: the linear order is Background → Layout → Placement → Camera Angles → Submit. "views"
   // (Camera Angles) is now a first-class step in the flow, not an out-of-band extra. Back/Next move exactly
   // one step; Next names the NEXT step; the center button shows the CURRENT step.
-  const navOrder = ["background", "layout", "cameras", "views", "review"];
-  const navIdx = Math.max(0, navOrder.indexOf(railStep));
-  const prevStep = navOrder[navIdx - 1] || null;
-  const nextStep = navOrder[navIdx + 1] || null;
+  // Order + one-step moves live in lib/survey-rail (RAIL_STEPS = Background, Layout, Placement, Camera Angles, Approval).
+  const prevStep = stepBefore(railStep);
+  const nextStep = stepAfter(railStep);
   const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
   const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
+  // Camera Angles: photos are OPTIONAL. With none attached, Next reads "Skip" and still goes to Approval
+  // (section L) — so the step never reads as a requirement the user has to satisfy.
+  const camsWithPhoto = (roster || []).reduce((n, f) => n + (Array.isArray(f?.devices) ? f.devices : []).filter((d) => d && d.k === "cam" && d.photo).length, 0);
+  const nextLabel = (step) => (railStep === "views" && camsWithPhoto === 0 ? "Skip" : NEXT_PROMPT[step]);
   // NAV-FIX §4: Next is never a silent no-op. It's enabled only when the step's prerequisite is met; otherwise
   // it shows disabled with a short hint. Background→Layout commits the open capture first (see the Next handler).
   const nextGate = (() => {
@@ -337,7 +383,8 @@ export default function SystemPlanner({
       return { ok: false, hint: "Choose a background" };
     }
     if (railStep === "layout") {
-      if (sig.hasPlan) return { ok: true, hint: "" };
+      // The floor's real structure: the iframe's live signal once it has reported, the SAVED floor before that.
+      if (layoutNextOk({ live: synced, liveHasPlan: sig.hasPlan, savedFloor: surveyFloors(sv)[curFloor] })) return { ok: true, hint: "" };
       return { ok: false, hint: "Draw the structure first" };
     }
     if (!sig.bgReady) return { ok: false, hint: "Set a background first" };
@@ -385,14 +432,37 @@ export default function SystemPlanner({
     return null;
   })();
   void mkStale; void mkSubCurrent; void mkApproved;   // retained reads (mockup state) — no longer gate Submit
+  // SUBMIT LOCK, EXPLAINED (section L). A submitted survey hides every edit tool by CSS inside the widget
+  // (frozen()), with nothing saying why — the + disappears, Placement can't place, Background won't open.
+  // This banner names the state and carries the one way out. The unlock is also enforced server-side
+  // (submitToolAction → can(role,"survey.unlock")); canUnlock only decides whether the button renders.
+  // The "Edited after submit" mark belongs to the SURVEY, so it rides in the saved blob (the widget sets
+  // it on any reopen and clears it on submit) and survives a refresh. `reopened` only covers the gap
+  // between clicking Edit survey and the next time the blob is read back.
+  const [reopened, setReopened] = useState(false);
+  const [lockErr, setLockErr] = useState("");
+  const editedAfterSubmit = !surveySubmitted && (reopened || surveyEditedAfterSubmit(sv));
+  // Both of these can be REFUSED server-side (can(role,"survey.unlock") / "survey.submit"). Showing
+  // "Edited after submit" after a refusal — or clearing it after a failed resubmit — would be the UI
+  // lying about what the server did, so the refusal is surfaced and the state is left alone.
+  const editSurvey = async () => {
+    if (!onUnsubmitTool) return;
+    setLockErr("");
+    let r; try { r = await onUnsubmitTool("site_survey"); } catch { r = { error: "Couldn’t reopen the survey." }; }
+    if (r && r.error) { setLockErr(r.error); return; }
+    setReopened(true);
+    if (railStep === "review") goRail("layout");   // unlocked → land back in the editor, not on Approval
+  };
+  const resubmit = async () => {
+    if (!onSubmitTool) return;
+    setLockErr("");
+    let r; try { r = await onSubmitTool("site_survey"); } catch { r = { error: "Couldn’t submit the survey." }; }
+    if (r && r.error) { setLockErr(r.error); return; }
+    setReopened(false);
+  };
   const [navMenuOpen, setNavMenuOpen] = useState(false);
   const [topMenuOpen, setTopMenuOpen] = useState(false);   // the floor-bar ••• Go-to (reachable when the footer is hidden)
 
-  // ONE BAR (§Round 3): an in-canvas dock (satellite / draw / the Cameras map dock) carries Back + the
-  // next-step button on its right, so the planner footer is HIDDEN on those steps — no second stacked bar.
-  // The footer stays the single bar only where there is no dock: the empty chooser, Camera Photos, Submit.
-  // Driven by the survey's own `dock` echo so the two never disagree; only in the plan pane (not views/review).
-  const inCanvasBar = paneMode === "plan" && !!dockState;
   // The in-canvas docks post iotSurveyNavGo{dir}; the planner resolves it to the real next/prev step here.
   navRef.current.goNext = () => {
     if (nextStep && nextEnabled) goRail(nextStep);
@@ -421,6 +491,23 @@ export default function SystemPlanner({
     <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
       {!customer && <SyncBadge />}
+
+      {/* The submit lock, said out loud — on every step, not just Review. This is the ONE unlock control
+          (the Review footer no longer carries a second Unsubmit). */}
+      {!customer && surveySubmitted && (
+        <div className="syp-lockbar" role="status">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><rect x="4" y="11" width="16" height="9" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></svg>
+          <span>Submitted — read-only</span>
+          {canUnlock && onUnsubmitTool && <button type="button" className="syp-lockbar-act" onClick={editSurvey}>Edit survey</button>}
+        </div>
+      )}
+      {!customer && editedAfterSubmit && (
+        <div className="syp-lockbar edited" role="status">
+          <span>Edited after submit</span>
+          {onSubmitTool && <button type="button" className="syp-lockbar-act" onClick={resubmit}>Resubmit</button>}
+        </div>
+      )}
+      {!customer && lockErr && <div className="syp-lockbar failed" role="alert">{lockErr}</div>}
 
       {customer ? (
         /* CUSTOMER — no staff rail. A floor/view pager (when there's more than one) + a full-width
@@ -541,19 +628,17 @@ export default function SystemPlanner({
           <div className="syp-nav-side syp-nav-side--right">
             {railStep === "review" ? (
               <>
-                {/* §8: Unsubmit sits next to "Awaiting customer approval" when the survey is locked. */}
-                {surveySubmitted && onUnsubmitTool && (
-                  <button type="button" className="syp-nav-unsub" onClick={() => onUnsubmitTool("site_survey")}>Unsubmit</button>
-                )}
+                {/* The unlock lives ONCE, in the submit-lock banner above the canvas ("Edit survey") —
+                    it was duplicated here as a second "Unsubmit" on Approval only. */}
                 {reviewCta ? (
                   <button className={`syp-nav-cta${reviewCta.muted ? " muted" : ""}${reviewCta.pending ? " pending" : ""}`} disabled={reviewCta.muted || reviewCta.pending || !reviewCta.act} onClick={reviewCta.act}>{reviewCta.label}</button>
                 ) : <span />}
               </>
             ) : nextStep ? (
               nextEnabled ? (
-                <button className="syp-nav-cta" onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+                <button className="syp-nav-cta" onClick={() => goRail(nextStep)}>{nextLabel(nextStep)} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
               ) : (
-                <button className="syp-nav-cta muted" disabled>{nextHint || NEXT_PROMPT[nextStep]}</button>
+                <button className="syp-nav-cta muted" disabled>{nextHint || nextLabel(nextStep)}</button>
               )
             ) : <span />}
           </div>
@@ -572,7 +657,7 @@ export default function SystemPlanner({
               <span>Devices{devCount ? ` (${devCount})` : ""}</span>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             </button>
-            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} cmd={surveyCmd} onAddCamera={() => surveyCmd({ cmd: "addCamera", project: accessId })} />}
+            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} canUnlock={canUnlock} onUnlock={editSurvey} cmd={surveyCmd} onAddCamera={() => surveyCmd({ cmd: "addCamera", project: accessId })} />}
           </div>
         );
       })()}
@@ -595,15 +680,47 @@ export default function SystemPlanner({
 // survives reload); this badge shows "Offline — will sync" when there's no signal and a queued edit,
 // "Saving…" while a change is in flight, and nothing once everything is on the server.
 function SyncBadge() {
-  const [st, setSt] = useState({ online: true, pending: 0, quota: null });
+  const [st, setSt] = useState({ online: true, pending: 0, quota: null, failed: false, blocked: null, savedAt: 0 });
   useEffect(() => subscribeSyncStatus(setSt), []);
-  if (!st.quota && st.online && st.pending === 0) return null;   // all synced, no quota issue → no chrome
+  // "Saved ✓" is a confirmation, not a permanent label — it shows for 2.5s after the queue drains, then
+  // the badge disappears again (section L asked for a save indicator, not another piece of chrome).
+  const [justSaved, setJustSaved] = useState(false);
+  useEffect(() => {
+    if (!st.savedAt) return;
+    setJustSaved(true);
+    const t = setTimeout(() => setJustSaved(false), 2500);
+    return () => clearTimeout(t);
+  }, [st.savedAt]);
+  // `blocked` outranks everything: nothing is being sent, and Retry cannot help — the local bytes are
+  // the problem, so the fix is the widget's own "Use the saved copy". Never show "Saved" over this.
+  if (st.blocked) return (
+    <div className="syp-sync off" role="alert" aria-live="assertive" title={st.blocked}>
+      <span className="syp-sync-dot" aria-hidden="true" />
+      <span>Not saving</span>
+    </div>
+  );
+  if (st.failed) return (
+    <div className="syp-sync off" role="alert" aria-live="assertive">
+      <span className="syp-sync-dot" aria-hidden="true" />
+      <span>Save failed</span>
+      <button type="button" className="syp-sync-retry" onClick={() => retryToolSync()}>Retry</button>
+    </div>
+  );
   if (st.quota) return (
     <div className="syp-sync off" role="alert" aria-live="assertive" title={st.quota}>
       <span className="syp-sync-dot" aria-hidden="true" />
       <span>{st.quota}</span>
     </div>
   );
+  if (st.online && st.pending === 0) {
+    if (!justSaved) return null;   // all synced and the confirmation has had its moment → no chrome
+    return (
+      <div className="syp-sync ok" role="status" aria-live="polite">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+        <span>Saved</span>
+      </div>
+    );
+  }
   const offline = !st.online && st.pending > 0;
   return (
     <div className={`syp-sync${offline ? " off" : ""}`} role="status" aria-live="polite" title={offline ? "Saved on this device — will upload when you're back online" : "Saving your changes"}>
@@ -792,8 +909,8 @@ const CSS = `
 .syp-gap-label{flex:1;font-size:.82rem;font-weight:600;color:var(--dv-meta,#787D84)}
 .syp-gap svg{color:var(--dv-meta,#787D84);flex:none}
 /* §8: Unsubmit next to the submit CTA */
-.syp-nav-unsub{appearance:none;cursor:pointer;font:inherit;font-size:.84rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:1px solid var(--dv-line,#E4E4DF);border-radius:100px;padding:9px 15px;margin-right:8px}
-.syp-nav-unsub:hover{color:var(--dv-ink,#101418);border-color:var(--dv-ink,#101418)}
+/* The quiet unsubmit pill that used to sit on Approval is gone with the duplicate control — there is one
+   unlock now, "Edit survey" in .syp-lockbar, which shows on every step. */
 .syp-head-actions{display:inline-flex;align-items:center;gap:8px}
 .syp-ico,.syp-play{appearance:none;cursor:pointer;width:38px;height:38px;border-radius:100px;display:inline-flex;align-items:center;justify-content:center;transition:background .18s,border-color .18s}
 .syp-ico{border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418)}
@@ -826,8 +943,17 @@ const CSS = `
 .syp-floorbar .syp-fsel.plain .syp-fsel-btn:hover{background:var(--dv-raise,#F6F6F4);border-color:transparent}
 /* Offline-first sync badge — top-right of the planner, above the canvas. */
 .syp{position:relative}
+/* Submit lock / edited-after-submit / refusal banner — one quiet strip above the canvas. Colour comes
+   from the .dv tokens (green = locked & submitted, gold = needs attention, red = refused), never hex. */
+.syp-lockbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;border:1px solid currentColor;border-radius:11px;background:var(--dv-paper,#F4F4F2);color:var(--dv-green,#2E7D5B);font-size:.8rem;font-weight:700}
+.syp-lockbar.edited{color:var(--dv-gold-text,#8A6A1F)}
+.syp-lockbar.failed{color:var(--dv-red,#C4553D)}
+.syp-lockbar-act{margin-left:auto;height:30px;padding:0 12px;border:1px solid currentColor;border-radius:8px;background:var(--dv-card,#fff);color:inherit;font:700 .78rem/1 inherit;cursor:pointer}
+.syp-lockbar-act:hover{background:var(--dv-paper,#F4F4F2)}
+.syp-sync-retry{margin-left:4px;height:20px;padding:0 8px;border:1px solid currentColor;border-radius:6px;background:transparent;color:inherit;font:700 .68rem/1 inherit;cursor:pointer}
 .syp-sync{position:absolute;top:6px;right:8px;z-index:30;display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:100px;font-size:.72rem;font-weight:700;letter-spacing:.01em;background:var(--dv-ink,#101418);color:#fff;box-shadow:0 2px 8px rgba(16,20,24,.25)}
 .syp-sync.off{background:#8a3a28}
+.syp-sync.ok{background:var(--dv-green,#2E7D5B)}
 .syp-sync-dot{width:7px;height:7px;border-radius:50%;background:#fff;opacity:.9;animation:sypSyncPulse 1.1s ease-in-out infinite}
 @keyframes sypSyncPulse{0%,100%{opacity:.35}50%{opacity:1}}
 /* Map / Photos — ONE toggle button, pinned left of the centered floor selector. Shows the current view +

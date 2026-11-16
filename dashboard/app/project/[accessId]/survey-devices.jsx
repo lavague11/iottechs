@@ -6,7 +6,14 @@ import { useState, useRef, useCallback } from "react";
 // postMessage (`iotSurveyCmd`): rename, FOV, delete, view photo, select-on-map, and Rapid Capture. The
 // current floor's devices are fully editable; other floors list read-only (tap to jump there). Photos
 // upload to /api/media (HEIC-safe) then attach to the device. Customers never see this (office tool).
-export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd, onAddCamera }) {
+// `canUnlock` / `onUnlock` (section L): a submitted survey used to show the empty "No cameras yet — tap
+// Add camera" prompt while the database held eight cameras AND the Add-camera button was hidden by the
+// lock. The roster now falls back to the saved survey (so `total` reflects the database), and a locked
+// survey never shows a "start here" prompt — it says why it is locked and offers the unlock.
+// The empty state keys off `locked` ALONE, deliberately: a "does the database have devices?" flag is
+// fetched once per mount and goes stale, so deleting the last camera on an UNSUBMITTED survey would make
+// the strip claim it was submitted and offer Unlock. `locked` is live, from the acceptance row.
+export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd, onAddCamera, canUnlock = false, onUnlock = null }) {
   const [open, setOpen] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [confirmDel, setConfirmDel] = useState(null);
@@ -160,7 +167,9 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
 
       {open && (
         <div className="sd-body">
-          {!total && <div className="sd-empty">No cameras yet — tap <b>Add camera</b> to start.</div>}
+          {!total && (locked
+            ? <div className="sd-empty">Submitted{canUnlock && onUnlock ? <> · <button type="button" className="sd-unlock" onClick={onUnlock}>Unlock to edit</button></> : " · unlock to edit"}</div>
+            : <div className="sd-empty">No cameras yet — tap <b>Add camera</b> to start.</div>)}
           {floors.map((f, fi) => {
             const isCur = fi === curFloor;
             if (!f.devices?.length) return null;
@@ -286,6 +295,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-addcam + .sd-ai-all, .sd-addcam + .sd-cap{margin-left:0}
         .sd-empty{font-size:.8rem;color:var(--muted,#6f7686);padding:4px 2px 6px}
         .sd-empty b{color:var(--ink,#1a1a1a);font-weight:700}
+        .sd-unlock{border:0;background:none;padding:0;color:var(--ink,#1a1a1a);font:700 .8rem/1 inherit;text-decoration:underline;cursor:pointer}
         .sd-spin{animation:sd-spin .7s linear infinite;transform-origin:center}
         @keyframes sd-spin{to{transform:rotate(360deg)}}
         .sd-capbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line,#e6e2d9);background:rgba(201,169,110,.08)}

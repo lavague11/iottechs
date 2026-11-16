@@ -30,6 +30,14 @@ const CAPS = {
   "qc.sign.manager":     ["admin", "manager"],
   "qc.sign.customer":    ["customer"],
   "qc.view":             ["admin", "manager", "sales", "tech", "readonly"],
+  // Site survey. Techs are the people who actually walk the site, so they may edit the survey, reopen a
+  // submitted one and send it back for approval — which is NOT true of tool blobs in general (see
+  // `saveToolDataAction` / /api/tool-data, where everything else stays office-only). These three move
+  // together on purpose: unlock without edit, or edit without resubmit, strands a tech's work on one
+  // device, which is the same silent data loss as not saving at all.
+  "survey.edit":         ["admin", "manager", "sales", "tech"],   // write the survey2 blob
+  "survey.unlock":       ["admin", "manager", "sales", "tech"],   // reopen a submitted survey for edits
+  "survey.submit":       ["admin", "manager", "sales", "tech"],   // send / re-send it for customer approval
   // Proposals
   "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
   "proposal.revise":     ["admin", "manager"],                             // AI #2: remove a line, or revise a sent/signed proposal (supersede → v+1)
