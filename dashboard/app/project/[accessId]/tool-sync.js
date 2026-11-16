@@ -47,6 +47,12 @@ export function toolPayloadSendable(tool, raw) {
   let d;
   try { d = JSON.parse(raw); } catch { return false; }  // unparseable → NEVER send. This is the live bug.
   if (!d || typeof d !== "object") return false;
+  // A legacy survey rendered through the read-time adapter (lib/survey2-model.legacySurveyToSurvey2,
+  // docs/blocked.md B11) is marked so it can never be posted back as a real survey2 row. Seeding does
+  // not record a push baseline, so without this gate simply OPENING a legacy project would convert it
+  // — a migration write nobody asked for, on a tool whose blob feeds the approval fingerprint. Legacy
+  // surveys are viewable, not editable, until that migration is a decision rather than a side effect.
+  if (d.__legacyAdapted) return false;
   if (EXACT_EMPTY.has(tool)) {
     // Same strictness the widget's restore() applies: a blob claiming floors in a shape nothing can read
     // is corruption, not data.

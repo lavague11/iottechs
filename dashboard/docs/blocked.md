@@ -309,6 +309,71 @@ every tap on a room, on touch most of all.
 
 ## B11 — a legacy survey renders as an EMPTY survey in the new viewer (O·161)
 
+> **DECIDED 2026-11-16 — read-time adapter, PARTIALLY delivered.** Ahmed: *"B11: read-time adapter, and
+> the verifier must confirm camera positions visually on a legacy clone before closing."*
+>
+> Built: `legacySurveyToSurvey2` in `lib/survey2-model.js`, applied inside `parseSurveyFloors` (so every
+> renderer that already funnels through it is covered) and via `db.getSurveyBlobForRender` for the
+> camera roster and device list. Coordinates carry over unchanged — see the note on the function for
+> why that is a fact about the old widget rather than an assumption.
+>
+> **Still open, and it is the half the owner actually complained about.** The survey WIDGET — what the
+> portal shows — is seeded from `/api/tool-data`, and serving the adapted blob there is NOT read-only:
+> the widget uploads the data-URL background to `/api/media`, rewrites `bg`, re-serialises its own
+> state (dropping the `__legacyAdapted` marker the outbound gate keys on) and autosyncs the result.
+> Opening the clone once wrote a real 820-byte `survey2` row. That is the migration write this decision
+> was meant to avoid, so the route was backed out and the stray row deleted.
+>
+> **DECIDED 2026-11-16 (follow-up) — the one-time migration write is accepted.** Ahmed: *"Accept the
+> one-time migration write for legacy projects."* Built as `lib/legacy-survey-migration.js` (pure) +
+> `scripts/migrate-legacy-surveys.mjs`, following section O's contract: dry run by default, the live
+> file refused unless named, `--apply` requires `--i-have-a-backup`. It writes a `survey2` row per
+> project and **never touches the legacy row**, which stays as the source and the rollback.
+>
+> **The dry run shrinks this problem to almost nothing.** Of 38 projects with a legacy survey:
+>
+> | | |
+> |---:|---|
+> | **1** | has a real floor plan to recover (`CSC0119`) |
+> | 3 | already have a `survey2` of their own |
+> | **34** | have no background image at all — markers with no plan, nothing to render |
+>
+> So the "legacy surveys render empty" defect is real but affects **one** project here. The production
+> count is not knowable from this machine; run the dry run there before deciding it is worth a release.
+>
+> **One guard worth knowing about.** `getToolMeta` falls back to the legacy tool for a project with no
+> `survey2`, so a survey approval on such a project is bound to the LEGACY fingerprint. Writing a
+> `survey2` row flips which tool the gate reads and the binding stops matching — a silent conversion
+> would void a customer's approval. The migration therefore **holds those projects back** and lists
+> them; `--rebind-approvals` converts them and re-binds the approval to the identical content in its
+> new shape, but only when asked for out loud. In this database no project needs it.
+>
+> **Not executed anywhere real.** Per the run's rule 6 the real migration is documented, not run. It
+> was rehearsed on a snapshot copy (1 converted, re-run converts 0 — idempotent) and applied only to
+> the throwaway clone.
+>
+> ### What B11 actually fixes, stated precisely
+>
+> The verifier's first requirement was to say this plainly rather than let "legacy surveys render" be
+> read as more than it is. Measured against this database:
+>
+> | | |
+> |---|---|
+> | **123 cameras across 27 projects** | reach the camera roster, the device list, the CCTV mockup picker and the proposal builder, through the read-time adapter. No write. |
+> | **1 project** | has a background image and so can have its floor plan materialised by the migration. |
+> | **26 of those 27** | have cameras but never had a background. Their rosters are now populated; they have no plan to draw and never did. |
+>
+> An earlier draft of the adapter filtered out floors with no background, which cost **125 of the 128
+> legacy markers** — nearly the whole estate — for a rendering reason that does not apply to a list.
+> The adapter now keeps device-bearing floors and `renderableFloors()` is what the migration writes.
+>
+> **A legacy survey still opens on the Layout step with nothing drawn**, because the old tool stored a
+> background photo and pins and never had a vector structure. The cameras are present (Placement,
+> Camera Angles and Devices all show them); it is the Layout step that has nothing to show. That is
+> inherent to the data, not a bug in the adapter, and no migration can invent a floor plan that was
+> never drawn.
+
+
 **Live, customer-facing, and the opposite of what the migration report claimed.** Found by cloning a
 real legacy project and opening it.
 
@@ -367,6 +432,14 @@ against the legacy viewer's own geometry before anything is shown to a customer.
 
 ## B12 — RED: the signer refuses `?sign=` in exactly the state "Sign" is shown for
 
+> **DECIDED 2026-11-16 — FIXED.** Ahmed: *"B12: gate on signed, not accepted, and confirm the
+> signature-request email links still work."* The guard now reads
+> `!!p.signed_name && accepted.has(match?.id)`. The email path is unchanged: a signature request goes
+> out while the proposal is `sent` with nothing accepted, so it took the `setEsignFor` branch before
+> and still does — the only behaviour that changed is that an accepted-but-unsigned proposal now opens
+> the signer instead of toasting. Covered by the four `B12:` tests in `tests/sign-request.test.mjs`.
+
+
 Found by the verifier on O·166, one level below what O·166 could fix. **Signature path — RED.**
 
 `proposal-customer-view.jsx:239-253` matches `?sign=<x>` against the proposal OPTION id and then
@@ -407,6 +480,13 @@ it is not only this CTA — it is latent there only because those links are sent
 
 ## B13 — "addendum awaiting signature → Sign" was never implemented (part of the addendum cluster)
 
+> **DECIDED 2026-11-16 — deferred, folded into B2/B3.** Ahmed: *"B13: defer, fold into B2/B3."*
+> Nothing to build until the addendum signature model is settled. Whoever takes B2/B3 owns this:
+> once an addendum signature has a definition, add the branch to `customerTodo` and a `TODO_ACTION`
+> entry pointing at `?open=addendum`, and remember it changes the required-actions banner as well as
+> the project card, because both read the same engine.
+
+
 Spec O·166 says *"Proposal/**addendum** awaiting signature → Sign"*. Only the proposal half exists.
 `customerTodo` (`lib/customer-action.js:56-70`) has no addendum branch at all, so a project whose only
 outstanding item is an unsigned change order falls through to a plain "Open" — on the card **and** in
@@ -423,3 +503,42 @@ the card, and it lands in the middle of the addendum cluster that is already wai
 (addendum e-sign needs a schema rebuild), **B3** (no row-per-version storage), **B4** (the A1 filename).
 Deciding B2/B3 decides what an addendum signature even is; building a CTA that points at it first would
 be guessing. Fold this into whatever you choose there.
+
+---
+
+## B14 — an open browser tab silently overwrites tool rows, including a freshly migrated one
+
+Predicted by the verifier on B11 and then **confirmed live, twice**. This is wider than B11 and it is a
+precondition for running the survey migration safely.
+
+`startToolAutosync` (`app/project/[accessId]/tool-sync.js`) seeds the client from the server (or from
+its own IndexedDB mirror, `iot_tools`, which wins over the server), then pushes localStorage back on a
+5-second timer. Nothing on either side asks whether the server's copy has moved on. So:
+
+1. **A deleted tool row comes back.** I deleted the clone's `survey2` row; a tab left open on the
+   project re-created it three minutes later, with that user's email as `updated_by`.
+2. **A migrated row is overwritten with pre-migration bytes.** I migrated the clone (9,390 bytes,
+   provenance `legacy-survey-migration`), then loaded the project with a tab whose storage predated
+   the migration. The row came back as the client's 825-byte copy under `aelzoghabi@gmail.com`. The
+   migration's write survived about a minute.
+
+**Operational consequence for B11:** the legacy-survey migration must not run while anyone has the
+affected projects open, and there is nothing in the code to enforce that. For a 1-project migration
+that is a scheduling note; as a general property it is a data-integrity hole.
+
+Related and separate: **the widget rewrites a migrated row on first open even with a clean client.** It
+uploads the inline data-URL background to `/api/media`, rewrites `bg` to the media id, re-serialises,
+and syncs — 9,390 bytes become 825 and the provenance becomes the viewer. The *geometry survives
+intact* (`cam@44.36,50.21`), so this is normalisation rather than corruption, but it means the
+migration's own output is not the steady state. If that matters, the migration should upload the
+background to the media store itself and write the media URL, matching what the widget produces.
+
+**Options for the owner:**
+1. A version/etag on `project_tool_data` that the client must echo; the server rejects a stale write.
+   The honest fix, and it also closes **B7** (the write path never checks the project exists).
+2. Have `seedToolData` record the seeded bytes as the push baseline, so a client that changed nothing
+   never pushes. Cheap, and it would have prevented both incidents above, but it does not stop a
+   client that has genuinely diverged.
+3. Accept it and run migrations in a maintenance window.
+
+File next to **B7** — same write path, same missing precondition.

@@ -65,6 +65,13 @@ export async function GET(req) {
     return Response.json({ ok: false });
   }
   if (tool === "techs" && tok.role === "customer") return Response.json({ ok: false });
+  // NOTE (B11): this route deliberately does NOT fall back to the adapted legacy survey. It is the
+  // widget's seed endpoint, and seeding here is not read-only in practice — the widget uploads a
+  // data-URL background to /api/media, rewrites `bg`, re-serialises its own state (dropping the
+  // `__legacyAdapted` marker the outbound gate keys on) and autosyncs the result, which creates a real
+  // survey2 row. Proven on a clone: opening the project once wrote an 820-byte survey2 row. Feeding
+  // the editor a legacy survey is therefore the migration write the owner asked not to make, not a
+  // read. Server-side RENDER paths use db.getSurveyBlobForRender instead, which no writer can reach.
   return Response.json({ ok: true, saved: getToolData(accessId, tool) });
 }
 

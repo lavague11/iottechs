@@ -786,3 +786,80 @@ checking whether the card element had a click handler at all. None of that is in
 
 So: when a change hands the user a new path through the product, the review has to walk the path, not
 read the diff. Budget for that rather than treating the rejection as rework.
+
+## D25 — the read-only adapter that could not stay read-only
+
+B11 was decided as a "read-time adapter": show legacy surveys without converting them. The adapter
+itself works and is pure. The decision that did not survive contact was *where* to apply it.
+
+Applying it at `parseSurveyFloors` covers every server-side renderer and cannot write — that half
+holds. Applying it at the widget's seed endpoint (`/api/tool-data` GET) looked like the same kind of
+change and is not, because **seeding the widget is not a read**. The widget uploads a data-URL
+background to `/api/media`, rewrites `bg` to the media URL, re-serialises its own state, and
+autosyncs the result five seconds later. Opening the clone once wrote a real 820-byte `survey2` row.
+
+The marker I had added for exactly this — `__legacyAdapted`, refused by `toolPayloadSendable` — did
+nothing, because the widget does not forward the blob it was given. It rebuilds one from its own
+fields, and the marker is not one of them. **A flag on data only survives where the data is passed
+through, not where it is re-derived.** That is the general lesson; the same mistake is available
+anywhere a client round-trips server state.
+
+Worse, the write-back is sticky: after the route was backed out and the row deleted, a browser tab
+left open on the project wrote the row *again* three minutes later, because its localStorage was
+already seeded and the autosync pushes from localStorage regardless of what the server now returns.
+Deleting a tool row does not stick while a stale tab exists. That is close to B7 and widens it.
+
+Resolution: the route was backed out, and the owner then accepted a deliberate one-time migration
+instead (B11) — the honest version of what the accident was doing. Which is the real point: the
+accidental write and the approved migration produce the *same row*. The difference is provenance,
+a dry run, an approval guard and a documented rollback.
+
+## D26 — "the defect is real" and "the defect is worth fixing" are different findings
+
+The legacy-survey dry run examined 38 projects carrying a legacy `survey` blob. One has a floor plan
+to recover. Three had already migrated themselves. **Thirty-four have no background image at all** —
+markers placed with no plan behind them, which no viewer, old or new, could ever have drawn.
+
+So the headline I reported — "a legacy survey renders as an empty survey" — was true, and the
+implied scale was wrong. Had the adapter shipped without the census, it would have been written up as
+rescuing 37 projects' floor plans when it rescues one.
+
+Count the affected rows before estimating the value of a fix, and put the count in the report rather
+than the adjective. The same script that performs a migration should be the thing that tells you
+whether to run it.
+
+## D27 — a filter that is right for drawing is wrong for a list
+
+`legacySurveyToSurvey2` dropped every legacy floor without a background image, mirroring what
+`parseSurveyFloors` does for current surveys. For a *renderer* that is correct: you cannot draw
+markers on an image that does not exist. The adapter, though, feeds two different consumers — the
+renderers, and the camera/device **roster**, which is a list and needs no image.
+
+The cost of conflating them was almost the whole feature: **125 of the 128 legacy markers in this
+database sit on floors that never got a background.** The adapter helped 1 project; it now helps 27,
+recovering 123 cameras, because it keeps device-bearing floors and `renderableFloors()` is applied at
+the point where drawing (and the migration) actually needs it.
+
+The general shape: when one transform feeds several consumers, the strictest consumer's precondition
+tends to get baked into the transform, where it quietly removes data the others wanted. Put the
+filter at the consumer that needs it.
+
+## D28 — verify through the surface the user actually looks at, not the one you changed
+
+I reported B11's adapter as working because `getProjectCameras` returned the right camera at the right
+coordinates. It did. The portal still showed an empty survey, because every customer-visible survey
+surface reads the raw row through `getToolDataAction`, not the resolver I had changed. The verifier
+found that by opening the page as the customer; I had not, because the server-side call returned what
+I expected and I stopped there.
+
+Two further things only the live surface could have shown, both found this way:
+
+- A **clean** client still ends up with a rewritten row: the widget uploads an inline data-URL
+  background to `/api/media`, rewrites `bg`, and syncs — the migration's 9,390 bytes become 825 under
+  the viewer's name within a minute of the first open. Geometry intact, provenance gone.
+- The client's **IndexedDB mirror** (`iot_tools`) outranks the server on seed, so clearing
+  localStorage is not enough to get a clean read. My first "fresh client" test was not fresh, and it
+  told me the migration had worked when I was looking at the client's own stale copy.
+
+Neither is visible from a server-side call or a unit test. The rule: when the complaint is about a
+screen, the verification has to end on that screen, with storage cleared.

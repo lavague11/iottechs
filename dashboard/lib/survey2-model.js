@@ -54,9 +54,84 @@ const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
 const num = (v, d = 0) => (Number.isFinite(+v) ? +v : d);
 
 // Parse a saved survey blob → floors with a usable background. Never throws.
+// ---- legacy survey ("survey") → this model -------------------------------------------------------
+// The old tool (public/widgets/site-survey.html) stored a different document: the background lives at
+// floors[].B.img and the devices at floors[].markers. Nothing ever mapped it onto this model, so a
+// legacy-only project rendered as an EMPTY survey in the portal while the office list showed its data
+// (docs/blocked.md B11).
+//
+// The coordinates carry over UNCHANGED, and that is a fact about the old widget, not an assumption:
+//   · markers were positioned with `p.style.left = m.x + '%'` on the board (site-survey.html:1242);
+//   · the board was sized to the image's own aspect ratio (`layoutBoard`, :637-639) and the image
+//     filled it exactly (`.board-img{position:absolute;inset:0;width:100%;height:100%}`), so there is
+//     no letterboxing between board-% and image-%;
+//   · the only inset was a 7% grid margin, and `B.grid` is absent from every legacy row;
+//   · `B.zoom {s,tx,ty}` is a view transform, never baked into stored coordinates;
+//   · `imgRotate` is 0 on every legacy row, so there is no rotated frame to undo.
+// Verified across all 38 legacy surveys / 128 markers in the database: 0 rotated, 0 grid margins.
+//
+// Read-only by construction: this NEVER writes, and the blob it produces is marked `__legacyAdapted`
+// so the outbound sync gate refuses to post it back as a real survey2 row. Legacy surveys are
+// viewable, not editable, until the owner chooses a migration write (B11).
+const LEGACY_KIND = { camera: "cam", cctv: "cam" };                 // a couple of rows use long names
+const LEGACY_MODE = { indoor: "in", outdoor: "out" };
+export function isLegacySurvey(d) {
+  return !!d && Array.isArray(d.floors) && d.floors.length > 0 &&
+    d.floors.some((f) => f && f.B && typeof f.B === "object") &&
+    !d.floors.some((f) => f && typeof f.bg === "string" && f.bg.length > 0);
+}
+export function legacySurveyToSurvey2(raw) {
+  let d;
+  try { d = typeof raw === "string" ? JSON.parse(raw) : raw; } catch { return null; }
+  if (!isLegacySurvey(d)) return null;
+  const floors = (d.floors || []).map((f, fi) => {
+    const B = f?.B || {};
+    const img = typeof B.img === "string" ? B.img : "";
+    const devices = (Array.isArray(f?.markers) ? f.markers : []).map((m, mi) => {
+      const k = LEGACY_KIND[String(m?.kind || "").toLowerCase()] || String(m?.kind || "cam");
+      const it = kindOf(k);
+      const aim = Number.isFinite(+m?.arrow?.angle) ? +m.arrow.angle : 0;
+      return {
+        // deterministic, so re-reading the same legacy row never churns ids
+        id: `lg${fi}_${m?.id ?? mi}`, cid: `lg${fi}_${m?.id ?? mi}`,
+        k,
+        // percent, carried verbatim — see the note above
+        x: num(m?.x), y: num(m?.y),
+        aim, aimed: !!m?.arrow, cone: !!it.cone, fov: num(it.fov, 30),
+        // `arrow.len` was a percent of the board's width; `range` here is FEET. Every legacy floor has
+        // ftWide = 0, so there is no scale to convert through — the kind's own default reach is used
+        // rather than a manufactured number.
+        range: num(it.range, 0),
+        tag: typeof m?._tag === "string" ? m._tag : "",
+        name: typeof m?.name === "string" ? m.name : "",
+        mode: LEGACY_MODE[String(m?.mode || "").toLowerCase()] || String(m?.mode || "in"),
+      };
+    });
+    return { name: f?.name || `Floor ${fi + 1}`, bg: img, bgSource: B.imgSource === "sat" ? "sat" : "upload",
+      started: !!img, devices,
+      scale: (+B.ftWide > 0 && +B.imgRatio > 0) ? { ftW: +B.ftWide, ftH: +B.ftWide / +B.imgRatio } : null };
+  // A floor with devices but NO background is kept. It cannot be DRAWN — parseSurveyFloors drops it
+  // below, exactly as it drops a backgroundless survey2 floor — but its cameras are real equipment and
+  // belong in the roster, which is a list and needs no image. Most of the legacy estate is this shape:
+  // 125 of the 128 markers in this database sit on floors that never got a background, so filtering
+  // here (as this did at first) threw away nearly every legacy camera for a rendering reason that does
+  // not apply to a list.
+  }).filter((f) => f.bg || f.devices.length);
+  if (!floors.length) return null;
+  return { __legacyAdapted: true, floors };
+}
+// The floors of an adapted blob that can actually be rendered — the ones with a background. The
+// migration materialises only these: writing a survey2 row made of backgroundless floors would flip
+// `toolHasData` for 35 projects, and with it getToolMeta().survey.has and the stage facts that read it.
+export const renderableFloors = (adapted) => ((adapted && adapted.floors) || []).filter((f) => f.bg);
+
 export function parseSurveyFloors(raw) {
   try {
-    const d = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const d0 = typeof raw === "string" ? JSON.parse(raw) : raw;
+    // A legacy blob is adapted on the way in, so every renderer that already funnels through here —
+    // the customer's "Your System Layout", the proposal PDF's survey pages, the camera roster —
+    // draws a legacy survey without knowing it is one.
+    const d = isLegacySurvey(d0) ? legacySurveyToSurvey2(d0) : d0;
     return (d?.floors || []).filter((f) => f && typeof f.bg === "string" && f.bg.length > 0)
       .map((f) => ({ name: f.name || "Floor", bg: f.bg,
         scale: (f.scale && +f.scale.ftW > 0 && +f.scale.ftH > 0) ? { ftW: +f.scale.ftW, ftH: +f.scale.ftH } : null,   // real-world size of the plan image (feet), for coverage scaling

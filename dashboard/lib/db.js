@@ -12,7 +12,7 @@ import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { isStampableCompletionDate } from "./completion-date.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
-import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
+import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
@@ -7607,8 +7607,20 @@ export function getPublishedSopBySlug(slug) {
 // camera device (k==="cam") across all floors, with its name/tag and view photo. This is the single
 // source of truth the CCTV mockup grid — and later the proposal/PDF — reflect, so cameras are entered
 // ONCE, in the survey, and everything downstream builds from them.
-export function getProjectCameras(accessId) {
+// The survey blob to RENDER for a project: the current `survey2` row, or — for a project whose survey
+// predates that tool — the legacy `survey` row run through the read-time adapter (B11). Read-only: the
+// adapted blob carries `__legacyAdapted` and the outbound sync gate refuses to post it back, so no
+// amount of reading converts a legacy project. Every server-side renderer/derivation goes through here.
+export function getSurveyBlobForRender(accessId) {
   const row = getToolData(accessId, "survey2");
+  if (toolHasData("survey2", row?.data)) return row?.data || null;
+  const legacy = getToolData(accessId, "survey")?.data;
+  const adapted = legacy ? legacySurveyToSurvey2(legacy) : null;
+  return adapted ? JSON.stringify(adapted) : (row?.data || null);
+}
+
+export function getProjectCameras(accessId) {
+  const row = { data: getSurveyBlobForRender(accessId) };
   const out = [];
   try {
     const d = JSON.parse(row?.data || "{}");
@@ -7642,7 +7654,7 @@ export function getProjectCameras(accessId) {
 // surveyDevices) — stable id + deterministic code (C3) + kindName + identity/label/loc + x/y percent.
 // Never a second device model; the AI device resolver and any device-aware feature read THIS.
 export function getProjectDevices(accessId) {
-  try { return surveyDevices(parseSurveyFloors(getToolData(accessId, "survey2")?.data)); }
+  try { return surveyDevices(parseSurveyFloors(getSurveyBlobForRender(accessId))); }
   catch { return []; }
 }
 

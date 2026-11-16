@@ -198,15 +198,17 @@ test("completed outranks a stale obligation — a finished project reads View", 
   assert.deepEqual(projectCardAction(c), { label: "View", href: "/project/ASC0001" });
 });
 
-test("Sign does NOT pass ?sign= — the signer refuses it in the state Sign is shown for", () => {
+test("Sign does NOT pass ?sign= — the card does not know which option to sign", () => {
   const sign = act({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: false });
   assert.doesNotMatch(sign.href, /[?&]sign=/, "no sign param");
-  // Why: the handler matches ?sign=<optionKey> against the option id and then refuses an option that is
-  // already ACCEPTED — and acceptance is written long before any signature. So in exactly the
-  // accepted-but-unsigned state, ?sign= produces a toast and no signer. Pinned so a future "improvement"
-  // that re-adds the param has to read this first. See docs/blocked.md B12.
+  // The original reason was B12 — the signer refused ?sign= in exactly the accepted-but-unsigned state
+  // this CTA is shown for. That is now FIXED (the guard tests the signature, see tests/sign-request).
+  // The param still is not passed for a second reason: ?sign= takes an OPTION key, and the card payload
+  // carries no option ids. `sign=1` only resolves on a single-option proposal and would show a
+  // "pick an option" toast on any other. Landing on the proposal always works, so it stays that way
+  // until the accepted option id is something the card is given.
   const pcv = readFileSync(new URL("../app/project/[accessId]/proposal-customer-view.jsx", import.meta.url), "utf8");
-  assert.match(pcv, /accepted\.has\(match\.id\)/, "the guard that conflates accepted with signed still exists");
+  assert.match(pcv, /const optionSigned = !!p\.signed_name && accepted\.has\(match\?\.id\)/, "B12 stays fixed");
 });
 
 test("every CTA target is a deep link the gateway actually understands", () => {
