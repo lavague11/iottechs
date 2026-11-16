@@ -1,6 +1,7 @@
 "use client";
 import { svcIsOpen, svcStepIndex } from "../../lib/svc-status";
 import { statusToneHex } from "../../lib/project-status";
+import { projectCardAction } from "../../lib/my-projects-card";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -450,6 +451,7 @@ function ActionModal({ type, user, projects, openSvcProjectIds, onClose }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function MyProjectsClient({ user, projects, serviceCalls = [] }) {
+  const cardRouter = useRouter();
   const [filter, setFilter]     = useState("all");
   const [userOpen, setUserOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -573,12 +575,17 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-section{padding:34px 0}
         .cp-sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;gap:16px;flex-wrap:wrap}
         .cp-sec-head h2{font-family:'Bricolage Grotesque',sans-serif;font-size:1.35rem;font-weight:700}
-        .cp-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px}
-        .cp-action{display:flex;flex-direction:row;align-items:center;gap:14px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 16px;transition:transform .18s,box-shadow .22s,border-color .2s;cursor:pointer;font-family:inherit;font-size:inherit;text-align:left;width:100%}
-        .cp-action:hover{transform:translateY(-4px);box-shadow:0 22px 44px -20px rgba(14,19,32,.45);border-color:rgba(201,169,110,.6)}
-        .cp-action .ic{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex-shrink:0}
-        .cp-action .ic svg{width:16px;height:16px;fill:none;stroke-width:2}
-        .cp-action h3{font-family:'Bricolage Grotesque',sans-serif;font-size:.92rem;font-weight:700;color:var(--ink)}
+        /* Quick actions sit UNDER the projects now, so they are rendered smaller and quieter than the
+           project cards above them — a secondary offer, not the first thing on the page. */
+        .cp-section-quiet{padding:10px 0 34px}
+        .cp-section-quiet .cp-sec-head{margin-bottom:12px}
+        .cp-section-quiet .cp-sec-head h2{font-size:1.05rem;color:var(--muted);font-weight:600}
+        .cp-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+        .cp-action{display:flex;flex-direction:row;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 12px;transition:transform .18s,box-shadow .22s,border-color .2s;cursor:pointer;font-family:inherit;font-size:inherit;text-align:left;width:100%}
+        .cp-action:hover{transform:translateY(-2px);box-shadow:0 14px 28px -18px rgba(14,19,32,.4);border-color:rgba(201,169,110,.6)}
+        .cp-action .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+        .cp-action .ic svg{width:14px;height:14px;fill:none;stroke-width:2}
+        .cp-action h3{font-family:'Bricolage Grotesque',sans-serif;font-size:.84rem;font-weight:700;color:var(--ink)}
         .cp-a-blue .ic{background:var(--accent-soft)}.cp-a-blue .ic svg{stroke:var(--accent)}
         .cp-a-gold .ic{background:#faf4e8}.cp-a-gold .ic svg{stroke:var(--gold-deep)}
         .cp-a-red .ic{background:var(--red-soft)}.cp-a-red .ic svg{stroke:var(--red)}
@@ -616,9 +623,18 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
         .cp-bar span{display:block;height:100%;border-radius:100px;background:linear-gradient(90deg,var(--gold),var(--gold-deep))}
         .cp-stage{font-size:.82rem;color:var(--muted);margin-top:8px}
         .cp-stage b{color:var(--ink);font-weight:600}
-        .cp-p-act{display:flex;align-items:center}
+        .cp-p-act{display:flex;flex-direction:column;align-items:flex-end;gap:7px}
         .cp-view{display:inline-flex;align-items:center;gap:7px;font-weight:600;font-size:.9rem;border:1px solid var(--line);padding:9px 16px;border-radius:10px;transition:background .2s,border-color .2s;white-space:nowrap}
         .cp-view:hover{background:var(--bg-soft);border-color:var(--gold)}
+        /* The card's action is the one thing on it the customer must do — Sign / Pay / Approve carry
+           weight; Open and View stay quiet so a list of idle projects has no false urgency. */
+        .cp-view.go{background:var(--gold,#C9A96E);border-color:var(--gold,#C9A96E);color:#1b1a16}
+        .cp-view.go:hover{filter:brightness(1.06);background:var(--gold,#C9A96E)}
+        .cp-act2{font-size:.8rem;color:var(--muted);white-space:nowrap}
+        .cp-act2:hover{color:var(--ink);text-decoration:underline}
+        .cp-proj h4 a:hover{text-decoration:underline}
+        .cp-proj.clickable{cursor:pointer}
+        .cp-proj.clickable a,.cp-proj.clickable button{cursor:pointer}
         .cp-p-foot{display:flex;align-items:center;gap:14px;margin-top:14px;flex-wrap:wrap}
         .cp-pin{display:inline-flex;align-items:center;gap:8px;background:var(--bg-soft);border:1px solid var(--line);border-radius:10px;padding:7px 12px}
         .cp-pin-lbl{font-size:.7rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
@@ -784,35 +800,6 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
           </div>
         </section>
 
-        {/* QUICK ACTIONS */}
-        <section className="cp-section">
-          <div className="cp-wrap">
-            <div className="cp-sec-head"><h2>What would you like to do?</h2></div>
-            <div className="cp-actions">
-              <button className="cp-action cp-a-blue" onClick={()=>setActiveModal("new")}>
-                <span className="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
-                <h3>Start a New Project</h3>
-              </button>
-              <button className="cp-action cp-a-gold" onClick={()=>setActiveModal("add")}>
-                <span className="ic"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="13" height="10" rx="1"/><path d="M15 10l6-3v10l-6-3"/><path d="M19 19v3M17.5 20.5h3"/></svg></span>
-                <h3>Add to My System</h3>
-              </button>
-              <button className="cp-action cp-a-red" onClick={()=>setActiveModal("service")}>
-                <span className="ic"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
-                <h3>Service Call</h3>
-              </button>
-              <button className="cp-action cp-a-purple" onClick={()=>setActiveModal("question")}>
-                <span className="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
-                <h3>Quick Question</h3>
-              </button>
-              <Link href="/adt" className="cp-action cp-a-slate">
-                <span className="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
-                <h3>ADT Monitoring</h3>
-              </Link>
-            </div>
-          </div>
-        </section>
-
         {/* MY PROJECTS */}
         <section className="cp-section" id="projects">
           <div className="cp-wrap">
@@ -839,10 +826,15 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                   : visible.map(p=>{
                       const st = p.status;
                       return (
-                        <div key={p.access_id} className="cp-proj" style={{ "--st": st.color || "var(--muted)" }}>
+                        <div key={p.access_id} className="cp-proj clickable" style={{ "--st": st.color || "var(--muted)" }}
+                          // Spec O·166: "Card click still opens the project page." The body is the click
+                          // target; anything genuinely interactive inside it (the title link, the action,
+                          // the address, Copy link, the PIN reveal) handles its own click first. Keyboard
+                          // users reach the project through the title link, which is a real anchor.
+                          onClick={(e) => { if (e.target.closest("a,button,input,select,textarea,[role='button']")) return; cardRouter.push(`/project/${p.access_id}`); }}>
                           <div>
                             <div className="p-top">
-                              <h4>{p.title}</h4>
+                              <h4><Link href={`/project/${p.access_id}`}>{p.title}</Link></h4>
                               <span className="cp-status"><i className="cp-dot" />{st.label}{st.detail ? <em>{st.detail}</em> : null}</span>
                             </div>
                             {p.address && <a className="p-addr" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.address)}`} target="_blank" rel="noreferrer">{p.address}</a>}
@@ -867,7 +859,15 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
                             </div>
                           </div>
                           <div className="cp-p-act">
-                            <Link href={`/project/${p.access_id}`} className="cp-view">Open →</Link>
+                            {(() => {
+                              const act = projectCardAction(p);
+                              return (
+                                <>
+                                  <Link href={act.href} className={`cp-view${act.label === "Open" || act.label === "View" ? "" : " go"}`}>{act.label} →</Link>
+                                  {act.secondary && <Link href={act.secondary.href} className="cp-act2">{act.secondary.label}</Link>}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -908,6 +908,36 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
             </div>
           </section>
         )}
+
+        {/* QUICK ACTIONS — below the projects (spec O·165: the list is why they came; this is the
+            secondary offer), and rendered smaller than the project cards it now sits under. */}
+        <section className="cp-section cp-section-quiet">
+          <div className="cp-wrap">
+            <div className="cp-sec-head"><h2>What would you like to do?</h2></div>
+            <div className="cp-actions">
+              <button className="cp-action cp-a-blue" onClick={()=>setActiveModal("new")}>
+                <span className="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
+                <h3>Start a New Project</h3>
+              </button>
+              <button className="cp-action cp-a-gold" onClick={()=>setActiveModal("add")}>
+                <span className="ic"><svg viewBox="0 0 24 24"><rect x="2" y="7" width="13" height="10" rx="1"/><path d="M15 10l6-3v10l-6-3"/><path d="M19 19v3M17.5 20.5h3"/></svg></span>
+                <h3>Add to My System</h3>
+              </button>
+              <button className="cp-action cp-a-red" onClick={()=>setActiveModal("service")}>
+                <span className="ic"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg></span>
+                <h3>Service Call</h3>
+              </button>
+              <button className="cp-action cp-a-purple" onClick={()=>setActiveModal("question")}>
+                <span className="ic"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+                <h3>Quick Question</h3>
+              </button>
+              <Link href="/adt" className="cp-action cp-a-slate">
+                <span className="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></span>
+                <h3>ADT Monitoring</h3>
+              </Link>
+            </div>
+          </div>
+        </section>
 
         <footer className="cp-footer">
           <div className="cp-wrap cp-foot-inner">

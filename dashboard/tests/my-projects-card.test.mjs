@@ -127,7 +127,9 @@ test("card payload carries no internal fields", () => {
   const c = card({}, { proposal_status: "accepted", proposal_signed: true });
   const json = JSON.stringify(c);
   for (const k of ["sales_rep", "commission", "tech_pin", "contact_message", "\"value\"", "\"tech\"", "Dana", "Lee", "9999", "internal"]) assert.ok(!json.includes(k), `leaked ${k}`);
-  assert.deepEqual(Object.keys(c).sort(), ["access_id", "address", "appt", "category", "customer_pin", "kind", "pct", "service", "state", "status", "step", "steps", "title", "todo"]);
+  assert.deepEqual(Object.keys(c).sort(), ["access_id", "actionable", "address", "appt", "category", "customer_pin", "kind", "pct", "service", "state", "status", "step", "steps", "title", "todo"]);
+  assert.deepEqual(Object.keys(c.actionable).sort(), ["payment", "proposal", "survey"], "the gate is three booleans, nothing more");
+  for (const v of Object.values(c.actionable)) assert.equal(typeof v, "boolean");
 });
 
 test("page uses the canonical-ownership query and the card builder, not the raw stage", () => {
@@ -137,4 +139,137 @@ test("page uses the canonical-ownership query and the card builder, not the raw 
   assert.ok(!page.includes("getProjectsByContactEmail"));
   const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
   assert.ok(/export function getOwnedProjectsForCustomer[\s\S]*customerOwnsProjectAccount/.test(db));
+});
+
+// ---- O·166: the card's action is the thing the project is waiting on, linked straight at it -------
+import { projectCardAction } from "../lib/my-projects-card.js";
+
+// money the portal would agree is collectible — payable() needs hasContract AND amountDueNow > 0
+// through the REAL financeSummary, exactly as page.jsx builds it — payable() needs hasContract too
+const DUE = financeSummary({ total: 9000, paid: 0, balance: 9000, amountDueNow: 2700, financialState: "awaiting_deposit" }, 2700);
+const actCard = (over = {}, facts = {}, fin = null) =>
+  buildMyProjectCard({ project: { ...proj, ...over }, facts: { ...baseFacts, ...facts }, fin, now: Date.parse("2026-11-16T12:00:00") });
+const act = (over = {}, facts = {}, fin = null) => projectCardAction(actCard(over, facts, fin));
+
+test("the card CTA is Approve / Review / Sign / Pay, each deep-linked to the gateway tool", () => {
+  // survey awaiting the customer's approval
+  assert.deepEqual(act({ stage: "site_survey" }, { stage: "site_survey", survey_accepted: false }),
+    { label: "Approve", href: "/project/ASC0001?open=site_survey" });
+  // proposal sent, not yet accepted
+  assert.deepEqual(act({}, { proposal_status: "sent" }),
+    { label: "Review", href: "/project/ASC0001?open=proposal" });
+  // accepted but unsigned. NOTE: no &sign= — see the signer test below for why.
+  assert.deepEqual(act({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: false }),
+    { label: "Sign", href: "/project/ASC0001?open=proposal" });
+  // signed, deposit outstanding
+  assert.deepEqual(act({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: true, deposit_recorded: false }, DUE),
+    { label: "Pay", href: "/project/ASC0001?open=deposit" });
+  // final balance
+  assert.deepEqual(act({ stage: "payment" }, { stage: "payment", proposal_status: "accepted", proposal_signed: true, deposit_recorded: true, install_done: true, final_balance_paid: false }, DUE),
+    { label: "Pay", href: "/project/ASC0001?open=payment" });
+});
+
+// The defect this guard exists for: stageFloorFacts invents proposal_status="accepted" from the stored
+// stage alone, so a project parked at approval_deposit with NO proposal resolved to AWAITING_SIGNATURE
+// and the card offered "Sign" — on a link the portal drops, landing the customer on the portal home.
+// 9 of 41 action-bearing cards in the local database did this.
+test("a CTA is never offered for something that does not exist", () => {
+  const bare = { access_id: "BSC02E8", stage: "approval_deposit", customer: "X", company_name: null };
+  const c = buildMyProjectCard({ project: bare, facts: { stage: "approval_deposit" }, now: Date.parse("2026-11-16T12:00:00") });
+  assert.equal(c.status.label, "Needs action", "the floored STATUS may still say so");
+  assert.equal(c.actionable.proposal, false, "but no proposal was ever published");
+  assert.deepEqual(projectCardAction(c), { label: "Open", href: "/project/BSC02E8" }, "so the card promises nothing");
+
+  // Pay is gated on the portal's own payable(), not on the stage
+  const noMoney = act({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: true, deposit_recorded: false }, null);
+  assert.equal(noMoney.label, "Open", "nothing collectible → no Pay button");
+  // Approve is gated on something actually being submitted
+  const noSurvey = act({ stage: "site_survey" }, { stage: "site_survey", survey_accepted: false, survey_submitted: false });
+  assert.equal(noSurvey.label, "Open", "nothing submitted → nothing to approve");
+  // a card built without the gate makes no promise at all
+  assert.equal(projectCardAction({ access_id: "X", todo: { order: 3 } }).label, "Open");
+});
+
+test("completed outranks a stale obligation — a finished project reads View", () => {
+  // stored stage lagged at site_survey while the job is finished and paid
+  const c = actCard({ stage: "site_survey" }, { stage: "site_survey", survey_accepted: false, install_done: true,
+    final_balance_paid: true, completion_docs: true, proposal_status: "accepted", proposal_signed: true, deposit_recorded: true });
+  assert.equal(c.status.key, "done");
+  assert.deepEqual(projectCardAction(c), { label: "View", href: "/project/ASC0001" });
+});
+
+test("Sign does NOT pass ?sign= — the signer refuses it in the state Sign is shown for", () => {
+  const sign = act({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: false });
+  assert.doesNotMatch(sign.href, /[?&]sign=/, "no sign param");
+  // Why: the handler matches ?sign=<optionKey> against the option id and then refuses an option that is
+  // already ACCEPTED — and acceptance is written long before any signature. So in exactly the
+  // accepted-but-unsigned state, ?sign= produces a toast and no signer. Pinned so a future "improvement"
+  // that re-adds the param has to read this first. See docs/blocked.md B12.
+  const pcv = readFileSync(new URL("../app/project/[accessId]/proposal-customer-view.jsx", import.meta.url), "utf8");
+  assert.match(pcv, /accepted\.has\(match\.id\)/, "the guard that conflates accepted with signed still exists");
+});
+
+test("every CTA target is a deep link the gateway actually understands", () => {
+  const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
+  const names = gw.slice(gw.indexOf("const OPEN_TOOL_NAMES"), gw.indexOf("\n", gw.indexOf("const OPEN_TOOL_NAMES")));
+  for (const open of ["site_survey", "proposal", "deposit", "payment"])
+    assert.ok(new RegExp(`\\b${open}:`).test(names), `the gateway maps ?open=${open}`);
+  assert.match(gw, /searchParams\?\.get\("sign"\)/, "the gateway still reads ?sign");
+});
+
+test("nothing owed: Completed reads View, otherwise Open", () => {
+  const done = { proposal_status: "accepted", proposal_signed: true, deposit_recorded: true, install_done: true, final_balance_paid: true, completion_docs: true };
+  assert.deepEqual(act({ stage: "complete" }, { ...done, stage: "complete" }), { label: "View", href: "/project/ASC0001" });
+  // no todo, no appointment
+  const idle = projectCardAction({ access_id: "ASC0001", status: { key: "progress" }, todo: null, appt: null });
+  assert.deepEqual(idle, { label: "Open", href: "/project/ASC0001" });
+});
+
+test("Reschedule rides alongside Open only when the page minted a token", () => {
+  const appt = { date: "Nov 18", time: "10:00 AM", kind: "Install" };
+  const withTok = projectCardAction({ access_id: "ASC0001", status: { key: "progress" }, appt: { ...appt, rescheduleToken: "abc.def" } });
+  assert.equal(withTok.label, "Open");
+  assert.deepEqual(withTok.secondary, { label: "Reschedule", href: "/appt/abc.def" });
+  // no token → no link at all, rather than one that goes nowhere
+  assert.equal(projectCardAction({ access_id: "ASC0001", status: { key: "progress" }, appt }).secondary, undefined);
+});
+
+test("an obligation outranks an appointment — you are told to pay, not to open", () => {
+  const c = actCard({ stage: "approval_deposit" }, { stage: "approval_deposit", proposal_status: "accepted", proposal_signed: true, deposit_recorded: false }, DUE);
+  c.appt = { date: "Nov 18", time: "10:00 AM", kind: "Install", rescheduleToken: "t" };
+  assert.equal(projectCardAction(c).label, "Pay");
+  assert.equal(projectCardAction(c).secondary, undefined);
+});
+
+test("the card body opens the project, without stealing clicks from the controls inside it", () => {
+  const src = readFileSync(new URL("../app/my-projects/my-projects-client.jsx", import.meta.url), "utf8");
+  assert.match(src, /className="cp-proj clickable"/, "the project card is a click target");
+  assert.match(src, /e\.target\.closest\("a,button,input,select,textarea,\[role='button'\]"\)\) return;/,
+    "a click on a link or control inside the card is left to that control");
+  assert.match(src, /cardRouter\.push\(`\/project\/\$\{p\.access_id\}`\)/, "otherwise it opens the project");
+  assert.match(src, /<h4><Link href=\{`\/project\/\$\{p\.access_id\}`\}>/, "and the title is a real anchor for keyboard users");
+});
+
+test("the card's appointment is display-only; the event id leaves solely inside a signed token", () => {
+  const ev = [{ id: 77, date: "2026-11-18", time: "10:00", kind: "install", title: "Installation" }];
+  assert.deepEqual(Object.keys(nextAppointment(ev, Date.parse("2026-11-16T12:00:00"))).sort(), ["date", "kind", "time"],
+    "the card's appointment carries display fields only — no event id to forget to strip");
+  const page = readFileSync(new URL("../app/my-projects/page.jsx", import.meta.url), "utf8");
+  assert.match(page, /const apptEventId = new Map\(\)/, "ids are held beside the cards, never on them");
+  assert.match(page, /makeApptToken\(c\.access_id, id\)/, "and only ever leave as a signed token");
+  // The token is SIGNED, not opaque — it decodes to {a,e}. The comment beside it must not claim secrecy,
+  // because the next person to read it will reason about what may safely go in one.
+  assert.doesNotMatch(page, /raw event id never reaches the browser/, "no secrecy claim about a signed token");
+});
+
+// ---- O·165: the projects come before the offer to start another one ------------------------------
+test("page order: required actions, then My Projects, then the quick actions, rendered smaller", () => {
+  const src = readFileSync(new URL("../app/my-projects/my-projects-client.jsx", import.meta.url), "utf8");
+  const at = (s) => { const i = src.indexOf(s); assert.ok(i > 0, `missing: ${s}`); return i; };
+  const banner = at("cp-req-actions"), projects = at("{/* MY PROJECTS */}"), quick = at("{/* QUICK ACTIONS");
+  assert.ok(banner < projects, "the action banner stays at the top");
+  assert.ok(projects < quick, "My Projects comes before the quick actions");
+  assert.ok(at("{/* MY SERVICE CALLS") < quick, "the quick actions sit under the service calls too");
+  assert.match(src, /cp-section cp-section-quiet/, "the quick-action section is the quiet variant");
+  assert.match(src, /\.cp-section-quiet \.cp-sec-head h2\{font-size:1\.05rem/, "its heading is smaller than a section head");
 });

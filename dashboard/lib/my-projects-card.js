@@ -9,7 +9,7 @@
 // the invited list, change requests or assigned crew.
 import { stageFloorFacts, resolveProjectStatus, CUSTOMER_STATUS, statusToneHex } from "./project-status.js";
 import { threeStepForState, progressFromFacts } from "./staff-hub.js";
-import { pickUpcomingAppt } from "./customer-portal.js";
+import { pickUpcomingAppt, payable } from "./customer-portal.js";
 import { customerTodo } from "./customer-action.js";
 import { masterToPhaseKey } from "./spec.js";
 
@@ -34,6 +34,39 @@ export function nextAppointment(events, nowMs = Date.now()) {
   const e = pickUpcomingAppt(events, nowMs);
   if (!e) return null;
   return { date: fmtApptDate(e.date), time: fmtApptTime(e.time), kind: apptKind(e) === "install" ? "Install" : "Survey" };
+}
+
+// ---- the ONE action a project card offers -------------------------------------------------------
+// Spec O·166: replace the generic "Open →" with the action this project is actually waiting on, linking
+// straight at it. The vocabulary is the gateway's own ?open= deep links (OPEN_TOOL_NAMES in
+// gateway-client.jsx) — nothing new is invented here, so the button lands on the tool it names.
+// Keyed on customerTodo's `order`, which is the same ranking the action banner above the list uses.
+// `needs` names the fact in card.actionable that must be TRUE before the card may promise this action.
+const TODO_ACTION = {
+  1: { label: "Approve", open: "site_survey", needs: "survey" },   // survey awaiting approval
+  2: { label: "Review",  open: "proposal",    needs: "proposal" }, // proposal sent, not yet accepted
+  3: { label: "Sign",    open: "proposal",    needs: "proposal" }, // accepted, awaiting signature
+  4: { label: "Pay",     open: "deposit",     needs: "payment" },  // deposit due
+  5: { label: "Pay",     open: "payment",     needs: "payment" },  // final balance due
+};
+export function projectCardAction(card = {}) {
+  const base = `/project/${card.access_id}`;
+  // Completed outranks everything. The todo is derived from FLOORED facts, so a finished project whose
+  // stored stage lagged behind still carries a stale obligation — it must read View, not "Approve".
+  if (card.status?.key === "done") return { label: "View", href: base };
+  const t = card.todo && TODO_ACTION[card.todo.order];
+  // A card may only promise what exists. The status label may say "Needs action" on floored facts; a
+  // BUTTON may not, because the portal drops a deep link whose overlay is unavailable and silently
+  // lands the customer on the portal home. Absent `actionable` = not established = no promise.
+  if (t && card.actionable?.[t.needs] === true) return { label: t.label, href: `${base}?open=${t.open}` };
+  if (card.appt) {
+    const open = { label: "Open", href: base };
+    // Only when the page minted a token — without one there is no reschedule flow to send them to,
+    // and a dead link is worse than no link.
+    if (card.appt.rescheduleToken) open.secondary = { label: "Reschedule", href: `/appt/${card.appt.rescheduleToken}` };
+    return open;
+  }
+  return { label: "Open", href: base };
 }
 
 // The stage the customer's TODO is evaluated at, by the state that produced it (customerTodo is keyed
@@ -110,5 +143,15 @@ export function buildMyProjectCard({ project: p, facts = {}, events = [], fin = 
     status: { key, label, detail, color: key === "closed" ? null : statusToneHex(tone) },
     appt,
     todo,
+    // Does the thing a CTA would name actually EXIST? Read from the UNFLOORED facts, because
+    // stageFloorFacts invents `proposal_status: "accepted"` for any project parked at approval_deposit
+    // or later — fine for a status label, wrong for a button that promises to open a document.
+    // `payment` reuses the portal's own payable(), so the card and the overlay agree by construction
+    // rather than by two rules that have to be kept in step.
+    actionable: {
+      survey: !!facts.survey_submitted,    // something was actually submitted to approve
+      proposal: !!facts.proposal_status,   // a PUBLISHED proposal exists (null when none was ever sent)
+      payment: payable(fin),               // money is collectible now
+    },
   };
 }
