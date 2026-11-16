@@ -2,6 +2,7 @@
 import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable, deviceIcon } from "./survey2-model.js";
 import { northArrowAngle } from "./site-transform.js";
 import { validXf, xfMatrix } from "./plan-xf.js";
+import TileLayout from "../public/widgets/tile-layout.js";   // the ONE credit sizing/drawing source (shared with the satellite widget)
 
 // Rasterize the Site Survey (the "survey2" planner) into one PNG per floor for the proposal PDF —
 // the SAME floors, backgrounds and devices the planner shows, projected through the same geometry
@@ -11,6 +12,12 @@ import { validXf, xfMatrix } from "./plan-xf.js";
 // Returns [{ name, img, devices, counts }] — devices feed the legend / schedule in the PDF; counts
 // carry canonical vs rendered so the caller can refuse to ship a silently incomplete survey.
 // Always resolves — a bad/oversized floor is skipped, so the PDF download never fails because of it.
+// Google imagery must carry its credit wherever it is rendered; the stored image never does (Enhance must not see one).
+export function isSatelliteRaster(f) {
+  const bg = f && f.bg;
+  return !!(f && f.aerial && typeof bg === "string" && bg && bg.indexOf("data:image/svg") !== 0 && !bg.split("?")[0].toLowerCase().endsWith(".svg"));
+}
+
 export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   // higher res so the plan stays crisp on the PDF
   return new Promise((resolve) => {
     if (typeof window === "undefined" || !surveyData) return resolve([]);
@@ -60,6 +67,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       if (hybrid) { const m = xfMatrix(xf, W, H); ctx.transform(m.a, m.b, m.c, m.d, m.e, m.f); }
       // Layer 1 — plan (rotation is baked in; zoom/pan are view-only, so this is the whole plan).
       ctx.drawImage(planIm, 0, 0, W, H);
+      if (!hybrid && isSatelliteRaster(f)) TileLayout.drawCredit(ctx, W, H);   // a plain satellite floor: the plate IS the imagery
       // Layer 1b — scaled grid: a ctx-framed plan SVG is drawn gridless (the planner overlays its grid). When
       // the owner has Grid ON (gridMode > 0) re-draw the SAME grid + "1 box = N ft" scale chip here; default OFF
       // draws nothing. Skipped for a plain hand-drawn plan (its own baked grid — avoid doubling) and raster bgs.
@@ -192,7 +200,7 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
 // (ctx.rect, fractions 0..1 of the FULL aerial) so the building sits framed with real surroundings and the
 // plate matches the plan, the SAME windowing the widget's layAerial does. Legacy ctx without `full` held a
 // pre-cropped strip → contain-fit it. Cosmetic: a bad aerial is skipped, never breaks the export.
-function drawAerialWindow(ctx, im, c, W, H) {
+export function drawAerialWindow(ctx, im, c, W, H) {
   try {
     const AW = im.naturalWidth, AH = im.naturalHeight, r = c && c.rect;
     if (c && c.full && r && r.w > 0 && r.h > 0) {
@@ -201,6 +209,9 @@ function drawAerialWindow(ctx, im, c, W, H) {
       const a = AW / AH; let w, h; if (W / H > a) { h = H; w = H * a; } else { w = W; h = W / a; }   // contain-fit, centred
       ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
     }
+    // The credit goes at THIS plate's own bottom-right — the window usually excludes the full image's corner, so a
+    // credit baked into the stored aerial would be cropped out of exactly the pages a customer reads.
+    TileLayout.drawCredit(ctx, W, H);
   } catch (e) { /* aerial is cosmetic — never break the PDF over it */ }
 }
 

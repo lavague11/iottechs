@@ -318,6 +318,7 @@
 
 <!-- Auto-Level core (pure, dependency-free): finds the frontage road + the property-facing rotation. -->
 <script src="auto-level.js?v=20261020"></script>
+<script src="tile-layout.js?v=20261116"></script>
 <script>
   var API_KEY=null, map=null, geocoder=null, marker=null;
   var PID=new URLSearchParams(location.search).get("project")||"";
@@ -700,19 +701,18 @@
     var stage=document.querySelector(".stage"), sw=stage.clientWidth, sh=stage.clientHeight;
     var c=map.getCenter(), zView=map.getZoom(), mppView=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zView);
     var need=Math.sqrt(sw*sw+sh*sh)*mppView*1.06;
-    var zt=Math.min(21,Math.round(zView)), mppTile, sf, span, cols, rows, box;
+    var zt=Math.min(21,Math.round(zView)), mppTile, sf, lay, cols, rows, box;
     while(true){ mppTile=156543.03392*Math.cos(c.lat()*Math.PI/180)/Math.pow(2,zt); sf=Math.pow(2,zt)*2;
       var halfWU=(need/mppTile)/Math.pow(2,zt)/2, cxW=wx(c), cyW=wy(c); box={x0:cxW-halfWU,x1:cxW+halfWU,y0:cyW-halfWU,y1:cyW+halfWU,cxW:cxW,cyW:cyW};   // span the FULL diagonal so the leveled (rotated) view has no bare corners
-      span=640/Math.pow(2,zt); cols=Math.ceil((box.x1-box.x0)/span); rows=Math.ceil((box.y1-box.y0)/span);
+      lay=IOTTileLayout.layout(box,zt); cols=lay.cols; rows=lay.rows;   // tiles keep only their top rows — no Google watermark in the mosaic
       if(cols*rows<=MAX_TILES||zt<=15) break; zt--; }
     var oX=box.x0, oY=box.y0, W=Math.ceil((box.x1-box.x0)*sf), H=Math.ceil((box.y1-box.y0)*sf), mppMosaic=mppTile/2;
     var mosaic=document.createElement("canvas"); mosaic.width=W; mosaic.height=H; var mg=mosaic.getContext("2d"), jobs=[], missed=0;
-    for(var r=0;r<rows;r++) for(var cc=0;cc<cols;cc++){ (function(col,row){
-      var cxw=oX+(col+0.5)*span, cyw=oY+(row+0.5)*span, ll=unproject(cxw,cyw);
+    lay.tiles.forEach(function(t){
+      var ll=unproject(t.cx,t.cy);
       var url="https://maps.googleapis.com/maps/api/staticmap?center="+ll.lat().toFixed(7)+","+ll.lng().toFixed(7)+"&zoom="+zt+"&size=640x640&scale=2&format=png&maptype="+(map.getMapTypeId()==="hybrid"?"hybrid":"satellite")+"&key="+API_KEY;
-      var dx=Math.round((cxw-span/2-oX)*sf), dy=Math.round((cyw-span/2-oY)*sf), dsz=Math.round(span*sf);
-      jobs.push(loadTile(url).then(function(im){ mg.drawImage(im,dx,dy,dsz,dsz); }).catch(function(){ missed++; }));
-    })(cc,r); }
+      jobs.push(loadTile(url).then(function(im){ mg.drawImage(im,0,0,t.sw,t.sh,t.dx,t.dy,t.dw,t.dh); }).catch(function(){ missed++; }));
+    });
     Promise.all(jobs).then(function(){
       if(missed>=cols*rows){ msg("Tiles failed — check Maps Static API + billing"); return RES(false); }
       var scale=mppView/mppMosaic;
@@ -734,9 +734,14 @@
   }); }
 
   /* ---------- finalized actions ---------- */
+  /* Attribution (see tile-layout.js): STORED imagery carries no credit — the model must never be fed one, and a reopened
+     aerial must not stack them. The credit is drawn where the aerial is RENDERED or DELIVERED (survey plate, export,
+     Download); Download below is the only exit here that hands out a file, so it is the only one that stamps. */
+  function creditedDownloadUrl(){ if(!capCanvas) return $("prevImg").src;
+    var cv=document.createElement("canvas"); cv.width=capCanvas.width; cv.height=capCanvas.height; var g=cv.getContext("2d"); g.drawImage(capCanvas,0,0); IOTTileLayout.drawCredit(g,cv.width,cv.height); return cv.toDataURL("image/jpeg",0.92); }
   function usePreview(){ trDraftPost(null); var FT=3.28084, scale=(capMetersW>0&&capMetersH>0)?{ftW:+(capMetersW*FT).toFixed(2), ftH:+(capMetersH*FT).toFixed(2)}:null;
     try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src, scale:scale, aerial: capAerial}, "*"); }catch(e){} }
-  function downloadImg(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); }
+  function downloadImg(){ var a=document.createElement("a"); a.href=creditedDownloadUrl(); a.download="satellite-capture.jpg"; a.click(); }
 
   /* Auto before/after scanner — no dragging. #prevImg (enhanced) is the base; #cmpBefore (original)
      overlays it, revealed from the left as a glowing scanner line sweeps. cmpPos: 0 = all AFTER

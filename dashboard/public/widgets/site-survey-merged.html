@@ -60,6 +60,7 @@
   .libBtn span{color:var(--muted);font-weight:400}
 
   /* device + FOV (used when a background is set) */
+  #aerialCredit{position:absolute;display:none;z-index:6;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:600;white-space:nowrap;color:rgba(255,255,255,.95);background:rgba(0,0,0,.45);text-shadow:0 0 3px rgba(0,0,0,.8)}   /* Google imagery credit, sized by IOTTileLayout.creditMetrics against the plate */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
   #planWorld{position:absolute;inset:0;transform-origin:50% 50%}   /* the plan + its grid/zones/rooms/devices ride ONE manual alignment transform (floor.planXf) over the fixed aerial; identity on plain/Plan-view floors */
   #gridLayer{position:absolute;inset:0;z-index:2;pointer-events:none;display:none;background-image:linear-gradient(to right,rgba(16,20,24,.14) 1px,transparent 1px),linear-gradient(to bottom,rgba(16,20,24,.14) 1px,transparent 1px)}   /* Phase 4.3: ONE scaled grid on the plate (scene-local px → rides the zoom); under devices (z3), over the plan */
@@ -719,7 +720,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
@@ -900,6 +901,7 @@
 
   <!-- upload source picker -->
 
+  <script src="tile-layout.js?v=20261116"></script>
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
     var PID = new URLSearchParams(location.search).get("project") || "";
@@ -935,7 +937,7 @@
     }
 
     var satFrame=document.getElementById("satFrame");
-    var SAT_SRC="satellite-capture.html?v=20261105-navfix"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
+    var SAT_SRC="satellite-capture.html?v=20261116-wm3"+(PID?"&project="+encodeURIComponent(PID):"&_=1")+(EMB?"&embed=1":"");
     function drawSrc(){ return "draw-floorplan.html?v=20261116-sectionE"
       +(PID?"&project="+encodeURIComponent(PID):"")
       +"&prop="+encodeURIComponent(SURVEY_PROP)
@@ -2678,7 +2680,7 @@
     // Google imagery is credited wherever it is RENDERED (nothing stored carries a credit). Same sizing as the export's
     // drawCredit — IOTTileLayout.creditMetrics against this plate — so the app, the PDF and Download agree.
     function aerialCreditSync(cap, v, f){ var el=document.getElementById("aerialCredit"), sc=document.getElementById("scene"); if(!el||!sc||!window.IOTTileLayout) return;
-      var bg=f&&f.bg, sat=cap ? v!=="plan" : !!(f&&f.aerial&&typeof bg==="string"&&bg&&bg.indexOf("data:image/svg")!==0&&!/.svg(?|$)/i.test(bg));
+      var bg=f&&f.bg, sat=cap ? v!=="plan" : !!(f&&f.aerial&&typeof bg==="string"&&bg&&bg.indexOf("data:image/svg")!==0&&!bg.split("?")[0].toLowerCase().endsWith(".svg"));
       if(!sat){ el.style.display="none"; return; }
       var m=IOTTileLayout.creditMetrics(sc.offsetWidth||800, sc.offsetHeight||600);
       el.textContent=m.text; el.style.cssText="display:block;right:"+m.margin+"px;bottom:"+m.margin+"px;font-size:"+m.font+"px;padding:"+m.padY+"px "+m.padX+"px;line-height:1"; }
