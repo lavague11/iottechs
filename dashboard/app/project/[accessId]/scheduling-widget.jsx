@@ -208,15 +208,18 @@ export default function SchedulingWidget({ accessId, assignments = [], staffUser
       // customer's calendar and everyone's inbox reflect the change. Build the merged event
       // SYNCHRONOUSLY (the update() setter runs async, so we can't read it back out of the callback).
       const existing = data.events.find(x => x.id === editingId) || {};
-      const ev = { ...existing, ...form, id: editingId };
-      update(d => { const e = d.events.find(x => x.id === editingId); if (e) Object.assign(e, form); });
+      // A moved date/time is a fresh booking for reminder purposes (no day-before right after the reschedule mail).
+      const moved = existing.date !== form.date || (existing.time || "") !== (form.time || "");
+      const stamp = moved ? { bookedAt: new Date().toISOString() } : {};
+      const ev = { ...existing, ...form, ...stamp, id: editingId };
+      update(d => { const e = d.events.find(x => x.id === editingId); if (e) Object.assign(e, form, stamp); });
       onBooked?.(ev.date);
       logAppointment(accessId, { verb: "updated", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).then(r => onLogResult?.(r)).catch(() => {});
       closeForm();
       setSaving(false);
       return;
     }
-    const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10) };
+    const ev = { id: uid(), kind: apptKind || undefined, ...form, created: new Date().toISOString().slice(0,10), bookedAt: new Date().toISOString() };
     update(d => d.events.unshift(ev));
     onBooked?.(ev.date);   // let the caller mirror the date onto the project (survey booking → auto-advance)
     logAppointment(accessId, { verb: "scheduled", title: ev.title, date: ev.date, event: ev, inviteeEmails: emailsFor(ev) }).then(r => onLogResult?.(r)).catch(() => {});   // Job Log + email invite

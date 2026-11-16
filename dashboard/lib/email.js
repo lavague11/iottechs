@@ -13,6 +13,7 @@
 
 import { secretValue } from "./db";
 import { makeApptToken } from "./auth";
+import { reminderCopy, techRow } from "./appt-reminder-model";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -868,7 +869,7 @@ function gcalUrl(ev) {
 // conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
 // Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
 const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
-export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "" }) {
+export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "", now = new Date() }) {
   const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
   const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
   const service = (event.title && event.title.includes("—")) ? event.title.split("—").pop().trim() : cap(noun || "Appointment");
@@ -887,13 +888,14 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   const street = ci > 0 ? loc.slice(0, ci).trim() : loc;
   const cityLine = ci > 0 ? loc.slice(ci + 1).replace(/,?\s*USA\s*$/i, "").trim() : "";
   const maps = loc ? mapsUrl(loc) : "";
-  const techName = (tech && String(tech).trim()) || "To be assigned";
+  const tr = techRow(tech);          // no tech → PROJECT MANAGER · Ahmed; customers never see a placeholder
+  const copy = reminder ? reminderCopy({ event, noun, accessId: projectNo, now }) : null;   // day word computed from the calendar, never hardcoded
   // Personal greeting — each recipient is addressed by their own first name, with a role-appropriate
   // one-liner (customer: "your appointment is confirmed"; internal: "you're assigned / confirmed on it").
   const firstName = String(recipientName || "").trim().split(/\s+/)[0] || "";
   const greetLine = cancel
     ? (internal ? "This assignment has been canceled." : "Your appointment has been canceled — we'll be in touch to rebook.")
-    : reminder ? (internal ? "A reminder — you're on this job tomorrow." : "A quick reminder — your appointment is tomorrow.")
+    : reminder ? (internal ? copy.greetStaff : copy.greetCustomer)
     : updated ? (internal ? "Your assignment was rescheduled — the new details are below." : "Your appointment was rescheduled — the new details are below.")
     : (internal ? "You're assigned to this appointment — details below." : "Your appointment is confirmed. Here are the details.");
   const detail = (label, valueHtml) => valueHtml
@@ -956,8 +958,8 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
           ${detail("Location", locHtml)}
           ${event.notes ? detail("Notes", esc(event.notes)) : ""}
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-            <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">Technician</td></tr>
-            <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(techName)}</td></tr>
+            <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(tr.label)}</td></tr>
+            <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(tr.value)}</td></tr>
           </table>
         </td></tr>
         ${ctaCells ? `<tr><td align="center" style="padding:34px 50px 8px 50px;" class="px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>${ctaCells}</tr></table></td></tr>` : ""}
@@ -979,7 +981,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
 
 // Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
 // assigned staff) — client-supplied emails are never trusted. Best-effort; never throws.
-export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [] } = {}) {
+export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [], now = new Date() } = {}) {
   try {
     if (!event?.date) return { ok: false, error: "no-event" };
     const { getJobByAccessId, getProjectAssignments, getUserByEmail } = await import("./db.js");
@@ -1032,14 +1034,14 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);
     const custSubject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
-      : reminder ? `Reminder: your ${noun} is tomorrow`
+      : reminder ? reminderCopy({ event, noun, accessId, now }).customerSubject
       : updated ? `Updated: your ${noun} was rescheduled`
       : `Your ${noun} is scheduled`;
     const staffSubject = cancel ? `Assignment canceled — ${event.title || accessId}`
-      : reminder ? `Tomorrow: you're on a ${noun} (${accessId})`
+      : reminder ? reminderCopy({ event, noun, accessId, now }).staffSubject
       : updated ? `Assignment rescheduled — ${noun} (${accessId})`
       : `You're assigned — ${noun} (${accessId})`;
-    const heading = cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
+    const heading = cancel ? "Your appointment was canceled" : reminder ? reminderCopy({ event, noun, accessId, now }).heading : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
     const intro = cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
       : reminder ? "A quick reminder about your upcoming appointment — see you then."
       : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
@@ -1074,7 +1076,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       // Each recipient gets THEIR OWN confirm/reschedule token, so their Confirm records THEIR status.
       let changeUrl = "";
       try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
-      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name });
+      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name, now });
       const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments, bcc: isStaff ? undefined : await customerCopyBcc(r.email) });
       if (res?.ok || res?.skipped) sent++;
     }

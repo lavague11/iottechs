@@ -1,14 +1,14 @@
-// 24-hour appointment reminders. A boot scheduler (instrumentation.js) runs this sweep on a timer;
-// it finds every booked appointment happening within the next 24 hours and emails the customer +
-// assigned team (+ any guest emails on the event) a reminder — exactly once per appointment.
+// Appointment reminders. A boot scheduler (instrumentation.js) runs this sweep every 30 min. Two
+// distinct reminders per appointment (rules in lib/appt-reminder-model.js): the day-before ("d1"), and an
+// optional same-day one ~2h out ("h2"). Each emails the customer + assigned team (+ guest emails).
 //
-// Times are floating local (server TZ = America/New_York), so `new Date("YYYY-MM-DDTHH:MM")` parses
-// in the office's timezone, matching how the appointment was booked.
+// Stored times are floating wall-clock strings, read explicitly as America/New_York by the model
+// (never via the process timezone).
 
-import { allScheduleBlobs, claimAppointmentReminder, logProjectEvent } from "./db.js";
+import { allScheduleBlobs, claimAppointmentReminder, releaseAppointmentReminder, appointmentReminderClaimed, logProjectEvent } from "./db.js";
 import { sendAppointmentEmails } from "./email.js";
+import { dueReminderKinds, reminderKey, legacyReminderKey, shouldReleaseClaim } from "./appt-reminder-model.js";
 
-const H24 = 24 * 60 * 60 * 1000;
 const isEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(s || "").trim());
 
 export async function sendDueAppointmentReminders() {
@@ -23,22 +23,23 @@ export async function sendDueAppointmentReminders() {
     for (const ev of events) {
       if (!ev?.date) continue;
       scanned++;
-      const t = new Date(`${ev.date}T${ev.time || "09:00"}`).getTime();
-      if (Number.isNaN(t)) continue;
-      const diff = t - now;
-      if (diff <= 0 || diff > H24) continue;                 // only visits in the next 24h
+      for (const kind of dueReminderKinds(ev, now)) {
+        const key = reminderKey(row.project_access_id, ev, kind);
+        try { if (kind === "d1" && appointmentReminderClaimed(legacyReminderKey(row.project_access_id, ev))) continue; } catch {}
+        let claimed = false;
+        try { claimed = claimAppointmentReminder(key); } catch { continue; }
+        if (!claimed) continue;                               // already reminded
 
-      const key = `${row.project_access_id}:${ev.id || `${ev.date}${ev.time || ""}`}`;
-      let claimed = false;
-      try { claimed = claimAppointmentReminder(key); } catch { continue; }
-      if (!claimed) continue;                                 // already reminded
-
-      const guests = (ev.invitees || []).filter(isEmail);     // typed guest invitees
-      try {
-        await sendAppointmentEmails(row.project_access_id, { verb: "reminder", event: ev, extraEmails: guests });
+        const guests = (ev.invitees || []).filter(isEmail);   // typed guest invitees
+        let res = null;
+        try { res = await sendAppointmentEmails(row.project_access_id, { verb: "reminder", event: ev, extraEmails: guests }); } catch { res = { ok: false, error: "exception" }; }
+        // A failed send gives the claim back so the next sweep retries; a partial success keeps it
+        // (releasing would re-mail the recipients who already got it).
+        const failed = shouldReleaseClaim(res);
+        if (failed) { try { releaseAppointmentReminder(key); } catch {} continue; }
         sent++;
-        try { logProjectEvent(row.project_access_id, { kind: "schedule", label: `24h reminder sent · ${ev.title || "Appointment"}`.slice(0, 300), actor: "System" }); } catch {}
-      } catch { /* best-effort; the claim stands so we don't spam retries */ }
+        try { logProjectEvent(row.project_access_id, { kind: "schedule", label: `${kind === "h2" ? "Same-day" : "Day-before"} reminder sent · ${ev.title || "Appointment"}`.slice(0, 300), actor: "System" }); } catch {}
+      }
     }
   }
   return { ok: true, sent, scanned };

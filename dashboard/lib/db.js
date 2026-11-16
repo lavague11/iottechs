@@ -7290,10 +7290,17 @@ export function allScheduleBlobs() {
   return db.prepare("SELECT project_access_id, data FROM project_tool_data WHERE tool='schedule'").all();
 }
 // Atomically claim a reminder: returns true only the FIRST time this event_key is seen, so the
-// hourly sweep sends each 24h reminder exactly once even if instances/sweeps overlap.
+// 30-min sweep sends each reminder (day-before / same-day) exactly once even if instances/sweeps overlap.
 export function claimAppointmentReminder(eventKey) {
   const r = db.prepare("INSERT OR IGNORE INTO appt_reminders (event_key) VALUES (?)").run(String(eventKey));
   return r.changes > 0;
+}
+// Give a claim back when the send failed outright, so the next sweep (every 30 min) retries it.
+export function releaseAppointmentReminder(eventKey) {
+  db.prepare("DELETE FROM appt_reminders WHERE event_key = ?").run(String(eventKey));
+}
+export function appointmentReminderClaimed(eventKey) {
+  return !!db.prepare("SELECT 1 FROM appt_reminders WHERE event_key = ?").get(String(eventKey));
 }
 
 // ---- Uploaded media (HEIC-safe photos). Bytes are already-converted JPEG from /api/media. ----

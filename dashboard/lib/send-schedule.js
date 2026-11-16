@@ -50,6 +50,27 @@ export function friendlyWhen(d, now = new Date()) {
   return `${time} on ${dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}`;
 }
 
+// Calendar-day comparison in the business timezone — NEVER a millisecond window. `dateStr` is the
+// appointment's floating local "YYYY-MM-DD"; `now` is a real instant, read as an Eastern calendar day.
+// Returns { diff, label }: diff 0 → "today", 1 → "tomorrow", anything else → the weekday name.
+export function ymdInTz(now = new Date(), tz = BIZ_TZ) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(now).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day}`;
+  } catch { return toLocalInput(now).slice(0, 10); }
+}
+export function apptDayLabel(dateStr, now = new Date(), tz = BIZ_TZ) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr || ""));
+  if (!m) return { diff: NaN, label: "" };
+  const n = ymdInTz(now, tz).split("-").map(Number);
+  const diff = Math.round((Date.UTC(+m[1], +m[2] - 1, +m[3]) - Date.UTC(n[0], n[1] - 1, n[2])) / 86400000);
+  if (diff === 0) return { diff, label: "today" };
+  if (diff === 1) return { diff, label: "tomorrow" };
+  const wd = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], 12)).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
+  return { diff, label: wd };
+}
+
 // Everything a scheduler UI needs up front: whether it's late, and the default (next 8:30) as both a
 // datetime-local string (for the input) and an ISO instant (for storage).
 export function scheduleDefaults({ tz = BIZ_TZ, now = new Date() } = {}) {
