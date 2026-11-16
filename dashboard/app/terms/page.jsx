@@ -4,6 +4,7 @@ import { Wordmark } from "../components/brand";
 export const metadata = {
   title: "Terms & Conditions · IOT TECHS",
   description: "The terms and conditions governing use of IOT TECHS services.",
+  alternates: { canonical: "/terms" },
 };
 
 // Terms & Conditions for IOT TECHS (operated by La Vague Inc.) — security/CCTV, low-voltage,

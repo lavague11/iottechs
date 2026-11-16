@@ -2,7 +2,13 @@ import { getSessionUser } from "../../lib/session";
 import { getUserById, getJobsForCustomer } from "../../lib/db";
 import ReportIssueClient from "./report-issue-client";
 
-export const metadata = { title: "IOT TECHS · Report an Issue" };
+// Had no description, so it inherited the app default ("Track your project from survey to completion"),
+// which described nothing and matched no search. This page is the public service-call intake.
+export const metadata = {
+  title: "Security Camera Repair & Service — Report an Issue | IOT TECHS",
+  description: "Camera offline, system down or something not recording? Tell us what's wrong and we'll get a technician out. Service across NJ & NYC, 7 days a week.",
+  alternates: { canonical: "/report-issue" },
+};
 
 // Public service-call intake — reached from the home page "Something's Not Working" path. A
 // logged-in customer gets their contact details prefilled and their own systems offered to link.

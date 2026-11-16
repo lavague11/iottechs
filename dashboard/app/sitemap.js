@@ -7,7 +7,9 @@ export const dynamic = "force-dynamic";
 
 // Public marketing/intake routes that aren't DB-driven SEO slugs — they'd otherwise be missing from
 // the sitemap even though they're linked from the homepage and footer.
-const STATIC_PUBLIC = ["systems", "build", "apply", "adt", "report-issue", "terms", "guides"];
+// NOTE: /adt is deliberately NOT here — app/adt/page.jsx sets robots noindex, and listing a noindexed
+// page in the sitemap just earns a "Submitted URL marked noindex" error in Search Console.
+const STATIC_PUBLIC = ["systems", "build", "apply", "report-issue", "terms", "guides"];
 
 export default function sitemap() {
   const home = { url: `${SITE_ORIGIN}/`, changeFrequency: "weekly", priority: 1 };
