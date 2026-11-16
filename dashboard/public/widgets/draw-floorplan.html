@@ -119,6 +119,9 @@
   .tb.ico.back{color:var(--muted)}
   .tb.ico.back:hover{color:var(--ink)}
   #modeMenu{left:0;right:auto}
+  #shapeMenu{left:0;right:auto;min-width:150px}
+  #shapeMenu button.on{color:var(--gold)}
+  .tb.ico.hot{color:var(--gold)}
   #modeMenu button .mchk{opacity:0}
   #modeMenu button.on .mchk{opacity:1;color:var(--gold)}
   .segToggle svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;opacity:.8}
@@ -185,6 +188,7 @@
       <button id="rmMerge" role="menuitem"><svg viewBox="0 0 24 24"><path d="M7 3v5a6 6 0 0 0 6 6h4"/><path d="M14 11l3 3-3 3"/></svg> Merge</button>
       <button id="rmRemoveWall" role="menuitem"><svg viewBox="0 0 24 24"><path d="M3 9h5M16 9h5M3 15h7M14 15h7"/><path d="M12 4v16"/></svg> <span id="rmRemoveWallTxt">Remove wall</span></button>
       <button id="rmRename" role="menuitem"><svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg> Rename</button>
+      <button id="rmRotate" role="menuitem"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v5h-5"/></svg> Rotate name</button>
       <div class="rmsep"></div>
       <button id="rmDelete" class="danger" role="menuitem"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> <span id="rmDeleteTxt">Delete room</span></button>
     </div>
@@ -235,7 +239,8 @@
           <button data-m="room" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Room</button>
           <button data-m="zone" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Area</button>
           <button data-m="opening" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Opening</button>
-          <button data-m="eraser" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Eraser</button>
+          <button data-m="stairs" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Stairs</button>
+          <button data-m="block" role="menuitemradio"><svg class="mchk" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg> Block</button>
         </div>
       </div>
       <span id="structTools" class="stools">
@@ -246,6 +251,17 @@
         <button class="tb ico" id="tAerial" title="Aerial" aria-label="Aerial backdrop" style="display:none"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15l5-5 4 4 3-3 6 6"/><circle cx="8.5" cy="9" r="1.5"/></svg></button>
         <select id="zoneTypeSel" title="Area type" aria-label="Area type" style="display:none;height:40px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font:600 13px var(--sans);padding:0 8px;cursor:pointer"></select>
       </span>
+      <div class="morewrap" id="shapeWrap">
+        <button class="tb ico" id="tShapes" title="Shapes" aria-label="Shapes" aria-haspopup="true" style="display:none"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg></button>
+        <div class="moremenu" id="shapeMenu" role="menu">
+          <button data-s="square" role="menuitemradio"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></svg> Square</button>
+          <button data-s="circle" role="menuitemradio"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg> Circle</button>
+          <button data-s="triangle" role="menuitemradio"><svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/></svg> Triangle</button>
+          <button data-s="poly" role="menuitemradio"><svg viewBox="0 0 24 24"><path d="M5 18l3-11 9-2 3 9-7 5z"/></svg> Multi-point</button>
+        </div>
+      </div>
+      <button class="tb ico" id="tSelect" title="Select" aria-label="Select"><svg viewBox="0 0 24 24"><path d="M5 3l14 7-6 2-2 6z"/></svg></button>
+      <button class="tb ico" id="tSelDel" title="Delete" aria-label="Delete" style="display:none"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
       <div class="morewrap">
         <button class="tb ico" id="tMore" title="More" aria-label="More"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>
         <div class="moremenu" id="moreMenu">
@@ -270,6 +286,7 @@
     </div>
 
 <script src="room-taxonomy.js?v=20260921-rooms"></script>
+<script src="draw-geom.js?v=20261116-sectionE"></script>
 <script>
   var _qs=new URLSearchParams(location.search);
   var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0", FID=_qs.get("fid")||"";   // FID = the survey floor's stable id
@@ -325,7 +342,16 @@
   // areas, so the existing export / colour pipeline (zoneCellsSVG, survey, PDF) keeps working unchanged. Outdoor device
   // naming reads areas[] (by cell) for the free name — see the survey location model.
   var areas=[];
-  var AREA_NAMES=["Driveway","Parking","Front Yard","Rear Yard","Backyard","Side Yard","Patio","Pool Area","Loading Area","Alley","Entrance","Sidewalk","Walkway","Garden","Courtyard","Deck","Porch"];
+  // Block = solid black cells for ground that is NOT customer property. [{cells:["c,r"]}] - persisted as plan.blocks ONLY when present (an untouched floor serialises exactly as before).
+  // Select / shapes state is editor chrome, never persisted: msel = multi-selection, shapeKind = square|circle|triangle|poly, polyPts = multi-point corners in progress.
+  var blocks=[], msel=[], shapeKind="square", polyPts=[], forcedCells=null, selDrag=null, selBox=null;
+  // A circle / triangle keeps only the cells inside it; a finished multi-point polygon arrives as forcedCells (hook: dragCells).
+  function shapeOut(list){ if(forcedCells) return forcedCells;
+    if(shapeKind==="square"||shapeKind==="poly"||!shapeAllowed(mode)||!list.length) return list;
+    var cs=list.map(function(x){return x[0];}), rs=list.map(function(x){return x[1];});
+    return IOTDrawGeom.shapeCells(shapeKind, Math.min.apply(null,cs), Math.min.apply(null,rs), Math.max.apply(null,cs), Math.max.apply(null,rs)); }
+  function shapeAllowed(m){ return m==="structure"||m==="room"||m==="zone"||m==="block"; }
+  var AREA_NAMES=IOTDrawGeom.AREA_NAMES;   // draw-geom.js — Street in, Backyard out (duplicate of Rear Yard)
   // Map a free area name → a ZCLASS type key, for the fill colour + the typed zoneCells cache (exterior = generic fallback).
   function areaTypeFor(name){ var n=String(name||"").toLowerCase();
     if(/drive/.test(n)) return "driveway";
@@ -432,7 +458,7 @@
   // Rooms are grid-cell sets in the SAME coordinate space as the structure, so a room can only ever occupy
   // cells the structure occupies (ROOM ⊆ STRUCTURE). Hit-test / bbox / boundary all derive from those cells.
   function cellAt(x,y){ return [Math.floor(x/HALF), Math.floor(y/HALF)]; }
-  function roomHit(x,y){ var cc=cellAt(x,y), k=key(cc[0],cc[1]); for(var i=rooms.length-1;i>=0;i--){ if((rooms[i].cells||[]).indexOf(k)>=0) return rooms[i]; } return null; }
+  function roomHit(x,y){ var cc=cellAt(x,y); return IOTDrawGeom.roomAtKey(rooms, key(cc[0],cc[1])); }   // nested rooms: the innermost room under the cursor wins
   // Boundary edges of an arbitrary cell set (interior partitions + the room's share of the exterior wall).
   function edgesOf(set){ var e=[]; set.forEach(function(k){ var a=k.split(","),c=+a[0],r=+a[1],x=c*HALF,y=r*HALF;
     if(!set.has(key(c,r-1))) e.push([x,y,x+HALF,y]);
@@ -470,7 +496,7 @@
     var x1=Math.ceil(Math.max(a.x,b.x)/s)*s, y1=Math.ceil(Math.max(a.y,b.y)/s)*s;
     if(x1<=x0)x1=x0+s; if(y1<=y0)y1=y0+s;
     var out=[]; for(var x=x0;x<x1-0.5;x+=HALF) for(var y=y0;y<y1-0.5;y+=HALF) out.push([Math.round(x/HALF),Math.round(y/HALF)]);
-    return out; }
+    return (typeof shapeOut==="function") ? shapeOut(out) : out; }
   function dragRectPx(a,b){ var s=step();
     var x0=Math.floor(Math.min(a.x,b.x)/s)*s, y0=Math.floor(Math.min(a.y,b.y)/s)*s;
     var x1=Math.ceil(Math.max(a.x,b.x)/s)*s, y1=Math.ceil(Math.max(a.y,b.y)/s)*s;
@@ -694,6 +720,9 @@
   function drawStairs(r,set){ ctx.save(); ctx.beginPath(); set.forEach(function(k){ var a=k.split(","); ctx.rect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); }); ctx.clip();   // clip the treads to the room polygon
     ctx.strokeStyle="rgba(16,17,18,.55)"; ctx.lineWidth=1.2; ctx.beginPath();
     stairTreads(r).forEach(function(s){ ctx.moveTo(s[0],s[1]); ctx.lineTo(s[2],s[3]); }); ctx.stroke(); ctx.restore(); }
+  // Label direction: an explicit Rotate name (labelRot 90 / 0) wins; otherwise a long name in a narrow tall room auto-rotates.
+  function nameVertical(r, name, bb){ if(!name) return false; if(r && (r.labelRot===90||r.labelRot===0)) return r.labelRot===90;
+    ctx.font="600 14px "+fontFam(); return ctx.measureText(name).width > (bb.w-12) && bb.h > bb.w+4; }
   function drawRoom(r,on){ var set=new Set(r.cells||[]); if(!set.size) return;
     ctx.fillStyle= on ? "rgba(255,255,255,.94)" : "rgba(255,255,255,.88)";   // white interior; selection shows via the gold wall + contextual grid, not a dark tint
     set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
@@ -705,8 +734,8 @@
     // Just the room name (no sq ft). A narrow, taller-than-wide room rotates its label 90° so a long name fits
     // along the long (vertical) axis instead of being squished into the width.
     ctx.font="600 14px "+fontFam();
-    var vertical = !!name && ctx.measureText(name).width > (bb.w-12) && bb.h > bb.w+4;
-    var along = Math.max(20, (vertical ? bb.h : bb.w) - 12);   // the label clamps to the room's long axis
+    var vertical = nameVertical(r, name, bb);
+    var along = Math.max(20, (vertical ? bb.h : bb.w) - 12);   // the label clamps to the long axis of the room
     ctx.save();
     if(vertical){ ctx.translate(cx,cy); ctx.rotate(-Math.PI/2); cx=0; cy=0; }
     ctx.fillStyle=name?"#2b2f36":"#9aa0a6"; ctx.font="600 14px "+fontFam();
@@ -714,19 +743,66 @@
     ctx.restore(); }
   // Room drag → the cells inside the drag rect that ALSO belong to the structure (the clamp that keeps rooms inside).
   function roomDragCells(a,b){ return dragCells(a,b).filter(function(cr){ return has(cr[0],cr[1]); }); }
+  function drawBlocks(){ ctx.fillStyle="#101112"; (blocks||[]).forEach(function(b){ (b.cells||[]).forEach(function(k){ var p=k.split(","); ctx.fillRect(+p[0]*HALF,+p[1]*HALF,HALF,HALF); }); }); }
+  // Multi-selection: gold wash + outline on every selected room / area / block (and the live move ghost while dragging).
+  function drawMultiSel(){ if(!msel.length && !selBox) return; ctx.save();
+    var dx=0, dy=0; if(selDrag){ var st=step(); dx=Math.round((selDrag.cur.x-selDrag.start.x)/st)*st; dy=Math.round((selDrag.cur.y-selDrag.start.y)/st)*st; }
+    msel.forEach(function(o){ var set=new Set(o.cells||[]); ctx.save(); ctx.translate(dx,dy);
+      ctx.fillStyle="rgba(185,138,46,.22)"; set.forEach(function(k){ var a=k.split(","); ctx.fillRect(+a[0]*HALF,+a[1]*HALF,HALF,HALF); });
+      ctx.strokeStyle="#b98a2e"; ctx.lineWidth=2.2; ctx.lineCap="round"; edgesOf(set).forEach(function(e){ ctx.beginPath(); ctx.moveTo(e[0],e[1]); ctx.lineTo(e[2],e[3]); ctx.stroke(); }); ctx.restore(); });
+    if(selBox){ var bx=Math.min(selBox.a.x,selBox.b.x), by=Math.min(selBox.a.y,selBox.b.y), bw=Math.abs(selBox.b.x-selBox.a.x), bh=Math.abs(selBox.b.y-selBox.a.y);
+      ctx.setLineDash([6,5]); ctx.strokeStyle="#b98a2e"; ctx.lineWidth=1.5/_vk; ctx.fillStyle="rgba(185,138,46,.1)"; ctx.fillRect(bx,by,bw,bh); ctx.strokeRect(bx,by,bw,bh); ctx.setLineDash([]); }
+    ctx.restore(); }
+  // ---- Select tool: click an item, shift-click to add, drag empty canvas for a marquee, drag a selected item to move the set together.
+  function selAll(){ var out=[]; rooms.forEach(function(r){ out.push({id:r,cells:r.cells}); }); areas.forEach(function(a){ out.push({id:a,cells:a.cells}); }); blocks.forEach(function(b){ out.push({id:b,cells:b.cells}); }); return out; }
+  function itemAt(pt){ var cc=cellAt(pt.x,pt.y), k=key(cc[0],cc[1]), i, r=IOTDrawGeom.roomAtKey(rooms,k); if(r) return r;
+    for(i=areas.length-1;i>=0;i--) if((areas[i].cells||[]).indexOf(k)>=0) return areas[i];
+    for(i=blocks.length-1;i>=0;i--) if((blocks[i].cells||[]).indexOf(k)>=0) return blocks[i]; return null; }
+  function syncSel(){ var one=msel.length===1?msel[0]:null; sel=(one && (rooms.indexOf(one)>=0||areas.indexOf(one)>=0))?one:null; var d=$("tSelDel"); if(d) d.style.display=(mode==="select"&&msel.length)?"inline-flex":"none"; }
+  function selectDown(pt,e){ var h=itemAt(pt);
+    if(h){ var i=msel.indexOf(h); if(e.shiftKey){ if(i>=0) msel.splice(i,1); else msel.push(h); } else if(i<0) msel=[h]; if(msel.indexOf(h)>=0) selDrag={start:pt,cur:pt}; }
+    else { if(!e.shiftKey) msel=[]; selBox={a:pt,b:pt,add:e.shiftKey?msel.slice():[]}; }
+    syncSel(); redraw(); }
+  function selectMove(pt){ if(selDrag) selDrag.cur=pt; else if(selBox) selBox.b=pt; redraw(); }
+  function selectUp(){ if(selDrag){ var d=selDrag; selDrag=null; var st=step(), dc=Math.round((d.cur.x-d.start.x)/st)*(st/HALF), dr=Math.round((d.cur.y-d.start.y)/st)*(st/HALF); if(dc||dr) moveSel(dc,dr); redraw(); return; }
+    if(selBox){ var b=selBox; selBox=null; var a=cellAt(b.a.x,b.a.y), z=cellAt(b.b.x,b.b.y);
+      var hit=IOTDrawGeom.boxSelect(selAll(),{c0:a[0],r0:a[1],c1:z[0],r1:z[1]}).map(function(x){return x.id;});
+      msel=b.add.concat(hit.filter(function(o){ return b.add.indexOf(o)<0; })); syncSel(); redraw(); } }
+  // The whole selection moves or none of it does: rooms must stay inside the structure, areas / blocks must stay off it.
+  function moveSel(dc,dr){ var ok=true, moved=[];
+    msel.forEach(function(o){ var nk=IOTDrawGeom.shiftKeys(o.cells,dc,dr), inRoom=rooms.indexOf(o)>=0;
+      nk.forEach(function(k){ if(inRoom ? !cells.has(k) : cells.has(k)) ok=false; }); moved.push([o,nk]); });
+    if(!ok || !moved.length) return; moved.forEach(function(m){ m[0].cells=m[1]; });
+    syncZoneCellsFromAreas(); pushHist(); }
+  function deleteSel(){ if(!msel.length) return; var n=msel.length;
+    askConfirm({ title:"Delete "+(n>1?n+" items":"item")+"?", ok:"Delete", danger:true }, function(){
+      rooms=rooms.filter(function(x){ return msel.indexOf(x)<0; }); areas=areas.filter(function(x){ return msel.indexOf(x)<0; }); blocks=blocks.filter(function(x){ return msel.indexOf(x)<0; });
+      msel=[]; sel=null; syncZoneCellsFromAreas(); syncSel(); pushHist(); redraw(); }); }
+  // ---- Multi-point shape: each click is a corner; clicking the first corner (or Enter) closes it into cells.
+  function polyClick(pt){ var p={x:snapV(pt.x),y:snapV(pt.y)};
+    if(IOTDrawGeom.closesPolygon(polyPts,p,16/_vk)){ polyClose(); return; }
+    polyPts.push(p); redraw(); }
+  function polyClose(){ if(polyPts.length<3){ polyPts=[]; redraw(); return; }
+    var list=IOTDrawGeom.polygonCells(polyPts,HALF); polyPts=[]; if(!list.length){ redraw(); return; }
+    forcedCells=list; startPt=dragCur={x:list[0][0]*HALF,y:list[0][1]*HALF}; dragging=true;
+    try{ onPointerUp({pointerType:"mouse",pointerId:-1}); } finally { forcedCells=null; } }
+  function drawPolyPreview(){ if(!polyPts.length) return; ctx.save(); ctx.strokeStyle="#b98a2e"; ctx.fillStyle="#b98a2e"; ctx.lineWidth=1.8/_vk; ctx.setLineDash([6/_vk,5/_vk]);
+    ctx.beginPath(); ctx.moveTo(polyPts[0].x,polyPts[0].y); for(var i=1;i<polyPts.length;i++) ctx.lineTo(polyPts[i].x,polyPts[i].y); if(hoverPt) ctx.lineTo(snapV(hoverPt.x),snapV(hoverPt.y)); ctx.stroke(); ctx.setLineDash([]);
+    polyPts.forEach(function(p,i){ ctx.beginPath(); ctx.arc(p.x,p.y,(i===0?6:3.5)/_vk,0,Math.PI*2); ctx.fill(); }); ctx.restore(); }
   function drawPreview(){
-    if(dragging && (mode==="structure"||mode==="eraser") && startPt && dragCur){
+    drawPolyPreview();
+    if(dragging && (mode==="structure"||mode==="eraser"||mode==="block") && startPt && dragCur){
       var list=dragCells(startPt,dragCur);
       ctx.fillStyle = structOp==="erase" ? "rgba(196,85,61,.24)" : "rgba(185,138,46,.32)";
       list.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
       var rc=dragRectPx(startPt,dragCur); ctx.setLineDash([6,5]);
       ctx.strokeStyle = structOp==="erase" ? "#c4553d" : "#b98a2e"; ctx.lineWidth=1.5;
       ctx.strokeRect(rc.x,rc.y,rc.w,rc.h); ctx.setLineDash([]);
-    } else if((mode==="structure"||mode==="eraser") && !dragging && hoverPt){
+    } else if((mode==="structure"||mode==="eraser"||mode==="block") && !dragging && hoverPt){
       var s=step(), x=Math.floor(hoverPt.x/s)*s, y=Math.floor(hoverPt.y/s)*s;   // snapped cursor
       ctx.strokeStyle="rgba(185,138,46,.75)"; ctx.lineWidth=1.5; ctx.strokeRect(x+0.5,y+0.5,s-1,s-1);
     }
-    if(mode==="room" && dragging && startPt && dragCur){   // preview is ALREADY clamped to the structure
+    if((mode==="room"||mode==="stairs") && dragging && startPt && dragCur){   // preview is ALREADY clamped to the structure
       var rl=roomDragCells(startPt,dragCur);
       ctx.fillStyle="rgba(185,138,46,.32)";
       rl.forEach(function(cr){ ctx.fillRect(cr[0]*HALF,cr[1]*HALF,HALF,HALF); });
@@ -794,6 +870,7 @@
   // null for the whole canvas, or false for "no grid".
   function gridClip(){
     if(mode==="structure"||mode==="eraser") return null;                 // blocking out / erasing the building → full grid
+    if(mode==="block" || (dragging && mode==="stairs")) return null;
     if(dragging && (mode==="room"||mode==="zone")) return null;          // drawing a new room/area → grid to snap against
     if((mode==="room"||mode==="removewall") && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected room → its local grid only
     if(mode==="zone" && sel && Array.isArray(sel.cells)) return new Set(sel.cells);   // selected area → its local grid only
@@ -815,29 +892,40 @@
     drawBackdrop();
     drawAreas();
     drawStructure();
-    rooms.forEach(function(r){ drawRoom(r, r===sel); });
+    drawBlocks();
+    IOTDrawGeom.paintOrder(rooms).forEach(function(r){ drawRoom(r, r===sel); });   // large first: a nested room paints over its container
+    drawMultiSel();
     drawGrid();
     drawPreview();
     drawFootprintDims();
     ctx.setTransform(dpr,0,0,dpr,0,0); }                                  // leave the context in identity for any out-of-redraw draw
   // Overall footprint size, shown only when the floor has a real scale (seeded from a trace).
+  // Every room / area NAME box, in plan px — what the footprint pill must stay clear of (draw-geom.js dimLabelPos).
+  function nameRects(){ var out=[]; ctx.textAlign="center";
+    rooms.forEach(function(r){ var name=(r.label||"").trim()||"Tap to name", bb=cellsBBoxPx(r.cells||[]), lc=roomLabelCell(r.cells||[]), v=nameVertical(r,(r.label||"").trim(),bb);
+      ctx.font="600 14px "+fontFam(); var along=Math.max(20,(v?bb.h:bb.w)-12), w=Math.min(ctx.measureText(name).width, along);
+      out.push(IOTDrawGeom.nameRect(lc[0],lc[1],w,18,v)); });
+    areas.forEach(function(a){ var name=(a.label||"").trim(); if(!name) return; var bb=cellsBBoxPx(a.cells||[]), lc=roomLabelCell(a.cells||[]);
+      ctx.font="600 13px "+fontFam(); out.push(IOTDrawGeom.nameRect(lc[0],lc[1],Math.min(ctx.measureText(name).width,Math.max(20,bb.w-10)),32,false)); });
+    return out; }
   function drawFootprintDims(){ if(!(metersPerPx>0) || !cells.size) return;
-    var bb=cellsBBoxPx(Array.from(cells));
-    var label=Math.round(pxToFeet(bb.w))+" × "+Math.round(pxToFeet(bb.h))+" ft";
-    ctx.font="600 12px "+fontFam(); ctx.textAlign="center"; ctx.textBaseline="middle";
-    var tx=bb.x+bb.w/2, ty=bb.y-13; if(ty<12) ty=bb.y+15;          // above the footprint, or inside if it's at the top
-    var tw=ctx.measureText(label).width, px=8, bw=tw+px*2, bh=20, bx=tx-bw/2, by=ty-bh/2, rr=6;
+    var bb=cellsBBoxPx(Array.from(cells)), k=1/_vk;   // the pill keeps one on-screen size at any zoom (names scale with the plan; the pill does not grow over them)
+    var label=Math.round(pxToFeet(bb.w))+" \u00d7 "+Math.round(pxToFeet(bb.h))+" ft", names=nameRects();
+    ctx.font="600 "+(12*k)+"px "+fontFam(); ctx.textAlign="center"; ctx.textBaseline="middle";
+    var tw=ctx.measureText(label).width, bw=tw+16*k, bh=20*k, rr=6*k;
+    var pos=IOTDrawGeom.dimLabelPos(bb,{w:bw,h:bh},names,{x:-_vx/_vk,y:-_vy/_vk,w:W()/_vk,h:H()/_vk}), bx=pos.x, by=pos.y;
     ctx.beginPath();                                               // faint pill so it reads over the grid
     ctx.moveTo(bx+rr,by); ctx.arcTo(bx+bw,by,bx+bw,by+bh,rr); ctx.arcTo(bx+bw,by+bh,bx,by+bh,rr);
     ctx.arcTo(bx,by+bh,bx,by,rr); ctx.arcTo(bx,by,bx+bw,by,rr); ctx.closePath();
     ctx.fillStyle="rgba(255,255,255,.9)"; ctx.fill();
-    ctx.fillStyle="#6b7076"; ctx.fillText(label, tx, ty); }
+    ctx.fillStyle="#6b7076"; ctx.fillText(label, bx+bw/2, by+bh/2); }
 
   // Enforce ROOM ⊆ STRUCTURE: keep only room cells the structure still occupies. Also migrates any legacy
   // normalized-rect rooms ({x,y,w,h}) into structure-clamped cells. Run on load and after every structure edit.
-  function reconcileRooms(){ rooms=(rooms||[]).map(function(r){
-      var sem=(r&&r.semanticType)||"", so=(r&&(r.stairOrientation===0||r.stairOrientation===90||r.stairOrientation===180||r.stairOrientation===270))?r.stairOrientation:undefined;   // preserve the stair orientation across reconcile
-      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"", semanticType:sem, stairOrientation:so };
+  function reconcileBlocks(){ blocks=(blocks||[]).map(function(b){ return {cells:(b.cells||[]).filter(function(k){ return !cells.has(k); })}; }).filter(function(b){ return b.cells.length>0; }); }   // the building wins over a block
+  function reconcileRooms(){ reconcileBlocks(); rooms=(rooms||[]).map(function(r){
+      var sem=(r&&r.semanticType)||"", so=(r&&(r.stairOrientation===0||r.stairOrientation===90||r.stairOrientation===180||r.stairOrientation===270))?r.stairOrientation:undefined, lr=(r&&(r.labelRot===0||r.labelRot===90))?r.labelRot:undefined;   // preserve the stair orientation across reconcile
+      if(r && Array.isArray(r.cells)) return { cells:r.cells.filter(function(k){ return cells.has(k); }), label:r.label||"", semanticType:sem, stairOrientation:so, labelRot:lr };
       if(r && typeof r.x==="number"){ var a={x:r.x*W(),y:r.y*H()}, b={x:(r.x+r.w)*W(),y:(r.y+r.h)*H()};
         return { cells:roomDragCells(a,b).map(function(cr){ return key(cr[0],cr[1]); }), label:r.label||"", semanticType:sem, stairOrientation:so }; }
       return { cells:[], label:(r&&r.label)||"", semanticType:sem, stairOrientation:so };
@@ -867,6 +955,8 @@
 
   // ---- per-floor persistence ----
   // Only NAMED rooms are persisted — an unnamed room is never written to storage (also cleans legacy ones).
+  function sanitizeBlocks(list){ var out=[]; if(!Array.isArray(list)) return out;
+    list.forEach(function(b){ if(out.length>=120||!b||!Array.isArray(b.cells)) return; var cl=b.cells.filter(function(k){ return typeof k==="string" && /^-?\d+,-?\d+$/.test(k); }); if(cl.length) out.push({cells:cl}); }); return out; }
   function namedRooms(list){ return (list||[]).filter(function(r){ return r && (r.label||"").trim(); }); }
   // t = when this geometry was last EDITED (not written): the recovery copy and the posted plan share it, a
   // loaded plan keeps its own — so a local copy is only "newer" when edits never reached the survey.
@@ -890,13 +980,14 @@
   // True only when a raster exists AND the geometry has changed since it was generated (so the raster is out of date).
   function enhanceStale(){ return !!(enhancedURL && String(enhancedRev)!==planRev()); }
   function planOut(){ var o={v:1, cells:Array.from(cells), rooms:namedRooms(rooms), areas:namedAreas(areas), openings:sanitizeOpenings(openings), openWalls:sanitizeOpenWalls(Array.from(openWalls)), metersPerPx:metersPerPx, seed:_seed||null, t:_planStamp};
+    if(blocks.length) o.blocks=sanitizeBlocks(blocks);   // ONLY when drawn — an untouched floor serialises exactly as it always did (planHash stays put)
     syncZoneCellsFromAreas(); var zc=zcOut(); for(var _z in zc){ o.zoneCells=zc; break; }   // typed cache derived from the named areas — the existing export/colour pipeline reads it (omitted when none)
     if(enhancedURL && enhancedRev!=null) o.enhanced={src:enhancedURL, rev:String(enhancedRev)}; return o; }   // the cached AI raster + the rev it was made from — survives reload, never re-fetched
   function writeLS(){ if(!LSK) return; try{ localStorage.setItem(LSK, JSON.stringify(planOut())); }catch(e){} }
   function readLS(k){ if(!k) return null; try{ return JSON.parse(localStorage.getItem(k)||"null"); }catch(e){ return null; } }
-  function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length))); }
+  function hasPlan(s){ return !!(s && ((Array.isArray(s.cells)&&s.cells.length) || (Array.isArray(s.rooms)&&s.rooms.length) || (Array.isArray(s.blocks)&&s.blocks.length))); }
   // Replace (never merge) the in-memory geometry with a plan record (null → empty).
-  function applyPlan(s){ cells=new Set(); rooms=[]; areas=[]; openings=[]; openWalls=new Set(); zoneCells={}; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
+  function applyPlan(s){ cells=new Set(); rooms=[]; areas=[]; blocks=sanitizeBlocks(s&&s.blocks); msel=[]; openings=[]; openWalls=new Set(); zoneCells={}; metersPerPx=0; sel=null; enhancedURL=null; enhancedRev=null; enhancedOnce=false; _planStamp=(s&&+s.t)||0;
     // Areas are the source of truth; a legacy floor with only typed zoneCells migrates to one named Area per type. zoneCells is then re-derived.
     areas = (s && Array.isArray(s.areas)) ? sanitizeAreas(s.areas) : ((s && s.zoneCells) ? areasFromZoneCells(zcIn(s.zoneCells)) : []);
     syncZoneCellsFromAreas();
@@ -913,11 +1004,11 @@
   function persist(){ if(planState!=="loaded") return; _planStamp=Date.now(); writeLS(); clearTimeout(_planT); _planT=setTimeout(postPlan,300); refreshPrevStale(); }   // any edit while the enhanced preview is up flips it to STALE (never silently keeps showing a current-looking raster)
 
   // ---- history (undo/redo) ----
-  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), areas:JSON.parse(JSON.stringify(areas)), openings:JSON.parse(JSON.stringify(openings)), openWalls:Array.from(openWalls), zoneCells:zcClone(zoneCells)}; }
+  function snapshot(){ return {cells:Array.from(cells), rooms:JSON.parse(JSON.stringify(rooms)), areas:JSON.parse(JSON.stringify(areas)), blocks:JSON.parse(JSON.stringify(blocks)), openings:JSON.parse(JSON.stringify(openings)), openWalls:Array.from(openWalls), zoneCells:zcClone(zoneCells)}; }
   var hist=[snapshot()], hi=0;
   function pushHist(){ hist=hist.slice(0,hi+1); hist.push(snapshot()); hi=hist.length-1; updateTools(); persist(); }
   function applySnap(s){ cells=new Set(s.cells); rooms=JSON.parse(JSON.stringify(s.rooms)); openings=sanitizeOpenings(s.openings||[]); openWalls=new Set(sanitizeOpenWalls(s.openWalls||[]));
-    areas = Array.isArray(s.areas) ? sanitizeAreas(s.areas) : areasFromZoneCells(zcIn(s.zoneCells||{})); syncZoneCellsFromAreas(); sel=null; closeLabel(); }
+    areas = Array.isArray(s.areas) ? sanitizeAreas(s.areas) : areasFromZoneCells(zcIn(s.zoneCells||{})); blocks=sanitizeBlocks(s.blocks); msel=[]; syncZoneCellsFromAreas(); sel=null; closeLabel(); }
   function undo(){ if(hi>0){ hi--; applySnap(hist[hi]); if(!cells.size && mode==="room") setMode("structure"); else { updateTools(); redraw(); } persist(); } }   // an undo is an edit → saved like one
   function redo(){ if(hi<hist.length-1){ hi++; applySnap(hist[hi]); updateTools(); redraw(); persist(); } }
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
@@ -927,13 +1018,15 @@
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     // Eraser is a dedicated block-erase tool: it forces erase; Structure always re-enters in add. The two are
     // separate dropdown entries, so the shared Add/Erase toggle tracks whichever we entered.
-    if(m==="eraser") structOp="erase"; else if(m==="structure") structOp="add";
+    if(m==="eraser") structOp="erase"; else if(m==="structure"||m==="block") structOp="add";
+    if(m!=="select"){ msel=[]; selDrag=selBox=null; } polyPts=[];
     // reflect the active PRIMARY (Structure / Room / Area / Eraser) in the compact selector — opening + remove-wall stay under Room
-    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : (m==="eraser") ? "eraser" : "room";
+    var prim = (m==="structure") ? "structure" : (m==="zone") ? "zone" : (m==="opening") ? "opening" : (m==="stairs") ? "stairs" : (m==="block") ? "block" : (m==="select") ? "select" : "room";
     [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.classList.toggle("on", b.getAttribute("data-m")===prim); });
     // The PRIMARY selector names the geometry type (or Eraser) — Remove wall is a contextual Room action, never a top-level label.
-    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="eraser" ? "Eraser" : "Room")));
-    var edit = m==="structure"||m==="zone";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones. Eraser is erase-only (no toggle).
+    var mtn=$("modeToggleName"); if(mtn) mtn.textContent = m==="structure" ? "Structure" : (m==="opening" ? "Opening" : (m==="zone" ? "Area" : (m==="stairs" ? "Stairs" : (m==="block" ? "Block" : (m==="select" ? "Select" : "Room")))));
+    var tsh=$("tShapes"); if(tsh) tsh.style.display=shapeAllowed(m)?"inline-flex":"none"; var tse=$("tSelect"); if(tse) tse.classList.toggle("on",m==="select"); if(!shapeAllowed(m)) closeShapeMenu();
+    var edit = m==="structure"||m==="zone"; edit = edit||m==="block";          // Add/Erase + snap apply to both block-paint modes; the zone type picker shows only in Zones. Eraser is erase-only (no toggle).
     $("tAdd").style.display = edit ? "inline-flex" : "none";
     $("tErase").style.display = "none";   // merged into the single #tAdd add/erase toggle
     if(edit) syncPaintBtn();   // reflect the current op on the one toggle button
@@ -949,6 +1042,7 @@
     if(e.pointerType==="touch"){ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
       if(_ptrs.size>=2){                                   // a second finger → pinch/pan; abort any in-progress draw
         dragging=false; wallDrag=null; pendingWall=null; startPt=dragCur=null; beginPinch(); redraw(); return; } }
+    if(e.button===2) return;   // right-click is handled by the contextmenu listener (menu), never starts a drag
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
     if(mode==="opening"){ return; }   // door placement / cycling happens on click/dblclick (so a double-click can open the door menu without cycling twice)
@@ -956,7 +1050,10 @@
       if(sel && nearestInteriorUnit(sel,pt.x,pt.y)){ toggleOpenWallAt(pt.x,pt.y); return; }   // tapped a wall of the selected room → open / restore it
       var rhw=roomHit(pt.x,pt.y); if(rhw && rhw!==sel){ sel=rhw; redraw(); }                   // tapped another room → it becomes the Remove-wall target (Remove wall stays active)
       return; }
-    if(mode==="structure"||mode==="eraser"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }   // eraser drags like structure, forced to erase
+    if(mode==="select"){ selectDown(pt,e); return; }
+    if(shapeKind==="poly" && shapeAllowed(mode)){ polyClick(pt); return; }   // multi-point: each click is a corner
+    if(mode==="structure"||mode==="eraser"||mode==="block"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }   // eraser drags like structure, forced to erase
+    if(mode==="stairs"){ closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); return; }
     if(mode==="zone"){   // AREA: erase drags to remove cells; else tap a named area to SELECT (unnamed → name), empty drag draws a new one
       if(structOp==="erase"){ dragging=true; startPt=pt; dragCur=pt; redraw(); return; }
       var ah=areaHit(pt.x,pt.y);
@@ -971,29 +1068,37 @@
       if(h===sel && hn && e.pointerType!=="mouse"){ openRoomMenu(h,false); return; }   // touch: second tap on the selected room → actions
       sel=h; redraw(); if(!hn) openLabel(h); return; }   // UNNAMED → name it; NAMED → just select (actions via double-click / second-tap)
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
-  // Right-click a room/area → select it (its actions live under •••). Never while picking a merge target.
+  // Right-click a room/area → its Room Actions menu (same as double-click). Never while picking a merge target.
   cv.addEventListener("contextmenu", function(e){ e.preventDefault(); if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed) return;
-    var pt=rel(e); if(mode==="room"){ var h=roomHit(pt.x,pt.y); if(h){ sel=h; redraw(); } } else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a){ sel=a; redraw(); } } });
+    var pt=rel(e), rh, ah;   // right-click = the same Room Actions menu as double-click
+    if(mode==="room"||mode==="removewall"||mode==="stairs"){ rh=roomHit(pt.x,pt.y); if(rh) openRoomMenu(rh,false); }
+    else if(mode==="zone"){ ah=areaHit(pt.x,pt.y); if(ah) openRoomMenu(ah,true); }
+    else if(mode==="select"){ var it=itemAt(pt); if(it && (rooms.indexOf(it)>=0||areas.indexOf(it)>=0)){ msel=[it]; syncSel(); openRoomMenu(it, areas.indexOf(it)>=0); } } });
   // Opening mode — a click cycles an existing door's swing (A → B → opening-only → A) or places a new one; the
   // cycle is deferred briefly so a double-click opens the door menu instead of cycling. Empty wall → place at once.
   cv.addEventListener("click", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed||mode!=="opening") return;
     var pt=rel(e), d=doorAt(pt.x,pt.y); if(d) scheduleDoorCycle(d); else { cancelDoorCycle(); placeDoor(pt.x,pt.y); } });
   // Desktop double-click: a room/area → Room Actions menu; a door → Door menu (Flip hinge / Opening only / Delete).
   cv.addEventListener("dblclick", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")||mergeArmed) return;
-    var pt=rel(e); if(mode==="room"||mode==="removewall"){ var h=roomHit(pt.x,pt.y); if(h) openRoomMenu(h,false); }   // Room Actions open even while Remove wall is active
+    var pt=rel(e); if(mode==="select"){ var si=itemAt(pt); if(si && (rooms.indexOf(si)>=0||areas.indexOf(si)>=0)){ msel=[si]; syncSel(); openRoomMenu(si, areas.indexOf(si)>=0); } }
+    else if(mode==="room"||mode==="removewall"||mode==="stairs"){ var h=roomHit(pt.x,pt.y); if(h) openRoomMenu(h,false); }   // Room Actions open even while Remove wall is active
     else if(mode==="zone"){ var a=areaHit(pt.x,pt.y); if(a) openRoomMenu(a,true); }
     else if(mode==="opening"){ var d=doorAt(pt.x,pt.y); if(d){ cancelDoorCycle(); openDoorMenu(d,pt.x,pt.y); } } });
   var wallKeyOf=function(r){ return r ? (r.orient+r.b+":"+r.lo+"-"+r.hi) : ""; };
   cv.addEventListener("pointermove", function(e){
     if(e.pointerType==="touch" && _ptrs.has(e.pointerId)){ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY}); if(_pinching){ updatePinch(); return; } }
     var pt=rel(e); hoverPt=pt;
+    if(mode==="select" && (selDrag||selBox)){ selectMove(pt); return; }
+    if(polyPts.length){ redraw(); }
     if(pendingWall && (Math.abs(pt.x-pendingWall.start.x)+Math.abs(pt.y-pendingWall.start.y) > 6)){ wallDrag={run:pendingWall.run}; pendingWall=null; }   // movement past a tap → it's a drag
     if(wallDrag){ wallDrag.cur=pt; redraw(); return; }
-    if(!dragging){ if(mode==="structure"||mode==="eraser") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
+    if(!dragging){ if(mode==="structure"||mode==="eraser"||mode==="block") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
       else if(mode==="room" && sel){ var nh=wallRunAt(sel,pt.x,pt.y); cv.style.cursor = nh ? (nh.orient==="v"?"ew-resize":"ns-resize") : "crosshair"; if(wallKeyOf(nh)!==wallKeyOf(wallHover)){ wallHover=nh; redraw(); } }
       return; }
     dragCur=pt; redraw(); });   // both modes track start→cur; the room preview clamps to the structure
-  cv.addEventListener("pointerup", function(e){
+  cv.addEventListener("pointerup", onPointerUp);
+  function onPointerUp(e){
+    if(mode==="select"){ selectUp(); return; }
     if(e.pointerType==="touch" && _ptrs.has(e.pointerId)){ var wasPinch=_pinching; _ptrs.delete(e.pointerId);
       if(wasPinch){ if(_ptrs.size<2) endPinch(); return; } }   // lifting a pinch finger never commits a draw
     if(wallDrag){ var b2=snappedWallB(wallDrag.run, wallDrag.cur.x, wallDrag.cur.y); commitWallMove(sel, wallDrag.run, b2); wallDrag=null; pendingWall=null; redraw(); return; }
@@ -1015,6 +1120,14 @@
       else redraw();
       return;
     }
+    if(mode==="block"){   // BLOCK: solid black, off the structure; Erase (the shared toggle) takes cells back out of any block
+      var bl=dragCells(startPt,dragCur||startPt), bch=false; startPt=dragCur=null;
+      if(structOp==="erase"){ var ek={}; bl.forEach(function(cr){ ek[key(cr[0],cr[1])]=1; });
+        blocks.forEach(function(b){ var n=b.cells.length; b.cells=b.cells.filter(function(k){ return !ek[k]; }); if(b.cells.length!==n) bch=true; }); blocks=blocks.filter(function(b){ return b.cells.length>0; }); }
+      else { var bk=bl.filter(function(cr){ return !has(cr[0],cr[1]); }).map(function(cr){ return key(cr[0],cr[1]); });
+        if(bk.length){ blocks.forEach(function(b){ b.cells=b.cells.filter(function(k){ return bk.indexOf(k)<0; }); }); blocks=blocks.filter(function(b){ return b.cells.length>0; }); blocks.push({cells:bk}); bch=true; } }
+      if(bch) pushHist(); updateTools(); redraw(); return;
+    }
     if(mode==="structure"||mode==="eraser"){
       var wasEmpty=cells.size===0, list=dragCells(startPt,dragCur||startPt), changed=false;
       list.forEach(function(cr){ var k=key(cr[0],cr[1]);
@@ -1028,10 +1141,12 @@
     var rl=roomDragCells(startPt,dragCur||startPt); startPt=dragCur=null;
     if(rl.length){ var rk=rl.map(function(cr){ return key(cr[0],cr[1]); });
       // a cell belongs to one room — take these cells away from any other room they overlapped
-      rooms.forEach(function(o){ o.cells=(o.cells||[]).filter(function(k){ return rk.indexOf(k)<0; }); });
-      rooms=rooms.filter(function(o){ return (o.cells||[]).length>0; });
-      var shape={cells:rk, label:""}; rooms.push(shape); sel=shape; pushHist(); redraw(); openLabel(shape); }
-    else { redraw(); } });
+      var nested=IOTDrawGeom.isNested(rk,rooms);   // drawn wholly inside another room (Paint Booth in Garage) → it nests; otherwise a cell belongs to one room
+      if(!nested){ rooms.forEach(function(o){ o.cells=(o.cells||[]).filter(function(k){ return rk.indexOf(k)<0; }); });
+        rooms=rooms.filter(function(o){ return (o.cells||[]).length>0; }); }
+      var isSt=(mode==="stairs"), shape=isSt ? {cells:rk, label:"Stairs", semanticType:"stairs"} : {cells:rk, label:""};
+      rooms.push(shape); sel=shape; pushHist(); redraw(); if(!isSt) openLabel(shape); }
+    else { redraw(); } }
   cv.addEventListener("pointerleave", function(){ hoverPt=null; hoverWall=null; if(wallHover){ wallHover=null; cv.style.cursor="crosshair"; } if(!dragging && !wallDrag) redraw(); });
   cv.addEventListener("pointercancel", function(e){ if(_ptrs.has(e.pointerId)){ _ptrs.delete(e.pointerId); if(_pinching && _ptrs.size<2) endPinch(); } });
   // Desktop: wheel zooms about the cursor (trackpad pinch arrives as ctrl+wheel — same path).
@@ -1220,6 +1335,7 @@
     var cid="st"+(++_stClip), rects=""; set.forEach(function(k){ var a=k.split(","); rects+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
     return '<clipPath id="'+cid+'">'+rects+'</clipPath><path d="'+d+'" fill="none" stroke="#2b2f36" stroke-opacity="0.6" stroke-width="1" vector-effect="non-scaling-stroke" clip-path="url(#'+cid+')"/>'; }
   function svgPlanBody(o, swS, swR, fs){ var segs=openings||[], hit=[];
+    (blocks||[]).forEach(function(b){ var br=""; (b.cells||[]).forEach(function(k){ var a=k.split(","); br+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; }); if(br) o.push('<g fill="#101112">'+br+'</g>'); });   // Block: solid black, not customer property
     rooms.forEach(function(r){ var set=new Set(r.cells||[]); if(!set.size) return;
       var rf=""; set.forEach(function(k){ var a=k.split(","); rf+='<rect x="'+(+a[0]*HALF)+'" y="'+(+a[1]*HALF)+'" width="'+HALF+'" height="'+HALF+'"/>'; });
       o.push('<g fill="#000000" fill-opacity="0.045">'+rf+'</g>');
@@ -1231,7 +1347,7 @@
     var arcs=hit.length ? hit.map(doorArcD).join("") : "";   // opening-only doors contribute the gap but no arc
     if(arcs) o.push('<path d="'+arcs+'" fill="none" stroke="#111" stroke-opacity="0.5" stroke-width="'+Math.max(1,swR*0.9)+'" stroke-linecap="round" stroke-linejoin="round"/>');
     rooms.forEach(function(r){ var name=(r.label||"").trim(); if(!name) return; var lc=roomLabelCell(r.cells||[]), bb=cellsBBoxPx(r.cells||[]);
-      var estW=name.length*fs*0.55, rot=(estW>bb.w-6 && bb.h>bb.w+4) ? ' transform="rotate(-90 '+lc[0]+' '+lc[1]+')"' : '';   // narrow + taller-than-wide → rotate the label to fit the long axis
+      var estW=name.length*fs*0.55, rot=((r.labelRot===90||r.labelRot===0) ? r.labelRot===90 : (estW>bb.w-6 && bb.h>bb.w+4)) ? ' transform="rotate(-90 '+lc[0]+' '+lc[1]+')"' : '';   // narrow + taller-than-wide → rotate the label to fit the long axis
       o.push('<text x="'+lc[0]+'" y="'+lc[1]+'"'+rot+' font-size="'+fs+'" font-weight="600" fill="#111" text-anchor="middle" dominant-baseline="central">'+esc(name)+'</text>'); }); }
   /* Phase 4 plan LAYER: the same scene, TRANSPARENT (no paper, no grid; structure a light wash), framed on the floor's
      context crop — viewBox = the ctx rect mapped through the seed transform (aerial fraction x·aspect·sc+offx, y·sc+offy).
@@ -1322,9 +1438,10 @@
   function closeMore(){ $("moreMenu").classList.remove("on"); var d=$("mDeleteTxt"); if(d) d.textContent="Delete structure"; var dr=$("mDeleteRoomTxt"); if(dr) dr.textContent="Delete room"; }
   // Compact mode selector (drop-up): Structure / Room / Area. Room needs a structure first.
   function closeModeMenu(){ var mm=$("modeMenu"); if(mm) mm.classList.remove("on"); var b=$("modeSel"); if(b) b.setAttribute("aria-expanded","false"); }
-  $("modeSel").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu(); closeMore(); var mm=$("modeMenu"), on=!mm.classList.contains("on"); mm.classList.toggle("on",on); this.setAttribute("aria-expanded",on?"true":"false"); });
+  $("modeSel").addEventListener("click", function(e){ e.stopPropagation(); closeFloorMenu(); closeMore(); closeShapeMenu(); var mm=$("modeMenu"), on=!mm.classList.contains("on"); mm.classList.toggle("on",on); this.setAttribute("aria-expanded",on?"true":"false"); });
   [].forEach.call(document.querySelectorAll("#modeMenu button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); var m=b.getAttribute("data-m"); closeModeMenu(); if(busy) return; backToDraw();
-    if((m==="room"||m==="opening"||m==="eraser") && cells.size===0){ setMode("structure"); return; }   // a room / opening / eraser needs a building first
+    if((m==="room"||m==="opening"||m==="eraser") && cells.size===0){ setMode("structure"); return; }
+    if(m==="stairs" && cells.size===0){ setMode("structure"); return; }   // a room / opening / eraser needs a building first
     setMode(m); }); });
   document.addEventListener("click", function(e){ var w=$("modeWrap"); if(w && !w.contains(e.target)) closeModeMenu(); });
   // (Opening mode is now a choice in the compact draw-mode selector — no separate toolbar button.)
@@ -1357,6 +1474,11 @@
   $("tUndo").addEventListener("click", function(){ if(busy) return; if(backToDraw()) return; undo(); });
   $("tRedo").addEventListener("click", function(){ if(!busy) redo(); });
   document.addEventListener("keydown", function(e){
+    var typing=/^(INPUT|TEXTAREA|SELECT)$/.test((e.target&&e.target.tagName)||"");
+    if(!typing && !_cc){
+      if(e.key==="Enter" && polyPts.length){ e.preventDefault(); polyClose(); return; }
+      if(e.key==="Escape" && polyPts.length){ e.preventDefault(); polyPts=[]; redraw(); return; }
+      if(mode==="select" && msel.length){ if(e.key==="Escape"){ msel=[]; syncSel(); redraw(); return; } if(e.key==="Delete"||e.key==="Backspace"){ e.preventDefault(); deleteSel(); return; } } }
     if(e.key==="Escape"){ if($("modeMenu").classList.contains("on")){ closeModeMenu(); return; } if($("floorMenu").classList.contains("on")){ closeFloorMenu(); $("floorBtn").focus(); return; } if($("moreMenu").classList.contains("on")){ closeMore(); return; } if(mergeArmed){ endMerge(); return; } if(backToDraw()) return; if(dragging){ dragging=false; startPt=dragCur=null; draft=null; redraw(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="z"||e.key==="Z")){ e.preventDefault(); if(busy) return; if(e.shiftKey){ redo(); } else if(!backToDraw()){ undo(); } }
     else if((e.ctrlKey||e.metaKey) && (e.key==="y"||e.key==="Y")){ e.preventDefault(); redo(); } });
@@ -1385,10 +1507,22 @@
     $("rmMerge").style.display=(room && rooms.length>1)?"":"none";           // merge needs a neighbour
     $("rmRemoveWall").style.display=(room && hasInt)?"":"none";              // only when there's an interior wall to open
     $("rmRemoveWallTxt").textContent="Remove wall";
+    $("rmRotate").style.display=(room && (r.label||"").trim())?"":"none";   // a name to rotate
     $("rmDeleteTxt").textContent=isArea?"Delete area":"Delete room";
     redraw(); positionPop($("roomMenu"), cellsBBoxPx(r.cells||[])); rmOpenedAt=Date.now(); }
   function closeRoomMenu(){ var m=$("roomMenu"); if(m) m.classList.remove("on"); rmRoom=null; }
   $("rmRename").addEventListener("click", function(){ if(busy||!rmRoom) return; var r=rmRoom, a=rmIsArea; closeRoomMenu(); openLabel(r, a); });   // explicit rename — only now does the name field open
+  $("rmRotate").addEventListener("click", function(){ if(busy||!rmRoom||rmIsArea) return; var r=rmRoom; closeRoomMenu();
+    r.labelRot = nameVertical(r,(r.label||"").trim(),cellsBBoxPx(r.cells||[])) ? 0 : 90; pushHist(); redraw(); });   // flip the name's direction (explicit, persisted on the room)
+  // ---- Shapes palette (paint modes only) + Select tool
+  function closeShapeMenu(){ var m=$("shapeMenu"); if(m) m.classList.remove("on"); }
+  function syncShapeUI(){ [].forEach.call(document.querySelectorAll("#shapeMenu button"), function(b){ b.classList.toggle("on", b.getAttribute("data-s")===shapeKind); }); $("tShapes").classList.toggle("hot", shapeKind!=="square"); }
+  $("tShapes").addEventListener("click", function(e){ e.stopPropagation(); closeMore(); closeModeMenu(); var m=$("shapeMenu"); m.classList.toggle("on"); });
+  [].forEach.call(document.querySelectorAll("#shapeMenu button"), function(b){ b.addEventListener("click", function(e){ e.stopPropagation(); shapeKind=b.getAttribute("data-s"); polyPts=[]; closeShapeMenu(); syncShapeUI(); redraw(); }); });
+  document.addEventListener("click", function(e){ var w=$("shapeWrap"); if(w && !w.contains(e.target)) closeShapeMenu(); });
+  $("tSelect").addEventListener("click", function(){ if(busy) return; backToDraw(); setMode(mode==="select" ? (cells.size?"room":"structure") : "select"); });
+  $("tSelDel").addEventListener("click", function(){ if(!busy) deleteSel(); });
+  syncShapeUI();
   $("rmMerge").addEventListener("click", function(){ if(busy||!rmRoom) return; closeRoomMenu(); if(sel) startMerge(); });
   $("rmRemoveWall").addEventListener("click", function(){ if(busy||!rmRoom) return; closeRoomMenu(); setMode(mode==="removewall" ? "room" : "removewall"); });
   $("rmDelete").addEventListener("click", function(){ if(busy||!rmRoom) return; var r=rmRoom, a=rmIsArea; closeRoomMenu();

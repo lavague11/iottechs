@@ -32,14 +32,14 @@ const HALF = 13, FULL = 26;
 const NAMES = [
   "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "sanitizeOpenWalls", "segDistSq",
   "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "structFill", "svgPlanBody",
-  "namedRooms", "planCells",
+  "namedRooms", "sanitizeBlocks", "planCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
   var HALF=${HALF}, FULL=${FULL};
   var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), metersPerPx=0, _seed=null, _planStamp=0;
   var enhancedURL=null, enhancedRev=null, enhancedOnce=false, sel=null, _pushes=0;
-  var zoneCells={}, areas=[];   // Phase 3 zone cells + named Areas — stubbed here (these tests cover the enhanced raster, not areas)
+  var zoneCells={}, areas=[], blocks=[];   // Phase 3 zone cells + named Areas — stubbed here (these tests cover the enhanced raster, not areas)
   function zcOut(){ return {}; } function zcIn(){ return {}; } function zcClone(){ return {}; } function zoneCellsSVG(){ return ""; }
   function namedAreas(l){ return (l||[]).filter(function(a){ return a && (a.label||"").trim() && (a.cells||[]).length; }); }
   function sanitizeAreas(l){ return Array.isArray(l)?l:[]; } function areasFromZoneCells(){ return []; } function syncZoneCellsFromAreas(){} function areasSVG(){ return ""; } function isStairs(){ return false; }

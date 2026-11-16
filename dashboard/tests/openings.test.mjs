@@ -34,7 +34,7 @@ const NAMES = ["key", "has", "edgesOf", "boundaryEdges", "ptLess", "wallKey", "c
   "cellsBBoxPx", "roomLabelCell", "esc", "doorArcD", "wallPathD", "svgPlanBody"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function(`
-  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), _pushes=0, snap=0.5;
+  var HALF=${HALF}, FULL=${FULL}; var cells=new Set(), rooms=[], blocks=[], openings=[], openWalls=new Set(), _pushes=0, snap=0.5;
   function pushHist(){ _pushes++; } function redraw(){}
   ${PURE}
   return { key:key, wallKey:wallKey, canonOpening:canonOpening, openKey:openKey, allWallUnits:allWallUnits,
