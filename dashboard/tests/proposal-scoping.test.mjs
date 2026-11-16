@@ -8,7 +8,8 @@ import { readFileSync } from "node:fs";
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 
 test("inline catalog autocomplete is scoped to the current service by canonical id", () => {
-  const src = read("../app/project/[accessId]/proposal-items-editor.jsx");
+  // ItemNameField now lives in its own module so the Addendum builder shares the same picker.
+  const src = read("../app/project/[accessId]/item-name-field.jsx") + read("../app/project/[accessId]/proposal-items-editor.jsx");
   assert.ok(/allCatalog\.filter\(\(c\) => c\.service === currentService && c\.name\.toLowerCase\(\)\.includes\(needle\)\)/.test(src),
     "matches filter by c.service === currentService BEFORE the name match (no cross-service results)");
   assert.ok(!/const others = hits\.filter/.test(src), "the old cross-service 'others' bucket is gone");

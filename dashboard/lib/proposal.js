@@ -1029,6 +1029,14 @@ export function addendumFingerprint(a) {
   const meaning = { t: a?.title || "", d: +a?.discount || 0, items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
   return _fpHash(_fpStable(meaning));
 }
+// THE add-on money formula (one definition: db.getApprovedAddons / getPendingAddons, the add-on card and the
+// version snapshot all call it). Rounded to cents like every other money figure; a missing/non-numeric qty or
+// price counts as 0; the total never goes below 0 (a discount larger than the subtotal floors at 0).
+export function addendumTotals(a) {
+  const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
+  const discount = r2(+a?.discount || 0);
+  return { sub, discount, total: r2(Math.max(0, sub - discount)) };
+}
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
 
