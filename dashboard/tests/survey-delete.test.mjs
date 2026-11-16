@@ -267,8 +267,14 @@ test("Start Over clears the stash, so Undo cannot resurrect a device onto a blan
   assert.deepEqual(sb.devices, [], "the floor stays blank");
 });
 
+// The point is that the key MOVED — not what it currently says. Pinning the live value made every later
+// section that edits the widget fail this test and retype it, which is how a cache-buster quietly stops
+// being bumped. So: it must still look like a dated key, and must not be any value already superseded.
+const STALE_WIDGET_KEYS = ["20261116-sectionA3", "20261116-sectionBCD3"];
 test("the widget cache-buster moved with the widget", () => {
   const w = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.jsx", import.meta.url), "utf8");
-  assert.ok(!w.includes("20261116-sectionA3"));
-  assert.match(w, /WIDGET_VERSION = "20261116-sectionBC/);
+  const m = w.match(/WIDGET_VERSION = "([^"]+)"/);
+  assert.ok(m, "the widget still declares a WIDGET_VERSION");
+  assert.match(m[1], /^\d{8}-/, "a dated cache key");
+  for (const old of STALE_WIDGET_KEYS) assert.notEqual(m[1], old, `the cache key is still the superseded ${old}`);
 });

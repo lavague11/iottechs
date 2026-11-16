@@ -82,6 +82,25 @@
       .sort(function (a, b) { return ((b.r.cells || []).length - (a.r.cells || []).length) || (a.i - b.i); })
       .map(function (x) { return x.r; });
   }
+  // A container's OWN visible floor: its cells minus every strictly smaller room nested wholly inside it.
+  // The name has to be anchored here, not at the container's centre — a nested room paints over its
+  // container (paintOrder), so a centred name lands under the inner room's fill and becomes unreadable
+  // (Garage's name buried in the Stairs hatch). Fully covered → its own cells, so a name never vanishes.
+  function freeCells(room, rooms) {
+    var own = (room && room.cells) || [];
+    if (!own.length) return own;
+    var taken = null, i, j;
+    for (i = 0; i < (rooms || []).length; i++) {
+      var o = rooms[i], oc = (o && o.cells) || [];
+      if (o === room || !oc.length || oc.length >= own.length) continue;   // only a strictly smaller room can nest
+      if (!isNested(oc, [room])) continue;
+      if (!taken) taken = {};
+      for (j = 0; j < oc.length; j++) taken[oc[j]] = 1;
+    }
+    if (!taken) return own;
+    var out = own.filter(function (k) { return !taken[k]; });
+    return out.length ? out : own;
+  }
 
   // ---- shapes ------------------------------------------------------------------------------------------
   function pointInPoly(px, py, pts) {
@@ -132,7 +151,7 @@
   function shiftKeys(keys, dc, dr) { return (keys || []).map(function (k) { var p = k.split(","); return (+p[0] + dc) + "," + (+p[1] + dr); }); }
 
   var api = { MODES: MODES, AREA_NAMES: AREA_NAMES, rectsOverlap: rectsOverlap, nameRect: nameRect, dimLabelPos: dimLabelPos,
-    isNested: isNested, roomAtKey: roomAtKey, paintOrder: paintOrder, shapeCells: shapeCells, closesPolygon: closesPolygon,
+    isNested: isNested, roomAtKey: roomAtKey, paintOrder: paintOrder, freeCells: freeCells, shapeCells: shapeCells, closesPolygon: closesPolygon,
     polygonCells: polygonCells, pointInPoly: pointInPoly, boxSelect: boxSelect, shiftKeys: shiftKeys };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (root) root.IOTDrawGeom = api;

@@ -6,8 +6,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 
 const src = readFileSync(new URL("../public/widgets/draw-floorplan.html", import.meta.url), "utf8");
+// The widget's pure helpers call into the shared geometry module (room labels anchor through
+// IOTDrawGeom.freeCells). Inject the REAL module, not a stub, so these tests keep running shipping code.
+const IOTDrawGeom = createRequire(import.meta.url)("../public/widgets/draw-geom.js");
 
 // Return the full text of `function name(...){...}` (brace-matched, string/comment tolerant enough for this widget).
 function extractFn(s, name) {
@@ -35,7 +39,7 @@ const NAMES = [
   "namedRooms", "sanitizeBlocks", "planCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
-const api = new Function(`
+const api = new Function("IOTDrawGeom", `
   var HALF=${HALF}, FULL=${FULL};
   var cells=new Set(), rooms=[], openings=[], openWalls=new Set(), metersPerPx=0, _seed=null, _planStamp=0;
   var enhancedURL=null, enhancedRev=null, enhancedOnce=false, sel=null, _pushes=0;
@@ -52,7 +56,7 @@ const api = new Function(`
     setEnhanced:function(u,r){ enhancedURL=u; enhancedRev=r; }, setMeters:function(m){ metersPerPx=m; }, setStamp:function(t){ _planStamp=t; },
     getEnhancedURL:function(){ return enhancedURL; }, getEnhancedRev:function(){ return enhancedRev; }, getEnhancedOnce:function(){ return enhancedOnce; },
     getCells:function(){ return Array.from(cells); }, getRooms:function(){ return rooms; } };
-`)();
+`)(IOTDrawGeom);
 const { key } = api;
 
 // A 2x2 half-cell box occupying cols 0..1, rows 0..1 — a self-contained structure for the hashes/exports.

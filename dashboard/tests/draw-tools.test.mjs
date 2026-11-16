@@ -83,6 +83,30 @@ test("paint order draws the container before the nested room", () => {
   const booth = { cells: ["1,1"] };
   assert.deepEqual(G.paintOrder([booth, garage]), [garage, booth]);
 });
+// Found by exercising the tool in a browser: the nested room paints OVER its container, so a container
+// name anchored at the container's centre ends up buried in the inner room's fill ("Garage" under Stairs).
+test("a container's name anchors in its own free floor, never under a nested room", () => {
+  const booth = { cells: ["1,1"], label: "Paint Booth" };
+  const free = G.freeCells(garage, [garage, booth]);
+  assert.equal(free.includes("1,1"), false, "the nested room's cells are not candidates for the container's name");
+  assert.equal(free.length, garage.cells.length - 1);
+  assert.deepEqual(G.freeCells(booth, [garage, booth]), booth.cells, "the nested room itself keeps all of its cells");
+  assert.deepEqual(G.freeCells(garage, [garage]), garage.cells, "no nesting → unchanged");
+});
+test("freeCells ignores overlaps that are not nesting, and never empties a room", () => {
+  const spill = { cells: ["2,2", "3,2"] };                       // overlaps the corner but is not inside
+  assert.deepEqual(G.freeCells(garage, [garage, spill]), garage.cells, "a spilling room is not a nested child");
+  const twin = { cells: garage.cells.slice() };                  // same size → neither contains the other
+  assert.deepEqual(G.freeCells(garage, [garage, twin]), garage.cells);
+  const covered = { cells: ["0,0"] };
+  assert.deepEqual(G.freeCells(covered, [covered, { cells: ["0,0"] }]), ["0,0"], "a fully covered room keeps a place for its name");
+  assert.deepEqual(G.freeCells({ cells: [] }, []), []);
+});
+test("every room label in the widget is anchored through freeCells", () => {
+  assert.equal(/roomLabelCell\(r\.cells\|\|\[\]\)/.test(html), false, "no room label still anchors at the raw cell list");
+  assert.equal((html.match(/roomLabelCell\(IOTDrawGeom\.freeCells\(r,rooms\)\)/g) || []).length, 4,
+    "canvas, the dim-pill name boxes and both SVG exports agree");
+});
 
 // ---- 10 shapes
 test("shapes: circle and triangle are strict subsets of the square", () => {
@@ -130,7 +154,8 @@ test("widget wires select, shapes, stairs, block, rotate-name and right-click", 
   assert.ok(html.includes("draw-geom.js?v="), "geometry module is loaded");
 });
 test("drawSrc cache key was bumped so the draw iframe actually reloads", () => {
-  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE/.test(host));
+  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE2/.test(host), "the draw iframe key");
+  assert.ok(/draw-geom\.js\?v=20261116-sectionE2/.test(html), "the geometry module key moves with it");
 });
 
 // ---- the constraint: planHash of an untouched floor
