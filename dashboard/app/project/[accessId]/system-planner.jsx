@@ -56,6 +56,7 @@ export default function SystemPlanner({
   const persistSkip = (v) => { setSkipped(v); if (onSkipViews) Promise.resolve(onSkipViews(v)).catch(() => {}); };
   const [walkOpen, setWalkOpen] = useState(false);
   const [selectedCid, setSelectedCid] = useState(null);   // the one camera the user picked — shared across modes
+  const [rosterUndo, setRosterUndo] = useState(null);   // newest undoable delete token the widget still holds
   const [liveRoster, setRoster] = useState([]);  // the survey iframe's LIVE device echo; `roster` (below) falls back to the SAVED list
   const [curFloor, setCurFloor] = useState(0);
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
@@ -155,7 +156,7 @@ export default function SystemPlanner({
       if (m.type === "iotSurveySelect" && m.cid) { setSelectedCid(m.cid); post("CCTV Mockup", { type: "iotMockupCmd", cmd: "focus", cid: m.cid }); }
       else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
       // The devices roster is lifted into the shell (shown on both tabs) — mirror the survey's live roster.
-      else if (m.type === "iotSurveyDevices") { setRoster(Array.isArray(m.floors) ? m.floors : []); setCurFloor(m.curFloor || 0); }
+      else if (m.type === "iotSurveyDevices") { setRoster(Array.isArray(m.floors) ? m.floors : []); setCurFloor(m.curFloor || 0); setRosterUndo(m.undo || null); }
       // A rename made INSIDE the mockup (it already persisted to survey2 by cid) → relay to the survey
       // iframe so the live map/Devices strip reflect it immediately, closing the sync loop both ways.
       else if (m.type === "iotMockupRenamed" && m.cid) { post("Site Survey", { type: "iotSurveyCmd", cmd: "renameCid", project: accessId, cid: m.cid, name: m.name || "" }); }
@@ -545,7 +546,7 @@ export default function SystemPlanner({
               </button>
             ) : <span className="syp-fb-arrow-sp" aria-hidden="true" />}
             <FloorSelect floors={roster} curFloor={curFloor} plain
-              onSwitch={goFloor} onAdd={addFloor} onRename={renameFloor} onDuplicate={duplicateFloor} onDelete={deleteFloor} />
+              onSwitch={goFloor} onAdd={addFloor} onRename={renameFloor} onDuplicate={duplicateFloor} onDelete={deleteFloor} locked={!!surveySubmitted} />
             {curFloor >= floorCount - 1 ? (
               <button className="syp-fb-arrow syp-fb-add" aria-label="Add floor" title="Add floor" onClick={addFloor}>
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
@@ -657,7 +658,7 @@ export default function SystemPlanner({
               <span>Devices{devCount ? ` (${devCount})` : ""}</span>
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
             </button>
-            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} canUnlock={canUnlock} onUnlock={editSurvey} cmd={surveyCmd} onAddCamera={() => surveyCmd({ cmd: "addCamera", project: accessId })} />}
+            {devOpen && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloor} readOnly={devReadOnly} locked={devLocked} canUnlock={canUnlock} onUnlock={editSurvey} cmd={surveyCmd} undoToken={rosterUndo} onAddCamera={() => surveyCmd({ cmd: "addCamera", project: accessId })} />}
           </div>
         );
       })()}
@@ -772,7 +773,7 @@ function SubmitSummary({ floors = [], roster = [], onGoPlan, onGoPhotos }) {
 // rename/duplicate/delete), so floor logic lives once in the widget. Compact closed; the open menu
 // lists floors (✓ current) then Add/Rename/Duplicate/Delete acting on the current floor. Rename and
 // Delete resolve inline (no native dialogs), matching the vault-dark system.
-function FloorSelect({ floors = [], curFloor = 0, plain = false, onSwitch, onAdd, onRename, onDuplicate, onDelete }) {
+function FloorSelect({ floors = [], curFloor = 0, plain = false, onSwitch, onAdd, onRename, onDuplicate, onDelete, locked = false }) {
   const [open, setOpen] = useState(false);
   const [menuMode, setMenuMode] = useState("list");   // "list" | "rename" | "confirm"
   const [draft, setDraft] = useState("");
@@ -808,10 +809,10 @@ function FloorSelect({ floors = [], curFloor = 0, plain = false, onSwitch, onAdd
             </div>
           ) : menuMode === "confirm" ? (
             <div className="syp-fsel-form">
-              <div className="syp-fsel-confirm">Delete “{curName}”?</div>
+              <div className="syp-fsel-confirm">{only ? `Reset “${curName}”?` : `Delete “${curName}”?`}</div>
               <div className="syp-fsel-formbtns">
                 <button className="syp-fsel-mini" onClick={() => setMenuMode("list")}>Cancel</button>
-                <button className="syp-fsel-mini danger" onClick={() => { onDelete && onDelete(); close(); }}>Delete</button>
+                <button className="syp-fsel-mini danger" onClick={() => { onDelete && onDelete(); close(); }}>{only ? "Reset" : "Delete"}</button>
               </div>
             </div>
           ) : (
@@ -827,7 +828,7 @@ function FloorSelect({ floors = [], curFloor = 0, plain = false, onSwitch, onAdd
               <button className="syp-fsel-act" role="menuitem" onClick={() => { onAdd && onAdd(); close(); }}>+ Add floor</button>
               <button className="syp-fsel-act" role="menuitem" onClick={startRename}>Rename</button>
               <button className="syp-fsel-act" role="menuitem" onClick={() => { onDuplicate && onDuplicate(); close(); }}>Duplicate</button>
-              <button className="syp-fsel-act danger" role="menuitem" disabled={only} onClick={() => setMenuMode("confirm")}>Delete</button>
+              <button className="syp-fsel-act danger" role="menuitem" disabled={locked} onClick={() => setMenuMode("confirm")}>Delete</button>
             </>
           )}
         </div>

@@ -11,7 +11,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261116-sectionA3";
+const WIDGET_VERSION = "20261116-sectionBCD2";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
@@ -51,6 +51,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [fs, setFs] = useState(false);
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
+  const [rosterUndo, setRosterUndo] = useState(null);   // newest undoable delete token the widget still holds
   const [roster, setRoster] = useState([]);       // device roster mirrored from the tool (moved outside)
   const [commentAnchor, setCommentAnchor] = useState(null);   // a read-only customer tapped this camera → comment toast
   const [curFloorState, setCurFloorState] = useState(0);
@@ -137,7 +138,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         // background is added — no waiting on the server's tool-meta poll.
         if (typeof e.data.hasContent === "boolean") onHasData?.(e.data.hasContent);
       }
-      if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); }
+      if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); setRosterUndo(e.data.undo || null); }
       if (e.data.type === "iotSurveyZoom" && e.data.img) { setZoomImg(e.data.img); setZoomed(false); }
       // The tool's own nav buttons drive the real server submit/unsubmit (the status now lives inside the tool).
       if (e.data.type === "iotSurvey2Submit") onSubmit?.();
@@ -326,7 +327,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       {fs && typeof document !== "undefined" ? createPortal(editor, document.body) : editor}
       {/* The device roster lives OUTSIDE the tool — hidden in focus mode (the overlay owns the screen),
           and lifted into the System Planner shell when embedded there (noRoster). */}
-      {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
+      {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} undoToken={rosterUndo} />}
       <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
       <style>{SS_FS_CSS}</style>
     </>

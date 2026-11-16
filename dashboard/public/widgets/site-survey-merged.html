@@ -2318,7 +2318,7 @@
                    color:(isCur?d.color:((it.group&&it.group.color)||"#8a8f98")), aimed:!!d.aimed, placed:(d.placed!==false),
                    photo:d.photo||null, photoName:d.photoName||null, busy:!!d.photoBusy }; }) };
       });
-      parent.postMessage({ type:"iotSurveyDevices", project:PID, curFloor:curFloor, ro:RO, floors:payload }, "*");
+      parent.postMessage({ type:"iotSurveyDevices", project:PID, curFloor:curFloor, ro:RO, floors:payload, undo:(delStash.length?delStash[delStash.length-1].token:null) }, "*");
       try{ updateCamBtns(); }catch(e){}   // device count changed → re-gate the floating undo (show only after a change)
     }catch(e){} }
     // Coalesce the cross-iframe roster push: posting the full roster (with photos) makes the React host
@@ -2395,6 +2395,7 @@
       if(m.cmd==="renameFloor"){ var rf=floors[curFloor]; if(rf && typeof m.name==="string" && m.name.trim()){ rf.name=m.name.trim(); renderFloorTabs(); renderPanel(); queueSave(); reportDevices(); } return; }
       // MERGE: Photos view "+ Add camera" → an unplaced survey camera (one shared record, placed:false).
       if(m.cmd==="addCamera"){ addUnplacedCamera(); return; }
+      if(m.cmd==="undoDelete"){ undoDeleteDevice(m.token); return; }   // frozen() is re-checked inside
       var d=(m.id!=null)?byIdDev(m.id):null;
       if(m.cmd==="select"){ if(d){ if(curStep!==1) goStep(1); select(d.id); } return; }
       // Relay from the host: focus the camera with this cid (System Planner cross-mode selection).
@@ -2442,12 +2443,43 @@
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
       if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); }
       else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }
-      else if(m.cmd==="delete"){ removeDevice(d.id); }
+      else if(m.cmd==="delete"){ removeDevice(d.id, m.token); }
       else if(m.cmd==="photo"){ d.photo=m.photo||null; d.photoName=m.photo?(m.photoName||d.name||null):null; renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="clearPhoto"){ d.photo=null; d.photoName=null; renderDevice(d); renderPanel(); queueSave(); }
     });
-    function removeDevice(id){ var el=document.getElementById("dev-"+id); if(el) el.remove();
+    // Delete-with-undo (section B). A delete asked for by the host carries a `token`. We keep the persisted
+    // (stripped) RECORD of the removed device, its tag, its array index and its floor OBJECT — never its runtime
+    // `id`, because loadFloor() resets devSeq to 0 so ids are reused by other devices after any floor switch.
+    // The device is identified by its cid (random, never positional), so deleting 2 of 5 renumbers nothing and
+    // Undo works across a floor round-trip. undoDeleteDevice() re-adds the record through reAdd (same path as a
+    // floor load) at its old index. Bounded stash; the newest token is reported to the host (`undo` in
+    // iotSurveyDevices) so its toast can never outlive a stash that is gone. A token-less (map-side) delete
+    // stashes nothing.
+    var delStash=[];
+    function removeDevice(id, token){ var el=document.getElementById("dev-"+id); if(el) el.remove();
+      if(token){ for(var si=0;si<devices.length;si++){ if(devices[si].id===id){
+        var keep=devices; devices=[keep[si]]; var rec=stripDevs()[0]; devices=keep;   // the ONE strip shape (persisted records carry no id/tag/colour)
+        delStash.push({token:token, cid:rec.cid, rec:rec, tag:keep[si].tag, idx:si, floor:floors[curFloor]}); if(delStash.length>20) delStash.shift(); break; } } }
       devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); }
+    function undoDeleteDevice(token){ if(frozen()||!token) return false;
+      var s=null; for(var ui=0;ui<delStash.length;ui++){ if(delStash[ui].token===token){ s=delStash.splice(ui,1)[0]; break; } }
+      if(!s) return false;
+      var fi=floors.indexOf(s.floor); if(fi<0) return false;   // that floor was deleted since — nothing to put it back on
+      var live=(fi===curFloor)?devices:(s.floor.devices||[]);
+      if(s.cid){ for(var di=0;di<live.length;di++){ if(live[di].cid===s.cid) return false; } }   // already back
+      if(fi===curFloor){
+        var n0=devices.length; reAdd(s.rec);
+        if(devices.length!==n0+1) return false;   // reAdd bails on an unknown kind — never pop an unrelated live device
+        var nd=devices.pop();
+        if(s.cid && nd.cid!==s.cid){ devices.push(nd); return false; }   // not the record we just re-added
+        devices.splice(Math.min(s.idx,devices.length),0,nd);   // reAdd appends; move it to its old slot
+        // Restore the original tag only while it is still free: delete IC5 → add a camera (recount hands out
+        // IC5) → undo would otherwise show IC5 twice. If taken, keep the tag reAdd assigned.
+        if(s.tag && !devices.some(function(d){ return d!==nd && d.tag===s.tag; })) nd.tag=s.tag;
+        try{ renderDevice(nd); }catch(e){}
+        renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); return true; }
+      var fd=s.floor.devices||(s.floor.devices=[]);   // another floor is showing: its stored list takes the record
+      fd.splice(Math.min(s.idx,fd.length),0,s.rec); reportDevices(); queueSave(); return true; }
     // A hand-typed rename becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
     // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An empty
     // name clears the flag → the auto geometry location takes over again on the next reconcile. (This is an
@@ -2643,6 +2675,13 @@
         ad.addEventListener("pointermove", function(e){ if(!aligning||!last) return; var sc=document.getElementById("scene").getBoundingClientRect(); if(!sc.width||!sc.height) return;
           nudgeAlign({ tx:(e.clientX-last.x)/sc.width*100, ty:(e.clientY-last.y)/sc.height*100 }); last={x:e.clientX,y:e.clientY}; });
         ad.addEventListener("pointerup", function(){ last=null; }); ad.addEventListener("pointercancel", function(){ last=null; }); } })();
+    // Google imagery is credited wherever it is RENDERED (nothing stored carries a credit). Same sizing as the export's
+    // drawCredit — IOTTileLayout.creditMetrics against this plate — so the app, the PDF and Download agree.
+    function aerialCreditSync(cap, v, f){ var el=document.getElementById("aerialCredit"), sc=document.getElementById("scene"); if(!el||!sc||!window.IOTTileLayout) return;
+      var bg=f&&f.bg, sat=cap ? v!=="plan" : !!(f&&f.aerial&&typeof bg==="string"&&bg&&bg.indexOf("data:image/svg")!==0&&!/.svg(?|$)/i.test(bg));
+      if(!sat){ el.style.display="none"; return; }
+      var m=IOTTileLayout.creditMetrics(sc.offsetWidth||800, sc.offsetHeight||600);
+      el.textContent=m.text; el.style.cssText="display:block;right:"+m.margin+"px;bottom:"+m.margin+"px;font-size:"+m.font+"px;padding:"+m.padY+"px "+m.padX+"px;line-height:1"; }
     function renderView(){
       var aerial=document.getElementById("aerialImg"), img=document.getElementById("stageImg"); if(!aerial||!img) return;
       var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?normView(f.view):null;   // Full | Layered | Plan (default Layered); legacy satellite→full, hybrid→layered
@@ -2664,6 +2703,7 @@
       var pw=document.getElementById("planWorld");
       if(pw && !aligning){ var ax=(cap && v!=="plan") ? validXf(f.planXf) : null; pw.style.transform = (ax && !xfIsId(ax)) ? xfCss(ax) : ""; }
       syncViewSeg(cap, v);
+      aerialCreditSync(cap, v, f);
       // Rotate moved into the ••• sheet; buildMoreSheet hides it on hybrid-capable floors (rotating bgData
       // alone would misalign the ctx aerial/planSvg layers, and a ctx plan is already leveled).
       var ab=document.getElementById("alignBtn"); if(ab){ ab.style.display=(cap && v!=="plan" && !frozen())?"":"none"; ab.classList.toggle("on",aligning); }   // Align plan→aerial: only on a hybrid floor in an aerial view, staff only
@@ -2939,7 +2979,7 @@
       var mr=document.getElementById("moreRotate"); if(mr) mr.addEventListener("click", function(){ closeMoreSheet(); rotatePlan(); });
       var so=document.getElementById("moreStartOver"); if(so) so.addEventListener("click", function(){ closeMoreSheet(); startOverFloor(); });
       var vl=document.getElementById("moreVersList"); if(vl) vl.addEventListener("click", function(e){ var b=e.target.closest(".versThumb"); if(b) restoreVersion(b.getAttribute("data-vid")); }); })();
-    function deleteFloor(i){ if(i<0||i>=floors.length) return; snapFloor(); clearIntent=true;   // a delete may legitimately leave the survey empty — declare it (see pushServer)
+    function deleteFloor(i){ if(frozen()||i<0||i>=floors.length) return; delStash=[]; snapFloor(); clearIntent=true;   // a delete may legitimately leave the survey empty — declare it (see pushServer)
       if(floors.length<=1){ floors=[{id:newFloorId(),name:"Floor 1",bg:null,devices:[],started:false}]; curFloor=0; loadFloor(0); renderFloorTabs(); goStep(0); flushNow(); return; }   // deleting the ONLY floor empties the survey → flush it now, while the intent is declared
       var wasCur=(curFloor===i);
       floors.splice(i,1);
@@ -2959,7 +2999,7 @@
       f.plan=null; f.outlineDraft=null; f.ctx=null; f.planSvg=null; f.bgCtx=false;
       f.view=null; f.sides=null; f.grid=null; f.planXf=null; f.zonesMigrated=false; f.boundary=null; f.zones=[]; f.devices=[]; }
     function startOverFloor(){ if(frozen()) return; var f=floors[curFloor]; if(!f) return;
-      var go=function(){ resetFloorRecord(floors[curFloor]); loadFloor(curFloor); renderFloorTabs(); goStep(0); clearIntent=true; flushNow(); };   // discrete+destructive → flush now; on the ONLY floor this empties the survey, so declare the clear (see pushServer); loadFloor(0)/goStep(0) land on the chooser and re-emit bgReady:false,hasPlan:false
+      var go=function(){ resetFloorRecord(floors[curFloor]); delStash=[]; loadFloor(curFloor); renderFloorTabs(); goStep(0); clearIntent=true; flushNow(); };   // delStash: the floor object survives the reset, so a pending Undo would resurrect a device onto a now-blank floor. discrete+destructive → flush now; on the ONLY floor this empties the survey, so declare the clear (see pushServer); loadFloor(0)/goStep(0) land on the chooser and re-emit bgReady:false,hasPlan:false
       if(floorHasWork(f)) askConfirm("Start over on "+(f.name||("Floor "+(curFloor+1)))+"? This clears the current setup for this floor and returns it to background selection. Your last submitted version is not deleted.", go, "Start Over");
       else go();   // nothing meaningful to lose → straight to the chooser, no scary confirm (owner's #20)
     }

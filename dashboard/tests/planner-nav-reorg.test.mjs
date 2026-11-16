@@ -59,7 +59,8 @@ test("FloorSelect exposes full parity: switch/add/rename/duplicate/delete", () =
   for (const bit of ["onSwitch", "onAdd", "onRename", "onDuplicate", "onDelete", "+ Add floor", "Rename", "Duplicate", "Delete"]) {
     assert.ok(f.includes(bit), `FloorSelect has ${bit}`);
   }
-  assert.ok(f.includes("disabled={only}"), "Delete disabled when only one floor");
+  assert.ok(!f.includes("disabled={only}"), "section C: the ONLY floor can be deleted (reset to a blank Floor 1) — no longer greyed out");
+  assert.ok(f.includes("disabled={locked}"), "…but a submitted survey still locks it");
   assert.ok(f.includes('menuMode === "confirm"'), "delete has an inline confirm step");
 });
 
