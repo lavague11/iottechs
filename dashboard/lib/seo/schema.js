@@ -188,4 +188,18 @@ function seedFacts(db) {
   F("company.licensing", "Low-voltage / alarm licensing", "", "licensing", 0, 0, "NEEDS INPUT — license numbers + jurisdictions for trust + legal claims.");
   F("pricing.standard_camera", "Standardized camera-install price (if public)", "", "pricing", 0, 0, "NEEDS DECISION — only publish from one canonical source if management approves.");
   F("company.warranty_months", "Standard warranty (months)", "", "warranty", 0, 0, "NEEDS INPUT.");
+  correctNapFacts(db);
+}
+
+// One-time NAP correction (2026-11-15). The seeds above are INSERT OR IGNORE: new keys (company.address,
+// company.gbp) insert themselves into an existing store, but company.phone was already seeded with the old
+// (646) 396-0775 — the number the site published before it was reconciled with the Google Business Profile.
+// Every public page and all JSON-LD read these facts, so that stale row would quietly re-publish the wrong
+// number and undo the site↔listing match. Rewrites ONLY the superseded value, so a later owner edit in
+// /dev/seo is never clobbered, and it is a no-op on every boot after the first.
+function correctNapFacts(db) {
+  db.prepare("UPDATE seo_facts SET value=?, notes=?, verified=1, public_use_allowed=1, updated_by='nap-fix' WHERE key='company.phone' AND value=?")
+    .run("(917) 727-0081",
+      "Matches the Google Business Profile (owner-confirmed 2026-11-15). (646) 396-0775 is still the Zelle payment token — never republish it as the public line.",
+      "(646) 396-0775");
 }
