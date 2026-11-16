@@ -683,3 +683,61 @@ widget tests brace-extract single functions and run them in a `vm`, so a syntax 
 the file went unseen; sections D and E each hand-extracted and parsed those scripts to check, which is
 exactly the sort of manual step that should be a test. Both gates were confirmed load-bearing by
 corrupting a copy in memory and watching them fail.
+
+## D21 — "Not exercised in a browser" is a finding, not a footnote
+
+Sections D and E both shipped with a line admitting something had never been seen: D's Google credit
+(no Maps key in this environment) and E's drawing tools. Both were closed afterwards, and closing them
+is the whole argument for this entry.
+
+**Section D** was verifiable without a Maps key once I stopped trying to verify the wrong thing. The
+credit does not need real satellite imagery — `drawCredit(ctx, w, h)` takes a context and two numbers.
+Rendering it onto a synthetic aerial at four output sizes (400×300 through 2400×1800) and reading the
+pixels back showed the plate inside the image every time, the font clamping 12→28px as designed, and
+~12–13% of the plate near-white against ~80% dark. Then I looked at it. It is legible.
+
+**Section E** could only be checked by driving it, and driving it found two things 22 passing unit
+tests could not:
+
+- the container's name rendered *under* a nested room — fixed in `ce2d750b`;
+- the ordinary Room gesture cannot nest at all — logged as B10, because the fix is a design choice.
+
+Neither was invisible to testing in principle. They were invisible to *these* tests, because the pure
+functions were all correct: `isNested`, `roomAtKey`, `paintOrder` and `freeCells` each do exactly what
+their tests say. The defect lived in the composition — correct paint order plus a correct label anchor
+produce an unreadable label — and the gap lived in an event handler's early `return`, which no test
+touched. A unit test proves a function; only running the thing proves the product.
+
+**The method that made it cheap.** Pixel-clicking the browser pane is unreliable (the pane's
+screenshots are scaled, so clicks mis-land — see the `browser-pane-coord-scaling` memory). Dispatching
+`PointerEvent`s at coordinates computed from `getBoundingClientRect`, then reading the widget's own
+module-scope state (`rooms`, `msel`, `nameRects()`), drives the real handlers and verifies against data
+rather than against a screenshot. Screenshots were used only for the last step — reading the label — and
+there the trick is to blit the region of interest onto an on-screen canvas at 4–5× first, because the
+pane downscales whatever it captures.
+
+**The rule.** When a section's report says something was not exercised, that sentence is the next task,
+not a disclaimer. Write it down when you cannot do it that hour; do not let it ship as a permanent
+caveat.
+
+## D22 — a test that pins a literal value makes the thing it guards decay
+
+Bumping the widget cache-buster for this fix broke a test asserting
+`WIDGET_VERSION = "20261116-sectionBC`, and changing the label anchor broke three asserting the literal
+expression `roomLabelCell(r.cells||[])`.
+
+Neither test was wrong about intent — the cache key *must* move when the widget changes, and the anchor
+*must* be the pole of inaccessibility. Both were wrong about how to say it. Pinning the live value means
+every later section has to retype the assertion, and a test you retype to make green is a test you have
+stopped reading. For a cache-buster that is actively dangerous: the failure mode being guarded against
+is "nobody bumped the key", and the fix-the-test reflex produces exactly that, one section at a time.
+
+They now assert the property. The cache key must look dated and must not equal any value on a list of
+superseded ones — so a stale key fails, a bumped key passes, and no edit is needed next time. The anchor
+assertions name the function and count the call sites (four: canvas, the dim-pill name boxes, both SVG
+exports), so adding a fifth label that skips `freeCells` fails too.
+
+One related repair: `tests/enhanced-plan.test.mjs` brace-extracts the widget's helpers into a
+`new Function` sandbox with stubbed globals, and `IOTDrawGeom` was not among them. Rather than stub the
+geometry module, the real one is now injected — a stub would have let the sandbox and the shipping code
+drift apart silently, which is the same disease.

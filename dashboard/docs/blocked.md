@@ -267,3 +267,40 @@ Option 3 is the honest fix and the largest; option 1 is the smallest that unbloc
 `status='failed'` **counts as paid** — it inflates `paid` and shrinks `balance`. Nothing writes
 `'failed'` today (Square only writes `pending` → `confirmed`), so it cannot fire yet; it becomes real
 the moment anyone adds failure handling, which option 3 above would do. Fix them together.
+
+---
+
+## B10 — the ordinary Room gesture cannot create a nested room
+
+**Section E, item 12.** Nesting works, and is proven working in a browser: a Stairs room or a
+multi-point polygon drawn wholly inside a Garage becomes its own room, leaves the container's cells
+intact, wins the hit test at its own cells, and paints over the container. What a user cannot do is the
+obvious thing — pick Room, keep the default square, and drag a box inside the Garage. Nothing is
+created; the Garage is simply selected.
+
+**Why.** In `draw-floorplan.html`, the canvas `pointerdown` handler reaches `roomHit(pt)` before any
+drag begins, and a hit on an existing room ends the gesture:
+
+```
+var h=roomHit(pt.x,pt.y);
+if(h){ ...; sel=h; redraw(); if(!hn) openLabel(h); return; }   // tap a room → select / name it
+closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true;  // empty space → start drawing
+```
+
+Stairs mode and the polygon shape each return earlier, which is the only reason they can nest. The
+select-on-tap behaviour is not a mistake — it is how a room gets selected and renamed — so two
+intentions share one gesture and the common one wins.
+
+**This is a design decision, not a bug fix**, which is why it is here rather than in a commit. The
+options:
+
+1. **Modifier-drag** — hold a key (or long-press on touch) to force a draw inside an existing room.
+   Smallest change; undiscoverable without a hint.
+2. **Drag vs tap** — let the pointerdown defer: a tap selects, a drag past a few pixels starts a new
+   room. Most natural, and it is how the wall-grab path (`pendingWall`) already resolves tap-vs-drag,
+   so the pattern exists in this file. It does change what a sloppy tap on a room does.
+3. **An explicit affordance** — a "room inside room" entry in the Room Actions menu, or a sub-mode.
+   Most discoverable, most UI.
+
+Option 2 matches what is already in the file. It needs Ahmed's call because it changes the feel of
+every tap on a room, on touch most of all.

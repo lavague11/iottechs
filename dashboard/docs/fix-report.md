@@ -468,8 +468,36 @@ fingerprint at HEAD and on the working copy and getting the same value both time
 block hashes differently, which is intended, since the block is part of what the customer approves.
 
 **Not done:** Select has no multi-item edit and moves whole objects rather than corners. Blocks drawn
-outside the exported footprint box may be cropped in the PDF viewBox — unchecked. None of it was
-exercised in a browser.
+outside the exported footprint box may be cropped in the PDF viewBox — unchecked.
+
+### Exercised in a browser afterwards · `ce2d750b`
+
+The line above used to end "none of it was exercised in a browser". It has been now, against the real
+widget on localhost with a throwaway plan id, driving the tool through its own pointer handlers.
+
+What works, confirmed on screen rather than inferred from the unit tests: the circle and triangle
+shapes produce real stepped cell shapes; the multi-point polygon closes on its first corner and fills;
+a marquee from empty canvas selects all three rooms and an empty band selects none; and nesting holds
+end to end — a Stairs room and a polygon room drawn inside a Garage leave the container's 567 cells
+intact, the hit test at an inner cell returns the inner room, and the paint order puts the container
+first.
+
+Two things the unit tests could not have caught:
+
+**A defect, now fixed.** Because the nested room paints *over* its container, and the container's name
+is anchored at its pole of inaccessibility, a nested room sitting near the middle lands exactly on the
+container's name. "Garage" rendered as a washed-out "Ga" buried in the Stairs hatch followed by a crisp
+"rage". `IOTDrawGeom.freeCells(room, rooms)` now subtracts nested children before the anchor is chosen,
+and all four label anchors — canvas, the dim-pill name boxes and both SVG exports — go through it. The
+fingerprint is unmoved, so no customer approval is voided.
+
+**A gap, reported not fixed.** Nesting is only reachable through Stairs mode or the polygon shape. In
+Room mode a pointerdown on an existing named room selects it and returns before any drag begins, so
+dragging a plain square room inside the Garage creates nothing — it just selects the Garage. The
+select-on-tap behaviour is deliberate (it is how a room is renamed), so the two intentions collide on
+one gesture, and the ordinary tool cannot produce the feature the spec asked for. Resolving it means
+choosing a gesture — modifier-drag, a drag that starts on the container's border, or an explicit "room
+inside room" affordance — which is a design decision, not a bug fix. See `blocked.md` B10.
 
 ---
 
@@ -502,7 +530,7 @@ The money and e-sign halves are **not** here and were not worked around — see 
 
 ## Still open
 
-**Nine items need Ahmed** — `docs/blocked.md` B1–B9. Every section of the spec is otherwise built.
+**Ten items need Ahmed** — `docs/blocked.md` B1–B10. Every section of the spec is otherwise built.
 
 The four that block the rest of section I:
 
@@ -523,14 +551,22 @@ The two that cost money or trust rather than time:
 - **B8** — **14 projects are currently telling their customers a proposal is ready to review when none
   was ever published.**
 
-Carried forward from the sections above: section D's rendered credit has never been seen (no Maps key),
-and section E was never exercised in a browser.
+And one that is a design decision rather than a defect:
+
+- **B10** — the ordinary Room gesture cannot create a nested room; only Stairs mode and the polygon
+  shape can. Picking the gesture is Ahmed's call.
+
+Both carried-forward unverified items are now closed. Section D's credit was rendered on a canvas at
+four output sizes and read back: the plate sits inside the image at every size, the font clamps from 12
+to 28px, and roughly an eighth of the plate is near-white text on a dark ground — legible at 1:1 and at
+4×, seen on screen, not inferred. Section E was exercised in a browser, which found the label defect
+and the gesture gap above.
 
 ---
 
 ## State of the branch
 
-Twelve commits on `origin/site-survey-fixes`. **Nothing on `main`** — still at `25916493`, the SEO
+Thirteen commits on `origin/site-survey-fixes`. **Nothing on `main`** — still at `25916493`, the SEO
 commit that predates this run — and **nothing deployed**.
 
 | | |
@@ -547,6 +583,7 @@ commit that predates this run — and **nothing deployed**.
 | `c109f9b4` | F + I — tool-card language, Addendum in the Proposal |
 | `904df9d6` | E — drawing tools |
 | `515373b6` | D — tile watermark and the rendered credit |
+| `ce2d750b` | E round 2 — a nested room no longer buries its container name (found in a browser) |
 
 Four commits each cover two sections, because those pairs co-edited single files too deeply to split
 without producing a commit that doesn't compile. Each says so in its message rather than pretending
@@ -556,7 +593,8 @@ otherwise. Where files were shared between sections that *could* be separated �
 carries only its own work. `site-survey-merged.html` was edited by three sections at once; its
 `SAT_SRC` and `drawSrc` cache-busters sit on adjacent lines and were separated individually.
 
-Suite: **1235 at baseline → 1532 passing, 0 failing.**
+Suite: **1235 at baseline → 1536 passing, 0 failing.** `npm run build` compiles clean from a cleared
+`.next`.
 
 Two housekeeping notes for whoever works here next. The repo carries **~315 untracked zero-byte files**
 (`dashboard/app/div`, `dashboard/app/it.heading`, and many in the root) from an old shell-quoting bug
