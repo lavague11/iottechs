@@ -4,12 +4,13 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, c
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { SOP_STEP_REAL_SQL, SOP_STEP_UNTAGGED_SQL } from "./sop-model.js";
-import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
+import { makeAccessId, stageLabel, stagesForType, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
 import { normalizeCategory as _normalizeExpenseCategory } from "./expense-model.js";
 import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "./svc-status.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
+import { isStampableCompletionDate } from "./completion-date.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
@@ -4100,6 +4101,92 @@ export function setSystemQr(accessId, data) {
   db.prepare("UPDATE projects SET system_qr = ? WHERE access_id = ? COLLATE NOCASE").run(data ? String(data) : null, String(accessId));
   return getJobByAccessId(accessId);
 }
+// ---- Section O: ADMIN manual stage/status override for a legacy project ------------------------
+// The escape hatch the migration deliberately needs. The one-time migration recomputes stage from
+// evidence and REFUSES to guess when the evidence is missing or contradictory (a drifted signature,
+// a finished job with no completion stamp); those projects are reported for a human, and this is how
+// the human answers. Admin only — the capability check lives in the server action
+// (`legacy.override` in lib/roles.js), never in a component.
+//
+// It writes only what an admin explicitly chose: the stage, and optionally the completion stamp.
+// Both are audited twice over — `updateStage` records a stage_transitions row, and the override
+// itself is appended to the project event log with who, what and why — so a hand-set stage is never
+// indistinguishable from one the lifecycle earned. Reversible: pass a different stage, or
+// completed=false to clear the stamp.
+//
+// `completedAt` is REQUIRED to mark a legacy job complete, and it is validated. Calling
+// markProjectCompleted() with no date takes its `COALESCE(completed_at, datetime('now'))` branch —
+// i.e. it stamps TODAY, and since the warranty is completed_at + warranty_months, a job finished
+// months ago would ship a warranty starting on the day someone clicked the button. The migration
+// refuses to invent that date; so does this. When the caller has none, `completionEvidenceDate()`
+// supplies the newest DATED evidence on the row (never "now"), and if there is none we refuse and
+// say so, because at that point the only honest answer comes from a human who knows the job.
+export function setLegacyStageOverride(accessId, { stage, completed = null, completedAt = null, reason = null, by = null } = {}) {
+  const p = getJobByAccessId(accessId);
+  if (!p) return { ok: false, error: "Project not found." };
+  const allowed = new Set(stagesForType(p.project_type).map((s) => s.key));
+  if (!MASTER_ORDER.includes(stage) || !allowed.has(stage)) return { ok: false, error: "That stage does not apply to this project." };
+
+  // Resolve (and validate) the completion date BEFORE touching anything, so a bad date changes nothing.
+  let stampDate = null;
+  if (completed === true && !p.completed_at) {
+    stampDate = completedAt || completionEvidenceDate(accessId).date;
+    if (!stampDate) return { ok: false, error: "Marking this complete needs a completion date — the project carries no dated evidence from before today, so it cannot be derived. Enter the date the job finished." };
+    if (!isStampableCompletionDate(stampDate)) return { ok: false, error: `"${String(stampDate).slice(0, 40)}" is not a real YYYY-MM-DD date. The completion date starts the warranty, so it is never guessed.` };
+  }
+
+  const from = p.stage;
+  if (from !== stage) updateStage(accessId, stage, by || "admin override");
+  let stampChanged = null;
+  if (stampDate) { markProjectCompleted(accessId, stampDate); stampChanged = "set"; }
+  if (completed === false && p.completed_at) { reopenProjectCompletion(accessId); stampChanged = "cleared"; }
+
+  if (from === stage && !stampChanged) return { ok: true, changed: false, stage, project: getJobByAccessId(accessId) };
+  const bits = [
+    from === stage ? null : `stage ${stageLabel(from)} → ${stageLabel(stage)}`,
+    stampChanged === "set" ? `marked complete as of ${String(stampDate).slice(0, 10)}` : stampChanged === "cleared" ? "completion stamp cleared" : null,
+  ].filter(Boolean);
+  logProjectEvent(accessId, {
+    kind: "override",
+    label: `Admin override (legacy project): ${bits.join(" · ")}${reason ? ` — ${String(reason).slice(0, 160)}` : ""}`,
+    actor: by || "admin",
+  });
+  return { ok: true, changed: true, stage, stampChanged, completedAt: stampDate, project: getJobByAccessId(accessId) };
+}
+
+// The newest DATED evidence of when a job actually finished, for the completion stamp. Never "now".
+// Order of trust: an existing stamp · the latest human-recorded entry into `completion` (a transition
+// written by a backfill/seed/migration pass records when a SCRIPT ran, not when the work finished, so
+// those authors are excluded by name) · the last confirmed payment. Shared by the migration script and
+// the admin override so both derive the warranty start the same way. Read-only.
+//
+// TODAY IS NEVER EVIDENCE. A stage move to Completion stamps a transition with today's timestamp, so
+// an admin who moves the stage and then marks the job complete would otherwise "derive" today's date
+// from the row they just created — the exact fallback this whole path exists to prevent. Candidates
+// dated today are skipped; an admin who means today must type it, which is a decision, not a default.
+// (An existing `completed_at` is returned regardless: it is the stamp itself, not evidence for a new one.)
+export function completionEvidenceDate(accessId) {
+  const id = String(accessId);
+  const today = new Date().toLocaleDateString("en-CA");   // YYYY-MM-DD in the server's pinned zone
+  const past = (v) => (v && String(v).slice(0, 10) !== today ? v : null);
+  const p = db.prepare("SELECT completed_at FROM projects WHERE access_id = ? COLLATE NOCASE").get(id);
+  if (p?.completed_at) return { date: p.completed_at, source: "projects.completed_at" };
+  const t = db.prepare(`
+    SELECT entered_at FROM stage_transitions
+     WHERE project_access_id = ? AND stage = 'completion'
+       AND LOWER(COALESCE(by_name, '')) NOT IN ('backfill', 'seed', 'seed-demo', 'migration', 'legacy migration', 'system')
+       AND DATE(entered_at) <> DATE('now', 'localtime')
+     ORDER BY id DESC LIMIT 1`).get(id);
+  if (past(t?.entered_at)) return { date: t.entered_at, source: "stage_transitions (human-recorded entry into Completion)" };
+  const pay = db.prepare(`
+    SELECT COALESCE(paid_at, created_at) AS d FROM project_payments
+     WHERE project_access_id = ? AND status = 'confirmed' AND COALESCE(paid_at, created_at) IS NOT NULL
+       AND DATE(COALESCE(paid_at, created_at)) <> DATE('now', 'localtime')
+     ORDER BY d DESC LIMIT 1`).get(id);
+  if (past(pay?.d)) return { date: pay.d, source: "the last confirmed payment" };
+  return { date: null, source: null };
+}
+
 // Re-open a completed project (clears the completion stamp) — admin correction path.
 export function reopenProjectCompletion(accessId) {
   db.prepare("UPDATE projects SET completed_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));

@@ -7,6 +7,8 @@ import { duplicateProjectAction, deleteProjectAction, setProjectArchivedAction, 
 import { setStage } from "../project/[accessId]/actions";
 import { sendInvoiceAction, scheduleInvoiceEmailAction } from "../project/[accessId]/proposal-actions";
 import SendScheduler from "../project/[accessId]/send-scheduler";
+import LegacyStageOverride from "./legacy-stage-override";
+import { can } from "../../lib/roles";
 
 // Wraps a project card/row (a single element — usually a <Link>) with a right-click / long-press context
 // menu. Clones the trigger props onto the child so layout is untouched. Role-aware; destructive actions
@@ -23,6 +25,8 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
   const id = project?.access_id;
   const isAdmin = role === "admin";
   const isMgr = role === "admin" || role === "manager";
+  // Section O's legacy override — by capability, so the admin-only rule lives in lib/roles.js.
+  const canOverride = !!role && can(role, "legacy.override");
   const canSell = isMgr || role === "sales";
   if (!id || !children) return children || null;
 
@@ -67,6 +71,10 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
     isMgr && { label: "Send invoice", icon: <Ic d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6M9 9h1" />, onClick: () => setOverlay({ type: "invoice" }) },
     isMgr && { type: "header", label: "Change stage" },
     ...(isMgr ? STAGE_TARGETS.map(([label, master]) => ({ label: `→ ${label}`, checked: project.stageGroup === master, onClick: () => changeStage(label, master) })) : []),
+    // Legacy escape hatch (section O): the three targets above are the normal, gate-aware path; this
+    // one reaches every master stage and the completion stamp, for projects whose records can't decide.
+    // Admin only, by capability — never a role string comparison.
+    canOverride && { label: "Override…", onClick: () => setOverlay({ type: "legacy" }) },
     canSell && { type: "divider" },
     isMgr && { label: "Merge with…", icon: <Ic d="M7 3v6a5 5 0 0 0 5 5 5 5 0 0 0 5-5V3M12 14v7" />, onClick: openMerge },
     canSell && { label: "Duplicate", icon: <Ic d="M9 9h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V11a2 2 0 0 1 2-2zM5 15H4a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v1" />, onClick: doDuplicate },
@@ -86,7 +94,10 @@ export default function ProjectCardMenu({ project, role = "", children, onChange
         <SendScheduler open title="Send invoice" subtitle={`${project.customer || id} — invoice with a Pay button`}
           busy={busy} onSendNow={doSendInvoice} onSchedule={doScheduleInvoice} onClose={() => setOverlay(null)} />
       )}
-      {overlay && overlay.type !== "invoice" && createPortal(
+      {overlay?.type === "legacy" && (
+        <LegacyStageOverride project={project} onClose={() => setOverlay(null)} onChanged={refresh} />
+      )}
+      {overlay && overlay.type !== "invoice" && overlay.type !== "legacy" && createPortal(
         <div className="pcm-bg" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) setOverlay(null); }}>
           <div className="pcm-modal" role="dialog" aria-modal="true">
             {overlay.type === "delete" ? (

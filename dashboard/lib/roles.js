@@ -43,18 +43,22 @@ const CAPS = {
   "proposal.revise":     ["admin", "manager"],                             // AI #2: remove a line, or revise a sent/signed proposal (supersede → v+1)
   // Money / lifecycle
   "stage.move":          ["admin", "manager"],
+  // Section O (legacy migration): hand-set a legacy project's stage / completion when the recorded
+  // data genuinely cannot decide it. Stricter than stage.move — ADMIN ONLY — because it bypasses the
+  // evidence instead of following it, and it is logged to the project event log every time.
+  "legacy.override":     ["admin"],
   "assignment.edit":     ["admin", "manager"],                              // add/remove a tech on a project (matches addAssignmentAction)
   "customer.contact.view": ["admin", "manager", "sales", "tech", "readonly"], // name / phone / email
   "customer.financials.view": ["admin", "manager", "sales", "customer", "readonly"],
-  // CRM (New Project → Existing / New client). Customers never search the CRM.
-  "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client
-  "customer.create":     ["admin", "manager", "sales"],                     // create a client with a project
-  "customer.edit":       ["admin", "manager"],                              // "Update client record" from the form
   // Project header icons. A customer gets Navigate + Share only: adding the contact to an address book and
   // editing the project's contact record are staff actions. `project.contact.edit` is enforced by
   // `updateProjectInfoAction` (server) — the header merely reads it to decide whether to draw the pencil.
   "project.contact.edit": ["admin", "manager", "sales", "tech"],
   "project.contact.save": ["admin", "manager", "sales", "tech", "readonly"],   // "add person" (vCard)
+  // CRM (New Project → Existing / New client). Customers never search the CRM.
+  "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client
+  "customer.create":     ["admin", "manager", "sales"],                     // create a client with a project
+  "customer.edit":       ["admin", "manager"],                              // "Update client record" from the form
   "customer.duplicate.override": ["admin", "manager"],                      // "Create new anyway" past a duplicate warning
   "cost.view":           ["admin", "manager"],
   // SEO engine (lib/seo.js, /dev/seo). Internal marketing tooling — staff only; customers never touch it.

@@ -6,3 +6,8 @@
 auth.json
 /audit/
 test-results/
+
+# Section O legacy-migration dry-run report (scripts/migrate-legacy-projects.mjs) — NEVER committed:
+# it embeds real customer names, signer names and contract totals. Regenerate on demand with
+#   node scripts/migrate-legacy-projects.mjs --snapshot /tmp/iot-rehearsal
+docs/migration-report.md
