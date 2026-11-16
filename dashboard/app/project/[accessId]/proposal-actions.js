@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, saveProposalDraft, markProposalSent,
+  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -18,8 +18,9 @@ import {
   customerOwnsProjectAccount, resolveCustomerRequiredActions,
 } from "../../../lib/db";
 import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
-import { can } from "../../../lib/roles";
-import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
+import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
+import { can, ROLE_KEYS } from "../../../lib/roles";
+import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailPaymentReminder } from "../../../lib/email";
 
@@ -61,11 +62,29 @@ async function revalidate(accessId) {
 // send date/author and whether it was signed. Read-only; powers the "Sent versions" list under the proposal.
 export async function getProposalHistoryAction(accessId) {
   const tok = await getSessionRole();
-  if (!tok || tok.role === "customer") return { ok: false, versions: [] };
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false, versions: [], addenda: [] };
   const sent = (getProposalHistory(accessId) || [])
     .filter((p) => p.sent_at)
     .map((p) => ({ version: p.version, sent_at: p.sent_at, sent_by_name: p.sent_by_name || null, status: p.status, signed_at: p.signed_at || null, signed_name: p.signed_name || null }));
-  return { ok: true, versions: sent };
+  return { ok: true, versions: sent, addenda: addendumEntries(accessId, tok.role).map((s) => ({ id: s.id, title: s.title, status: s.status, sentAt: s.sentAt, edited: !!s.edited })) };
+}
+function addendumEntries(accessId, role) {
+  let list = [];
+  try { list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []; } catch { list = []; }
+  return list.map((a) => buildAddendumSnapshot(a, role)).filter(Boolean);
+}
+// One sent version as a read-only snapshot (staff only). The compare target is the CURRENT working draft.
+export async function getProposalVersionAction(accessId, version) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false };
+  const snap = buildVersionSnapshot(getProposalVersionRow(accessId, version), tok.role, getActiveProposal(accessId));
+  return snap ? { ok: true, snapshot: snap } : { ok: false };
+}
+export async function getAddendumSnapshotAction(accessId, addendumId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false };
+  const snap = addendumEntries(accessId, tok.role).find((s) => s.id === addendumId);
+  return snap ? { ok: true, snapshot: snap } : { ok: false };
 }
 
 export async function getCustomerFinanceAction(accessId) {

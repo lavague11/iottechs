@@ -3193,7 +3193,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                 viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
-              <ProposalVersionLog accessId={lp.access_id} />
+              <ProposalVersionLog accessId={lp.access_id} fileBase={fileBase} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                customerPhone={lp.contact_phone} customerEmail={lp.contact_email} />
             </div></AccordionProvider>);
           case "survey": {
             // The SAME System Planner the deck mounts — so the hub survey behaves identically: the floor

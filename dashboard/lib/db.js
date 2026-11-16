@@ -13,7 +13,7 @@ import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flo
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
+import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
@@ -6737,6 +6737,12 @@ export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at, created_by_name, signed_name, signed_at, signed_fingerprint FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
 }
+// One full version row (payload + signed_payload included) — feeds the read-only version snapshot. Staff
+// actions only; callers sanitize through lib/proposal-version-snapshot.js before anything leaves the server.
+export function getProposalVersionRow(accessId, version) {
+  const r = db.prepare("SELECT * FROM proposals WHERE project_access_id=? AND version=?").get(String(accessId), +version || 0);
+  return r ? { ...r } : null;
+}
 
 // ---- PCP (Performance Credit Program) ----
 // Customer acknowledges the PCP agreement in one click — records their signature + issues
@@ -7833,11 +7839,10 @@ export function getApprovedAddons(accessId) {
   // Approved AND still matching the signed content (fingerprint) — an edited add-on drops out until re-signed.
   try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && addendumSignatureCurrent(a)); } catch { list = []; }
   const each = list.map((a) => {
-    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
-    const discount = +a.discount || 0;
+    const { discount, total } = addendumTotals(a);
     return {
       id: a.id, title: a.title || "Job-site add-on", signedName: a.signedName || null, signedAt: a.signedAt || null,
-      discount, total: Math.max(0, sub - discount), // customer owes the discounted total
+      discount, total, // customer owes the discounted total
       items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 1, price: +it.price || 0 })),
     };
   });
@@ -7852,8 +7857,7 @@ export function getPendingAddons(accessId) {
   let list = [];
   try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "pending" && !a.needsPricing); } catch { list = []; }
   const each = list.map((a) => {
-    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
-    return { id: a.id, title: a.title || "Job-site add-on", total: Math.max(0, sub - (+a.discount || 0)) };
+    return { id: a.id, title: a.title || "Job-site add-on", total: addendumTotals(a).total };
   });
   return { total: each.reduce((s, a) => s + a.total, 0), list: each, count: each.length };
 }

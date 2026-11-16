@@ -935,7 +935,7 @@ function _diffItems(o) {
   (o?.services || []).forEach((s) => (s.items || []).forEach((it) => {
     const key = it?.id || `${s?.name || ""}|${it?.name || ""}`;
     const subSum = (it?.sub || []).reduce((a, x) => a + (x?.waived ? 0 : (+x?.qty || 0) * (+x?.price || 0)), 0);
-    m.set(key, { name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
+    m.set(key, { id: it?.id || null, name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
   }));
   return m;
 }
@@ -950,11 +950,11 @@ export function proposalDiff(prev, cur) {
     if (!po || !co) { any = true; options.push({ id, name: (co || po)?.name || `Option ${id}`, optionAdded: !po, optionRemoved: !co, added: [], removed: [], changed: [] }); continue; }
     const a = _diffItems(po), b = _diffItems(co);
     const added = [], removed = [], changed = [];
-    for (const [k, v] of b) if (!a.has(k)) added.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
-    for (const [k, v] of a) if (!b.has(k)) removed.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of b) if (!a.has(k)) added.push({ id: v.id, name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of a) if (!b.has(k)) removed.push({ id: v.id, name: v.name, svc: v.svc, qty: v.qty, price: v.price });
     for (const [k, v] of a) { const w = b.get(k); if (!w) continue;
       if (v.qty !== w.qty || v.price !== w.price || v.waived !== w.waived || v.subSum !== w.subSum)
-        changed.push({ name: w.name, svc: w.svc, from: { qty: v.qty, price: v.price, waived: v.waived }, to: { qty: w.qty, price: w.price, waived: w.waived } }); }
+        changed.push({ id: w.id, name: w.name, svc: w.svc, from: { qty: v.qty, price: v.price, waived: v.waived }, to: { qty: w.qty, price: w.price, waived: w.waived } }); }
     const discFrom = po.discount ?? null, discTo = co.discount ?? null;
     const disc = JSON.stringify(discFrom) !== JSON.stringify(discTo) ? { from: discFrom, to: discTo } : null;
     const pcp = (+po.pcpCredit || 0) !== (+co.pcpCredit || 0) ? { from: +po.pcpCredit || 0, to: +co.pcpCredit || 0 } : null;
