@@ -6,6 +6,7 @@ import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/a
 import { LOGIN_VIEW } from "../../../lib/spec";
 import { customerPortalV2For, financeSummary, pickUpcomingAppt } from "../../../lib/customer-portal";
 import { staffHubFor } from "../../../lib/staff-hub";
+import { can } from "../../../lib/roles";
 import { getToolData } from "../../../lib/db";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
@@ -391,7 +392,14 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // Presentation-only; the same tools open from its cards in staff (editable) mode. Deck is unaffected when off.
   const staffHub = staffHubFor(p);   // Simple view (the hub) is the default for eligible projects; only a "deck" override opts out.
   let customerFinance = null, customerAppt = null, staffFinance = null, staffAppt = null;
-  if (customerPortalV2 || staffHub) {
+  // Customer money (total / paid / balance / pending add-ons) is CAPABILITY-gated, not view-gated: a tech
+  // or vendor never receives the figures at all, so there is nothing in the payload for a client to
+  // re-reveal. Gating the computation rather than the two assignments matters — `customerFinance` ships
+  // as a prop whatever the view, and gateway-client falls back to it (`staffFinance || customerFinance`)
+  // when building the progress rail, so gating only `staffFinance` would still hand a tech the numbers.
+  // Definition of Done rule 4: a tech never sees customer financials.
+  const maySeeMoney = can(initialView, "customer.financials.view");
+  if ((customerPortalV2 || staffHub) && maySeeMoney) {
     const fin = getProjectFinancialState(p.access_id);
     const dep = amountDueForPayment(p.access_id, "deposit");
     const finSum = financeSummary(fin, dep?.ok ? dep.due : 0);
