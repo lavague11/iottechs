@@ -708,7 +708,11 @@ export async function emailReviewRequest(accessId) {
     if (!fin || fin.financialState !== "collected") return { skipped: "balance-due" };  // and paid in full
 
     const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];
-    const reviewUrl = secretValue("REVIEW_URL") || "https://search.google.com/local/writereview?placeid=ChIJ-IOT-TECHS";
+    // REVIEW_URL (Development ▸ API Keys) should hold the GBP "ask for reviews" short link (g.page/r/…),
+    // which opens the review box directly. The fallback is the real listing — a customer can still leave a
+    // review from there. It used to be `placeid=ChIJ-IOT-TECHS`, a placeholder that opened a dead page, so
+    // every review request sent while REVIEW_URL was unset asked for a review and then lost the customer.
+    const reviewUrl = secretValue("REVIEW_URL") || "https://maps.google.com/?cid=15380872044622826314";
     const payload = {
       heading: `Thank you, ${first}!`,
       intro: "Your system is installed and your project is complete.",

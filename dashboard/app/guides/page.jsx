@@ -8,6 +8,14 @@ import GuidesClient from "./guides-client";
 // which is the internal FAQ knowledge base.) Staff see a "Build guide" entry only when SOP_BUILDER is on.
 export const dynamic = "force-dynamic";
 
+// Without this the library inherited the APP's default metadata ("IOT TECHS · Project Dashboard" +
+// "Track your project from survey to completion"), which told a searcher nothing and matched no query.
+export const metadata = {
+  title: "Security Camera & Low-Voltage How-To Guides | IOT TECHS",
+  description: "Step-by-step guides from the IOT TECHS field team — camera installation, system setup and troubleshooting, photographed one step at a time.",
+  alternates: { canonical: "/guides" },
+};
+
 export default async function GuidesPage() {
   const user = await getSessionUser();
   const staff = !!user?.id && canEditSop(user.role);

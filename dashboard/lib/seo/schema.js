@@ -164,7 +164,11 @@ function seedFacts(db) {
   F("company.legal_name", "Legal entity", "La Vague Inc.", "identity", 1, 1);
   F("company.brand", "Brand name", "IOT TECHS", "identity", 1, 1);
   F("company.website", "Website", "https://iot-techs.com", "identity", 1, 1);
-  F("company.phone", "Phone", "(646) 396-0775", "identity", 1, 1, "From the live home page.");
+  // NAP must match the Google Business Profile exactly or the listing and the site don't corroborate
+  // each other (the single biggest local-SEO own-goal). Source of truth = the GBP, confirmed by the owner.
+  F("company.phone", "Phone", "(917) 727-0081", "identity", 1, 1, "Matches the Google Business Profile (owner-confirmed 2026-11-15). The old (646) 396-0775 is still the Zelle payment token — do not reuse it as the public line.");
+  F("company.address", "Business address", "120 Industrial Ave #4, Little Ferry, NJ 07643", "identity", 1, 1, "As listed on the Google Business Profile.");
+  F("company.gbp", "Google Business Profile", "https://maps.google.com/?cid=15380872044622826314", "identity", 1, 1, "Used as sameAs so the site and the listing corroborate each other.");
   F("company.email", "Support email", "support@iot-techs.com", "identity", 1, 1);
   F("company.tagline", "Tagline", "Make Tomorrow Safer Today", "identity", 1, 1);
   F("service_area.primary", "Primary service area", "New Jersey; New York City; Westchester; Long Island", "service-area", 1, 1, "Positioning is NJ + NY; not nationwide.");

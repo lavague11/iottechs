@@ -1,4 +1,5 @@
 import { publishedSlugs, SITE_ORIGIN } from "../lib/seo";
+import { listPublishedSops } from "../lib/db";
 
 // XML sitemap — the home page plus every PUBLISHED SEO page. Auto-updates as pages go live, so there's
 // nothing to maintain by hand. Drafts / in-progress pages are never listed (they aren't public).
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // Public marketing/intake routes that aren't DB-driven SEO slugs — they'd otherwise be missing from
 // the sitemap even though they're linked from the homepage and footer.
-const STATIC_PUBLIC = ["systems", "build", "apply", "adt", "report-issue", "terms"];
+const STATIC_PUBLIC = ["systems", "build", "apply", "adt", "report-issue", "terms", "guides"];
 
 export default function sitemap() {
   const home = { url: `${SITE_ORIGIN}/`, changeFrequency: "weekly", priority: 1 };
@@ -20,5 +21,13 @@ export default function sitemap() {
       priority: 0.8,
     }));
   } catch { /* DB not ready during build — ship at least the home entry */ }
-  return [home, ...statics, ...pages];
+  // Published PUBLIC guides (/guides/<slug>). Real, indexable content that was missing from the sitemap
+  // entirely. Internal guides are excluded — they 404 for anyone who isn't signed-in staff.
+  let guides = [];
+  try {
+    guides = listPublishedSops({ includeInternal: false })
+      .filter((s) => s.slug)
+      .map((s) => ({ url: `${SITE_ORIGIN}/guides/${s.slug}`, lastModified: s.published_at || undefined, changeFrequency: "monthly", priority: 0.6 }));
+  } catch { /* DB not ready during build */ }
+  return [home, ...statics, ...pages, ...guides];
 }

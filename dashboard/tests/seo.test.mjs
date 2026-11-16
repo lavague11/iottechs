@@ -34,7 +34,12 @@ test("fact store seeds safe identity facts and withholds unverified claims", () 
   assert.equal(byKey["claim.locations"].public_use_allowed, 0, "…and NOT cleared for public use");
   const pub = publicFacts();
   assert.equal(pub["company.brand"], "IOT TECHS");
-  assert.equal(pub["company.phone"], "(646) 396-0775");
+  // NAP: the public phone is the Google Business Profile number. It must NOT drift back to the old
+  // (646) 396-0775 — that one is still the Zelle payment token, and a mismatch between the site and the
+  // listing is the local-search own-goal this fact exists to prevent.
+  assert.equal(pub["company.phone"], "(917) 727-0081");
+  assert.ok(!JSON.stringify(pub).includes("396-0775"), "the Zelle token is never published as the public line");
+  assert.equal(pub["company.address"], "120 Industrial Ave #4, Little Ferry, NJ 07643");
   assert.ok(!("claim.locations" in pub), "unverified claim never appears in publicFacts()");
   assert.ok(!("claim.port_authority" in pub), "Port Authority reference withheld until verified");
 });

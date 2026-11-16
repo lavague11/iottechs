@@ -6,10 +6,23 @@ import SopPlayer from "./sop-player";
 
 export const dynamic = "force-dynamic";
 
+// A real per-guide description (the app default — "Track your project from survey to completion" — said
+// nothing and matched no search). Built from the guide's own first steps, so it describes THIS guide.
 export async function generateMetadata({ params }) {
   const { slug } = await params;
   const sop = getPublishedSopBySlug(slug);
-  return { title: sop ? `${sop.title} — Guides` : "Guides" };
+  if (!sop) return { title: "Guides" };
+  const steps = Array.isArray(sop.steps) ? sop.steps.filter((s) => s.title) : [];
+  const lead = String(steps[0]?.instruction || "").trim();
+  const description = (lead ? `${lead} ` : "") +
+    `A step-by-step guide from IOT TECHS${steps.length ? ` — ${steps.length} steps, with a photo for each` : ""}.`;
+  return {
+    title: `${sop.title} — Guides | IOT TECHS`,
+    description: description.slice(0, 300),
+    alternates: { canonical: `/guides/${slug}` },
+    // Internal guides already 404 for non-staff; keep them out of any index that sees one anyway.
+    ...(sop.visibility === "internal" ? { robots: { index: false, follow: false } } : {}),
+  };
 }
 
 export default async function GuidePage({ params }) {
