@@ -47,7 +47,7 @@ function sanitize(list, role) {
   const seePayout = can(role, "addendum.payout.view"), seeRetail = can(role, "addendum.retail.view");
   return (list || []).map((a) => {
     const out = { ...a, items: (a.items || []).map((it) => { const c = { ...it }; if (!seePayout) delete c.techPay; if (!seeRetail) delete c.price; return c; }) };
-    if (!seeRetail) delete out.discount;
+    if (!seeRetail) { delete out.discount; delete out.taxRate; }   // tax is retail money, like the discount
     return out;
   });
 }

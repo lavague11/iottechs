@@ -15,7 +15,9 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
   const { customerName = "", projectId = "" } = meta;
   const items = Array.isArray(add.items) ? add.items : [];
   const discount = +add.discount || 0;
-  const addTotal = addendumTotals(add).total;
+  const t = addendumTotals(add);
+  const tax = t.tax;
+  const addTotal = t.total;
   const newBalance = fig.newBalance;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
@@ -58,6 +60,8 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
     if (y > 700) { doc.addPage(); y = 64; }
   }
   if (discount > 0) { doc.setTextColor(...META); doc.text("Discount", lm, y); rt("− " + money(discount), rm, y); y += 20; }
+  // Tax only when this add-on carries a rate — an untaxed change order prints exactly as it did before.
+  if (tax > 0) { doc.setTextColor(...META); doc.text(`Tax · ${t.taxRate}%`, lm, y); rt(money(tax), rm, y); y += 20; }
 
   // Totals
   y += 6; doc.setDrawColor(...LINE); doc.line(lm, y, rm, y); y += 24;

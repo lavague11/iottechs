@@ -756,7 +756,8 @@ export async function emailAddendumApproval(accessId, addendumId) {
     if (add.status !== "pending" || add.needsPricing) return { skipped: "not-pending" };
 
     const m = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const addTotal = addendumTotals(add).total;
+    const addTot = addendumTotals(add);
+    const addTotal = addTot.total;
     const fin = getProjectFinancialState(accessId);
     const newBalance = (fin ? +fin.balance || 0 : 0) + addTotal;
     const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];
@@ -766,7 +767,9 @@ export async function emailAddendumApproval(accessId, addendumId) {
     const payload = {
       heading: `A quick approval, ${first}`,
       intro: `We'd like to add this to your project — "${add.title || "Job-site add-on"}":`,
-      lines: [...itemLines, `Add-on total: ${m(addTotal)}`, `Your new balance if approved: ${m(newBalance)}`, "Tap below to review and approve — no PIN needed."],
+      // A tax line only when this add-on is taxed, so an untaxed approval email reads as it always did.
+      lines: [...itemLines, ...(addTot.tax > 0 ? [`Tax · ${addTot.taxRate}%: ${m(addTot.tax)}`] : []),
+        `Add-on total: ${m(addTotal)}`, `Your new balance if approved: ${m(newBalance)}`, "Tap below to review and approve — no PIN needed."],
       ctaLabel: "Approve Add-on",
       ctaUrl: approveUrl,
       footNote: "This secure link opens your add-on to approve and sign. Questions? Just reply to this email.",

@@ -608,6 +608,8 @@ async function reconcileAddendumWrite(accessId, data, tok) {
       const prevItems = new Map(((prev && prev.items) || []).map((it) => [it.id, it]));
       a.items = (a.items || []).map((it) => { const p = prevItems.get(it.id); return p ? { ...it, price: p.price, techPay: p.techPay } : { ...it, price: 0, techPay: 0 }; });
       a.discount = prev ? prev.discount : 0;
+      a.taxRate = prev ? prev.taxRate : undefined;   // only a pricing role sets tax; undefined drops the key
+
       if (!prev || prev.needsPricing) a.needsPricing = true;
     }
     // Signed content drifted? A fingerprinted approval compares to its own hash; a legacy approval
@@ -982,7 +984,7 @@ function sanitizeToolRead(tool, role, saved) {
           if (!seeRetail) delete c.price;     // tech never sees the retail price
           return c;
         }) };
-        if (!seeRetail) delete out.discount;
+        if (!seeRetail) { delete out.discount; delete out.taxRate; }   // tax is retail money, like the discount
         return out;
       });
       return { ...saved, data: JSON.stringify(j) };

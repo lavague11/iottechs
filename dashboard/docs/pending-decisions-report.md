@@ -27,7 +27,20 @@ unapplied because it *could* move one on data that does not exist here yet, and 
 
 ---
 
-## B1 — tax and PCP on a signed addendum · **one project, +$49.69**
+## B1 — tax and PCP on a signed addendum · ~~one project, +$49.69~~ **APPLIED 2026-11-17 · $0.00 moved**
+
+> **Superseded by the owner's ruling: _"Tax is not on all customers. It's only if we click it."_**
+>
+> The measurement below is sound but answers the wrong question — it priced *inheriting the published
+> proposal's rate*, when tax is a per-document click. 56 of 84 proposals carry no tax at all.
+>
+> What shipped instead: the add-on carries its **own** `taxRate`, absent until clicked, never inherited.
+> Re-measured after applying — **0 of 3 add-ons and 0 of 31 contracted projects move.** ASC0034 keeps
+> its $750.00 add-on and its $3,693.73 balance even though its proposal is taxed at NJ 6.625%.
+> The +$49.69 below does not happen. PCP stays out: it is already subtracted at proposal level.
+
+<details><summary>The original measurement, kept for the record</summary>
+
 
 Current rule: `total = max(0, Σ qty×price − discount)` — no tax, no PCP credit. Proposed rule mirrors
 `optionTotals`: `taxable = max(0, sub − discount − pcpCredit)`, then tax at the published proposal's
@@ -49,6 +62,8 @@ Projects with a signed/approved add-on: **2**. Add-ons whose total would change:
 
 This is a customer who has already signed. Restating it changes what they are told they owe after the
 fact, which is why it is yours to decide.
+
+</details>
 
 ---
 

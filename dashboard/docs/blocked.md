@@ -12,11 +12,30 @@ asks for a RED change, the safe part was built and the money/signature part is r
 
 ## B1 — Section I: addendum totals feeding project money (RED, owner decision)
 
-> **REPORTED 2026-11-16, NOT APPLIED.** Measured against the live database: **one** add-on would
-> change — ASC0034's "Added 3 back-lot cameras", $750.00 → $799.69 (+$49.69 tax at 6.625%), taking
-> that project's balance $3,693.73 → $3,743.42. Total across all customers: **+$49.69**. It is a
-> customer who has already signed, so restating it changes what they are told they owe after the
-> fact. Full figures in `docs/pending-decisions-report.md`.
+> **DECIDED 2026-11-17 — APPLIED, as a per-add-on opt-in. No existing figure moved.**
+>
+> The owner's ruling settled it: *"Tax is not on all customers. It's only if we click it."* Both
+> options this entry offered were therefore wrong, because both treated tax as a property of the
+> system rather than a click. The data agrees — **56 of the 84 proposals carry `tax_rate` 0**, and
+> the column is `NOT NULL DEFAULT 0` behind an explicit NJ/NY control.
+>
+> So an add-on now carries its **own** `taxRate`, absent until someone clicks it, and the proposal's
+> rate is never inherited. The reported +$49.69 on ASC0034 **does not happen**: its proposal is taxed
+> at NJ 6.625%, its add-on is not, and both are now correct at the same time — which the old
+> "inherit the published rate" framing could not express.
+>
+> Measured after applying, against the live local database: **0 of 3 add-ons** and **0 of 31
+> contracted projects** move. ASC0034 stays at $750.00 / balance $3,693.73, confirmed in the running
+> app. The seven consumers below are unaffected while no rate is set, and pick the tax up
+> automatically when one is.
+>
+> The load-bearing detail: the tax term enters `addendumFingerprint` **only when non-zero**. Had it
+> been added unconditionally, every already-signed add-on would have stopped matching its stored
+> `signedFingerprint`, dropped out of `getApprovedAddons`, and silently *subtracted* itself from a
+> live balance — the opposite failure to the one this entry was guarding against.
+>
+> **PCP was deliberately not applied.** The credit is a proposal-level figure already subtracted by
+> `optionTotals`; applying it again on an add-on would credit the same money twice.
 
 Section I says *"Signed addendum totals add into the project TOTAL, BALANCE and payment plan … and into
 the portal PROJECT BALANCE card."* Addendum totals **already** feed total and balance, via
@@ -38,10 +57,11 @@ consumer of that one function simultaneously:
 | Invoice model | `lib/invoice-model.js:32-33` |
 | Addendum send/approve actions | `proposal-actions.js:712, 723` |
 
-**Decision needed:** does a signed addendum carry tax and PCP (change `getApprovedAddons`, and with it
+~~**Decision needed:** does a signed addendum carry tax and PCP (change `getApprovedAddons`, and with it
 every figure above, including historical ones), or does it stay untaxed (keep today's behaviour and drop
-the tax/PCP rows from the addendum editor)? Retro-taxing existing approved addenda would silently
-restate balances on live projects, so this is not a choice to make on the model's own judgment.
+the tax/PCP rows from the addendum editor)?~~ **Answered above — neither.** The question assumed tax is
+a rule the system applies; it is a button someone presses. An add-on carries the tax it was given and
+no other, so nothing historical is restated and the editor keeps its rows.
 
 **2. Three deposit definitions already disagree.** Section I's "add to the payment plan" needs one of
 them to win:

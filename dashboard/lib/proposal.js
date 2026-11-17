@@ -1023,19 +1023,37 @@ export function proposalChangeState(published, working) {
 }
 
 // ---- Addendum fingerprint (ledger P4): what the customer agreed to on a change order ------------
-// Title, the customer-visible line items (name/qty/price) and the discount. techPay is internal and
-// excluded — a payout tweak never voids the customer's acceptance; a price/qty change does.
+// Title, the customer-visible line items (name/qty/price), the discount and the tax rate. techPay is
+// internal and excluded — a payout tweak never voids the customer's acceptance; a price/qty/tax change
+// does, because each moves what the customer owes.
+//
+// The tax term is included ONLY when a rate is actually set. That is deliberate, not tidiness: an
+// add-on with no tax must hash exactly as it did before tax existed, or every already-signed add-on
+// would stop matching its stored signedFingerprint, drop out of getApprovedAddons and silently
+// subtract itself from a live balance. Keys are sorted in _fpStable, so adding one changes nothing else.
 export function addendumFingerprint(a) {
-  const meaning = { t: a?.title || "", d: +a?.discount || 0, items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
+  const rate = +a?.taxRate || 0;
+  const meaning = { t: a?.title || "", d: +a?.discount || 0, ...(rate ? { x: rate } : {}),
+    items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
   return _fpHash(_fpStable(meaning));
 }
 // THE add-on money formula (one definition: db.getApprovedAddons / getPendingAddons, the add-on card and the
 // version snapshot all call it). Rounded to cents like every other money figure; a missing/non-numeric qty or
 // price counts as 0; the total never goes below 0 (a discount larger than the subtotal floors at 0).
+//
+// Tax (B1) is the add-on's OWN rate — `taxRate`, which exists only when someone clicked it, exactly like
+// the proposal's NJ/NY control. It is never inherited from the proposal: most proposals carry no tax at
+// all, so inheriting would invent tax on add-ons nobody taxed, and would restate add-ons already signed.
+// With no rate the arithmetic is the untaxed formula untouched. Tax is charged on the discounted net,
+// mirroring optionTotals. PCP is NOT applied here: the credit is a proposal-level figure already
+// subtracted from the proposal total, so applying it again on an add-on would credit it twice.
 export function addendumTotals(a) {
   const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
   const discount = r2(+a?.discount || 0);
-  return { sub, discount, total: r2(Math.max(0, sub - discount)) };
+  const taxRate = +a?.taxRate || 0;
+  const taxable = Math.max(0, sub - discount);
+  const tax = r2(taxable * taxRate / 100);
+  return { sub, discount, taxRate, tax, total: r2(taxable + tax) };
 }
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));

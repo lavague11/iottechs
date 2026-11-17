@@ -80,7 +80,9 @@ test("the snapshot PDF is named by documentFilename with the version's own revis
 
 test("addendum snapshot: retail only for retail roles, never tech payout, needs-pricing hidden", () => {
   const a = { id: "x1", title: "3 cams", status: "approved", discount: 20, items: [{ name: "Dome", qty: 3, price: 100, techPay: 40 }], signedName: "Zed", signedAt: "2026-02-01", at: "2026-01-30" };
-  assert.deepEqual(addendumTotals(a), { sub: 300, discount: 20, total: 280 });
+  // the money, not the object's exact shape: an untaxed add-on is subtotal − discount
+  const t = addendumTotals(a);
+  assert.equal(t.sub, 300); assert.equal(t.discount, 20); assert.equal(t.total, 280); assert.equal(t.tax, 0);
   const s = buildAddendumSnapshot(a, "admin");
   assert.equal(s.totals.total, 280); assert.equal(s.signature.name, "Zed");
   assert.ok(!/techPay|payout/i.test(JSON.stringify(s)));

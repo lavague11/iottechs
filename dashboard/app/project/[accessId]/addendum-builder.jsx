@@ -18,6 +18,7 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
   const [title, setTitle] = useState(init?.title || "");
   const [services, setServices] = useState(() => addendumItemsToServices(init?.items));
   const [discount, setDiscount] = useState(init?.discount || "");
+  const [taxRate, setTaxRate] = useState(init?.taxRate || 0);   // off unless clicked — never inherited from the proposal
   const [payOv, setPayOv] = useState({});     // office-typed per-line tech pay, keyed by line id
   const [rates, setRates] = useState(null);   // company rate book -> default tech pay (office only)
 
@@ -32,7 +33,8 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
     () => servicesToAddendumItems(services, { rates, priced: canPrice, payOverrides: payOv, original: init?.items }),
     [services, rates, canPrice, payOv, init],
   );
-  const total = addendumTotals({ items, discount }).total;
+  const totals = addendumTotals({ items, discount, taxRate });
+  const total = totals.total;
 
   const addService = (key, customLabel) => {
     if (!key) return;
@@ -68,6 +70,19 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
               <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" aria-label="Discount" value={discount} onChange={(e) => setDiscount(e.target.value)} /></span>
           </label>
         )}
+        {/* Tax is per add-on and starts at 0 — it applies only when someone clicks it, exactly like the
+            proposal's own NJ/NY control. The proposal's rate is never inherited. */}
+        {canPrice && (
+          <div className="adn-b-tax">
+            <span className="adn-flbl">Tax</span>
+            <span className="adn-taxrow">
+              <button type="button" className={`prop-tax-btn${+taxRate === 6.625 ? " on" : ""}`} onClick={() => setTaxRate(+taxRate === 6.625 ? 0 : 6.625)}>NJ</button>
+              <button type="button" className={`prop-tax-btn${+taxRate === 8.875 ? " on" : ""}`} onClick={() => setTaxRate(+taxRate === 8.875 ? 0 : 8.875)}>NY</button>
+              <input className="adn-tin" type="number" min="0" max="30" step="0.01" inputMode="decimal" aria-label="Tax rate percent"
+                value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+            </span>
+          </div>
+        )}
       </div>
 
       {canPrice && items.length > 0 && (
@@ -87,6 +102,10 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
       <div className="adn-b-final">
         {canPrice ? (
           <div className="adn-b-totalblock">
+            {/* Subtotal and Tax appear only when tax actually moves the price. */}
+            {totals.tax > 0 && (
+              <span className="adn-b-sub">{money(totals.sub - totals.discount)} + {money(totals.tax)} tax</span>
+            )}
             <span className="adn-flbl">Total</span>
             <b className="adn-b-tval">{money(total)}</b>
           </div>
@@ -94,7 +113,7 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
           <div className="adn-b-note">Office will price this.</div>
         )}
         <button type="button" className="adn-b-create" disabled={busy || !items.length}
-          onClick={() => onSubmit({ title: title.trim(), items, discount: +discount || 0 })}>{submitLabel}</button>
+          onClick={() => onSubmit({ title: title.trim(), items, discount: +discount || 0, taxRate: +taxRate || 0 })}>{submitLabel}</button>
         <button type="button" className="adn-b-cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>
@@ -103,7 +122,11 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
 
 const BUILDER_CSS = `
 .adn-builder{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2);padding:14px;margin-top:6px;display:flex;flex-direction:column;gap:12px}
-.adn-fld,.adn-b-disc{display:flex;flex-direction:column;gap:5px;min-width:0}
+.adn-fld,.adn-b-disc,.adn-b-tax{display:flex;flex-direction:column;gap:5px;min-width:0}
+.adn-taxrow{display:flex;align-items:center;gap:6px;height:38px}
+.adn-tin{width:66px;height:30px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;text-align:right;padding:0 8px;font-size:.76rem;font-weight:600;font-family:inherit;outline:none;color:var(--dv-ink,#101418);background:var(--dv-raise,#FBFBFA);font-variant-numeric:tabular-nums}
+.adn-tin:focus{border-color:var(--dv-gold-text,#8A6A1F)}
+.adn-b-sub{font-size:.7rem;color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
 .adn-flbl{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .adn-b-title{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 11px;font-size:.86rem;font-weight:600;font-family:inherit;outline:none;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);width:100%}
 .adn-b-title:focus{border-color:var(--dv-gold-text,#8A6A1F)}

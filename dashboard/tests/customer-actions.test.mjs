@@ -128,11 +128,15 @@ test("B6: every add-on total comes from addendumTotals, with no hand-rolled copi
 
 test("B6: the helper rounds the way the copies did, so no figure moves", () => {
   const a = { items: [{ qty: 2, price: 175 }, { qty: 1, price: 150 }], discount: 50 };
-  assert.deepEqual(addendumTotals(a), { sub: 500, discount: 50, total: 450 });
+  // the figures, not the object's exact shape (an untaxed add-on reports tax 0 since B1)
+  const t = addendumTotals(a);
+  assert.equal(t.sub, 500); assert.equal(t.discount, 50); assert.equal(t.total, 450); assert.equal(t.tax, 0);
   // a discount larger than the subtotal floors at zero, never negative
   assert.equal(addendumTotals({ items: [{ qty: 1, price: 10 }], discount: 99 }).total, 0);
   // missing qty counts as 0 in the TOTAL — the long-standing rule the copies shared
   assert.equal(addendumTotals({ items: [{ price: 100 }] }).total, 0);
-  assert.deepEqual(addendumTotals({}), { sub: 0, discount: 0, total: 0 });
-  assert.deepEqual(addendumTotals(null), { sub: 0, discount: 0, total: 0 });
+  for (const empty of [{}, null]) {
+    const z = addendumTotals(empty);
+    assert.equal(z.sub, 0); assert.equal(z.discount, 0); assert.equal(z.total, 0); assert.equal(z.tax, 0);
+  }
 });

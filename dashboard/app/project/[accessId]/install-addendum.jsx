@@ -95,7 +95,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
   // Office prices a tech-submitted add-on: load it into the builder (with any existing values) so the
   // office can fill in the customer price + payout, then Save writes back to the same record.
   function startEdit(a) {
-    setDraft({ title: a.title || "", items: a.items || [], discount: a.discount ? String(a.discount) : "" });
+    setDraft({ title: a.title || "", items: a.items || [], discount: a.discount ? String(a.discount) : "", taxRate: +a.taxRate || 0 });
     setEditingId(a.id); setBuilding(true);
   }
   // `res` comes from AddendumBuilder: items already in the stored addendum shape (lib/addendum-items.js).
@@ -103,7 +103,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     const items = res.items;
     if (!items.length) return;
     if (editingId) {   // office pricing an existing add-on — update in place and clear the pricing flag
-      const next = addendums.map((a) => a.id === editingId ? { ...a, title: res.title || a.title, items, discount: res.discount, needsPricing: undefined } : a);
+      // taxRate stays ABSENT when it's 0, so an untaxed add-on's stored shape (and therefore its
+      // fingerprint) is exactly what it was before tax existed.
+      const next = addendums.map((a) => a.id === editingId ? { ...a, title: res.title || a.title, items, discount: res.discount, taxRate: +res.taxRate || undefined, needsPricing: undefined } : a);
       persist(next);
       const upd = next.find((a) => a.id === editingId);
       if (upd) logAddendumAction(accessId, { verb: "priced", title: upd.title, amount: custTotal(upd) }).catch(() => {});
@@ -113,7 +115,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     }
     // A tech logs the work only — flag it so the office knows to price it (and so it's held back from
     // the customer until priced). Office-built ones are priced on creation.
-    const rec = { id: newId(), title: res.title || "Job-site add-on", items, discount: res.discount, at: new Date().toISOString(), status: "pending", needsPricing: !canPrice ? true : undefined, createdByTech: isTech ? true : undefined };
+    const rec = { id: newId(), title: res.title || "Job-site add-on", items, discount: res.discount, taxRate: +res.taxRate || undefined, at: new Date().toISOString(), status: "pending", needsPricing: !canPrice ? true : undefined, createdByTech: isTech ? true : undefined };
     persist([...addendums, rec]);
     logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
     closeBuilder();
@@ -203,6 +205,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
             </div>
             {showRetail && +a.discount > 0 && (
               <div className="adn-disc-row"><span>Discount</span><b>− {money(+a.discount)}</b></div>
+            )}
+            {showRetail && addendumTotals(a).tax > 0 && (
+              <div className="adn-disc-row"><span>Tax · {+a.taxRate}%</span><b>{money(addendumTotals(a).tax)}</b></div>
             )}
             <div className="adn-card-ft">
               <span className="adn-ct">
