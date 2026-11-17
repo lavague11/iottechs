@@ -134,3 +134,27 @@ test("renderableFloors is what the migration materialises, not every adapted flo
   assert.equal(out.floors.length, 2, "both reach the roster");
   assert.deepEqual(renderableFloors(out).map((f) => f.name), ["Plan"], "only one can be drawn");
 });
+
+// B7 + B15 — the two write-path consequences of the adapter and of stale clients.
+test("B7: both tool-data write paths refuse a project that does not exist", () => {
+  const route = readFileSync(new URL("../app/api/tool-data/route.js", import.meta.url), "utf8");
+  const action = readFileSync(new URL("../app/project/[accessId]/proposal-actions.js", import.meta.url), "utf8");
+  for (const [src, who] of [[route, "POST /api/tool-data"], [action, "saveToolDataAction"]]) {
+    assert.match(src, /if \(!getJobByAccessId\(accessId\)\) return [\s\S]{0,80}no longer exists/, `${who} resolves the project first`);
+  }
+  // and it has to come AFTER the role gate, so an unauthorised caller learns nothing about which ids exist
+  const posIdx = route.indexOf("Read-only for your role."), chkIdx = route.indexOf("!getJobByAccessId(accessId)");
+  assert.ok(posIdx > 0 && chkIdx > posIdx, "the existence check must not become an id oracle");
+});
+
+test("B15: a legacy-only survey says it is read-only, rather than blaming a concurrent edit", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.match(db, /export function surveyIsLegacyOnly/, "a predicate for the legacy-only case");
+  // it must be false once a project has a real survey2, else every rename would claim to be legacy
+  assert.match(db, /if \(toolHasData\("survey2"[\s\S]{0,60}return false;/, "a migrated project is not legacy-only");
+  const route = readFileSync(new URL("../app/api/project-cameras/route.js", import.meta.url), "utf8");
+  assert.match(route, /function notFoundReason\(accessId\)/, "one place decides the message");
+  assert.match(route, /older format and is read-only until it is migrated/, "the legacy reason");
+  assert.match(route, /the survey changed\. Reopen and retry\./, "the ordinary reason survives");
+  assert.equal((route.match(/notFoundReason\(accessId\)/g) || []).length, 3, "both writers use it (plus the definition)");
+});

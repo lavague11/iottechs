@@ -1052,6 +1052,10 @@ export async function saveToolDataAction(accessId, tool, data, { allowEmpty = fa
   if (!editors.includes(tok.role)) return { error: "Read-only for your role." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  // B7, and the same check /api/tool-data's POST makes: the role gate asks what the caller may do,
+  // never whether the target is real, and there is no foreign key on project_tool_data. A stale tab
+  // on a deleted project would otherwise keep recreating orphan rows. The two write paths must agree.
+  if (!getJobByAccessId(accessId)) return { error: "That project no longer exists." };
   // A customer's addendum write is a signature, nothing more: their copy came over the wire
   // without techPay (see sanitizeToolRead), so saving it verbatim would wipe payout data — and
   // trusting it verbatim would let a tampered client rewrite prices. Reduce the write to

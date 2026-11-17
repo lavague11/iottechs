@@ -7612,6 +7612,15 @@ export function getPublishedSopBySlug(slug) {
 // predates that tool — the legacy `survey` row run through the read-time adapter (B11). Read-only: the
 // adapted blob carries `__legacyAdapted` and the outbound sync gate refuses to post it back, so no
 // amount of reading converts a legacy project. Every server-side renderer/derivation goes through here.
+// True when a project's survey exists ONLY in the legacy `survey` store. Its cameras reach the roster
+// through the read-time adapter, but every writer reads the raw `survey2` row — correctly, so an
+// adapted blob can never round-trip through a write — and there isn't one, so a rename or a photo
+// cannot land. Callers use this to say WHY rather than blame a concurrent edit (B15).
+export function surveyIsLegacyOnly(accessId) {
+  if (toolHasData("survey2", getToolData(accessId, "survey2")?.data)) return false;
+  return !!legacySurveyToSurvey2(getToolData(accessId, "survey")?.data || null);
+}
+
 export function getSurveyBlobForRender(accessId) {
   const row = getToolData(accessId, "survey2");
   if (toolHasData("survey2", row?.data)) return row?.data || null;

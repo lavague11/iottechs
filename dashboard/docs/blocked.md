@@ -200,6 +200,15 @@ blocker.
 
 ## B7 — Found in passing: the tool-data write path doesn't check the project exists
 
+> **DECIDED 2026-11-16 — FIXED, option 1.** Both write paths — `POST /api/tool-data` and
+> `saveToolDataAction` — now resolve the project before writing and return *"That project no longer
+> exists."* The check sits **after** the role gate on purpose, so an unauthorised caller cannot use it
+> to discover which ids exist; a test pins that ordering. Cascade-on-delete (option 2) was not done:
+> it would clean up history, whereas this stops new orphans, and the two are independent.
+>
+> Note this narrows **B14** without closing it. A stale tab writing to a project that still exists is
+> unaffected — that needs the version/etag in B14's option 1.
+
 Minor, not blocking anything, and not caused by this run — observed while cleaning up a test clone.
 
 A throwaway project (`ASC-TEST`) was deleted from `projects` while a browser tab still had its survey
@@ -586,6 +595,13 @@ File next to **B7** — same write path, same missing precondition.
 ---
 
 ## B15 — a legacy camera appears in the roster but cannot be renamed or photographed
+
+> **DECIDED 2026-11-16 — FIXED, option 1 (say why).** The write already failed safely; what it said
+> was wrong. Both writers returned *"Camera not found — the survey changed. Reopen and retry."*, which
+> sends someone hunting a concurrent edit that never happened. `surveyIsLegacyOnly()` now distinguishes
+> the case and the route answers *"This project's survey is in the older format and is read-only until
+> it is migrated."* Migrate-on-demand (option 2) was not done: it would make a read-shaped action
+> perform a migration write, which is exactly what B11 spent two rounds separating.
 
 Adapter-scope consequence of B11, found by the verifier. Low impact, no data at risk.
 

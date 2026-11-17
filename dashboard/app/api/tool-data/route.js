@@ -105,6 +105,12 @@ export async function POST(req) {
     : ["admin", "manager", "sales"].includes(tok.role);
   if (!allowed) return Response.json({ error: "Read-only for your role." });
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return Response.json({ error: "Not your project." });
+  // B7: the role gate asks what the CALLER may do, never whether the TARGET is real. There is no
+  // foreign key on project_tool_data.project_access_id either, so a tab left open on a project that
+  // has since been deleted kept POSTing and recreated orphan rows under a project that no longer
+  // exists — unbounded growth from an abandoned tab, and it means deleting a project does not
+  // reliably remove its tool data. Resolve the project first.
+  if (!getJobByAccessId(accessId)) return Response.json({ error: "That project no longer exists." });
   if (emptyOverContent(accessId, tool, data, allowEmpty)) {
     return Response.json({ error: "Refused: that would replace the saved survey with an empty one." });
   }
