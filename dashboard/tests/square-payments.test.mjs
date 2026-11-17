@@ -3,7 +3,7 @@
 // convenience fee math, webhook signature verification, and the dormant-until-configured gate.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -90,4 +90,87 @@ test("webhook signature verification (HMAC-SHA256 over url+body)", () => {
   assert.equal(sq.verifyWebhook(good, body, url), true, "correct signature verifies");
   assert.equal(sq.verifyWebhook("tampered", body, url), false, "wrong signature rejected");
   assert.equal(sq.verifyWebhook(good, body + "x", url), false, "mutated body rejected");
+});
+
+// ---- B9 (latent half): "paid" names the status that means paid ----------------------------------
+// Four call sites asked "is this payment money in hand?" with `status !== "pending"` — allow-by-
+// default, so ANY status other than that one literal counted as cash. Only "pending" and "confirmed"
+// are ever written, so the answer is identical on every existing row; but the moment someone adds
+// failure handling (which B9's option 3 does), a `status='failed'` row would have inflated `paid` and
+// shrunk `balance` on a real invoice.
+test("B9: the paid filter names 'confirmed' rather than 'not pending'", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.match(db, /const paymentCounts = \(p\) => p\?\.status === "confirmed";/, "one predicate");
+  assert.equal((db.match(/pays\.filter\(paymentCounts\)/g) || []).length, 4, "all four call sites use it");
+  assert.doesNotMatch(db, /filter\(\((?:x|p)\) => (?:x|p)\.status !== "pending"\)/, "no allow-by-default copies left");
+
+  // the predicate itself, including the statuses that do not exist yet
+  const paymentCounts = (p) => p?.status === "confirmed";
+  assert.equal(paymentCounts({ status: "confirmed" }), true);
+  assert.equal(paymentCounts({ status: "pending" }), false);
+  assert.equal(paymentCounts({ status: "failed" }), false, "a failed payment is not money received");
+  assert.equal(paymentCounts({ status: "void" }), false);
+  assert.equal(paymentCounts({}), false);
+  assert.equal(paymentCounts(null), false);
+});
+
+test("B9: it is defined above its first use, so the module cannot be reordered into a TDZ error", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.ok(db.indexOf("const paymentCounts =") < db.indexOf("pays.filter(paymentCounts)"),
+    "the predicate is declared before the first call site reads it");
+});
+
+// ---- B9 main: the stale-pending rule, ON since the owner approved it (2026-11-17) ----------------
+// A pending row is created when a payment LINK is made, not when money moves, and nothing clears it,
+// so one abandoned checkout refuses the customer for ever. Option 1: stop counting a pending row once
+// it is older than a real checkout could take. The secret is now a KILL SWITCH, not an opt-in.
+test("B9: the rule is live, the secret turns it off, and the window is a real checkout's length", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.match(db, /export const STALE_PENDING_MINUTES = 30;/, "30 minutes");
+  assert.match(db, /secretValue\("PAYMENTS_IGNORE_STALE_PENDING"\)[\s\S]{0,40}!== "off"/, "on unless disabled");
+  assert.match(db, /const stale = paymentsIgnoreStalePending\(\) \? stalePendingTotal\(accessId\) : 0;/);
+  assert.match(db, /const applied = paid \+ pending - stale;/, "switched off -> stale is 0 -> paid + pending, as before");
+});
+
+test("B9: an unknown or recent timestamp is never released — an unknown age must not re-bill", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  const fn = db.slice(db.indexOf("export function stalePendingTotal"), db.indexOf("export function amountDueForPayment"));
+  assert.match(fn, /if \(r\.status !== "pending"\) return s;/, "confirmed money is never 'stale'");
+  assert.match(fn, /if \(!Number\.isFinite\(t\) \|\| t >= cutoff\) return s;/, "unparseable or recent still counts");
+  // replicate the predicate to pin the direction of each boundary. created_at is SERVER-LOCAL, so
+  // the reference "now" is built the same way rather than from a UTC literal.
+  const WINDOW = 30 * 60 * 1000, now = Date.parse("2026-11-16T12:00:00"), cutoff = now - WINDOW;
+  const releases = (status, created) => {
+    if (status !== "pending") return false;
+    const t = Date.parse(String(created || "").replace(" ", "T"));
+    return Number.isFinite(t) && t < cutoff;
+  };
+  assert.equal(releases("pending", "2026-07-09 05:49:00"), true, "months old -> released");
+  assert.equal(releases("pending", "2026-11-16 11:00:00"), true, "an hour old -> released");
+  assert.equal(releases("pending", "2026-11-16 11:45:00"), false, "15 minutes old -> still in flight");
+  assert.equal(releases("pending", "2026-11-16 11:59:30"), false, "30 seconds old -> certainly in flight");
+  assert.equal(releases("pending", null), false, "no timestamp -> never released");
+  assert.equal(releases("pending", "nonsense"), false, "unparseable -> never released");
+  assert.equal(releases("confirmed", "2026-07-09 05:49:00"), false, "confirmed money is not pending");
+});
+
+test("B9: the flag moves only what is payable now — never total, paid or balance", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  const fn = db.slice(db.indexOf("export function amountDueForPayment"), db.indexOf("// Staff confirm a customer-submitted payment"));
+  // `stale` may appear only in the `applied` line; total/paid come straight from fin
+  assert.match(fn, /const total = \+fin\.total \|\| 0;/);
+  assert.match(fn, /const paid = \+fin\.paid \|\| 0;/);
+  // `stale` may appear on three lines only: where it is computed, where it reduces `applied`, and
+  // where it is reported back. If it ever reaches the total/paid/deposit lines, the flag has started
+  // moving an invoice figure.
+  const staleLines = fn.split("\n").filter((l) => /\bstale/i.test(l));
+  assert.equal(staleLines.length, 3, `stale appears on ${staleLines.length} lines:\n${staleLines.join("\n")}`);
+  assert.match(staleLines[0], /const stale = /);
+  assert.match(staleLines[1], /const applied = paid \+ pending - stale;/);
+  assert.match(staleLines[2], /return \{ ok: true/);
+  for (const l of fn.split("\n").filter((l) => /const (total|paid|pending|depositAmt) =/.test(l)))
+    assert.doesNotMatch(l, /stale/i, `an invoice figure is derived from the flag: ${l.trim()}`);
+  // and getProjectFinancialState — the source of total/paid/balance — knows nothing about it
+  const gpfs = db.slice(db.indexOf("export function getProjectFinancialState"), db.indexOf("export function getProjectFinancialState") + 2500);
+  assert.doesNotMatch(gpfs, /stalePending|IGNORE_STALE/, "the invoice figures are untouched by the flag");
 });

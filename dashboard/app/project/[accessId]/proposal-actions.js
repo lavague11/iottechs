@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, saveProposalDraft, markProposalSent,
+  getJobByAccessId, toolWriteIsStale, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -17,9 +17,12 @@ import {
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
   customerOwnsProjectAccount, resolveCustomerRequiredActions,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
-import { can } from "../../../lib/roles";
-import { survey2CameraCount, survey2HasData, mockupHasData } from "../../../lib/tool-data";
+import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint, addendumTotals } from "../../../lib/proposal";
+import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
+import { addendumLabel } from "../../../lib/addendum-display";
+import { can, ROLE_KEYS } from "../../../lib/roles";
+import { paymentsForViewer } from "../../../lib/customer-portal";
+import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
 import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailPaymentReminder } from "../../../lib/email";
 
@@ -61,19 +64,44 @@ async function revalidate(accessId) {
 // send date/author and whether it was signed. Read-only; powers the "Sent versions" list under the proposal.
 export async function getProposalHistoryAction(accessId) {
   const tok = await getSessionRole();
-  if (!tok || tok.role === "customer") return { ok: false, versions: [] };
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false, versions: [], addenda: [] };
   const sent = (getProposalHistory(accessId) || [])
     .filter((p) => p.sent_at)
     .map((p) => ({ version: p.version, sent_at: p.sent_at, sent_by_name: p.sent_by_name || null, status: p.status, signed_at: p.signed_at || null, signed_name: p.signed_name || null }));
-  return { ok: true, versions: sent };
+  return { ok: true, versions: sent, addenda: addendumEntries(accessId, tok.role).map((s) => ({ id: s.id, label: s.label, title: s.title, status: s.status, sentAt: s.sentAt, signedAt: s.signature?.at || null, edited: !!s.edited })) };
+}
+function addendumEntries(accessId, role) {
+  let list = [];
+  try { list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []; } catch { list = []; }
+  // label = A<position in the stored array> — display only, derived here, never persisted. Position is taken
+  // BEFORE filtering so an entry awaiting pricing does not shift the numbers of the ones after it.
+  return list.map((a, i) => { const s = buildAddendumSnapshot(a, role); return s ? { ...s, label: addendumLabel(i) } : null; }).filter(Boolean);
+}
+// One sent version as a read-only snapshot (staff only). The compare target is the CURRENT working draft.
+export async function getProposalVersionAction(accessId, version) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false };
+  const snap = buildVersionSnapshot(getProposalVersionRow(accessId, version), tok.role, getActiveProposal(accessId));
+  return snap ? { ok: true, snapshot: snap } : { ok: false };
+}
+export async function getAddendumSnapshotAction(accessId, addendumId) {
+  const tok = await getSessionRole();
+  if (!tok || !STAFF_EDIT.has(tok.role)) return { ok: false };
+  const snap = addendumEntries(accessId, tok.role).find((s) => s.id === addendumId);
+  return snap ? { ok: true, snapshot: snap } : { ok: false };
 }
 
 export async function getCustomerFinanceAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };
-  const { financeSummary } = await import("../../../lib/customer-portal");
+  // canReadProject admits any logged-in tech; customer money is capability-gated (D12) — a technician must
+  // never be able to pull the balance by calling this action directly, so check the capability itself.
+  const tok = await getSessionRole();
+  if (!can(tok?.role, "customer.financials.view")) return { ok: false };
+  const { financeSummary, paymentsSummary } = await import("../../../lib/customer-portal");
   const fin = getProjectFinancialState(accessId);
   const dep = amountDueForPayment(accessId, "deposit");
-  return { ok: true, finance: financeSummary(fin, dep?.ok ? dep.due : 0) };
+  const finance = financeSummary(fin, dep?.ok ? dep.due : 0);
+  return { ok: true, finance, payments: finance.hasContract ? paymentsSummary(getProjectPayments(accessId)) : [] };
 }
 
 export async function getProposalAction(accessId) {
@@ -546,8 +574,8 @@ export async function signAddendumAction(accessId, addendumId, sign) {
   Object.assign(a, { status: "approved", signedName: name, signedAt: at, signatureData: sign?.data || null, signedFingerprint: addendumFingerprint(a), resignRequired: undefined,
     history: [...(a.history || []), { verb: wasResign ? "re-signed" : "approved", at, by: name }] });
   saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
-  const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
-  logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, actor: name });
+  const total = addendumTotals(a).total;
+  logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name });
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch {}
   await revalidate(accessId);
   return { ok: true, addendums: list };
@@ -580,6 +608,8 @@ async function reconcileAddendumWrite(accessId, data, tok) {
       const prevItems = new Map(((prev && prev.items) || []).map((it) => [it.id, it]));
       a.items = (a.items || []).map((it) => { const p = prevItems.get(it.id); return p ? { ...it, price: p.price, techPay: p.techPay } : { ...it, price: 0, techPay: 0 }; });
       a.discount = prev ? prev.discount : 0;
+      a.taxRate = prev ? prev.taxRate : undefined;   // only a pricing role sets tax; undefined drops the key
+
       if (!prev || prev.needsPricing) a.needsPricing = true;
     }
     // Signed content drifted? A fingerprinted approval compares to its own hash; a legacy approval
@@ -658,8 +688,10 @@ export async function getLiveSnapshotAction(accessId) {
       accepted_options: (() => { try { return JSON.parse(proposal.accepted_options || "[]"); } catch { return []; } })(),
       tech_signed_name: proposal.tech_signed_name,
     } : null,
-    paymentsCount: payments.length,
-    paymentsConfirmedTotal: confirmed.reduce((s, x) => s + (+x.amount || 0), 0),
+    // Money figures ride the same capability as every other customer-money read: a tech/vendor polling this
+    // gets neither the count nor the confirmed total (the client only diffs them, so null is stable).
+    paymentsCount: can(tok.role, "customer.financials.view") ? payments.length : null,
+    paymentsConfirmedTotal: can(tok.role, "customer.financials.view") ? confirmed.reduce((s, x) => s + (+x.amount || 0), 0) : null,
     acceptances: Object.fromEntries(Object.entries(acceptances || {}).map(([k, v]) => [k, !!v])),
   };
 }
@@ -703,13 +735,16 @@ export async function getApprovalDataAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };   // gate: this returns the payment ledger + signatures — never cross-project
   const tok = await getSessionRole();
   const role = tok?.role || "customer";
+  // Money is capability-gated (D12): a technician/vendor gets no ledger and no add-on retail; a customer gets
+  // the ledger with staff-internal columns stripped (paymentsForViewer); the office gets it whole.
+  const money = can(role, "customer.financials.view");
   return {
     ok: true,
     // Approval & Deposit is contractual (signatures, money owed) — read the published version.
     proposal: sanitizeProposal(getPublishedProposal(accessId), role),
-    payments: getProjectPayments(accessId),
+    payments: paymentsForViewer(role, getProjectPayments(accessId), money),
     acceptances: getStageAcceptances(accessId),
-    addons: getApprovedAddons(accessId),  // approved job-site add-ons fold into the amount owed
+    addons: money ? getApprovedAddons(accessId) : { total: 0, list: [] },  // approved job-site add-ons fold into the amount owed
   };
 }
 
@@ -800,7 +835,7 @@ export async function recordPaymentAction(accessId, payment) {
   // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
-  return { ok: true, stage, payments };
+  return { ok: true, stage, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 export async function deletePaymentAction(accessId, id) {
   const tok = await getSessionRole();
@@ -820,11 +855,11 @@ export async function deletePaymentAction(accessId, id) {
   try {
     if (before) {
       const amt = "$" + (+before.amount).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      logProjectEvent(accessId, { kind: "request", label: `Payment canceled — ${amt}${before.kind ? ` · ${before.kind}` : ""}`, actor: actorName(tok) });
+      logProjectEvent(accessId, { kind: "request", label: `Payment canceled — ${amt}${before.kind ? ` · ${before.kind}` : ""}`, money: true, actor: actorName(tok) });
     }
   } catch { /* best-effort */ }
   await revalidate(accessId);
-  return { ok: true, payments };
+  return { ok: true, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 // Admin/manager correction: void a customer signature so the agreement can be re-signed.
 // The proposal record is preserved (signature fields cleared only).
@@ -866,14 +901,15 @@ export async function confirmPaymentAction(accessId, id) {
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
-  return { ok: true, stage, payments };
+  return { ok: true, stage, payments: paymentsForViewer(tok.role, payments, can(tok.role, "customer.financials.view")) };
 }
 
 // The Job Log derives payment events from the payment records, so existing deposits/payments show
 // (not just ones made after logging was added). Read-gated to the people on the project.
 export async function getPaymentsForLogAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false, payments: [] };
-  return { ok: true, payments: getProjectPayments(accessId) };
+  const role = (await getSessionRole())?.role;
+  return { ok: true, payments: paymentsForViewer(role, getProjectPayments(accessId), can(role, "customer.financials.view")) };
 }
 
 // Canonical outstanding customer actions (proposal signature, change orders, PCP approval) — powers the
@@ -948,7 +984,7 @@ function sanitizeToolRead(tool, role, saved) {
           if (!seeRetail) delete c.price;     // tech never sees the retail price
           return c;
         }) };
-        if (!seeRetail) delete out.discount;
+        if (!seeRetail) { delete out.discount; delete out.taxRate; }   // tax is retail money, like the discount
         return out;
       });
       return { ...saved, data: JSON.stringify(j) };
@@ -995,7 +1031,7 @@ export async function proposalLayoutMetaAction(accessId) {
   // normally /api/media URLs now, so the old scan both missed built layouts AND could show empty ones.
   return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
-export async function saveToolDataAction(accessId, tool, data) {
+export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false, baseRev = null } = {}) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
@@ -1004,7 +1040,10 @@ export async function saveToolDataAction(accessId, tool, data) {
   if (typeof data !== "string" || data.length > 8_000_000) return { error: "Bad payload." };
   // Who may write each tool: survey/mockup = office; schedule = office + customer; install
   // checklist = office + the technician doing the work.
-  const editors = tool === "schedule" ? ["admin", "manager", "sales", "customer"]
+  // survey/survey2: the tech on site may write it (can(role,"survey.edit")) — unlocking a survey a tech
+  // then cannot save would strand their edits in one browser. Mirrors /api/tool-data's POST gate.
+  const editors = tool === "survey" || tool === "survey2" ? ROLE_KEYS.filter((r) => can(r, "survey.edit"))
+    : tool === "schedule" ? ["admin", "manager", "sales", "customer"]
     : tool === "install" ? ["admin", "manager", "tech"]
     : tool === "addendum" ? ["admin", "manager", "sales", "tech", "customer"]  // office builds/prices, tech logs work (unpriced), customer approves
     : tool === "receiving" ? ["admin", "manager", "sales", "tech"]     // office/tech mark gear received
@@ -1015,6 +1054,14 @@ export async function saveToolDataAction(accessId, tool, data) {
   if (!editors.includes(tok.role)) return { error: "Read-only for your role." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
+  // B7, and the same check /api/tool-data's POST makes: the role gate asks what the caller may do,
+  // never whether the target is real, and there is no foreign key on project_tool_data. A stale tab
+  // on a deleted project would otherwise keep recreating orphan rows. The two write paths must agree.
+  if (!getJobByAccessId(accessId)) return { error: "That project no longer exists." };
+  // B14, same gate as /api/tool-data: optional baseRev, refused when behind.
+  if (toolWriteIsStale(accessId, tool, baseRev)) {
+    return { error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true };
+  }
   // A customer's addendum write is a signature, nothing more: their copy came over the wire
   // without techPay (see sanitizeToolRead), so saving it verbatim would wipe payout data — and
   // trusting it verbatim would let a tampered client rewrite prices. Reduce the write to
@@ -1026,9 +1073,19 @@ export async function saveToolDataAction(accessId, tool, data) {
   } else if (tool === "addendum") {
     payload = await reconcileAddendumWrite(accessId, data, tok);
   }
+  // Same server-side refusal as /api/tool-data's POST: an EMPTY survey never replaces one that HAS
+  // content unless the caller declares that intent. The two write paths must agree, or the guard is only
+  // as strong as which one a caller happens to use.
+  if (!allowEmpty && (tool === "survey2" || tool === "survey") && !survey2OrSurveyHasData(tool, payload)) {
+    const existing = getToolData(accessId, tool);
+    if (existing?.data && survey2OrSurveyHasData(tool, existing.data)) {
+      return { error: "Refused: that would replace the saved survey with an empty one." };
+    }
+  }
   const saved = saveToolData(accessId, tool, payload, actorName(tok));
   return { ok: true, saved: { updated_at: saved.updated_at } };
 }
+const survey2OrSurveyHasData = (tool, raw) => (tool === "survey2" ? survey2HasData(raw) : surveyHasData(raw));
 
 function mergeCustomerAddendumWrite(accessId, data) {
   let incoming;
@@ -1168,7 +1225,13 @@ export async function resolveNotePublicAction(accessId, id, approve) {
 export async function getEventsAction(accessId) {
   const tok = await getSessionRole();
   if (!tok || tok.role === "customer" || !(await canReadProject(accessId))) return { ok: false, events: [] };
-  return { ok: true, events: getProjectEvents(accessId) };
+  let events = getProjectEvents(accessId);
+  // Event labels that carry a dollar figure are flagged `money` where they are logged (logProjectEvent). A role
+  // without customer-money access (tech, vendor) never receives those rows — a marker, not a regex over text.
+  // Structured flag is the gate; the regex is the net for anything unflagged or free text (the AI label
+  // interpolates model output). The column defaults to 0, so without the net an unflagged event fails OPEN.
+  if (!can(tok.role, "customer.financials.view")) events = events.filter((e) => !e.money && !/\$\s?\d/.test(String(e.label || "")));
+  return { ok: true, events };
 }
 // Log a call the instant a staff member taps the Call button.
 export async function logCallAction(accessId, targetName) {
@@ -1310,8 +1373,18 @@ export async function overrideQcCustomerAction(accessId) {
 // and the customer can't approve a draft that hasn't been submitted at its current state.
 export async function submitToolAction(accessId, tool, on = true) {
   const tok = await getSessionRole();
-  if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Only the office can submit this for review." };
+  if (!tok) return { error: "Not authenticated." };
   if (!["site_survey", "mockup"].includes(tool)) return { error: "Bad tool." };
+  // SUBMIT and UNLOCK are separate permissions (section L, rule 7), and for the SITE SURVEY both include
+  // the tech — they walk the site, so they may reopen it, edit it (see the editor map in
+  // saveToolDataAction / /api/tool-data) and send it back for approval. The mockup stays office-only.
+  // Enforced here, on the server, not by whether the button rendered.
+  if (tool === "site_survey") {
+    const cap = on ? "survey.submit" : "survey.unlock";
+    if (!can(tok.role, cap)) return { error: on ? "You can't submit this survey for review." : "You can't reopen a submitted survey." };
+  } else if (!STAFF_EDIT.has(tok.role)) {
+    return { error: on ? "Only the office can submit this for review." : "Only the office can change this." };
+  }
   const meta = getToolMeta(accessId);
   const has  = tool === "site_survey" ? meta.survey.has : meta.mockup.has;
   if (on && !has) return { error: "Add something to the tool before submitting it." };
@@ -1333,6 +1406,14 @@ export async function submitToolAction(accessId, tool, on = true) {
     logProjectEvent(accessId, {
       kind: wasSubmitted ? "resubmit" : "submit",
       label: `${noun} ${wasSubmitted ? "resubmitted" : "submitted to customer"}${extra}`,
+      actor: actorName(tok),
+    });
+  } else if (wasSubmitted) {
+    // Reopening a submitted document is an audit event — "Edited after submit" has to be on the record,
+    // not just in the banner of whoever clicked it.
+    logProjectEvent(accessId, {
+      kind: "unsubmit",
+      label: `${tool === "site_survey" ? "Site survey" : "Mockups"} reopened for edits after submit`,
       actor: actorName(tok),
     });
   }

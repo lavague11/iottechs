@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolRev } from "../../../lib/db";
+import { can } from "../../../lib/roles";
+import { toolHasData } from "../../../lib/tool-data";
 
 // Plain REST twin of getToolDataAction/saveToolDataAction (proposal-actions.js), used ONLY by
 // tool-sync.js and survey-approve.jsx's flushDraft — the two callers that move the mockup/survey
@@ -63,20 +65,64 @@ export async function GET(req) {
     return Response.json({ ok: false });
   }
   if (tool === "techs" && tok.role === "customer") return Response.json({ ok: false });
+  // NOTE (B11): this route deliberately does NOT fall back to the adapted legacy survey. It is the
+  // widget's seed endpoint, and seeding here is not read-only in practice — the widget uploads a
+  // data-URL background to /api/media, rewrites `bg`, re-serialises its own state (dropping the
+  // `__legacyAdapted` marker the outbound gate keys on) and autosyncs the result, which creates a real
+  // survey2 row. Proven on a clone: opening the project once wrote an 820-byte survey2 row. Feeding
+  // the editor a legacy survey is therefore the migration write the owner asked not to make, not a
+  // read. Server-side RENDER paths use db.getSurveyBlobForRender instead, which no writer can reach.
   return Response.json({ ok: true, saved: getToolData(accessId, tool) });
 }
 
+// LAST LINE OF DEFENCE, server-side: never let an EMPTY survey replace one that has content unless the
+// caller declares that intent. A client-only guard leaves this route open to the same overwrite from any
+// stale tab, an old cached bundle, or a retry queued before the fix shipped — and the row is the only
+// copy of the survey. "Clear the survey" stays possible, but it has to SAY so (allowEmpty, which only
+// the tool itself sends, because only the tool knows its state was actually loaded) rather than be
+// inferred from emptiness. Scoped to the survey tools, whose emptiness test is exact.
+function emptyOverContent(accessId, tool, data, allowEmpty) {
+  if (allowEmpty) return false;
+  if (tool !== "survey2" && tool !== "survey") return false;
+  if (toolHasData(tool, data)) return false;
+  const existing = getToolData(accessId, tool);
+  return !!(existing?.data && toolHasData(tool, existing.data));
+}
+
 export async function POST(req) {
-  const { accessId, tool, data } = await req.json();
+  const { accessId, tool, data, allowEmpty, baseRev } = await req.json();
   const tok = await getSessionRole();
   if (!tok) return Response.json({ error: "Session expired." });
   if (!SYNC_TOOLS.has(tool)) return Response.json({ error: "Unknown tool." });
   if (typeof data !== "string" || data.length > 8_000_000) return Response.json({ error: "Bad payload." });
-  const editors = ["admin", "manager", "sales"];   // survey + mockup are office-only writes
-  if (!editors.includes(tok.role)) return Response.json({ error: "Read-only for your role." });
+  // Writes are office-only (admin/manager/sales) with ONE exception: the site survey, which the tech on
+  // site may edit — `can(role, "survey.edit")`, the same capability behind "Edit survey" and Resubmit.
+  // Letting a tech unlock a survey they then cannot save strands their work in one browser's
+  // localStorage, which is the silent data loss this whole section is about. Mockup and schedule keep
+  // their existing sets. Enforced here AND in saveToolDataAction — the two write paths must agree.
+  const allowed = tool === "survey2" || tool === "survey"
+    ? can(tok.role, "survey.edit")
+    : ["admin", "manager", "sales"].includes(tok.role);
+  if (!allowed) return Response.json({ error: "Read-only for your role." });
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return Response.json({ error: "Not your project." });
+  // B7: the role gate asks what the CALLER may do, never whether the TARGET is real. There is no
+  // foreign key on project_tool_data.project_access_id either, so a tab left open on a project that
+  // has since been deleted kept POSTing and recreated orphan rows under a project that no longer
+  // exists — unbounded growth from an abandoned tab, and it means deleting a project does not
+  // reliably remove its tool data. Resolve the project first.
+  if (!getJobByAccessId(accessId)) return Response.json({ error: "That project no longer exists." });
+  // B14: refuse a write made against a version the caller did not read. Optional, so a client that
+  // sends no baseRev is accepted exactly as before; one that sends a stale rev is told, rather than
+  // silently winning. `stale: true` lets the client re-seed instead of retrying the same bytes.
+  if (toolWriteIsStale(accessId, tool, baseRev)) {
+    return Response.json({ error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true });
+  }
+  if (emptyOverContent(accessId, tool, data, allowEmpty)) {
+    return Response.json({ error: "Refused: that would replace the saved survey with an empty one." });
+  }
   const saved = saveToolData(accessId, tool, data, tok.name || tok.email || tok.role);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
-  return Response.json({ ok: true, saved: { updated_at: saved.updated_at } });
+  // the rev the client should now claim on its next write (B14)
+  return Response.json({ ok: true, saved: { updated_at: saved.updated_at, rev: toolRev(data) } });
 }

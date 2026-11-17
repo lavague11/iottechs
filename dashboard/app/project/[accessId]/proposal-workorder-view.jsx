@@ -6,6 +6,7 @@ import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../..
 import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { TaglinePill, Wordmark } from "../../components/brand";
+import { SUPPORT_PHONE, SUPPORT_EMAIL } from "../../../lib/nap";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -107,7 +108,7 @@ export default function ProposalWorkOrderView({ fileBase = null, accessId, propo
         <div className="pwo-hd-left">
           <a href="/go" className="pwo-brand" aria-label="IOT TECHS home" style={{ display: "inline-flex", color: "inherit", textDecoration: "none" }}><Wordmark height={20} /></a>
           <TaglinePill tone="dark" className="pwo-brand-pill" />
-          <span className="pwo-contact">(646) 396-0775 · support@iot-techs.com</span>
+          <span className="pwo-contact">{SUPPORT_PHONE} · {SUPPORT_EMAIL}</span>
         </div>
         <div className="pwo-hd-right">
           <span className="pwo-doctag">Field Work Order</span>
@@ -267,7 +268,7 @@ export default function ProposalWorkOrderView({ fileBase = null, accessId, propo
       )}
 
       <div className="pwo-footer">
-        IOT TECHS · (646) 396-0775 · support@iot-techs.com · Internal Work Order — not for customer distribution
+        IOT TECHS · {SUPPORT_PHONE} · {SUPPORT_EMAIL} · Internal Work Order — not for customer distribution
       </div>
     </div>
   );

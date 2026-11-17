@@ -248,7 +248,14 @@ export default function ProposalCustomerView({ fileBase = null, accessId, propos
     if (!signable) { showToast("This proposal isn’t awaiting a signature right now."); return; }
     const opts = p.payload.options;
     const match = opts.find((o) => String(o.id) === String(want)) || (opts.length === 1 ? opts[0] : null);
-    if (match && accepted.has(match.id)) showToast("That option is already signed.");
+    // "Already signed" must test the SIGNATURE, not the acceptance. selectProposalOption writes
+    // accepted_options when the customer picks an option, which happens BEFORE they sign — so gating on
+    // acceptance alone refused the signer in exactly the awaiting-signature state this link exists for
+    // (the customer landed on the proposal with a toast and no signer). Note the `signable` check above
+    // already rejects a genuinely signed proposal, so this branch is a belt-and-braces guard, not the
+    // main gate; with the signature test it can only fire on a state `signable` would have caught.
+    const optionSigned = !!p.signed_name && accepted.has(match?.id);
+    if (match && optionSigned) showToast("That option is already signed.");
     else if (match) setEsignFor(match.id);
     else showToast("Open a proposal option to review and sign.");
   }, [p, preview]);

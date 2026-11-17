@@ -45,7 +45,10 @@ export function clonePayload(sourcePayload, opts = {}) {
   if (addendumItems.length && options[0]) {
     let svc = options[0].services.find((s) => s.key === "custom");
     if (!svc) { svc = { key: "custom", label: serviceLabel("custom"), items: [], note: "" }; options[0].services.push(svc); }
-    for (const a of addendumItems) svc.items.push({ id: newItemId(), name: a?.name || "", qty: +a?.qty || 1, price: r2(a?.price), ...(includeInternal && a?.techPay != null ? { techPrice: +a.techPay || 0 } : {}) });
+    // B6: qty 0 is carried through, not rounded up to 1. These items come from an add-on whose total
+    // counted a missing qty as nothing; inventing a unit here would bill the clone for something the
+    // signed add-on charged $0 for. The second of the two places that used to do it.
+    for (const a of addendumItems) svc.items.push({ id: newItemId(), name: a?.name || "", qty: +a?.qty || 0, price: r2(a?.price), ...(includeInternal && a?.techPay != null ? { techPrice: +a.techPay || 0 } : {}) });
   }
   const out = { options: options.length ? options : [{ id: "A", name: "Option A", services: [], note: "", includeMockup: false, includeSurvey: false }] };
   out.discount = includeDiscount && src.discount ? { ...src.discount } : { type: "flat", value: 0 };

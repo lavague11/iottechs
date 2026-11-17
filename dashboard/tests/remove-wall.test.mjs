@@ -157,8 +157,8 @@ test("double-click opens the Room Actions menu — never the Rename field direct
   assert.ok(!dc.includes("openLabel"), "double-click no longer opens the rename input directly");
 });
 test("Room Actions menu order is Merge, Remove wall, Rename, then a separated Delete", () => {
-  const menu = src.slice(src.indexOf('id="roomMenu"'), src.indexOf('id="roomMenu"') + 700);
-  const order = ["rmMerge", "rmRemoveWall", "rmRename", "rmsep", "rmDelete"].map((id) => menu.indexOf(id));
+  const menu = src.slice(src.indexOf('id="roomMenu"'), src.indexOf('id="roomMenu"') + 1100);
+  const order = ["rmMerge", "rmRemoveWall", "rmRename", "rmRotate", "rmsep", "rmDelete"].map((id) => menu.indexOf(id));
   assert.ok(order.every((i) => i >= 0), "all actions + the separator are present");
   for (let i = 1; i < order.length; i++) assert.ok(order[i] > order[i - 1], "actions are in Merge → Remove wall → Rename → ─ → Delete order");
   assert.ok(/id="rmDelete"[^>]*class="danger"/.test(menu), "Delete is the destructive (danger) action");
@@ -179,7 +179,10 @@ test("Delete uses a destructive confirm; closing the menu is wired to outside-cl
   assert.ok(src.includes('if(e.key!=="Escape") return;') && src.includes('if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); return; }'), "Escape closes the menu");
 });
 test("newly created rooms/areas still auto-open naming (first-creation naming is unchanged)", () => {
-  const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 2000);
+  // Scoped to the whole onPointerUp body rather than a fixed byte window: the window silently
+  // stopped reaching the assertion the moment anything was added above it.
+  const pu = src.slice(src.indexOf("function onPointerUp("), src.indexOf('cv.addEventListener("pointerleave"'));
+  assert.ok(pu.length > 500, "found the onPointerUp body");
   assert.ok(pu.includes("openLabel(shape)") || pu.includes("openLabel(ash,true)"), "a freshly drawn room/area opens the naming UI on creation");
 });
 

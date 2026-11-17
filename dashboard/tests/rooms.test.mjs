@@ -117,11 +117,13 @@ test("mergeRooms: null-safe", () => {
 
 // ---------- source-reads: wiring the pure logic into the live widget ----------
 test("roomLabelCell is used for the label anchor in redraw (drawRoom) + both SVG/PNG exports", () => {
-  const drawRoom = extractFn(src, "drawRoom");
-  assert.ok(drawRoom.includes("roomLabelCell(r.cells||[])"), "on-canvas label uses the pole anchor");
-  assert.ok(!/cx=bb\.x\+bb\.w\/2/.test(drawRoom), "the old bbox-centre label anchor is gone from drawRoom");
-  assert.ok(extractFn(src, "svgPlanBody").includes("roomLabelCell(r.cells||[])"), "vector export uses the pole anchor");
-  assert.ok(extractFn(src, "sketchPNG").includes("roomLabelCell(r.cells||[])"), "raster export uses the pole anchor");
+  // The anchor must be roomLabelCell on the room's OWN free floor — freeCells drops the cells of any
+  // nested room, which paints over its container and would otherwise bury the container's name.
+  const anchored = (fn, where) => assert.match(extractFn(src, fn), /roomLabelCell\(IOTDrawGeom\.freeCells\(r,rooms\)\)/, `${where} uses the pole anchor on the free floor`);
+  anchored("drawRoom", "on-canvas label");
+  assert.ok(!/cx=bb\.x\+bb\.w\/2/.test(extractFn(src, "drawRoom")), "the old bbox-centre label anchor is gone from drawRoom");
+  anchored("svgPlanBody", "vector export");
+  anchored("sketchPNG", "raster export");
 });
 
 test("Merge action lives in the Room Actions menu, one word, inline SVG", () => {

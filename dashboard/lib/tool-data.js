@@ -54,7 +54,7 @@ function fnv1a(str) {
   return (h >>> 0).toString(16);
 }
 function planHash(plan) {
-  return (plan && Array.isArray(plan.cells) && plan.cells.length) ? fnv1a(JSON.stringify({ c: plan.cells, r: plan.rooms })) : null;
+  return (plan && Array.isArray(plan.cells) && plan.cells.length) ? fnv1a(JSON.stringify({ c: plan.cells, r: plan.rooms, ...(Array.isArray(plan.blocks) && plan.blocks.length ? { b: plan.blocks } : {}) })) : null;
 }
 // Floor `id`, capture `aerial`, `legacyIdx`, the unfinished `outlineDraft` and the derived `ctx` crop are bookkeeping,
 // NOT meaning — backfilling them never voids an approval.

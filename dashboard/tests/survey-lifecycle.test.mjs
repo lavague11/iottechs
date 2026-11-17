@@ -79,7 +79,9 @@ test("Start Over: a ••• row that resets the current floor, gated on !froze
   assert.ok(html.includes('id="moreStartOver"') && html.includes("Start over"), "a Start Over row lives in the ••• sheet");
   const so = region("function startOverFloor(", "function frozen(");
   assert.ok(so.includes("if(frozen()) return;"), "Start Over is blocked while submitted/RO (protects the approved snapshot)");
-  assert.ok(so.includes("resetFloorRecord(floors[curFloor]); loadFloor(curFloor)") && so.includes("goStep(0)"), "it resets the floor record then lands on the chooser");
+  assert.ok(/resetFloorRecord\(floors\[curFloor\]\);[\s\S]{0,60}?loadFloor\(curFloor\)/.test(so) && so.includes("goStep(0)"), "it resets the floor record then lands on the chooser");
+  // the floor object survives the reset, so a pending device-delete Undo would resurrect a camera onto a blanked floor
+  assert.match(so, /delStash\s*=\s*\[\]/, "Start Over drops the delete stash");
   assert.ok(so.includes('askConfirm(') && so.includes('"Start Over"'), "it confirms with a Start Over action when there is work");
   assert.ok(so.includes("if(floorHasWork(f)) askConfirm") && so.includes("else go();"), "no scary confirm when the floor has nothing to lose");
   // resetFloorRecord clears working fields but NEVER touches id/name/version history (off the approval fingerprint)

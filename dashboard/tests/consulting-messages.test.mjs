@@ -27,7 +27,11 @@ const EXPECTED_TYPES = new Set([
   "iotMockupFullscreen", "iotMockupPhoto", "iotMockupRenamed", "iotMockupSelect", "iotOutlineLoad", "iotOutlineReady",
   "iotOutlineSave", "iotPlanLoad", "iotPlanReady", "iotPlanSave", "iotSurvey",
   "iotSurvey2Submit", "iotSurvey2Unsubmit", "iotSurveyCmd", "iotSurveyComment", "iotSurveyContext",
-  "iotSurveyDevices", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyNavGo", "iotSurveyReqFocus", "iotSurveySelect",
+  // Section L adds two, on purpose: the widget tells the host it could not read this device's saved copy
+  // (iotSurveyLoadFailed) and asks it to drop that copy and re-seed from the server (iotSurveyDiscardLocal),
+  // which the host owns because the localStorage + IndexedDB mirror is the host's.
+  "iotSurveyDevices", "iotSurveyDiscardLocal", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyLoadFailed",
+  "iotSurveyNavGo", "iotSurveyReqFocus", "iotSurveySelect",
   "iotSurveyStep", "iotSurveySubmitState", "iotSurveyZoom", "iotZonePolys", "iotZonesMigrated",
 ]);
 

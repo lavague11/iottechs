@@ -2,11 +2,12 @@
 
 import { useState, useLayoutEffect } from "react";
 import { markTourSeenAction } from "./actions";
+import { SUPPORT_PHONE } from "../../../lib/nap";
 
 // First-time guided tour for a customer: dims the page, spotlights the two spots that matter, and
 // closes with a "call us" beat. Auto-shows once (DB flag: tour_seen_at) right after they confirm
 // their details, and can be replayed anytime from the header "?" button. Dependency-free.
-export default function CustomerTour({ accessId, phone = "(646) 396-0775", onClose }) {
+export default function CustomerTour({ accessId, phone = SUPPORT_PHONE, onClose }) {
   const STEPS = [
     { selector: ".pbar-wrap", title: "This is your project",
       body: "Your progress bar. Tap any step to see exactly where things stand — and what's coming next." },

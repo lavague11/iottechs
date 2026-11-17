@@ -32,7 +32,9 @@ import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
 import AddressAutocomplete from "../../components/address-autocomplete";
-import { ToolApproveBar, ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
+import { toolCardState, toolDone } from "../../../lib/tool-card";
+import { proposalCardAction } from "../../../lib/addendum-display";
+import { ToolApproveBar,ToolSubmitButton, SmoothSailing, surveySatisfied, toolAccepted, submitTool } from "./survey-approve";
 import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
@@ -45,14 +47,16 @@ import { customerPointer, customerAnnouncement, customerAction } from "../../../
 import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
+import PortalSurvey from "./portal-survey";
 import StaffHub from "./staff-hub";
 import ProposalVersionLog from "./proposal-version-log";
-import { threeStepPhases, simpleProgressPct } from "../../../lib/staff-hub";
+import { threeStepForState, progressFromFacts } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
 import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
+import { SUPPORT_PHONE as NAP_PHONE, SUPPORT_TEL as NAP_TEL } from "../../../lib/nap";
 import { getAcceptancesAction, getLiveSnapshotAction, logCallAction, getCustomerFinanceAction, requestReopenAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
@@ -1280,9 +1284,9 @@ function CustomerInquiryPanel({ project, accessId }) {
         <div className="ciq-pill">Inquiry received · <span className="mono">{project.access_id}</span></div>
         <h2 className="ciq-title">You&apos;re in. We&apos;ve got it from here.</h2>
         <p className="ciq-sub">We'll call within <b>one business day</b>.</p>
-        <a className="ciq-call" href="tel:6463960775">
+        <a className="ciq-call" href={`tel:${NAP_TEL}`}>
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          Can&apos;t wait? Call 646-396-0775
+          Can&apos;t wait? Call {NAP_PHONE}
         </a>
       </div>
 
@@ -1558,12 +1562,13 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
   const [custFin, setCustFin] = useState(customerFinance);
-  const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) setCustFin(r.finance); }).catch(() => {}); };
+  const [custPays, setCustPays] = useState(customerPayments);   // customer-safe ledger rows (paymentsSummary)
+  const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) { setCustFin(r.finance); setCustPays(r.payments || []); } }).catch(() => {}); };
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
@@ -1906,6 +1911,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     qc_customer_signed:  acceptLoaded ? qcSignedCurrent("qc_customer") : !!lp.qc_customer_signed,
     install_photos:      acceptLoaded ? (toolMeta?.media?.installPhotos || 0) > 0 : !!lp.install_photos,
     install_confirmed:   acceptLoaded ? !!toolMeta?.schedule?.installConfirmed : !!lp.install_confirmed,
+    // B13: drives the customer's "Sign the change order" to-do and the portal's Change Order card.
+    addendum_awaiting_signature: acceptLoaded ? (toolMeta?.addendum?.awaitingSignature || 0) > 0 : !!lp.addendum_awaiting_signature,
     completion_docs:     !!lp.completed_at,
     // Work order (server facts): submitted = the office froze it; accepted = a technician signed it.
     // (proposalData is the live row, so submitting in the sheet flips the card without a reload.)
@@ -2427,10 +2434,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             onSkipViews={(cView === "customer" || viewOnly) ? null : (skip) => skipViewsAction(lp.access_id, skip)}
             customer={cView === "customer"}
             surveySubmitted={!!acceptances.submit_site_survey}
+            canUnlock={!viewOnly && cView !== "customer" && can(cView, "survey.unlock")}
             surveyOk={surveyOk} svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
             onContinue={() => browse("proposal")}
-            onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } }}
-            onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
+            onSubmitTool={viewOnly ? null : async (key) => { const r = await submitTool(lp.access_id, key, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } return r; }}
+            onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); return r; }}
             devReadOnly={cView === "customer" || viewOnly} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
         ) }];
       }
@@ -2839,12 +2847,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Add expense — opens the project's Expenses form in a modal; submitting files it to the shared
         // expenses ledger (submitProjectExpense), so it shows in the /expenses portal. Internal submitters only.
         ["admin", "manager", "tech"].includes(cView) && !previewRole && { label: "Add expense", icon: DVI.cash, onClick: (e) => { e.preventDefault(); setExpModal(true); } },
-        { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
+        can(cView, "project.contact.save") && { label: "Add to contact", icon: DVI.card, onClick: (e) => { e.preventDefault(); downloadVCard(lp); } },
         { label: "Share", icon: DVI.share, onClick: (e) => { e.preventDefault(); shareProjectLink(lp.access_id, lp.customer, () => showLiveToast("Project link copied")); } },
       ].filter(Boolean),
       // Inline contact edit from the drawer — same server action + change-logging as the legacy header.
       contact: { contact_name: lp.contact_name || lp.customer || "", contact_phone: lp.contact_phone || "", contact_email: lp.contact_email || "", address: lp.address || "" },
-      canEdit: ["admin", "manager", "sales", "tech", "customer"].includes(cView) && !previewRole,
+      canEdit: can(cView, "project.contact.edit") && !previewRole,
       onSave: async (vals) => { const r = await updateProjectInfoAction(lp.access_id, vals); if (r?.ok) setLocalProj((p) => ({ ...p, ...vals })); return r; },
       // Service line — admin/manager can correct a mis-filed job right from the contact edit.
       service_code: lp.service_code || "",
@@ -2903,24 +2911,21 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       install_done: sFacts.install_done,
       completed_at: sFacts.completion_docs,
       final_paid: sFacts.final_balance_paid,
-      closed_not_completed: !!lp.closed_at && !sFacts.completion_docs,
+      closed_not_completed: !!lp.lost_at && !sFacts.completion_docs,   // closeProject stamps lost_at (there is no closed_at column)
     };
     const projState = acceptLoaded ? resolveProjectStatus(resolverFacts, projectStage) : null;
     // Milestone progress for the Simple-view rail (hub + customer portal) — bug #83. ONE source for both
     // the percentage readout and the segment fills, so they always agree.
     const _simpleFin = staffFinance || customerFinance;
-    const simplePct = simpleProgressPct({
-      proposalSent:    !!resolverFacts.proposal_status,
-      signed:          !!resolverFacts.proposal_signed,
-      scheduled:       !!(pickAppt("install") || sFacts.install_confirmed),
-      installDone:     !!sFacts.install_done,
-      qcDone:          !!custFacts.qc_customer_signed,
-      completed:       projCompleted,
-      balanceOwed:     !!(_simpleFin && _simpleFin.hasContract && !_simpleFin.paidInFull),
-      surveyDone:      !!custFacts.survey_done,
-      mockupDone:      !!custFacts.mockup_done,
-      proposalStarted: !!proposalData?.payload,
+    const simplePct = progressFromFacts({
+      resolverFacts, sFacts, custFacts, finance: _simpleFin, completed: projCompleted,
+      hasInstallAppt: !!pickAppt("install"), proposalStarted: !!proposalData?.payload,
     });
+    // The 3-step rail derives from the SAME state the chip shows (never the stored stage, which lags) — staff
+    // hub and customer portal both read this one value. Until the facts load there is no state, and painting
+    // the stored stage instead would flash the stale step (the "Consulting" screenshot) for a round-trip — so
+    // the rail simply isn't drawn yet (both hosts render it only when phases is non-empty).
+    const rail3 = projState ? threeStepForState(projState, masterToPhaseKey(projectStage)) : { phases: [], currentKey: null };
     const dateSuffix = projState === "INSTALL_SCHEDULED" && realInstallDate ? ` · ${fmtDate(realInstallDate)}` : "";
     let statusChip = null;
     if (projState && isCustomerView) {
@@ -3011,16 +3016,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           }
           case "survey":
             return (
-              <div style={{ height: "100%" }}>
-                <SiteSurveyWidget accessId={lp.access_id} view={view} customerView noApproval noRoster
-                  propertyType={lp.property_type || "commercial"} customerName={lp.contact_name || lp.customer} hasData />
-              </div>
+              <PortalSurvey accessId={lp.access_id} project={lp} meta={toolMeta?.survey || { has: false }}
+                acceptance={acceptances.site_survey} submission={acceptances.submit_site_survey}
+                preview={!!previewRole} onApprove={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
             );
           case "mockup":
             return (
               <div style={padOvl}>
                 <MockupWidget embedded accessId={lp.access_id} view={view} customerView noApproval
                   customerName={lp.contact_name || lp.customer} hasData />
+              </div>
+            );
+          // B13: the change order the customer is asked to sign. The SAME component the deck mounts,
+          // in its customer role — the signing control lives inside it, so the card's "Sign" lands on
+          // the actual signature rather than the portal home.
+          case "addendum":
+            return (
+              <div style={padOvl}>
+                <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole}
+                  customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
               </div>
             );
           case "closeout": {
@@ -3068,6 +3082,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         proposalStatus: resolverFacts.proposal_status,
         proposalSigned: !!resolverFacts.proposal_signed,
         installComplete: !!sFacts.install_done,
+        // B13: priced add-ons the customer can see, and whether any still wants their signature.
+        addendumCount: toolMeta?.addendum?.count || 0,
+        addendumAwaiting: !!sFacts.addendum_awaiting_signature,
         // Real install status: use the actual appointment (or a confirmed booking), never the inquiry's
         // requested install_date fallback — so the portal never shows a phantom "Scheduled".
         installStatus: (sFacts.install_done || ["qc", "payment", "completion"].includes(projectStage)) ? "complete"
@@ -3111,9 +3128,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           project={lp}
           status={cs ? { state: projState, label: `${cs.label}${dateSuffix}`, tone: cs.tone, color: statusToneHex(cs.tone), cta: cs.cta } : null}
           finance={custFin}
+          payments={custPays}
+          contact={deckCustomer}
+          log={deckLog}
           appt={portalAppt}
-          phases={threeStepPhases(masterToPhaseKey(projectStage)).phases}
-          currentPhaseKey={threeStepPhases(masterToPhaseKey(projectStage)).currentKey}
+          phases={rail3.phases}
+          currentPhaseKey={rail3.currentKey}
           progressPct={simplePct}
           ctx={portalCtx}
           signedDate={proposalData?.signed_at || null}
@@ -3170,6 +3190,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const sHasMockup = !!(toolMeta?.mockup?.has || custFacts.mockup_has);
       const pStatus = resolverFacts.proposal_status;
       const pSigned = !!resolverFacts.proposal_signed;
+      const sSurveyDone = toolDone(toolMeta?.survey, acceptances?.submit_site_survey, acceptances?.site_survey);
       const installDone = !!sFacts.install_done;
       const qcSigned = !!sFacts.qc_customer_signed;
       const isComplete = !!sFacts.completion_docs || projState === "COMPLETE";
@@ -3181,7 +3202,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const woSigned = !!(sFacts.work_order_accepted || sFacts.tech_accepted);
       const woSubmitted = !!sFacts.work_order_submitted;
       const woStarted = woSigned || woSubmitted || !!workOrders?.length;
-      const simple3 = threeStepPhases(masterToPhaseKey(projectStage));   // Simple view = 3 steps: Consulting · Install · Completion
+      const simple3 = rail3;   // Simple view = 3 steps: Consulting · Install · Completion (derived from state, see rail3)
 
       const renderStaffOverlay = (key, onCloseOverlay) => {
         switch (key) {
@@ -3193,7 +3214,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
                 viewCount={proposalViews.filter((v) => v.viewer_role === "customer").length} onShowViews={() => setPvwOpen(true)}
                 signerName={currentUser?.name || currentUser?.email || ""} assignedTech={lp.tech || null} />
-              <ProposalVersionLog accessId={lp.access_id} />
+              <ProposalVersionLog accessId={lp.access_id} fileBase={fileBase} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
+                customerPhone={lp.contact_phone} customerEmail={lp.contact_email} />
             </div></AccordionProvider>);
           case "survey": {
             // The SAME System Planner the deck mounts — so the hub survey behaves identically: the floor
@@ -3254,11 +3276,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                 onSkipViews={viewOnly ? null : (skip) => skipViewsAction(lp.access_id, skip)}
                 customer={!!previewRole}
                 surveySubmitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)}
+                canUnlock={!viewOnly && !previewRole && can(cView, "survey.unlock")}
                 svMeta={svMetaEff} mkMeta={mkMetaEff} acceptances={acceptances}
                 onContinue={() => browse("proposal")}
                 onClose={onCloseOverlay}
-                onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } }}
-                onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); }}
+                onSubmitTool={viewOnly ? null : async (key2) => { const r = await submitTool(lp.access_id, key2, true); if (r?.acceptances) { onApprove(r.acceptances); try { showLiveToast("Submitted"); } catch {} } return r; }}
+                onUnsubmitTool={viewOnly ? null : async () => { const r = await submitTool(lp.access_id, "site_survey", false); if (r?.acceptances) onApprove(r.acceptances); return r; }}
                 devReadOnly={!!previewRole} devLocked={toolAccepted(svMetaEff, acceptances.submit_site_survey)} />
             );
           }
@@ -3368,10 +3391,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // (add-ons after signing). Closeout unlocks after the proposal is signed; Completion after QC sign-off.
         // Site Survey is the single entry for both the floor plan (Map) and the camera photos/preview
         // (Photos) — System Preview merged in (toggle inside the tool). A preview-only job never needs a map.
-        { key: "survey", title: "Site Survey", group: "customer", sub: (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.", action: (sHasSurvey || sHasMockup) ? "Edit" : "Create" },
-        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", action: pSigned ? "Completed" : pStatus ? "Edit" : "Create", done: pSigned },
-        // Addendum — job add-ons / change-orders on top of the signed job (fills the slot System Preview left).
-        { key: "addendum", title: "Addendum", group: "customer", sub: addonCount ? `${addonCount} add-on${addonCount === 1 ? "" : "s"}.` : "Job add-ons.", action: addonCount ? "Edit" : "Add" },
+        // Survey is done when the office's submission (or the customer's approval) still matches the
+        // survey's content fingerprint — an edit after approval re-opens the card.
+        { key: "survey", title: "Site Survey", group: "customer", sub: sSurveyDone ? "Submitted." : (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.",
+          ...toolCardState({ done: sSurveyDone, started: sHasSurvey || sHasMockup }) },
+        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", ...toolCardState({ done: pSigned, started: !!pStatus }),
+          // Addenda live inside the Proposal now (no separate card): the done chip carries the count.
+          action: proposalCardAction(toolCardState({ done: pSigned, started: !!pStatus }).action, toolMeta?.addendum?.count) },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
@@ -3580,7 +3606,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                     <span className="pv-addr-arrow">→</span>
                   </a>
                   <div className="pv-hactions">
-                    {["admin","manager","sales","tech","customer"].includes(view) && (
+                    {can(view,"project.contact.edit") && (
                       <button className="pv-hact" onClick={()=>{setHVals({company_name:lp.company_name||"",contact_name:lp.contact_name||"",contact_phone:lp.contact_phone||"",contact_email:lp.contact_email||"",address:lp.address||"",service_code:lp.service_code||""});setPinVal(lp.customer_pin||"");setPinCustom(!!lp.pin_custom);setHEditing(true);}}>
                         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                         Edit info
@@ -3836,7 +3862,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </button>
       )}
       {tourOpen && (
-        <CustomerTour accessId={lp.access_id} phone="(646) 396-0775"
+        <CustomerTour accessId={lp.access_id} phone={NAP_PHONE}
           onClose={() => { setTourOpen(false); setLocalProj((p) => ({ ...p, tour_seen_at: p.tour_seen_at || new Date().toISOString() })); }} />
       )}
       {showAnnounce && (
@@ -4567,7 +4593,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, staffHub = false, staffFinance = null, staffAppt = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4612,6 +4638,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       customerPortalV2={customerPortalV2}
       customerFinance={customerFinance}
       customerAppt={customerAppt}
+      customerPayments={customerPayments}
       staffHub={staffHub}
       staffFinance={staffFinance}
       staffAppt={staffAppt}

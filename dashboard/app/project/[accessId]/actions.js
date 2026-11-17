@@ -4,6 +4,8 @@ import { headers, cookies } from "next/headers";
 import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyUserByCredential, recordLogin, recordEvent, logProjectEvent, updateProjectContact, markProjectLost, setProjectAttention, setCommission, setProjectRestricted, submitProjectExpense, payProjectExpense, declineProjectExpense, submitRequest, approveRequest, rejectRequest, getCustomerUserForProject, setCustomerPinCustom, resetCustomerPinToPhone, findInternalUserByPin, getPrimaryAdmin, markInfoConfirmed, markTourSeen, markAnnouncementSeen, setProjectService, setProjectPropertyType, setSurveySkipped, setMockupSkipped, setViewsRequired, buildStageFacts, getProjectAssignments, customerOwnsProjectAccount } from "../../../lib/db";
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
+import { can as roleCan } from "../../../lib/roles";
+import { contactWriteError } from "../../../lib/contact-guard";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
 
@@ -244,14 +246,10 @@ export async function setCustomerPinAction(accessId, pin) {
 export async function confirmInfoAction(accessId, fields) {
   const tok = await getAnyTok();
   if (!tok) return { error: "Not authenticated." };
-  if (tok.role === "customer") {
-    const ok = tok.viaPin ? String(tok.accessId) === String(accessId)
-                          : customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email });
-    if (!ok) return { error: "Not your project." };
-  } else if (!["admin", "manager", "sales", "tech"].includes(tok.role)) {
-    return { error: "Unauthorized." };
-  }
-  if (fields && Object.keys(fields).length) updateProjectContact(accessId, fields);
+  const hasFields = !!fields && Object.keys(fields).length > 0;
+  const werr = contactWriteErr(tok, accessId, hasFields ? fields : null);
+  if (werr) return { error: werr };
+  if (hasFields) updateProjectContact(accessId, fields);
   markInfoConfirmed(accessId);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
@@ -287,6 +285,20 @@ export async function markAnnouncementSeenAction(accessId, key) {
   return { ok: true };
 }
 
+// Every action that writes the contact record asks lib/contact-guard (one rule, unit-tested).
+function contactWriteErr(tok, accessId, fields) {
+  return contactWriteError({
+    role: tok.role, fields,
+    // A project grant is not a capability, and a grant for X is not a grant for Y: ANY PIN grant (tech included)
+    // is bound to its own project. Session logins: a customer must own it; staff are scoped by role.
+    owns: tok.viaPin ? String(tok.accessId) === String(accessId)
+          : tok.role !== "customer" ? true
+          : customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email }),
+    infoConfirmed: !!getJobByAccessId(accessId)?.info_confirmed_at,
+    canEditContact: roleCan(tok.role, "project.contact.edit"),
+  });
+}
+
 export async function updateProjectInfoAction(accessId, fields) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";
@@ -295,12 +307,12 @@ export async function updateProjectInfoAction(accessId, fields) {
   const { parseToken } = await import("../../../lib/auth");
   const tok = await parseToken(raw.trim());
   if (!tok?.role) return { error: "Not authenticated." };
-  if (tok.role === "customer") {
-    if (!customerOwnsProjectAccount(accessId, { userId: tok.id, email: tok.email }))
-      return { error: "Not your project." };
-  } else if (!["admin","manager","sales","tech"].includes(tok.role)) {
-    return { error: "Unauthorized." };
-  }
+  // The contact RECORD (name / business / phone / email / address) is a staff edit — `project.contact.edit`,
+  // checked here in the action that writes, not in a wrapper in front of it. A customer keeps exactly two
+  // things: their free-text message, and the one-time intake confirmation of their own details (allowed only
+  // until they confirm: info_confirmed_at is unset). After that a customer can change nothing but the message.
+  const werr = contactWriteErr(tok, accessId, fields);
+  if (werr) return { error: werr };
   // Snapshot before the write so we can log exactly which contact fields changed.
   const before = getJobByAccessId(accessId) || {};
   updateProjectContact(accessId, fields);
@@ -669,6 +681,7 @@ export async function logAddendumAction(accessId, { verb, title, amount }) {
     logProjectEvent(accessId, {
       kind: verb === "approved" ? "approve" : "request",
       label: `${map[verb] || "Add-on"}${title ? ` · ${title}` : ""}${amt}`.slice(0, 300),
+      money: amount != null,   // carries add-on retail — hidden from roles without customer-money access
       actor: tok.name || tok.contact_name || tok.role || "—",
     });
   } catch { /* best-effort */ }

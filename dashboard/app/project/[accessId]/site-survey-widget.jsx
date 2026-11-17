@@ -5,13 +5,13 @@ import SignaturePanel from "./signature-panel";
 import SurveyDevices from "./survey-devices";
 import BuildGate from "./build-gate";
 import ToolComments from "./tool-comments";
-import { seedToolData, startToolAutosync } from "./tool-sync";
+import { seedToolData, startToolAutosync, discardLocalToolData, suspendToolSync } from "./tool-sync";
 import { survey2HasData } from "../../../lib/tool-data";
 
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261113-commit";
+const WIDGET_VERSION = "20261116-sectionE4";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
@@ -25,6 +25,7 @@ const SS_FS_CSS = `
 .ss-embed-fs .ss-fs-x:active{background:rgba(16,17,18,.07)}
 .ss-embed-fs .ss-embed-frame{flex:1 1 0;min-height:0;width:auto;height:auto;border:0;border-radius:12px;overflow:hidden;background:#fff;margin:0 8px 8px;display:block}
 .ss-embed-fs .ss-zoom{z-index:10001}
+.ss-loadfail{display:flex;align-items:center;justify-content:center;gap:12px;color:var(--dv-red,#C4553D);font-size:.84rem;font-weight:700}
 `;
 
 // Embeds the full self-contained Site Survey widget (public/widgets/site-survey.html).
@@ -50,6 +51,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   const [fs, setFs] = useState(false);
   const [zoomImg, setZoomImg] = useState(null);
   const [zoomed, setZoomed] = useState(false);
+  const [rosterUndo, setRosterUndo] = useState(null);   // newest undoable delete token the widget still holds
   const [roster, setRoster] = useState([]);       // device roster mirrored from the tool (moved outside)
   const [commentAnchor, setCommentAnchor] = useState(null);   // a read-only customer tapped this camera → comment toast
   const [curFloorState, setCurFloorState] = useState(0);
@@ -72,11 +74,19 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // Dev/demo "Load sample" is out of the production chooser; forward &sample=1 only when the project URL
   // carries ?sample=1 (a deliberate dev/demo session) so the widget reveals the helper (body.devsample).
   const sampleOn = typeof window !== "undefined" && /[?&]sample=1(?:&|$)/.test(window.location.search);
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}${sampleOn ? "&sample=1" : ""}&v=${WIDGET_VERSION}`;
+  // B10 nested-room gesture: forwarded only when the page URL asks for it, so the default tap
+  // behaviour is untouched. Turning it on for everyone means dropping the condition here.
+  const nestOn = typeof window !== "undefined" && /[?&]nest=1(?:&|$)/.test(window.location.search);
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}${sampleOn ? "&sample=1" : ""}${nestOn ? "&nest=1" : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.
   const [synced, setSynced] = useState(false);
+  // "Couldn't read the server AND this device has no copy" is NOT an empty survey — opening the editor
+  // there is how a real survey gets overwritten by a blank one on the first edit (section L: load from
+  // the database first). So we refuse to mount the tool and offer a retry instead.
+  const [loadFail, setLoadFail] = useState(false);
+  const [reseed, setReseed] = useState(0);
   useEffect(() => {
     let stop = null, live = true;
     // Any READ-ONLY view — a real customer, or staff using the "Customer view" preview — must mirror
@@ -87,8 +97,14 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
     // never clobbers a live draft with nothing.
     const viewerRefresh = readOnly;
     (async () => {
-      await seedToolData(accessId, "survey2", `iottechs_survey2_${accessId}`, { force: viewerRefresh });
+      const seed = await seedToolData(accessId, "survey2", `iottechs_survey2_${accessId}`, { force: viewerRefresh });
       if (!live) return;
+      // "I couldn't ask the server" + "this device has no survey CONTENT" is the same unknown state as
+      // having no local copy at all — and an empty-but-valid local blob (`{"floors":[]}`, exactly what
+      // the pre-fix failed-restore path wrote) is readable, so restore() would open the save gate over a
+      // blank canvas and the first edit would blank the row. Both halves, not just hasLocal.
+      if (seed?.serverError && !seed?.localHasContent) { setLoadFail(true); setSynced(true); return; }
+      setLoadFail(false);
       // Now that the draft is seeded, decide from localStorage whether there's a real survey — so we can
       // open the editor (or show the Build gate) without a flash.
       try { setLocalHasData(survey2HasData(localStorage.getItem(`iottechs_survey2_${accessId}`))); } catch { /* storage blocked */ }
@@ -96,6 +112,23 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       stop = startToolAutosync(accessId, "survey2", `iottechs_survey2_${accessId}`);
     })();
     return () => { live = false; if (stop) stop(); };
+  }, [accessId, reseed]);
+
+  // Two messages from the widget about this device's copy:
+  //  · iotSurveyLoadFailed — it could not read the copy. STOP the host's 5s autosync for this key at
+  //    once: that loop reads localStorage and POSTs it, so while the widget's "nothing was changed"
+  //    banner is on screen it would otherwise be busy replacing the server row with the broken value.
+  //  · iotSurveyDiscardLocal — the way out: drop the local copy (the server row is untouched) and seed
+  //    again, which pulls the saved survey back down and restarts the autosync.
+  useEffect(() => {
+    function onMsg(e) {
+      if (!e.data || e.data.project !== accessId) return;
+      if (e.data.type === "iotSurveyLoadFailed") { suspendToolSync(accessId, "survey2"); return; }
+      if (e.data.type !== "iotSurveyDiscardLocal") return;
+      discardLocalToolData(`iottechs_survey2_${accessId}`).then(() => { setSynced(false); setReseed((n) => n + 1); });
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
   }, [accessId]);
 
   useEffect(() => {
@@ -108,7 +141,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         // background is added — no waiting on the server's tool-meta poll.
         if (typeof e.data.hasContent === "boolean") onHasData?.(e.data.hasContent);
       }
-      if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); }
+      if (e.data.type === "iotSurveyDevices") { setRoster(Array.isArray(e.data.floors) ? e.data.floors : []); setCurFloorState(e.data.curFloor || 0); setRosterUndo(e.data.undo || null); }
       if (e.data.type === "iotSurveyZoom" && e.data.img) { setZoomImg(e.data.img); setZoomed(false); }
       // The tool's own nav buttons drive the real server submit/unsubmit (the status now lives inside the tool).
       if (e.data.type === "iotSurvey2Submit") onSubmit?.();
@@ -238,6 +271,13 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
         <div className="ss-embed-frame" style={{ display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted,#6f7686)", fontSize: ".82rem" }}>
           Loading survey…
         </div>
+      ) : loadFail ? (
+        /* Server unreachable and nothing on this device. Opening the editor here would let the first edit
+           save a blank survey over the real one, so we show the failure and a retry instead. */
+        <div className="ss-embed-frame ss-loadfail" role="alert">
+          <span>Couldn’t load the survey.</span>
+          <button type="button" className="mk-btn" onClick={() => { setSynced(false); setReseed((n) => n + 1); }}>Retry</button>
+        </div>
       ) : showEditor ? (
         <iframe
           key={src}
@@ -290,7 +330,7 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
       {fs && typeof document !== "undefined" ? createPortal(editor, document.body) : editor}
       {/* The device roster lives OUTSIDE the tool — hidden in focus mode (the overlay owns the screen),
           and lifted into the System Planner shell when embedded there (noRoster). */}
-      {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} />}
+      {!fs && !noRoster && <SurveyDevices accessId={accessId} roster={roster} curFloor={curFloorState} readOnly={readOnly} locked={!readOnly && submitted} cmd={cmd} undoToken={rosterUndo} />}
       <ToolComments accessId={accessId} scope="survey" role={view} preview={!!customerView} anchor={commentAnchor} onClose={() => setCommentAnchor(null)} hideGeneral />
       <style>{SS_FS_CSS}</style>
     </>

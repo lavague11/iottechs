@@ -4,16 +4,18 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, c
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
 import { SOP_STEP_REAL_SQL, SOP_STEP_UNTAGGED_SQL } from "./sop-model.js";
-import { makeAccessId, stageLabel, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
+import { makeAccessId, stageLabel, stagesForType, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
 import { normalizeCategory as _normalizeExpenseCategory } from "./expense-model.js";
 import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "./svc-status.js";
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
+import { isStampableCompletionDate } from "./completion-date.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
-import { parseSurveyFloors, surveyDevices } from "./survey2-model.js";
+import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
+import { SUPPORT_PHONE } from "./nap.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, requiredActionsFromState } from "./proposal.js";
+import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
@@ -1348,6 +1350,9 @@ function init() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_events_project ON project_events(project_access_id)`);
+  // Structured money marker: events whose label carries a dollar figure are flagged at the call site, and the
+  // activity feed filters on THIS (never on a regex over display text) for roles without customer-money access.
+  try { const ec = db.prepare("PRAGMA table_info(project_events)").all().map((c) => c.name); if (!ec.includes("money")) { db.exec("ALTER TABLE project_events ADD COLUMN money INTEGER DEFAULT 0"); db.exec("UPDATE project_events SET money=1 WHERE label LIKE '%$%'"); /* one-time backfill of history: conservatively flag every legacy label carrying a $ */ } } catch { /* already there */ }
 
   // Customer-level log — the CRM activity note a rep adds against the whole client ("called, left VM"),
   // not tied to one project. The customer hub merges these with the per-project Job Log and service-call
@@ -2011,7 +2016,7 @@ const GUIDE_SEED = [
       { art: "device", title: "Why reset",     text: "A monthly restart fixes about 90% of common problems and keeps your system healthy." },
       { art: "device", title: "Power it off",  text: "Unplug the recorder for 1–2 minutes." },
       { art: "device", title: "Power it on",   text: "Plug it back in and give it a few minutes to come up." },
-      { art: "device", title: "Still stuck?",  text: "If a camera is still offline, call us at 646-396-0775. We’re here 24/7." },
+      { art: "device", title: "Still stuck?",  text: `If a camera is still offline, call us at ${SUPPORT_PHONE}. We’re here 24/7.` },
     ],
   },
 ];
@@ -2319,6 +2324,14 @@ function financialStateFromRow(r, { total, paid, pendingPay, lastPay }) {
 // for history). Every money figure + bucket comes from the ONE canonical resolver (lib/receivables-model.js)
 // so the AR page, project page and dashboard can't disagree. Unsigned-approved deals appear (Awaiting
 // Signature) but are NEVER counted as money due.
+// Does this payment count as money received? Four call sites answer "is it paid?" and all four used
+// `status !== "pending"`, which is ALLOW-BY-DEFAULT: any status that is not the single value
+// "pending" counted as cash in hand. Only "pending" and "confirmed" are ever written today, so this
+// is the same answer on every existing row - but the moment anyone adds failure handling, a
+// `status = 'failed'` row would have inflated `paid` and shrunk `balance` on a real invoice
+// (docs/blocked.md B9). Name the one status that means paid.
+const paymentCounts = (p) => p?.status === "confirmed";
+
 export function getReceivables() {
   const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
   const iso = (d) => (d instanceof Date ? d.toISOString() : (d || null));
@@ -2357,7 +2370,7 @@ export function getReceivables() {
     const addons = getApprovedAddons(r.access_id);
     const total  = grand + (addons?.total || 0);
     const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
-    const paid    = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const paid    = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
     const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
     const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
 
@@ -2423,7 +2436,7 @@ export function getProjectFinancialState(accessId) {
   } catch { /* bad payload */ }
   const total = grand + (getApprovedAddons(accessId)?.total || 0);
   const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(accessId);
-  const paid = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const paid = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
   const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
   const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
   const st = financialStateFromRow(r, { total, paid, pendingPay, lastPay });
@@ -2864,7 +2877,7 @@ export function buildStageFacts(accessId) {
   // the project keeps reflecting what the customer actually received until a revision is Sent.
   const prop = getPublishedProposal(accessId);
   const pays = db.prepare("SELECT amount, status FROM project_payments WHERE project_access_id=?").all(String(accessId));
-  const confirmedTotal = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const confirmedTotal = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
 
   // Final balance paid — same math as the payment portal (accepted option(s) total + approved
   // add-ons vs. confirmed payments). Lets `payment` auto-advance once the balance is truly $0,
@@ -2902,6 +2915,9 @@ export function buildStageFacts(accessId) {
       install_done: m.install.allDone && m.install.openIssues === 0,
       install_photos: m.media.installPhotos > 0,
       install_confirmed: m.schedule.installConfirmed,
+      // B13: a priced change order the customer has not signed yet. An obligation of its own — it can
+      // outlive the stage it was raised in, so customerTodo checks it independently of `stage`.
+      addendum_awaiting_signature: m.addendum.awaitingSignature > 0,
       ...qcSignoffFacts(accessId, m),
     }; })(),
     completion_docs: !!p.completed_at,
@@ -3136,14 +3152,14 @@ export function resolveCustomerOwnership(accessId, { userId = null, email = null
   const proj = getJobByAccessId(accessId);
   if (!proj) return { owner: false, reason: "PROJECT_NOT_FOUND" };
   const row = userId ? getUserById(userId) : null;
-  const digits = (s) => String(s || "").replace(/\D/g, "");
   const acctEmail = String(email || row?.email || "").trim().toLowerCase();
   const projEmail = String(proj.contact_email || "").trim().toLowerCase();
-  const acctPhone = digits(row?.phone);
-  const projPhone = digits(proj.contact_phone);
+  // Normalized (crm.phoneKey: digits, leading US "1" dropped) so "+1 646…", "646.555.0142" and "(646) 555-0142" agree.
+  const acctPhone = phoneKey(row?.phone);
+  const projPhone = phoneKey(proj.contact_phone);
   if (userId && proj.customer_id != null && Number(proj.customer_id) === Number(userId)) return { owner: true, reason: "OWNER_ID" };
   if (acctEmail && projEmail && acctEmail === projEmail) return { owner: true, reason: "OWNER_EMAIL" };
-  if (acctPhone.length >= 7 && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
+  if (acctPhone && acctPhone === projPhone)   return { owner: true, reason: "OWNER_PHONE" };
   // Explicit access roster — an admin-shared or inquiry-granted customer (a canonical, PERSISTED link,
   // by user_id once repaired, else by the email it was granted under). Survives a later contact edit.
   try {
@@ -3326,6 +3342,27 @@ export function getProjectsByContactEmail(email) {
   if (!email) return [];
   return db.prepare("SELECT * FROM projects WHERE LOWER(contact_email) = ? ORDER BY id DESC")
     .all(String(email).trim().toLowerCase()).map(decorate);
+}
+
+// A customer's projects under the CANONICAL ownership rule (email OR phone OR customer_id OR explicit
+// roster) — the dashboard used to match contact_email only, so a project created with just a phone
+// never appeared. SQL only NARROWS to candidates; customerOwnsProjectAccount is the sole judge, so
+// this can never widen ownership beyond what the project page itself allows.
+export function getOwnedProjectsForCustomer({ userId = null, email = null, phone = null } = {}) {
+  const em = normalizeEmail(email);
+  const pk = phoneKey(phone);
+  const where = [], args = [];
+  if (em) { where.push("LOWER(TRIM(contact_email)) = ?"); args.push(em); }
+  if (pk) where.push("COALESCE(contact_phone,'') <> ''");          // narrowed in JS by phoneKey below
+  if (userId) {
+    where.push("customer_id = ?"); args.push(Number(userId));
+    where.push("access_id IN (SELECT project_access_id FROM project_assignments WHERE role='customer' AND user_id = ?)"); args.push(Number(userId));
+  }
+  if (em) { where.push("access_id IN (SELECT project_access_id FROM project_assignments WHERE role='customer' AND LOWER(TRIM(user_email)) = ?)"); args.push(em); }
+  if (!where.length) return [];
+  return db.prepare(`SELECT * FROM projects WHERE ${where.join(" OR ")} ORDER BY id DESC`).all(...args)
+    .filter((r) => customerOwnsProjectAccount(r.access_id, { userId, email: em }))
+    .map(decorate);
 }
 
 // The e-sign landing path for a customer who still owes a signature, else null. The login flows use it to
@@ -4076,6 +4113,92 @@ export function setSystemQr(accessId, data) {
   db.prepare("UPDATE projects SET system_qr = ? WHERE access_id = ? COLLATE NOCASE").run(data ? String(data) : null, String(accessId));
   return getJobByAccessId(accessId);
 }
+// ---- Section O: ADMIN manual stage/status override for a legacy project ------------------------
+// The escape hatch the migration deliberately needs. The one-time migration recomputes stage from
+// evidence and REFUSES to guess when the evidence is missing or contradictory (a drifted signature,
+// a finished job with no completion stamp); those projects are reported for a human, and this is how
+// the human answers. Admin only — the capability check lives in the server action
+// (`legacy.override` in lib/roles.js), never in a component.
+//
+// It writes only what an admin explicitly chose: the stage, and optionally the completion stamp.
+// Both are audited twice over — `updateStage` records a stage_transitions row, and the override
+// itself is appended to the project event log with who, what and why — so a hand-set stage is never
+// indistinguishable from one the lifecycle earned. Reversible: pass a different stage, or
+// completed=false to clear the stamp.
+//
+// `completedAt` is REQUIRED to mark a legacy job complete, and it is validated. Calling
+// markProjectCompleted() with no date takes its `COALESCE(completed_at, datetime('now'))` branch —
+// i.e. it stamps TODAY, and since the warranty is completed_at + warranty_months, a job finished
+// months ago would ship a warranty starting on the day someone clicked the button. The migration
+// refuses to invent that date; so does this. When the caller has none, `completionEvidenceDate()`
+// supplies the newest DATED evidence on the row (never "now"), and if there is none we refuse and
+// say so, because at that point the only honest answer comes from a human who knows the job.
+export function setLegacyStageOverride(accessId, { stage, completed = null, completedAt = null, reason = null, by = null } = {}) {
+  const p = getJobByAccessId(accessId);
+  if (!p) return { ok: false, error: "Project not found." };
+  const allowed = new Set(stagesForType(p.project_type).map((s) => s.key));
+  if (!MASTER_ORDER.includes(stage) || !allowed.has(stage)) return { ok: false, error: "That stage does not apply to this project." };
+
+  // Resolve (and validate) the completion date BEFORE touching anything, so a bad date changes nothing.
+  let stampDate = null;
+  if (completed === true && !p.completed_at) {
+    stampDate = completedAt || completionEvidenceDate(accessId).date;
+    if (!stampDate) return { ok: false, error: "Marking this complete needs a completion date — the project carries no dated evidence from before today, so it cannot be derived. Enter the date the job finished." };
+    if (!isStampableCompletionDate(stampDate)) return { ok: false, error: `"${String(stampDate).slice(0, 40)}" is not a real YYYY-MM-DD date. The completion date starts the warranty, so it is never guessed.` };
+  }
+
+  const from = p.stage;
+  if (from !== stage) updateStage(accessId, stage, by || "admin override");
+  let stampChanged = null;
+  if (stampDate) { markProjectCompleted(accessId, stampDate); stampChanged = "set"; }
+  if (completed === false && p.completed_at) { reopenProjectCompletion(accessId); stampChanged = "cleared"; }
+
+  if (from === stage && !stampChanged) return { ok: true, changed: false, stage, project: getJobByAccessId(accessId) };
+  const bits = [
+    from === stage ? null : `stage ${stageLabel(from)} → ${stageLabel(stage)}`,
+    stampChanged === "set" ? `marked complete as of ${String(stampDate).slice(0, 10)}` : stampChanged === "cleared" ? "completion stamp cleared" : null,
+  ].filter(Boolean);
+  logProjectEvent(accessId, {
+    kind: "override",
+    label: `Admin override (legacy project): ${bits.join(" · ")}${reason ? ` — ${String(reason).slice(0, 160)}` : ""}`,
+    actor: by || "admin",
+  });
+  return { ok: true, changed: true, stage, stampChanged, completedAt: stampDate, project: getJobByAccessId(accessId) };
+}
+
+// The newest DATED evidence of when a job actually finished, for the completion stamp. Never "now".
+// Order of trust: an existing stamp · the latest human-recorded entry into `completion` (a transition
+// written by a backfill/seed/migration pass records when a SCRIPT ran, not when the work finished, so
+// those authors are excluded by name) · the last confirmed payment. Shared by the migration script and
+// the admin override so both derive the warranty start the same way. Read-only.
+//
+// TODAY IS NEVER EVIDENCE. A stage move to Completion stamps a transition with today's timestamp, so
+// an admin who moves the stage and then marks the job complete would otherwise "derive" today's date
+// from the row they just created — the exact fallback this whole path exists to prevent. Candidates
+// dated today are skipped; an admin who means today must type it, which is a decision, not a default.
+// (An existing `completed_at` is returned regardless: it is the stamp itself, not evidence for a new one.)
+export function completionEvidenceDate(accessId) {
+  const id = String(accessId);
+  const today = new Date().toLocaleDateString("en-CA");   // YYYY-MM-DD in the server's pinned zone
+  const past = (v) => (v && String(v).slice(0, 10) !== today ? v : null);
+  const p = db.prepare("SELECT completed_at FROM projects WHERE access_id = ? COLLATE NOCASE").get(id);
+  if (p?.completed_at) return { date: p.completed_at, source: "projects.completed_at" };
+  const t = db.prepare(`
+    SELECT entered_at FROM stage_transitions
+     WHERE project_access_id = ? AND stage = 'completion'
+       AND LOWER(COALESCE(by_name, '')) NOT IN ('backfill', 'seed', 'seed-demo', 'migration', 'legacy migration', 'system')
+       AND DATE(entered_at) <> DATE('now', 'localtime')
+     ORDER BY id DESC LIMIT 1`).get(id);
+  if (past(t?.entered_at)) return { date: t.entered_at, source: "stage_transitions (human-recorded entry into Completion)" };
+  const pay = db.prepare(`
+    SELECT COALESCE(paid_at, created_at) AS d FROM project_payments
+     WHERE project_access_id = ? AND status = 'confirmed' AND COALESCE(paid_at, created_at) IS NOT NULL
+       AND DATE(COALESCE(paid_at, created_at)) <> DATE('now', 'localtime')
+     ORDER BY d DESC LIMIT 1`).get(id);
+  if (past(pay?.d)) return { date: pay.d, source: "the last confirmed payment" };
+  return { date: null, source: null };
+}
+
 // Re-open a completed project (clears the completion stamp) — admin correction path.
 export function reopenProjectCompletion(accessId) {
   db.prepare("UPDATE projects SET completed_at = NULL WHERE access_id = ? COLLATE NOCASE").run(String(accessId));
@@ -6737,6 +6860,12 @@ export function getProposalHistory(accessId) {
   return db.prepare("SELECT id, version, status, sent_at, sent_by_name, selected_option, updated_at, created_by_name, signed_name, signed_at, signed_fingerprint FROM proposals WHERE project_access_id=? ORDER BY version DESC")
     .all(String(accessId)).map((r) => ({ ...r }));
 }
+// One full version row (payload + signed_payload included) — feeds the read-only version snapshot. Staff
+// actions only; callers sanitize through lib/proposal-version-snapshot.js before anything leaves the server.
+export function getProposalVersionRow(accessId, version) {
+  const r = db.prepare("SELECT * FROM proposals WHERE project_access_id=? AND version=?").get(String(accessId), +version || 0);
+  return r ? { ...r } : null;
+}
 
 // ---- PCP (Performance Credit Program) ----
 // Customer acknowledges the PCP agreement in one click — records their signature + issues
@@ -7116,7 +7245,7 @@ export function svcAmountDue(svcId) {
   const inv = getSvcInvoice(svcId);
   if (!inv || !(inv.total > 0)) return { ok: false, error: "No invoice to pay yet." };
   const pays = getSvcPayments(svcId);
-  const paid = pays.filter((p) => p.status !== "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+  const paid = pays.filter(paymentCounts).reduce((s, p) => s + (+p.amount || 0), 0);
   const pending = pays.filter((p) => p.status === "pending").reduce((s, p) => s + (+p.amount || 0), 0);
   return { ok: true, due: Math.round(Math.max(0, inv.total - paid - pending) * 100) / 100, total: inv.total, paid, pending };
 }
@@ -7129,6 +7258,40 @@ export function getPendingSquareOrders(accessId) {
 }
 // What a customer can pay right now for a project: the deposit still owed, and the full remaining balance.
 // Reads the canonical financial state (published proposal), so it can never bill a staff working draft.
+// B9, OFF BY DEFAULT. A `pending` row is created when a payment LINK is made, not when money moves,
+// and nothing ever clears it — so one abandoned Square checkout counts against `applied` for ever and
+// the customer is refused by /api/pay/create with "Nothing is due right now." Option 1 of the three in
+// docs/blocked.md: stop counting a pending row once it is older than a real checkout could take.
+//
+// Why this one: it keeps the double-payment guard intact for money genuinely in flight (a checkout
+// under the window still blocks), and only releases rows that cannot still be live. The alternatives
+// either drop the guard for all Square rows or need a new payment state.
+//
+// Scope: this moves `due` ONLY — what the customer may pay right now. It does not touch `total`,
+// `paid` or `balance`, so no invoice figure is restated whether the flag is on or off.
+export const STALE_PENDING_MINUTES = 30;
+// ON by default since B9 was approved (2026-11-17). The secret is now a kill switch: set
+// PAYMENTS_IGNORE_STALE_PENDING="off" to restore the old arithmetic without a deploy.
+export const paymentsIgnoreStalePending = () => String(secretValue("PAYMENTS_IGNORE_STALE_PENDING") || "").toLowerCase() !== "off";
+// Pending money that is too old to still be a live checkout. Rows with no timestamp are treated as
+// LIVE (never released) — an unknown age must not become a reason to ask for money twice.
+export function stalePendingTotal(accessId, nowMs = Date.now()) {
+  const cutoff = nowMs - STALE_PENDING_MINUTES * 60 * 1000;
+  const rows = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(String(accessId));
+  return Math.round(rows.reduce((s, r) => {
+    if (r.status !== "pending") return s;
+    // created_at is written by `datetime('now','localtime')` — SERVER-LOCAL time (America/New_York)
+    // with no offset. Appending "Z" parsed it as UTC and made every row look 5 hours older than it
+    // was (4 in EDT), so with this rule live a link made seconds ago read as stale and the 30-minute
+    // guard protected nothing — the customer could be asked to pay while a real checkout was in
+    // flight. A date-time with no offset is parsed as local, which is how it was written. A value
+    // that DOES carry an offset (or a trailing Z) still parses correctly here.
+    const t = Date.parse(String(r.created_at || "").replace(" ", "T"));
+    if (!Number.isFinite(t) || t >= cutoff) return s;        // unknown or recent -> still counts
+    return s + (+r.amount || 0);
+  }, 0) * 100) / 100;
+}
+
 export function amountDueForPayment(accessId, kind) {
   const fin = getProjectFinancialState(accessId);
   if (!fin) return { ok: false, error: "No proposal to pay on yet." };
@@ -7138,9 +7301,10 @@ export function amountDueForPayment(accessId, kind) {
   const pending = +fin.pendingPayments || 0;
   const depositAmt = Math.round(total * ((+pub?.deposit_pct || 0) / 100) * 100) / 100;
   // Count money already applied OR in flight (pending), so the customer can't double-pay the same bucket.
-  const applied = paid + pending;
+  const stale = paymentsIgnoreStalePending() ? stalePendingTotal(accessId) : 0;
+  const applied = paid + pending - stale;
   const due = kind === "deposit" ? Math.max(0, depositAmt - applied) : Math.max(0, total - applied);
-  return { ok: true, due: Math.round(due * 100) / 100, total, paid, pending, depositAmt };
+  return { ok: true, due: Math.round(due * 100) / 100, total, paid, pending, stalePending: stale, depositAmt };
 }
 // Staff confirm a customer-submitted payment once the money is actually received.
 export function confirmProjectPayment(accessId, id) {
@@ -7193,7 +7357,10 @@ export function resolveCustomerRequiredActions(accessId) {
   try {
     const addRow = getToolData(accessId, "addendum");
     addendums = (JSON.parse(addRow?.data || "{}").addendums || []).map((a) => ({
-      id: a?.id, title: a?.title, shared: !!a?.shared, needsPricing: !!a?.needsPricing,
+      // B13: `shared` is DERIVED. It was read as a stored field that nothing ever writes, so this
+      // branch never fired. An explicit `a.shared === true` still wins if a writer ever sets one.
+      id: a?.id, title: a?.title, shared: a?.shared === true || addendumAwaitingCustomer(a),
+      needsPricing: !!a?.needsPricing,
       signedCurrent: addendumSignatureCurrent(a),
     }));
   } catch { addendums = []; }
@@ -7209,10 +7376,25 @@ export function confirmedPaymentTotal(accessId, kind) {
 // "tracking" = equipment shipment info for the Schedule stage ({number, carrier, note}) —
 // staff set it, the customer's scheduling page displays it.
 export const TOOL_KEYS = new Set(["survey", "survey2", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
+// B14 — the version a client must echo to prove it is writing against what it read.
+//
+// A content hash rather than a column: it needs no migration, it cannot drift from the row it
+// describes, and two writes inside the same second (which `updated_at` cannot tell apart) get
+// different revs. "0" means there is no row, so a client that read "nothing" can only create.
+export function toolRev(data) {
+  return data == null ? "0" : createHash("sha256").update(String(data)).digest("hex").slice(0, 16);
+}
 export function getToolData(accessId, tool) {
   const r = db.prepare("SELECT data, updated_by, updated_at FROM project_tool_data WHERE project_access_id=? AND tool=?")
     .get(String(accessId), String(tool));
-  return r ? { data: r.data, updated_by: r.updated_by, updated_at: r.updated_at } : null;
+  return r ? { data: r.data, updated_by: r.updated_by, updated_at: r.updated_at, rev: toolRev(r.data) } : null;
+}
+// Is this write made against the version the caller last read? `baseRev` is OPTIONAL: a caller that
+// sends none is accepted exactly as before, so no existing client breaks. One that sends a rev and is
+// behind is refused rather than silently winning, which is the overwrite in B14.
+export function toolWriteIsStale(accessId, tool, baseRev) {
+  if (typeof baseRev !== "string" || !baseRev) return false;      // no claim made -> nothing to check
+  return baseRev !== toolRev(getToolData(accessId, tool)?.data ?? null);
 }
 export function saveToolData(accessId, tool, data, byName) {
   db.prepare(`
@@ -7290,10 +7472,17 @@ export function allScheduleBlobs() {
   return db.prepare("SELECT project_access_id, data FROM project_tool_data WHERE tool='schedule'").all();
 }
 // Atomically claim a reminder: returns true only the FIRST time this event_key is seen, so the
-// hourly sweep sends each 24h reminder exactly once even if instances/sweeps overlap.
+// 30-min sweep sends each reminder (day-before / same-day) exactly once even if instances/sweeps overlap.
 export function claimAppointmentReminder(eventKey) {
   const r = db.prepare("INSERT OR IGNORE INTO appt_reminders (event_key) VALUES (?)").run(String(eventKey));
   return r.changes > 0;
+}
+// Give a claim back when the send failed outright, so the next sweep (every 30 min) retries it.
+export function releaseAppointmentReminder(eventKey) {
+  db.prepare("DELETE FROM appt_reminders WHERE event_key = ?").run(String(eventKey));
+}
+export function appointmentReminderClaimed(eventKey) {
+  return !!db.prepare("SELECT 1 FROM appt_reminders WHERE event_key = ?").get(String(eventKey));
 }
 
 // ---- Uploaded media (HEIC-safe photos). Bytes are already-converted JPEG from /api/media. ----
@@ -7483,8 +7672,29 @@ export function getPublishedSopBySlug(slug) {
 // camera device (k==="cam") across all floors, with its name/tag and view photo. This is the single
 // source of truth the CCTV mockup grid — and later the proposal/PDF — reflect, so cameras are entered
 // ONCE, in the survey, and everything downstream builds from them.
-export function getProjectCameras(accessId) {
+// The survey blob to RENDER for a project: the current `survey2` row, or — for a project whose survey
+// predates that tool — the legacy `survey` row run through the read-time adapter (B11). Read-only: the
+// adapted blob carries `__legacyAdapted` and the outbound sync gate refuses to post it back, so no
+// amount of reading converts a legacy project. Every server-side renderer/derivation goes through here.
+// True when a project's survey exists ONLY in the legacy `survey` store. Its cameras reach the roster
+// through the read-time adapter, but every writer reads the raw `survey2` row — correctly, so an
+// adapted blob can never round-trip through a write — and there isn't one, so a rename or a photo
+// cannot land. Callers use this to say WHY rather than blame a concurrent edit (B15).
+export function surveyIsLegacyOnly(accessId) {
+  if (toolHasData("survey2", getToolData(accessId, "survey2")?.data)) return false;
+  return !!legacySurveyToSurvey2(getToolData(accessId, "survey")?.data || null);
+}
+
+export function getSurveyBlobForRender(accessId) {
   const row = getToolData(accessId, "survey2");
+  if (toolHasData("survey2", row?.data)) return row?.data || null;
+  const legacy = getToolData(accessId, "survey")?.data;
+  const adapted = legacy ? legacySurveyToSurvey2(legacy) : null;
+  return adapted ? JSON.stringify(adapted) : (row?.data || null);
+}
+
+export function getProjectCameras(accessId) {
+  const row = { data: getSurveyBlobForRender(accessId) };
   const out = [];
   try {
     const d = JSON.parse(row?.data || "{}");
@@ -7518,7 +7728,7 @@ export function getProjectCameras(accessId) {
 // surveyDevices) — stable id + deterministic code (C3) + kindName + identity/label/loc + x/y percent.
 // Never a second device model; the AI device resolver and any device-aware feature read THIS.
 export function getProjectDevices(accessId) {
-  try { return surveyDevices(parseSurveyFloors(getToolData(accessId, "survey2")?.data)); }
+  try { return surveyDevices(parseSurveyFloors(getSurveyBlobForRender(accessId))); }
   catch { return []; }
 }
 
@@ -7826,12 +8036,15 @@ export function getApprovedAddons(accessId) {
   // Approved AND still matching the signed content (fingerprint) — an edited add-on drops out until re-signed.
   try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && addendumSignatureCurrent(a)); } catch { list = []; }
   const each = list.map((a) => {
-    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
-    const discount = +a.discount || 0;
+    const { discount, total } = addendumTotals(a);
     return {
       id: a.id, title: a.title || "Job-site add-on", signedName: a.signedName || null, signedAt: a.signedAt || null,
-      discount, total: Math.max(0, sub - discount), // customer owes the discounted total
-      items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 1, price: +it.price || 0 })),
+      discount, total, // customer owes the discounted total
+      // B6: a missing quantity is NOT a quantity of one. addendumTotals (the money formula, and the
+      // thing a signature is bound to) counts it as 0, and this array is copied straight into a clone
+      // by cloneProposal — so `|| 1` here meant an add-on that billed $0 came back as a charge in the
+      // new draft. Both ends now read 0, which is also the house rule: never manufacture a number.
+      items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 0, price: +it.price || 0 })),
     };
   });
   return { total: each.reduce((s, a) => s + a.total, 0), list: each };
@@ -7843,10 +8056,9 @@ export function getApprovedAddons(accessId) {
 export function getPendingAddons(accessId) {
   const rec = getToolData(accessId, "addendum");
   let list = [];
-  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "pending" && !a.needsPricing); } catch { list = []; }
+  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter(addendumAwaitingCustomer); } catch { list = []; }
   const each = list.map((a) => {
-    const sub = (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
-    return { id: a.id, title: a.title || "Job-site add-on", total: Math.max(0, sub - (+a.discount || 0)) };
+    return { id: a.id, title: a.title || "Job-site add-on", total: addendumTotals(a).total };
   });
   return { total: each.reduce((s, a) => s + a.total, 0), list: each, count: each.length };
 }
@@ -7937,9 +8149,9 @@ export function getRecentBusinessEvents(limit = 6) {
     ORDER BY e.id DESC LIMIT ?
   `).all(Number(limit)).map((r) => ({ ...r }));
 }
-export function logProjectEvent(accessId, { kind, label, actor }) {
-  db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor) VALUES (?,?,?,?)")
-    .run(String(accessId), String(kind || "note").slice(0, 30), String(label || "").slice(0, 300) || null, String(actor || "").slice(0, 120) || null);
+export function logProjectEvent(accessId, { kind, label, actor, money = false }) {
+  db.prepare("INSERT INTO project_events (project_access_id, kind, label, actor, money) VALUES (?,?,?,?,?)")
+    .run(String(accessId), String(kind || "note").slice(0, 30), String(label || "").slice(0, 300) || null, String(actor || "").slice(0, 120) || null, money ? 1 : 0);
   return getProjectEvents(accessId);
 }
 export function setProjectPoc(accessId, { name, phone }) {
@@ -7989,8 +8201,13 @@ export function getToolMeta(accessId) {
   // Exclude tech-submitted ones still awaiting office pricing (needsPricing) — the customer shouldn't
   // see an add-on before the office has set its price.
   const addRow = getToolData(accessId, "addendum");
-  let addCount = 0;
-  try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).filter((a) => !a?.needsPricing).length; } catch { /* bad blob */ }
+  let addCount = 0, addAwaiting = 0;
+  try {
+    const addList = JSON.parse(addRow?.data || "{}").addendums || [];
+    addCount = addList.filter((a) => !a?.needsPricing).length;
+    // B13: priced add-ons still waiting on the customer's signature — the fact behind their "Sign" CTA.
+    addAwaiting = addList.filter(addendumAwaitingCustomer).length;
+  } catch { /* bad blob */ }
   // Scheduled visits (survey + install share this store): drives "Scheduling" step green/open state
   // and keeps the scheduler hidden from the customer until a real booking exists.
   const schedRow = getToolData(accessId, "schedule");
@@ -8012,7 +8229,7 @@ export function getToolMeta(accessId) {
       cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
-    addendum: { count: addCount },
+    addendum: { count: addCount, awaitingSignature: addAwaiting },
     schedule: { count: schedCount, installConfirmed: installAppointmentConfirmed(schedRow?.data) },
     // Install photos = media rows tagged kind "install" (issue photos / survey shots don't count).
     media: { installPhotos: countProjectMedia(accessId, "install") },

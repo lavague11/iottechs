@@ -30,14 +30,31 @@ const CAPS = {
   "qc.sign.manager":     ["admin", "manager"],
   "qc.sign.customer":    ["customer"],
   "qc.view":             ["admin", "manager", "sales", "tech", "readonly"],
+  // Site survey. Techs are the people who actually walk the site, so they may edit the survey, reopen a
+  // submitted one and send it back for approval — which is NOT true of tool blobs in general (see
+  // `saveToolDataAction` / /api/tool-data, where everything else stays office-only). These three move
+  // together on purpose: unlock without edit, or edit without resubmit, strands a tech's work on one
+  // device, which is the same silent data loss as not saving at all.
+  "survey.edit":         ["admin", "manager", "sales", "tech"],   // write the survey2 blob
+  "survey.unlock":       ["admin", "manager", "sales", "tech"],   // reopen a submitted survey for edits
+  "survey.submit":       ["admin", "manager", "sales", "tech"],   // send / re-send it for customer approval
   // Proposals
   "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
   "proposal.revise":     ["admin", "manager"],                             // AI #2: remove a line, or revise a sent/signed proposal (supersede → v+1)
   // Money / lifecycle
   "stage.move":          ["admin", "manager"],
+  // Section O (legacy migration): hand-set a legacy project's stage / completion when the recorded
+  // data genuinely cannot decide it. Stricter than stage.move — ADMIN ONLY — because it bypasses the
+  // evidence instead of following it, and it is logged to the project event log every time.
+  "legacy.override":     ["admin"],
   "assignment.edit":     ["admin", "manager"],                              // add/remove a tech on a project (matches addAssignmentAction)
   "customer.contact.view": ["admin", "manager", "sales", "tech", "readonly"], // name / phone / email
   "customer.financials.view": ["admin", "manager", "sales", "customer", "readonly"],
+  // Project header icons. A customer gets Navigate + Share only: adding the contact to an address book and
+  // editing the project's contact record are staff actions. `project.contact.edit` is enforced by
+  // `updateProjectInfoAction` (server) — the header merely reads it to decide whether to draw the pencil.
+  "project.contact.edit": ["admin", "manager", "sales", "tech"],
+  "project.contact.save": ["admin", "manager", "sales", "tech", "readonly"],   // "add person" (vCard)
   // CRM (New Project → Existing / New client). Customers never search the CRM.
   "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client
   "customer.create":     ["admin", "manager", "sales"],                     // create a client with a project

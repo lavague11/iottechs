@@ -3,6 +3,8 @@
 // add-on total, and the new balance if approved. NEVER the tech payout (project role rule #4). Figures are
 // computed from the stored add-on record's customer prices.
 import { jsPDF } from "jspdf";
+import { contactLine } from "./nap.js";
+import { addendumTotals } from "./proposal.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCaseX = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -13,7 +15,9 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
   const { customerName = "", projectId = "" } = meta;
   const items = Array.isArray(add.items) ? add.items : [];
   const discount = +add.discount || 0;
-  const addTotal = Math.max(0, items.reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - discount);
+  const t = addendumTotals(add);
+  const tax = t.tax;
+  const addTotal = t.total;
   const newBalance = fig.newBalance;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
@@ -27,7 +31,7 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
   doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.text("IOT TECHS", lm, 44);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 184, 190);
   doc.text("Secure Tomorrow. Today.", lm, 60);
-  doc.text("(646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", lm, 74);
+  doc.text(contactLine("  ·  "), lm, 74);
   doc.setTextColor(...GOLD); doc.setFont("helvetica", "bold"); doc.setFontSize(15); rt("CHANGE ORDER", rm, 42);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(210, 214, 220);
   rt(fmtDay(add.at || new Date().toISOString()), rm, 60);
@@ -56,6 +60,8 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
     if (y > 700) { doc.addPage(); y = 64; }
   }
   if (discount > 0) { doc.setTextColor(...META); doc.text("Discount", lm, y); rt("− " + money(discount), rm, y); y += 20; }
+  // Tax only when this add-on carries a rate — an untaxed change order prints exactly as it did before.
+  if (tax > 0) { doc.setTextColor(...META); doc.text(`Tax · ${t.taxRate}%`, lm, y); rt(money(tax), rm, y); y += 20; }
 
   // Totals
   y += 6; doc.setDrawColor(...LINE); doc.line(lm, y, rm, y); y += 24;

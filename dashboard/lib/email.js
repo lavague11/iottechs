@@ -13,6 +13,9 @@
 
 import { secretValue } from "./db";
 import { makeApptToken } from "./auth";
+import { reminderCopy, techRow } from "./appt-reminder-model";
+import { SUPPORT_PHONE, SUPPORT_TEL } from "./nap.js";
+import { addendumTotals } from "./proposal.js";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -248,12 +251,20 @@ async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) 
   try {
     const { getJobByAccessId, getToolData } = await import("./db.js");
     const { buildAddendumPdfBytes } = await import("./addendum-pdf.js");
-    let add = null;
-    try { add = (JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []).find((a) => a && a.id === addendumId); } catch { /* no add-on */ }
+    const { addendumLabel } = await import("./addendum-display.js");
+    let add = null, addIdx = -1;
+    try {
+      const list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || [];
+      addIdx = list.findIndex((a) => a && a.id === addendumId);
+      add = addIdx >= 0 ? list[addIdx] : null;
+    } catch { /* no add-on */ }
     if (!add) return null;
     const p = getJobByAccessId(accessId);
     const bytes = buildAddendumPdfBytes({ customerName: customerLabelOf(p), projectId: accessId }, add, { newBalance });
-    return { filename: attachmentName("Change Order", { customer: customerLabelOf(p), docNo: accessId }),
+    // The A-number is part of the name (B4): without it a second change order on the same project
+    // arrives with a filename identical to the first, and the customer's download folder silently
+    // renames or overwrites it. It also matches the "A2" they see in the portal.
+    return { filename: attachmentName("Change Order", { customer: customerLabelOf(p), docNo: `${accessId} - ${addendumLabel(addIdx)}` }),
       content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" };
   } catch (e) { console.error(`[email:addendum-pdf] ${e?.message || e}`); return null; }
 }
@@ -753,7 +764,8 @@ export async function emailAddendumApproval(accessId, addendumId) {
     if (add.status !== "pending" || add.needsPricing) return { skipped: "not-pending" };
 
     const m = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const addTotal = Math.max(0, (add.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+add.discount || 0));
+    const addTot = addendumTotals(add);
+    const addTotal = addTot.total;
     const fin = getProjectFinancialState(accessId);
     const newBalance = (fin ? +fin.balance || 0 : 0) + addTotal;
     const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];
@@ -763,7 +775,9 @@ export async function emailAddendumApproval(accessId, addendumId) {
     const payload = {
       heading: `A quick approval, ${first}`,
       intro: `We'd like to add this to your project — "${add.title || "Job-site add-on"}":`,
-      lines: [...itemLines, `Add-on total: ${m(addTotal)}`, `Your new balance if approved: ${m(newBalance)}`, "Tap below to review and approve — no PIN needed."],
+      // A tax line only when this add-on is taxed, so an untaxed approval email reads as it always did.
+      lines: [...itemLines, ...(addTot.tax > 0 ? [`Tax · ${addTot.taxRate}%: ${m(addTot.tax)}`] : []),
+        `Add-on total: ${m(addTotal)}`, `Your new balance if approved: ${m(newBalance)}`, "Tap below to review and approve — no PIN needed."],
       ctaLabel: "Approve Add-on",
       ctaUrl: approveUrl,
       footNote: "This secure link opens your add-on to approve and sign. Questions? Just reply to this email.",
@@ -867,8 +881,8 @@ function gcalUrl(ev) {
 // Chic editorial appointment email (Playfair serif, warm cream, gold hairline). Table-based + MSO
 // conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
 // Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
-const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
-export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "" }) {
+// contact details come from lib/nap.js — see the note there about the Zelle token
+export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "", now = new Date() }) {
   const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
   const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
   const service = (event.title && event.title.includes("—")) ? event.title.split("—").pop().trim() : cap(noun || "Appointment");
@@ -887,13 +901,14 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
   const street = ci > 0 ? loc.slice(0, ci).trim() : loc;
   const cityLine = ci > 0 ? loc.slice(ci + 1).replace(/,?\s*USA\s*$/i, "").trim() : "";
   const maps = loc ? mapsUrl(loc) : "";
-  const techName = (tech && String(tech).trim()) || "To be assigned";
+  const tr = techRow(tech);          // no tech → PROJECT MANAGER · Ahmed; customers never see a placeholder
+  const copy = reminder ? reminderCopy({ event, noun, accessId: projectNo, now }) : null;   // day word computed from the calendar, never hardcoded
   // Personal greeting — each recipient is addressed by their own first name, with a role-appropriate
   // one-liner (customer: "your appointment is confirmed"; internal: "you're assigned / confirmed on it").
   const firstName = String(recipientName || "").trim().split(/\s+/)[0] || "";
   const greetLine = cancel
     ? (internal ? "This assignment has been canceled." : "Your appointment has been canceled — we'll be in touch to rebook.")
-    : reminder ? (internal ? "A reminder — you're on this job tomorrow." : "A quick reminder — your appointment is tomorrow.")
+    : reminder ? (internal ? copy.greetStaff : copy.greetCustomer)
     : updated ? (internal ? "Your assignment was rescheduled — the new details are below." : "Your appointment was rescheduled — the new details are below.")
     : (internal ? "You're assigned to this appointment — details below." : "Your appointment is confirmed. Here are the details.");
   const detail = (label, valueHtml) => valueHtml
@@ -956,8 +971,8 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
           ${detail("Location", locHtml)}
           ${event.notes ? detail("Notes", esc(event.notes)) : ""}
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
-            <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">Technician</td></tr>
-            <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(techName)}</td></tr>
+            <tr><td style="font-family:'Instrument Sans','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:10px; font-weight:bold; letter-spacing:3px; color:#B4945C; text-transform:uppercase; padding-bottom:6px;">${esc(tr.label)}</td></tr>
+            <tr><td class="serif" style="font-size:17px; color:#161821; padding-bottom:4px;">${esc(tr.value)}</td></tr>
           </table>
         </td></tr>
         ${ctaCells ? `<tr><td align="center" style="padding:34px 50px 8px 50px;" class="px"><table role="presentation" cellpadding="0" cellspacing="0" align="center"><tr>${ctaCells}</tr></table></td></tr>` : ""}
@@ -979,7 +994,7 @@ export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, cta
 
 // Send the invite/cancellation. Recipients are resolved SERVER-SIDE (the project's customer + its
 // assigned staff) — client-supplied emails are never trusted. Best-effort; never throws.
-export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [] } = {}) {
+export async function sendAppointmentEmails(accessId, { verb, event, extraEmails = [], now = new Date() } = {}) {
   try {
     if (!event?.date) return { ok: false, error: "no-event" };
     const { getJobByAccessId, getProjectAssignments, getUserByEmail } = await import("./db.js");
@@ -1032,14 +1047,14 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
     const attachments = [{ filename: `invite.ics`, content: Buffer.from(ics, "utf8").toString("base64"), content_type: `text/calendar; method=${method}; charset=utf-8` }];
     const ctaUrl = projectLink(accessId);
     const custSubject = cancel ? `Appointment canceled — ${event.title || "IOT TECHS"}`
-      : reminder ? `Reminder: your ${noun} is tomorrow`
+      : reminder ? reminderCopy({ event, noun, accessId, now }).customerSubject
       : updated ? `Updated: your ${noun} was rescheduled`
       : `Your ${noun} is scheduled`;
     const staffSubject = cancel ? `Assignment canceled — ${event.title || accessId}`
-      : reminder ? `Tomorrow: you're on a ${noun} (${accessId})`
+      : reminder ? reminderCopy({ event, noun, accessId, now }).staffSubject
       : updated ? `Assignment rescheduled — ${noun} (${accessId})`
       : `You're assigned — ${noun} (${accessId})`;
-    const heading = cancel ? "Your appointment was canceled" : reminder ? `Reminder — your ${noun} is tomorrow` : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
+    const heading = cancel ? "Your appointment was canceled" : reminder ? reminderCopy({ event, noun, accessId, now }).heading : updated ? `Your ${noun} was rescheduled` : `Your ${noun} is scheduled`;
     const intro = cancel ? "This appointment has been canceled. We'll be in touch to reschedule."
       : reminder ? "A quick reminder about your upcoming appointment — see you then."
       : updated ? "The date or time of your appointment changed — here are the new details. Your calendar will update automatically from the attached invite."
@@ -1074,7 +1089,7 @@ export async function sendAppointmentEmails(accessId, { verb, event, extraEmails
       // Each recipient gets THEIR OWN confirm/reschedule token, so their Confirm records THEIR status.
       let changeUrl = "";
       try { if (!cancel && event.id != null && appUrl()) changeUrl = `${appUrl()}/appt/${await makeApptToken(accessId, event.id, r)}`; } catch {}
-      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name });
+      const html = renderAppointmentEmail({ verb, event, noun, projectNo: accessId, tech, ctaUrl, changeUrl, internal: isStaff, customerName: custName, recipientName: r.name, now });
       const res = await sendEmail({ to: r.email, subject: isStaff ? staffSubject : custSubject, html, text, attachments, bcc: isStaff ? undefined : await customerCopyBcc(r.email) });
       if (res?.ok || res?.skipped) sent++;
     }

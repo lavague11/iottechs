@@ -29,7 +29,7 @@ export default function ProposalPanel({ fileBase = null, accessId, view, cView, 
   );
 }
 
-const PROP_CSS = `
+export const PROP_CSS = `
 .pvx .prop-wrap{display:flex;flex-direction:column;gap:14px;margin:18px 0}
 /* Flush tool-card (matches .pv-tool-panel / System QR): no card padding — the header bar sits
    edge-to-edge and the body is a divided, padded section below. Flat deck surface, no accent rail. */

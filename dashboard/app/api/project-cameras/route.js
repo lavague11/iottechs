@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken } from "../../../lib/auth";
-import { getJobByAccessId, getProjectCameras, setSurveyCameraPhoto, setSurveyCameraName, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, getProjectCameras, setSurveyCameraPhoto, setSurveyCameraName, customerOwnsProjectAccount, surveyIsLegacyOnly } from "../../../lib/db";
 
 // The project's canonical camera list, derived from the Site Survey (see getProjectCameras). This is
 // the single source of truth the CCTV mockup grid reflects — and, later, the proposal/PDF — so cameras
@@ -53,7 +53,7 @@ export async function POST(req) {
   // all route a rename through here and stay in sync.
   if (typeof name === "string" && cid) {
     const cameras = setSurveyCameraName(accessId, cid, name);
-    if (!cameras) return Response.json({ error: "Camera not found — the survey changed. Reopen and retry." });
+    if (!cameras) return Response.json({ error: notFoundReason(accessId) });
     const { revalidatePath } = await import("next/cache");
     revalidatePath(`/project/${accessId}`);
     return Response.json({ ok: true, cameras });
@@ -61,8 +61,18 @@ export async function POST(req) {
   if (!Number.isInteger(floor) || !Number.isInteger(di)) return Response.json({ error: "Bad target." });
   if (photo != null && (typeof photo !== "string" || photo.length > 8_000_000)) return Response.json({ error: "Bad photo." });
   const cameras = setSurveyCameraPhoto(accessId, floor, di, photo || null, typeof photoName === "string" ? photoName : null);
-  if (!cameras) return Response.json({ error: "Camera not found — the survey changed. Reopen and retry." });
+  if (!cameras) return Response.json({ error: notFoundReason(accessId) });
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return Response.json({ ok: true, cameras });
+}
+
+// A write found no camera. Usually that means the survey moved under the caller — but on a project
+// whose survey predates the current tool there is no survey2 row to write INTO at all: its cameras
+// are surfaced read-only by the legacy adapter. Saying "the survey changed" there sends people
+// hunting a concurrent edit that never happened (B15).
+function notFoundReason(accessId) {
+  return surveyIsLegacyOnly(accessId)
+    ? "This project's survey is in the older format and is read-only until it is migrated."
+    : "Camera not found — the survey changed. Reopen and retry.";
 }

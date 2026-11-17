@@ -1,41 +1,44 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import { titleCase } from "../../../lib/proposal";
+import { titleCase, addendumTotals } from "../../../lib/proposal";
 import { saveToolDataAction } from "./proposal-actions";
 import { logAddendumAction, sendAddendumApprovalAction, scheduleAddendumApprovalAction, cancelAddendumScheduleAction } from "./actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import SendScheduler from "./send-scheduler";
 import { can } from "../../../lib/roles";
+import AddendumBuilder from "./addendum-builder";
 
 // On-site addendum builder. Things change on the job (customer wants 3 more cameras) — the office
 // builds an addendum right on the install page: extra line items with a customer price (and tech
 // payout, internal). It's a separate change order the customer approves & signs; it never touches
 // the originally-signed proposal. Stored in the "addendum" tool record.
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const TYPES = [["camera", "Camera"], ["pos", "POS / Network"], ["nvr", "NVR / Recorder"], ["equip", "Equipment / Other"]];
 let _aid = 0;
 const newId = () => `a${Date.now().toString(36)}${_aid++}`;
-const blankItem = () => ({ id: newId(), name: "", type: "camera", qty: 1, price: "", techPay: "" });
 
+const Tick = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign: "-1px", marginRight: 4 }}><polyline points="4 12 10 18 20 6"/></svg>;
 const fmtStamp = (iso) => { if (!iso) return ""; try { return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); } catch { return ""; } };
 // Prefill the addendum title so the office has a sensible starting point: "Add-on · <today>".
 const defaultTitle = () => `Add-on · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 
-export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false }) {
+// composeOnly: opened from the Proposal footer ("+ Addendum") — shows just the builder (the list lives under
+// SENT VERSIONS) and calls onClose once it is done (created / cancelled / email prompt answered).
+export default function InstallAddendum({ accessId, role, readOnly, customerName, onCount, embedded = false, composeOnly = false, onClose }) {
   const isCustomer = role === "customer";
   const isTech = role === "tech";
   // The technician can create an on-site add-on too, but only logs the WORK — pricing (customer charge
   // + payout) stays office-controlled, so a tech never sets or sees retail (project role rule #4).
   const canBuild = !readOnly && can(role, "addendum.build");
-  const canVoid = !readOnly && can(role, "addendum.price");      // admin/manager can void an addendum
+  const canPrice = can(role, "addendum.price");                   // admin/manager set customer price + payout
+  const canVoid = !readOnly && canPrice;                          // admin/manager can void an addendum
   const showRetail = can(role, "addendum.retail.view");          // tech never sees the customer (retail) price — only their payout
   const showPayout = can(role, "addendum.payout.view");          // office + tech see the tech payout; customer + sales never do
 
   const [addendums, setAddendums] = useState([]);
-  const [building, setBuilding] = useState(false);
+  const [building, setBuilding] = useState(composeOnly);
   const [editingId, setEditingId] = useState(null);  // office is pricing an existing (tech-submitted) add-on
-  const [draft, setDraft] = useState({ title: "", items: [blankItem()], discount: "" });
+  const [draft, setDraft] = useState(() => (composeOnly ? { title: defaultTitle(), items: [], discount: "" } : null));      // { title, items, discount } the builder opens with
   const [signId, setSignId] = useState(null);
   const [signErr, setSignErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -79,34 +82,30 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     setBusy(true);
     await saveToolDataAction(accessId, "addendum", JSON.stringify({ addendums: next }));
     setBusy(false);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("iot:addendum-changed"));   // SENT VERSIONS refetches
   }
 
-  const itemsSum = (a) => (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0);
-  const custTotal = (a) => Math.max(0, itemsSum(a) - (+a.discount || 0)); // customer price, less any discount
+  const custTotal = (a) => addendumTotals(a).total; // customer price, less any discount (shared formula)
   const techTotal = (a) => (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.techPay || 0), 0);
   const approvedTotal = addendums.filter((a) => a.status === "approved").reduce((s, a) => s + custTotal(a), 0);
 
-  // ---- Builder (office) ----
-  const dItem = (i, patch) => setDraft((d) => ({ ...d, items: d.items.map((it, x) => (x === i ? { ...it, ...patch } : it)) }));
-  const addRow = () => setDraft((d) => ({ ...d, items: [...d.items, blankItem()] }));
-  const delRow = (i) => setDraft((d) => ({ ...d, items: d.items.filter((_, x) => x !== i) }));
-  const validItems = () => draft.items.filter((it) => it.name.trim() && +it.price >= 0);
-  const closeBuilder = () => { setDraft({ title: "", items: [blankItem()], discount: "" }); setBuilding(false); setEditingId(null); };
+  // ---- Builder (office) ---- the form itself is AddendumBuilder (the Proposal's item picker).
+  useEffect(() => { if (composeOnly && !building && !emailPrompt) onClose?.(); }, [composeOnly, building, emailPrompt, onClose]);
+  const closeBuilder = () => { setDraft(null); setBuilding(false); setEditingId(null); };
   // Office prices a tech-submitted add-on: load it into the builder (with any existing values) so the
   // office can fill in the customer price + payout, then Save writes back to the same record.
   function startEdit(a) {
-    setDraft({
-      title: a.title || "",
-      items: (a.items || []).map((it) => ({ id: it.id, name: it.name, type: it.type, qty: it.qty, price: it.price ? String(it.price) : "", techPay: it.techPay ? String(it.techPay) : "" })),
-      discount: a.discount ? String(a.discount) : "",
-    });
+    setDraft({ title: a.title || "", items: a.items || [], discount: a.discount ? String(a.discount) : "", taxRate: +a.taxRate || 0 });
     setEditingId(a.id); setBuilding(true);
   }
-  function createAddendum() {
-    const items = validItems().map((it) => ({ id: it.id, name: it.name.trim(), type: it.type, qty: +it.qty || 1, price: +it.price || 0, techPay: +it.techPay || 0 }));
+  // `res` comes from AddendumBuilder: items already in the stored addendum shape (lib/addendum-items.js).
+  function createAddendum(res) {
+    const items = res.items;
     if (!items.length) return;
     if (editingId) {   // office pricing an existing add-on — update in place and clear the pricing flag
-      const next = addendums.map((a) => a.id === editingId ? { ...a, title: draft.title.trim() || a.title, items, discount: +draft.discount || 0, needsPricing: undefined } : a);
+      // taxRate stays ABSENT when it's 0, so an untaxed add-on's stored shape (and therefore its
+      // fingerprint) is exactly what it was before tax existed.
+      const next = addendums.map((a) => a.id === editingId ? { ...a, title: res.title || a.title, items, discount: res.discount, taxRate: +res.taxRate || undefined, needsPricing: undefined } : a);
       persist(next);
       const upd = next.find((a) => a.id === editingId);
       if (upd) logAddendumAction(accessId, { verb: "priced", title: upd.title, amount: custTotal(upd) }).catch(() => {});
@@ -116,11 +115,11 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
     }
     // A tech logs the work only — flag it so the office knows to price it (and so it's held back from
     // the customer until priced). Office-built ones are priced on creation.
-    const rec = { id: newId(), title: draft.title.trim() || "Job-site add-on", items, discount: +draft.discount || 0, at: new Date().toISOString(), status: "pending", needsPricing: isTech ? true : undefined, createdByTech: isTech ? true : undefined };
+    const rec = { id: newId(), title: res.title || "Job-site add-on", items, discount: res.discount, taxRate: +res.taxRate || undefined, at: new Date().toISOString(), status: "pending", needsPricing: !canPrice ? true : undefined, createdByTech: isTech ? true : undefined };
     persist([...addendums, rec]);
     logAddendumAction(accessId, { verb: "created", title: rec.title, amount: custTotal(rec) }).catch(() => {});   // Job Log
     closeBuilder();
-    if (!isTech) openPrompt(rec.id);   // office-created + priced → offer to send the approval email
+    if (canPrice) openPrompt(rec.id);   // office-created + priced → offer to send the approval email
   }
   // Part B handlers — Send now / Schedule / Cancel. Update local state optimistically (the server stamps too).
   async function sendNow(id) {
@@ -184,13 +183,13 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
       )}
 
       {/* The customer never sees an add-on still awaiting office pricing. */}
-      {addendums.filter((a) => !(isCustomer && a.needsPricing)).map((a) => {
+      {!composeOnly && addendums.filter((a) => !(isCustomer && a.needsPricing)).map((a) => {
         const ct = custTotal(a), tt = techTotal(a);
         return (
           <div key={a.id} className={`adn-card ${a.status}`}>
             <div className="adn-card-hd">
               <span className="adn-card-title">{a.title}</span>
-              <span className={`adn-badge ${a.needsPricing && a.status === "pending" ? "pending" : a.status}`}>{a.status === "approved" ? "✓ Approved" : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : a.needsPricing ? "Needs pricing" : a.resignRequired ? "Changed — re-sign" : "Pending approval"}</span>
+              <span className={`adn-badge ${a.needsPricing && a.status === "pending" ? "pending" : a.status}`}>{a.status === "approved" ? <><Tick />Approved</> : a.status === "declined" ? "Declined" : a.status === "voided" ? "Voided" : a.needsPricing ? "Needs pricing" : a.resignRequired ? "Changed — re-sign" : "Pending approval"}</span>
             </div>
             <div className="adn-items">
               {(a.items || []).map((it) => (
@@ -206,6 +205,9 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
             </div>
             {showRetail && +a.discount > 0 && (
               <div className="adn-disc-row"><span>Discount</span><b>− {money(+a.discount)}</b></div>
+            )}
+            {showRetail && addendumTotals(a).tax > 0 && (
+              <div className="adn-disc-row"><span>Tax · {+a.taxRate}%</span><b>{money(addendumTotals(a).tax)}</b></div>
             )}
             <div className="adn-card-ft">
               <span className="adn-ct">
@@ -228,7 +230,7 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
                 <button type="button" className="adn-del" disabled={busy} onClick={() => setConfirm({ id: a.id, action: "delete" })}>Delete</button>
               )}
               {/* Office prices a tech-submitted add-on before it can go to the customer. */}
-              {a.needsPricing && a.status === "pending" && canBuild && !isTech && confirm?.id !== a.id && (
+              {a.needsPricing && a.status === "pending" && canBuild && canPrice && confirm?.id !== a.id && (
                 <button type="button" className="adn-approve" disabled={busy} onClick={() => startEdit(a)}>Add pricing</button>
               )}
               {a.status === "pending" && isCustomer && !a.needsPricing && (
@@ -263,13 +265,13 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
               <div className="adn-email-row">
                 {a.scheduledSendAt ? (
                   <>
-                    <span className="adn-email-sched">✦ Email scheduled for {fmtStamp(a.scheduledSendAt)}</span>
+                    <span className="adn-email-sched">Email scheduled for {fmtStamp(a.scheduledSendAt)}</span>
                     <button type="button" className="adn-email-link" disabled={busy} onClick={() => openPrompt(a.id)}>Edit</button>
                     <button type="button" className="adn-email-link" disabled={busy} onClick={() => sendNow(a.id)}>Send now</button>
                     <button type="button" className="adn-email-link adn-email-cancel" disabled={busy} onClick={() => cancelSched(a.id)}>Cancel</button>
                   </>
                 ) : a.emailSentAt ? (
-                  <span className="adn-email-sent">✓ Approval email sent · {fmtStamp(a.emailSentAt)}</span>
+                  <span className="adn-email-sent"><Tick />Approval email sent · {fmtStamp(a.emailSentAt)}</span>
                 ) : (
                   <button type="button" className="adn-email-btn" disabled={busy} onClick={() => openPrompt(a.id)}>Send approval email</button>
                 )}
@@ -279,79 +281,12 @@ export default function InstallAddendum({ accessId, role, readOnly, customerName
         );
       })}
 
-      {canBuild && (building ? (
-        <div className="adn-builder">
-          {editingId && <div className="adn-b-editing">Set pricing for this add-on</div>}
-          <label className="adn-fld">
-            <span className="adn-flbl">Addendum title</span>
-            <input className="adn-b-title" placeholder="Added 3 rear cameras" value={draft.title} autoFocus onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} />
-          </label>
-          <div className="adn-b-items">
-            {draft.items.map((it, i) => (
-              <div key={it.id} className="adn-lineitem">
-                {draft.items.length > 1 && (
-                  <div className="adn-li-hd"><span className="adn-li-n">Item {i + 1}</span>
-                    <button type="button" className="adn-b-x" onClick={() => delRow(i)} aria-label="Remove item">✕</button></div>
-                )}
-                <label className="adn-fld">
-                  <span className="adn-flbl">Item</span>
-                  <input className="adn-b-name" placeholder="Dome Camera" value={it.name} onChange={(e) => dItem(i, { name: e.target.value })} />
-                </label>
-                <div className="adn-frow">
-                  <label className="adn-fld adn-fld-type">
-                    <span className="adn-flbl">Type</span>
-                    <select className="adn-b-type" value={it.type} onChange={(e) => dItem(i, { type: e.target.value })}>
-                      {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                    </select>
-                  </label>
-                  <label className="adn-fld adn-fld-qty">
-                    <span className="adn-flbl">Qty</span>
-                    <input className="adn-b-qty" type="number" min="1" step="1" value={it.qty} onChange={(e) => dItem(i, { qty: e.target.value })} />
-                  </label>
-                </div>
-                {/* Pricing is office-only — a tech logs the work; customer price + payout are set later. */}
-                {!isTech && (
-                  <div className="adn-frow">
-                    <label className="adn-fld adn-fld-price">
-                      <span className="adn-flbl">Customer price</span>
-                      <span className="adn-money"><span className="adn-cur">$</span>
-                        <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.price} onChange={(e) => dItem(i, { price: e.target.value })} /></span>
-                    </label>
-                    <label className="adn-fld adn-fld-price">
-                      <span className="adn-flbl adn-flbl-tech">Tech pay</span>
-                      <span className="adn-money tech"><span className="adn-cur">$</span>
-                        <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={it.techPay} onChange={(e) => dItem(i, { techPay: e.target.value })} /></span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="adn-b-act">
-            <button type="button" className="adn-b-additem" onClick={addRow}>+ Add item</button>
-            {!isTech && (
-              <label className="adn-fld adn-b-disc">
-                <span className="adn-flbl">Discount</span>
-                <span className="adn-money"><span className="adn-cur">$</span>
-                  <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" value={draft.discount} onChange={(e) => setDraft((d) => ({ ...d, discount: e.target.value }))} /></span>
-              </label>
-            )}
-          </div>
-          <div className="adn-b-final">
-            {isTech ? (
-              <div className="adn-b-note">The office will price this before the customer sees it.</div>
-            ) : (
-              <div className="adn-b-totalblock">
-                <span className="adn-flbl">Total</span>
-                <b className="adn-b-tval">{money(Math.max(0, validItems().reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+draft.discount || 0)))}</b>
-              </div>
-            )}
-            <button type="button" className="adn-b-create" disabled={busy || !validItems().length} onClick={createAddendum}>{editingId ? "Save pricing" : isTech ? "Submit add-on" : "Create addendum"}</button>
-            <button type="button" className="adn-b-cancel" onClick={closeBuilder}>Cancel</button>
-          </div>
-        </div>
-      ) : (
-        <button type="button" className="adn-newbtn" onClick={() => { setDraft((d) => ({ ...d, title: d.title || defaultTitle() })); setBuilding(true); }}>+ New addendum</button>
+      {canBuild && (building && draft ? (
+        <AddendumBuilder key={editingId || "new"} accessId={accessId} canPrice={canPrice} editing={!!editingId} init={draft} busy={busy}
+          submitLabel={editingId ? "Save pricing" : !canPrice ? "Submit add-on" : "Create addendum"}
+          onSubmit={createAddendum} onCancel={closeBuilder} />
+      ) : !composeOnly && (
+        <button type="button" className="adn-newbtn" onClick={() => { setDraft({ title: defaultTitle(), items: [], discount: "" }); setBuilding(true); }}>+ New addendum</button>
       ))}
 
       {/* Part B — "Send approval email to <customer>?" via the shared Send-now / Schedule-send chooser. */}
@@ -429,52 +364,6 @@ const ADN_CSS = `
 .adn-c-no{height:30px;padding:0 12px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-ink,#101418);font-size:.74rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-newbtn{margin-top:6px;height:42px;width:100%;border:1px solid var(--dv-line,#E4E4DF);background:var(--dv-paper,#F4F4F2);color:var(--dv-ink,#101418);border-radius:10px;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
 .adn-newbtn:hover{border-color:var(--dv-gold-text,#8A6A1F);color:var(--dv-gold-text,#8A6A1F)}
-.adn-builder{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:var(--dv-paper,#F4F4F2);padding:14px;margin-top:6px;display:flex;flex-direction:column;gap:12px}
-/* One deliberate form: every control is a labeled field so the workflow reads top to bottom
-   (title → item → type/qty → customer/tech price → add item/discount → total → create). */
-.adn-fld{display:flex;flex-direction:column;gap:5px;min-width:0}
-.adn-flbl{font-size:.66rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
-.adn-flbl-tech{color:var(--dv-gold-text,#8A6A1F)}
-.adn-b-title,.adn-b-name,.adn-b-type,.adn-b-qty{height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;padding:0 11px;font-size:.86rem;font-family:inherit;outline:none;background:#fff;color:var(--dv-ink,#101418);width:100%}
-.adn-b-title{font-weight:600}
-.adn-b-title:focus,.adn-b-name:focus,.adn-b-type:focus,.adn-b-qty:focus{border-color:var(--dv-gold-text,#8A6A1F)}
-.adn-b-qty{text-align:center;padding:0 6px}
-.adn-b-items{display:flex;flex-direction:column;gap:14px}
-.adn-lineitem{display:flex;flex-direction:column;gap:10px}
-.adn-lineitem + .adn-lineitem{border-top:1px solid var(--dv-line,#E4E4DF);padding-top:14px}
-.adn-li-hd{display:flex;align-items:center;justify-content:space-between}
-.adn-li-n{font-size:.72rem;font-weight:700;color:var(--dv-ink-soft,#3A4048)}
-.adn-frow{display:flex;gap:8px}
-.adn-frow .adn-fld{flex:1 1 0}
-.adn-frow .adn-fld-type{flex:1 1 auto}
-.adn-frow .adn-fld-qty{flex:0 0 72px}
-.adn-frow .adn-fld-price{flex:1 1 0}
-/* Currency belongs to the input: one bordered box, $ inside, number right-aligned. No loose $. */
-.adn-money{display:flex;align-items:center;height:38px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;padding-left:10px;gap:1px}
-.adn-money:focus-within{border-color:var(--dv-gold-text,#8A6A1F)}
-.adn-money.tech:focus-within{border-color:var(--dv-gold-text,#8A6A1F)}
-.adn-cur{color:var(--dv-meta,#787D84);font-weight:600;font-size:.86rem;flex:0 0 auto}
-.adn-money input{flex:1 1 0;min-width:0;height:100%;border:none;background:transparent;text-align:right;padding:0 10px 0 2px;font-size:.9rem;font-family:inherit;color:var(--dv-ink,#101418);outline:none;font-variant-numeric:tabular-nums}
-.adn-money.tech .adn-cur{color:var(--dv-gold-text,#8A6A1F)}
-.adn-b-x{width:26px;height:26px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-red,#C4553D);cursor:pointer;font-size:.72rem;flex:0 0 auto}
-.adn-b-act{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
-.adn-b-additem{height:38px;padding:0 15px;border:1px dashed var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-b-additem:hover{border-color:var(--dv-gold-text,#8A6A1F);border-style:solid;color:var(--dv-gold-text,#8A6A1F)}
-.adn-b-disc{flex:0 0 auto}
-.adn-b-disc .adn-money{width:118px}
-/* Final action area: Total leads, Create is the clear primary, Cancel is quiet. */
-.adn-b-final{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;padding-top:13px;border-top:1px solid var(--dv-line,#E4E4DF)}
-.adn-b-totalblock{display:flex;flex-direction:column;gap:2px;margin-right:auto}
-.adn-b-note{margin-right:auto;max-width:60%;font-size:.72rem;line-height:1.35;color:var(--dv-meta,#787D84)}
-.adn-b-editing{font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--dv-gold-text,#8A6A1F);margin-bottom:-2px}
-.adn-b-tval{font-size:1.15rem;font-weight:700;color:var(--dv-ink,#101418);font-variant-numeric:tabular-nums;line-height:1}
-/* .adn-root prefix beats the deck's ".dv-shell button" background reset so the primary button
-   actually reads as a filled button, not plain text. */
-.adn-root .adn-b-create{height:40px;padding:0 20px;border:none;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font-size:.84rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-root .adn-b-create:hover{filter:brightness(1.12)}
-.adn-root .adn-b-create:disabled{background:var(--dv-line-soft,#EDEDE9);color:var(--dv-faint,#A1A6AC);cursor:not-allowed;filter:none}
-.adn-b-cancel{height:40px;padding:0 12px;border:none;border-radius:9px;background:transparent;color:var(--dv-meta,#787D84);font-size:.8rem;font-weight:600;cursor:pointer;font-family:inherit}
-.adn-b-cancel:hover{color:var(--dv-ink,#101418)}
 .adn-cust-note{margin-top:10px;font-size:.8rem;color:var(--dv-ink-soft,#3A4048);background:var(--dv-paper,#F4F4F2);border:1px solid var(--dv-line,#E4E4DF);border-radius:9px;padding:10px 12px;font-weight:500}
 /* Part B — approval-email state row + the send prompt. */
 .adn-email-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;padding-top:9px;border-top:1px dashed var(--dv-line,#E4E4DF)}

@@ -1,15 +1,35 @@
 "use client";
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { deleteDeviceCmd, undoDeleteCmd, UNDO_MS } from "../../../lib/survey-delete.js";
 
 // The survey device roster — moved OUTSIDE the tool so it never overlaps the map. It mirrors the live
 // survey state (the iframe posts `iotSurveyDevices` on every change) and drives edits back over
 // postMessage (`iotSurveyCmd`): rename, FOV, delete, view photo, select-on-map, and Rapid Capture. The
 // current floor's devices are fully editable; other floors list read-only (tap to jump there). Photos
 // upload to /api/media (HEIC-safe) then attach to the device. Customers never see this (office tool).
-export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd, onAddCamera }) {
+// `canUnlock` / `onUnlock` (section L): a submitted survey used to show the empty "No cameras yet — tap
+// Add camera" prompt while the database held eight cameras AND the Add-camera button was hidden by the
+// lock. The roster now falls back to the saved survey (so `total` reflects the database), and a locked
+// survey never shows a "start here" prompt — it says why it is locked and offers the unlock.
+// The empty state keys off `locked` ALONE, deliberately: a "does the database have devices?" flag is
+// fetched once per mount and goes stale, so deleting the last camera on an UNSUBMITTED survey would make
+// the strip claim it was submitted and offer Unlock. `locked` is live, from the acceptance row.
+export default function SurveyDevices({ accessId, roster, curFloor, readOnly, locked, cmd, onAddCamera, canUnlock = false, onUnlock = null, undoToken }) {
   const [open, setOpen] = useState(true);
   const [busyId, setBusyId] = useState(null);
-  const [confirmDel, setConfirmDel] = useState(null);
+  const [undo, setUndo] = useState(null);            // { token } of the latest delete, offered for UNDO_MS
+  const undoT = useRef(null);
+  useEffect(() => () => clearTimeout(undoT.current), []);
+  // The toast is only ever shown while the widget still holds its stash. The widget echoes its newest token
+  // (`undoToken`); once we've seen ours echoed, any other value (iframe remounted, floor removed, undone) or a
+  // lock means the stash is gone → drop the toast.
+  useEffect(() => {
+    if (!undo) return;
+    if (locked || readOnly) { clearTimeout(undoT.current); setUndo(null); return; }
+    if (undoToken === undefined) return;               // host doesn't echo; the 5s timer is the only bound
+    if (undoToken === undo.token) { if (!undo.seen) setUndo({ ...undo, seen: true }); }
+    else if (undo.seen) { clearTimeout(undoT.current); setUndo(null); }
+  }, [undoToken, undo, locked, readOnly]);
   const [capture, setCapture] = useState(-1);     // rapid-capture index into the current floor's cameras
   const [lightbox, setLightbox] = useState(null);
   const [editingId, setEditingId] = useState(null); // device whose name is being edited inline
@@ -44,6 +64,23 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
     const j = await fetch("/api/media", { method: "POST", body: fd, credentials: "same-origin" }).then((r) => r.ok ? r.json() : null).catch(() => null);
     return j?.ok && j.url ? j.url : null;
   }, [accessId]);
+
+  // Delete one device (X on its card). The widget keeps the removed device — cid, position and all — for
+  // the undo; nothing is renumbered. A locked (submitted) survey never reaches here: the X isn't rendered,
+  // and the widget ignores the verb while frozen.
+  function deleteDevice(id) {
+    if (readOnly || locked || id == null) return;
+    const c = deleteDeviceCmd(id);
+    cmd(c);
+    setUndo({ token: c.token });
+    clearTimeout(undoT.current);
+    undoT.current = setTimeout(() => setUndo(null), UNDO_MS);
+  }
+  function undoNow() {
+    if (!undo) return;
+    cmd(undoDeleteCmd(undo.token));
+    clearTimeout(undoT.current); setUndo(null);
+  }
 
   async function onPick(e) {
     const f = e.target.files?.[0]; const id = targetRef.current; e.target.value = "";
@@ -160,7 +197,9 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
 
       {open && (
         <div className="sd-body">
-          {!total && <div className="sd-empty">No cameras yet — tap <b>Add camera</b> to start.</div>}
+          {!total && (locked
+            ? <div className="sd-empty">Submitted{canUnlock && onUnlock ? <> · <button type="button" className="sd-unlock" onClick={onUnlock}>Unlock to edit</button></> : " · unlock to edit"}</div>
+            : <div className="sd-empty">No cameras yet — tap <b>Add camera</b> to start.</div>)}
           {floors.map((f, fi) => {
             const isCur = fi === curFloor;
             if (!f.devices?.length) return null;
@@ -192,6 +231,12 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                             title={isCam ? (d.photo ? "View photo" : "Add photo") : "Show on plan"}>
                             <span className="sd-badge" style={{ background: d.color }} title="Show on plan"
                               onClick={(e) => { e.stopPropagation(); cmd({ cmd: "select", id: d.id }); }}>{d.tag || (i + 1)}</span>
+                            {!locked && (
+                              <button type="button" className="sd-x" title="Delete" aria-label={`Delete ${nm}`}
+                                onClick={(e) => { e.stopPropagation(); deleteDevice(d.id); }}>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                              </button>
+                            )}
                             {busy ? (
                               <span className="sd-tile-msg"><svg className="sd-spin" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.2-8.5" /></svg></span>
                             ) : isCam && d.photo ? (
@@ -220,7 +265,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                             )}
                             {!locked && (
                               <div className="sd-menuwrap">
-                                <button className="sd-more" title="More" aria-label={`${nm} options`} onClick={() => { setMenuId(menuOpen ? null : d.id); setConfirmDel(null); }}>
+                                <button className="sd-more" title="More" aria-label={`${nm} options`} onClick={() => setMenuId(menuOpen ? null : d.id)}>
                                   <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>
                                 </button>
                                 {menuOpen && (
@@ -229,11 +274,6 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
                                     {isCam && <button onClick={() => { shoot(d.id, false); setMenuId(null); }}>{d.photo ? "Replace photo" : "Add photo"}</button>}
                                     {isCam && d.photo && <button disabled={aiIds.has(d.id) || !!aiAll} onClick={() => { nameOne(d, curDevices.map((x) => (x.name || "").trim()).filter(Boolean)); setMenuId(null); }}>Auto-name</button>}
                                     {isCam && d.photo && <button onClick={() => { cmd({ cmd: "clearPhoto", id: d.id }); setMenuId(null); }}>Remove photo</button>}
-                                    {confirmDel === d.id ? (
-                                      <button className="danger" onClick={() => { cmd({ cmd: "delete", id: d.id }); setMenuId(null); setConfirmDel(null); }}>Confirm delete</button>
-                                    ) : (
-                                      <button className="danger" onClick={() => setConfirmDel(d.id)}>Delete device</button>
-                                    )}
                                   </div>
                                 )}
                               </div>
@@ -258,7 +298,14 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         </div>
       )}
 
-      {menuId != null && <div className="sd-scrim" onClick={() => { setMenuId(null); setConfirmDel(null); }} />}
+      {menuId != null && <div className="sd-scrim" onClick={() => setMenuId(null)} />}
+
+      {undo && (
+        <div className="sd-undo" role="status">
+          <span>Deleted</span>
+          <button type="button" onClick={undoNow}>Undo</button>
+        </div>
+      )}
 
       {lightbox && (
         <div className="sd-lb" onClick={() => setLightbox(null)}>
@@ -286,6 +333,7 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-addcam + .sd-ai-all, .sd-addcam + .sd-cap{margin-left:0}
         .sd-empty{font-size:.8rem;color:var(--muted,#6f7686);padding:4px 2px 6px}
         .sd-empty b{color:var(--ink,#1a1a1a);font-weight:700}
+        .sd-unlock{border:0;background:none;padding:0;color:var(--ink,#1a1a1a);font:700 .8rem/1 inherit;text-decoration:underline;cursor:pointer}
         .sd-spin{animation:sd-spin .7s linear infinite;transform-origin:center}
         @keyframes sd-spin{to{transform:rotate(360deg)}}
         .sd-capbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:11px 14px;border-top:1px solid var(--line,#e6e2d9);background:rgba(201,169,110,.08)}
@@ -326,6 +374,10 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
         .sd-menu button.danger{color:#c0392b}
         .sd-menu button:disabled{opacity:.5;cursor:default}
         .sd-scrim{position:fixed;inset:0;z-index:15}
+        .sd-x{position:absolute;top:6px;right:6px;z-index:2;width:22px;height:22px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:#fff;background:rgba(14,19,32,.62);opacity:.85}
+        .sd-x:hover,.sd-x:focus-visible{opacity:1;background:var(--ink,#1a1a1a)}
+        .sd-undo{position:fixed;left:50%;bottom:var(--dock-stack,72px);transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:12px;padding:8px 8px 8px 14px;border-radius:10px;background:var(--ink,#1a1a1a);color:#fff;font-size:.8rem;font-weight:600;box-shadow:0 10px 28px -10px rgba(14,19,32,.5)}
+        .sd-undo button{border:0;border-radius:7px;background:var(--gold,#c9a96e);color:var(--ink,#1a1a1a);font:inherit;font-weight:800;padding:5px 12px;cursor:pointer}
         .sd-locked{display:inline-flex;align-items:center;gap:5px;font-size:.68rem;font-weight:700;letter-spacing:.02em;color:var(--muted,#6f7686);background:var(--bg-soft,#f5f2ea);border:1px solid var(--line,#e6e2d9);border-radius:100px;padding:3px 9px;margin-left:auto}
         .sd-btn{height:30px;padding:0 10px;border:1px solid var(--line,#d9d4c8);border-radius:7px;background:var(--bg-soft,#f5f2ea);color:var(--ink,#1a1a1a);font-size:.74rem;font-weight:700;cursor:pointer;font-family:inherit;white-space:nowrap}
         .sd-btn:hover:not(:disabled){border-color:var(--gold,#c9a96e)}.sd-btn:disabled{opacity:.55;cursor:default}

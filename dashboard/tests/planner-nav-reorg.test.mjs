@@ -33,15 +33,18 @@ test("staff: floor carousel header on top, contextual nav footer below the canva
 
 test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a state-derived Submit CTA", () => {
   // NAV-FIX: the linear flow is Background → Layout → Placement → Camera Angles → Submit (views is in-flow).
-  assert.ok(sp.includes('const navOrder = ["background", "layout", "cameras", "views", "review"];'), "linear 5-step order, one at a time (no skips)");
-  assert.ok(sp.includes("const nextStep = navOrder[navIdx + 1] || null;") && sp.includes("const prevStep = navOrder[navIdx - 1] || null;"), "prev/next derived from the canonical order");
-  // the forward control NAMES the next step itself
-  assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{NEXT_PROMPT[nextStep]} <svg"), "the Next label is the next step's prompt");
+  // Section A: the order lives in lib/survey-rail.js (RAIL_STEPS); stepAfter/stepBefore move exactly one step.
+  assert.ok(sp.includes("const nextStep = stepAfter(railStep);") && sp.includes("const prevStep = stepBefore(railStep);"), "prev/next derived from the canonical order");
+  // the forward control NAMES the next step itself — through nextLabel(), which is NEXT_PROMPT except on
+  // Camera Angles with no photos attached, where photos are optional and Next reads "Skip" (section L).
+  assert.ok(sp.includes("onClick={() => goRail(nextStep)}>{nextLabel(nextStep)} <svg"), "the Next label is the next step's prompt");
+  assert.ok(sp.includes("const nextLabel = (step) => (railStep === \"views\" && camsWithPhoto === 0 ? \"Skip\" : NEXT_PROMPT[step]);"),
+    "Camera Angles with no photos: Next reads Skip and still advances to Approval");
   // the center button shows the CURRENT step and opens Survey Navigation upward
   assert.ok(sp.includes('className="syp-nav-center"') && sp.includes("{STEP_LABEL[railStep]"), "center button shows the current step name");
   assert.ok(sp.includes('renderNavPop(navMenuOpen, setNavMenuOpen, "up-center")'), "center opens the Survey Navigation popover upward");
   // disabled Next shows a short hint instead of a silent no-op
-  assert.ok(sp.includes("{nextHint || NEXT_PROMPT[nextStep]}"), "a gated Next shows its hint, never a silent click");
+  assert.ok(sp.includes("{nextHint || nextLabel(nextStep)}"), "a gated Next shows its hint, never a silent click");
   // Submit CTA (label just 'Submit', not Re-submit) drives the canonical submit / continue
   assert.ok(/label: "Approval"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Approval / Awaiting / Continue (no Re-submit label)");
   assert.ok(sp.includes('await onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
@@ -56,7 +59,8 @@ test("FloorSelect exposes full parity: switch/add/rename/duplicate/delete", () =
   for (const bit of ["onSwitch", "onAdd", "onRename", "onDuplicate", "onDelete", "+ Add floor", "Rename", "Duplicate", "Delete"]) {
     assert.ok(f.includes(bit), `FloorSelect has ${bit}`);
   }
-  assert.ok(f.includes("disabled={only}"), "Delete disabled when only one floor");
+  assert.ok(!f.includes("disabled={only}"), "section C: the ONLY floor can be deleted (reset to a blank Floor 1) — no longer greyed out");
+  assert.ok(f.includes("disabled={locked}"), "…but a submitted survey still locks it");
   assert.ok(f.includes('menuMode === "confirm"'), "delete has an inline confirm step");
 });
 

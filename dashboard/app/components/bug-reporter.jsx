@@ -123,9 +123,16 @@ export default function BugReporter() {
     for (const r of results) {
       if (r.key != null) {
         // re-marked an existing shot — replace flattened image + shapes, re-upload
-        setShots((prev) => prev.map((s) => (s.id === r.key ? { ...s, preview: r.dataUrl, shapes: r.shapes || [], file: dataURLtoFile(r.dataUrl, `bug-${Date.now()}.png`), uploading: true } : s)));
-        const key = r.key, dataUrl = r.dataUrl;
-        (async () => { const url = await uploadMedia(dataURLtoFile(dataUrl, `bug-${Date.now()}.png`)); setShots((prev) => prev.map((s) => (s.id === key ? { ...s, url, uploading: false } : s))); })();
+        setShots((prev) => prev.map((s) => (s.id === r.key ? { ...s, preview: r.dataUrl, cleanShot: r.base || s.cleanShot, shapes: r.shapes || [], file: dataURLtoFile(r.dataUrl, `bug-${Date.now()}.png`), uploading: true } : s)));
+        // The base may have changed (crop): the draft/report persist cleanUrl, so it must be re-uploaded too —
+        // otherwise a restore pairs the OLD uncropped base with shapes in cropped coordinates.
+        const key = r.key, dataUrl = r.dataUrl, base = r.base;
+        (async () => {
+          const url = await uploadMedia(dataURLtoFile(dataUrl, `bug-${Date.now()}.png`));
+          const upBase = base && base.startsWith("data:");   // a plain URL base is unchanged → keep its cleanUrl
+          const cleanUrl = upBase ? (base === dataUrl ? url : await uploadMedia(dataURLtoFile(base, `clean-${Date.now()}.png`))) : undefined;
+          setShots((prev) => prev.map((s) => (s.id === key ? { ...s, url, ...(upBase ? { cleanUrl } : null), uploading: false } : s)));
+        })();
       } else {
         addFinal({ preview: r.dataUrl, cleanShot: r.base || r.dataUrl, shapes: r.shapes || [] });
       }

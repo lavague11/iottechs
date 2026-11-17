@@ -57,7 +57,7 @@ Return ONLY a JSON object. No preamble, no markdown fences.
 }
 
 CRITICAL rules:
-- CUSTOMER ONLY. This document was WRITTEN BY the contractor "IOT TECHS" (by La Vague Inc). NEVER return IOT TECHS, La Vague, "Assigned Contractor", their phone (646-396-0775), email (support@iot-techs.com) or website (iot-techs.com) as the customer or customer contact. The customer is the "Prepared For" party / project site (e.g. "Fuel Gas Station Hub").
+- CUSTOMER ONLY. This document was WRITTEN BY the contractor "IOT TECHS" (by La Vague Inc). NEVER return IOT TECHS, La Vague, "Assigned Contractor", their phone ((917) 727-0081 or the old 646-396-0775), email (support@iot-techs.com) or website (iot-techs.com) as the customer or customer contact. The customer is the "Prepared For" party / project site (e.g. "Fuel Gas Station Hub").
 - Detect EACH separate camera system as its own entry in "systems" (System 1, System 2, System 3, …), each with its coverage, camera count, NVR, storage, total, and its own line items.
 - Put every line item UNDER its system. Keep quantity, unit price and line total separate (never put a line total in unit_price). Parse "$1,250.00" as 1250.
 - Never invent a value — a field the document doesn't clearly show is null. Mark an item "low" confidence when any of its numbers is unclear, and list anything you couldn't read under "uncertain".`;
@@ -175,7 +175,7 @@ export async function POST(req) {
       let candidate = null; try { candidate = normalizeCandidate(JSON.parse(String(pre))); } catch {}
       if (candidate) {
         const engName = String(form.get("engine") || "");
-        try { logProjectEvent(project, { kind: "ai", label: `Proposal import attached · ${engName === "claude" ? "Claude" : engName === "openai" ? "OpenAI" : "AI"} (read at upload) · $${Number(form.get("cost") || 0).toFixed(4)}`, actor: user.name || user.role }); } catch { /* non-fatal */ }
+        try { logProjectEvent(project, { kind: "ai", label: `Proposal import attached · ${engName === "claude" ? "Claude" : engName === "openai" ? "OpenAI" : "AI"} (read at upload) · $${Number(form.get("cost") || 0).toFixed(4)}`, money: true, actor: user.name || user.role }); } catch { /* non-fatal */ }
         return Response.json({ ok: true, mediaId, candidate, engine: engName || null, model: null, usage: { cost: +form.get("cost") || 0 } });
       }
     }
@@ -185,7 +185,7 @@ export async function POST(req) {
     const { candidate, usage } = eng.name === "openai" ? await extractOpenAI(bytes, mime, eng.key, eng.model) : await extractClaude(bytes, mime, eng.key, eng.model);
     const cost = Math.round((usage?.cost || 0) * 10000) / 10000;   // $ to 4dp
     // Log the per-import API cost to the project (visible in the Job Log).
-    try { logProjectEvent(project, { kind: "ai", label: `Proposal import parsed · ${eng.name === "claude" ? "Claude" : "OpenAI"} ${eng.model} · ${(usage?.inTok || 0) + (usage?.outTok || 0)} tok · $${cost.toFixed(4)}`, actor: user.name || user.role }); } catch { /* non-fatal */ }
+    try { logProjectEvent(project, { kind: "ai", label: `Proposal import parsed · ${eng.name === "claude" ? "Claude" : "OpenAI"} ${eng.model} · ${(usage?.inTok || 0) + (usage?.outTok || 0)} tok · $${cost.toFixed(4)}`, money: true, actor: user.name || user.role }); } catch { /* non-fatal */ }
     return Response.json({ ok: true, mediaId, candidate, engine: eng.name, model: eng.model, usage: { ...usage, cost } });
   } catch (e) {
     return Response.json({ ok: true, mediaId, candidate: null, engine: eng.name, model: eng.model, error: `Couldn't read the document (${e?.message || e}).` });

@@ -1,6 +1,7 @@
 "use client";
 import { jsPDF } from "jspdf";
 import { DOC, documentFilename, projectFileBase } from "./doc-filename.js";
+import { contactLine, footerLine } from "./nap.js";
 
 // Certificate of Completion + warranty as a branded PDF — same visual language as the proposal
 // export (lib/proposal-pdf.js): slate side rail, ink header band, gold accents. One page.
@@ -37,7 +38,7 @@ export function downloadCompletionPdf(project, meta = {}) {
   doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 60.48);
   doc.setDrawColor(...GOLD_D); doc.setLineWidth(0.5); doc.line(61.2, 66.24, 216, 66.24);
   doc.setFontSize(7.5); doc.setTextColor(170, 170, 170);
-  doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 79.2);
+  doc.text(contactLine("   ·   "), 61.2, 79.2);
   doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 90.72);
 
   doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
@@ -96,7 +97,7 @@ export function downloadCompletionPdf(project, meta = {}) {
   doc.setFillColor(...INK); doc.rect(39.6, H - 30.24, W - 39.6, 30.24, "F");
   doc.setFillColor(...GOLD); doc.rect(39.6, H - 30.24, W - 39.6, 1.44, "F");
   doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
-  doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", W / 2 + 18, H - 10.08, { align: "center" });
+  doc.text(footerLine("  ·  "), W / 2 + 18, H - 10.08, { align: "center" });
 
   doc.save(documentFilename(projectFileBase(project), { type: DOC.COMPLETION }));
 }

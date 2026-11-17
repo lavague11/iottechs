@@ -452,7 +452,7 @@ export async function aiApplyProjectActionAction(accessId, name, args) {
   if (out?.error) return { error: out.error };
 
   // Audit only when something actually happened — a no-op (already signed / debounced) isn't an "email sent".
-  if (!noop) logProjectEvent(accessId, { kind: "ai", label: `AI: ${name} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
+  if (!noop) logProjectEvent(accessId, { kind: "ai", label: `AI: ${name} — by ${actorName(g.tok)}`, money: true, actor: actorName(g.tok) });
   try { const { revalidatePath } = await import("next/cache"); revalidatePath(`/project/${accessId}`); } catch {}
   return { ok: true, message };
 }
@@ -571,7 +571,7 @@ export async function aiAuditAction(accessId, summary) {
   // attacker-controlled free text. (aiCanEdit already excludes tech; the scope check is defense-in-depth.)
   if (!aiCanEdit(g.tok.role)) return { error: "Your role can't do that." };
   if (g.tok.role === "tech" && !tokScopedToProject(accessId, g.tok)) return { error: "That isn't a project you're assigned to." };
-  logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(g.tok)}`, actor: actorName(g.tok) });
+  logProjectEvent(accessId, { kind: "ai", label: `AI: ${String(summary || "command").slice(0, 160)} — by ${actorName(g.tok)}`, money: true, actor: actorName(g.tok) });
   return { ok: true };
 }
 

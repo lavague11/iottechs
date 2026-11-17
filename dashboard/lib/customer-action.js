@@ -55,8 +55,21 @@ export function customerAnnouncement(f = {}) {
 // pending actions in chronological order. `target` is the stage the project's gateway centers on.
 export function customerTodo(f = {}) {
   const S = f.stage;
-  if (S === "site_survey" && !f.survey_accepted)
+  // B8: every branch below the survey asks the customer to act on a PROPOSAL, and until now they were
+  // keyed on the stage column alone. The stage column is a cache, not evidence — and `stageFloorFacts`
+  // additionally invents `proposal_status: "accepted"` for anything at approval_deposit or later — so
+  // any project parked past `proposal` with no published proposal told its customer "a new proposal is
+  // ready — review & accept", or "sign your agreement", for a document that does not exist. 14 projects
+  // in the database were doing it. `proposal_published` is the UNFLOORED fact (buildStageFacts sets
+  // `proposal_status` from the published row, null when there is none); callers that don't pass it keep
+  // the old behaviour rather than silently losing a prompt.
+  const published = f.proposal_published !== false;
+  // Same defect one branch up: a survey that exists but was never SUBMITTED to the customer is not
+  // theirs to approve, and asking them to approve it is the survey-shaped version of announcing a
+  // proposal nobody sent. `survey_submitted` is explicit; absent, keep the old behaviour.
+  if (S === "site_survey" && !f.survey_accepted && f.survey_submitted !== false)
     return { label: "Review & approve your site survey", cta: "Review survey", target: "site_survey", order: 1 };
+  if (!published) return null;   // nothing below here is true without a contract to act on
   if ((S === "proposal" || S === "approval_deposit") && f.proposal_status !== "accepted")
     return { label: (f.proposal_version > 1 ? "Your proposal has been revised — review & accept" : "A new proposal is ready — review & accept"),
              cta: "Review proposal", target: "proposal", order: 2 };
@@ -66,6 +79,15 @@ export function customerTodo(f = {}) {
     return { label: "Pay your deposit to lock in your install date", cta: "Pay deposit", target: "approval_deposit", order: 4 };
   if (S === "payment" && !f.final_balance_paid)
     return { label: "Pay your final balance to complete your project", cta: "Pay balance", target: "approval_deposit", order: 5 };
+  // B13 (spec O·166: "Proposal/ADDENDUM awaiting signature → Sign"). Deliberately LAST and deliberately
+  // not keyed on `stage`: a change order is raised whenever something on site differs from the
+  // proposal — usually during install or QC, stages with no branch above — so a project whose only
+  // outstanding item was an unsigned change order fell through to a plain "Open", on the card and in
+  // the required-actions banner, which read the same engine. Ranking it last means it can never
+  // displace an obligation that comes earlier in the flow; a pending add-on is excluded from the
+  // balance, so "pay your balance" above is still a complete instruction on its own.
+  if (f.addendum_awaiting_signature)
+    return { label: "Sign the change order for your add-on", cta: "Sign", target: "install", order: 6 };
   return null;
 }
 

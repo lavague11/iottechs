@@ -4,8 +4,9 @@ import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersB
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
-import { customerPortalV2For, financeSummary, pickUpcomingAppt } from "../../../lib/customer-portal";
+import { customerPortalV2For, financeSummary, pickUpcomingAppt, sanitizeAppt, paymentsSummary } from "../../../lib/customer-portal";
 import { staffHubFor } from "../../../lib/staff-hub";
+import { can } from "../../../lib/roles";
 import { getToolData } from "../../../lib/db";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
@@ -286,7 +287,10 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project.install_photos = !!f.install_photos; project.install_confirmed = !!f.install_confirmed; project.completion_docs = !!f.completion_docs;
     // Work order: submitted (office froze it) / accepted (a tech signed it), on ANY version — the Staff Hub
     // card needs these because a `work_orders` row alone misses a WO the office submitted through the sheet.
-    project.work_order_submitted = !!f.work_order_submitted; project.work_order_accepted = !!f.work_order_accepted; }
+    project.work_order_submitted = !!f.work_order_submitted; project.work_order_accepted = !!f.work_order_accepted;
+    // B13: a priced change order still waiting on the customer's signature — server-derived so the
+    // portal's "Sign" card is right on first paint, not only once tool meta has loaded.
+    project.addendum_awaiting_signature = !!f.addendum_awaiting_signature; }
   let assignments    = getProjectAssignments(p.access_id).map(r=>({...r}));
   // The access roster carries each grantee's email — including the customer's. A tech must never
   // receive the customer's contact channel, so null it out of the customer rows for tech views.
@@ -390,28 +394,39 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // Staff Project Hub (Phase 1) — the clean customer-style hub for STAFF, flag + per-project override.
   // Presentation-only; the same tools open from its cards in staff (editable) mode. Deck is unaffected when off.
   const staffHub = staffHubFor(p);   // Simple view (the hub) is the default for eligible projects; only a "deck" override opts out.
-  let customerFinance = null, customerAppt = null, staffFinance = null, staffAppt = null;
-  if (customerPortalV2 || staffHub) {
+  let customerFinance = null, customerAppt = null, customerPayments = [], staffFinance = null, staffAppt = null;
+  // Customer money (total / paid / balance / pending add-ons) is CAPABILITY-gated, not view-gated: a tech
+  // or vendor never receives the figures at all, so there is nothing in the payload for a client to
+  // re-reveal. Gating the computation rather than the two assignments matters — `customerFinance` ships
+  // as a prop whatever the view, and gateway-client falls back to it (`staffFinance || customerFinance`)
+  // when building the progress rail, so gating only `staffFinance` would still hand a tech the numbers.
+  // Definition of Done rule 4: a tech never sees customer financials.
+  const maySeeMoney = can(initialView, "customer.financials.view");
+  if ((customerPortalV2 || staffHub) && maySeeMoney) {
     const fin = getProjectFinancialState(p.access_id);
     const dep = amountDueForPayment(p.access_id, "deposit");
     const finSum = financeSummary(fin, dep?.ok ? dep.due : 0);
     if (customerPortalV2) customerFinance = finSum;
     if (staffHub) staffFinance = finSum;
-    // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
-    // customer-safe fields only — never crew/roster/invitees/confirmations, and NOT the free-text `notes`
-    // (a staff-internal field: technician instructions, access concerns, internal scheduling notes). The
-    // client keeps a localStorage cache for responsiveness, but this prop is the source of truth.
-    try {
-      const sched = getToolData(p.access_id, "schedule");
-      const events = sched?.data ? (JSON.parse(sched.data)?.events || []) : [];
-      const ev = pickUpcomingAppt(Array.isArray(events) ? events : []);
-      if (ev) {
-        const appt = { kind: ev.kind || null, title: ev.title || null, date: ev.date || null, time: ev.time || null, location: ev.location || null };
-        if (customerPortalV2) customerAppt = appt;
-        if (staffHub) staffAppt = appt;
-      }
-    } catch { /* no schedule / bad blob → no appointment */ }
+    // Payment ledger for the customer's balance card — whitelisted columns only (paymentsSummary).
+    if (customerPortalV2 && finSum.hasContract) customerPayments = paymentsSummary(getProjectPayments(p.access_id));
   }
+  // The upcoming appointment is NOT money — it is whitelisted by sanitizeAppt — so it sits outside the finance
+  // gate: a technician still sees the installation card. (D12's gate above wraps the finance computation only.)
+  // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
+  // customer-safe fields only — never crew/roster/invitees/confirmations, and NOT the free-text `notes`
+  // (a staff-internal field: technician instructions, access concerns, internal scheduling notes). The
+  // client keeps a localStorage cache for responsiveness, but this prop is the source of truth.
+  try {
+    const sched = getToolData(p.access_id, "schedule");
+    const events = sched?.data ? (JSON.parse(sched.data)?.events || []) : [];
+    const ev = pickUpcomingAppt(Array.isArray(events) ? events : []);
+    if (ev) {
+      const appt = sanitizeAppt(ev);
+      if (customerPortalV2) customerAppt = appt;
+      if (staffHub) staffAppt = appt;
+    }
+  } catch { /* no schedule / bad blob → no appointment */ }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt} />;
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} customerPayments={customerPayments} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt} />;
 }

@@ -38,7 +38,7 @@ export async function POST(req) {
   // model can never invent a pool/water feature that isn't in the original (a recurring failure was
   // pools appearing in the yard or a neighbour's).
   if (mode === "aerial") {
-    prompt += " ABSOLUTE RULE, overrides everything above if in conflict: NEVER add, paint, draw or imagine a pool, hot tub, pond, fountain or any water feature anywhere in the image — including neighbouring yards — unless one is clearly, unmistakably already present in this exact original photo. When unsure, do NOT add it. Do not invent any structure, building or feature that is not in the original.";
+    prompt += " ABSOLUTE RULE, overrides everything above if in conflict: NEVER add, paint, draw or imagine a pool, hot tub, pond, fountain or any water feature anywhere in the image — including neighbouring yards — unless one is clearly, unmistakably already present in this exact original photo. When unsure, do NOT add it. Do not invent any structure, building or feature that is not in the original. Leave any text, logo or watermark exactly as given — never redraw, enlarge, sharpen or smear lettering.";
   }
   if (mode === "floorplan") {
     labels = String(inForm.get("labels") || "").replace(/[\r\n]+/g, " ").trim().slice(0, 400);

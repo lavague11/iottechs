@@ -7,9 +7,11 @@
 // the deck uses (via the `renderOverlay` the gateway supplies) so there is zero duplicated business logic.
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { portalCards, viewFromParams, payable, overlayAvailable } from "../../../lib/customer-portal";
+import { portalCards, portalBlocks, viewFromParams, payable, overlayAvailable } from "../../../lib/customer-portal";
+import PortalHeader from "./portal-header";
+import PortalBalance from "./portal-balance";
+import PortalLog from "./portal-log";
 
-const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
 const fmtTime = (t) => { try { const [h, m] = String(t).split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; const hh = ((h + 11) % 12) + 1; return `${hh}:${String(m).padStart(2, "0")} ${ap}`; } catch { return t; } };
 
@@ -49,10 +51,11 @@ const CARD_COPY = {
   install:    { title: "Installation",   sub: null,                                   action: "View" },
   closeout:   { title: "Closeout",       sub: "Review and sign off the completed work.", action: "Review" },
   completion: { title: "Completion",     sub: "Your project is complete.",            action: "Certificate" },
+  addendum:   { title: "Change Order",   sub: null,                                   action: "Review" },
 };
 
 export default function CustomerPortal({
-  accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {},
+  accessId, project, status, finance, appt, phases = [], currentPhaseKey, ctx = {}, contact = null, log = null, payments = [],
   signedDate = null, renderOverlay, onRefresh, progressPct = null,
   previewRole = null, onPreviewRole, previewRoles = [], onLock, priceValidUntil = null, onRequestReopen, reopenPending = false, priceExpired = false,
 }) {
@@ -115,6 +118,7 @@ export default function CustomerPortal({
     return () => { document.body.style.overflow = ""; };
   }, [activeView]);
 
+  const blocks = portalBlocks({ finance, appt, ctx, payments });
   const cards = portalCards(ctx, finance);
   let cta = status?.state ? STATUS_CTA[status.state] : null;
   // Defensive: never offer "Make Payment" in the hero unless money is actually collectible now (matches the
@@ -126,16 +130,13 @@ export default function CustomerPortal({
     <div className="cpv">
       <style>{PORTAL_CSS}</style>
 
-      {/* Header — lean, same branding family as the rest of the app. */}
-      <header className="cpv-head">
-        <div className="cpv-brand">
-          <span className="cpv-mark">IOT TECHS</span>
-          <span className="cpv-proj">{project?.contact_name || project?.customer || "Your project"} · {String(accessId).slice(-4)}</span>
-        </div>
-        {previewRole ? (
-          // Staff previewing as a customer: keep the Portal dropdown so they can switch role / exit the
-          // preview — never a one-way trip into the customer gateway.
-          <div className="cpv-portwrap">
+      {/* Header — the same bar the staff portal uses (name · id, contact drop-down). A customer's drop-down
+          carries Navigate + Share only; a staff member previewing as a customer also gets the Portal menu so
+          the preview is never a one-way trip. */}
+      <PortalHeader accessId={accessId} projName={contact?.businessName || project?.contact_name || project?.customer || "Your project"}
+        contact={contact} brandHref={previewRole ? "/dashboard" : "/my-projects"} brandLabel={previewRole ? "Dashboard" : "My projects"}>
+        {previewRole && (
+          <>
             <button className="cpv-port" onClick={() => setMenuOpen((v) => !v)} aria-haspopup="menu" aria-expanded={menuOpen}>
               Portal <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: menuOpen ? "rotate(180deg)" : "none" }}><path d="M6 9l6 6 6-6"/></svg>
             </button>
@@ -152,15 +153,13 @@ export default function CustomerPortal({
                 </div>
               </>
             )}
-          </div>
-        ) : (
-          <a className="cpv-port" href="/my-projects">My projects</a>
+          </>
         )}
-      </header>
+      </PortalHeader>
 
       <main className="cpv-main">
         {/* HERO — upcoming appointment first; else current status. One dominant CTA. */}
-        {appt ? (
+        {blocks.appointment ? (
           <section className="cpv-hero cpv-appt">
             <div className="cpv-kick">Upcoming appointment</div>
             <div className="cpv-appt-type">{apptType(appt)}</div>
@@ -217,33 +216,8 @@ export default function CustomerPortal({
           </section>
         )}
 
-        {/* BALANCE — canonical; hidden entirely when there is no contract yet. */}
-        {finance?.hasContract && (
-          <section className="cpv-bal">
-            <div className="cpv-kick">Project balance</div>
-            {finance.paidInFull ? (
-              <>
-                <div className="cpv-paid">Paid in full ✓</div>
-                {finance.pendingAddons > 0 && (
-                  <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="cpv-balrows">
-                  <div><span>Total</span><b>{money(finance.total)}</b></div>
-                  <div><span>Paid</span><b>{money(finance.paid)}</b></div>
-                  <div className="cpv-balrem"><span>Remaining</span><b>{money(finance.balance)}{finance.pendingAddons > 0 && <span className="cpv-pendplus"> + {money(finance.pendingAddons)} pending</span>}</b></div>
-                  {/* Pending add-ons are shown but NOT added to the amount due until the customer approves. */}
-                  {finance.pendingAddons > 0 && (
-                    <div className="cpv-balpend"><span>Pending add-on{finance.pendingAddonCount > 1 ? "s" : ""} · awaiting approval</span><b>+{money(finance.pendingAddons)}</b></div>
-                  )}
-                </div>
-                {payable(finance) && <button className="cpv-cta" onClick={() => open("payment")}>Make payment</button>}
-              </>
-            )}
-          </section>
-        )}
+        {/* BALANCE + payments — the same component the staff portal uses; nothing until there is a contract. */}
+        {blocks.balance && <PortalBalance accessId={accessId} finance={finance} payments={payments} onPay={payable(finance) ? () => open("payment") : null} />}
 
         {/* CARDS — only what applies. */}
         {cards.length > 0 && (
@@ -252,7 +226,10 @@ export default function CustomerPortal({
             {cards.map((c) => {
               const copy = CARD_COPY[c.key] || { title: c.key, action: "View" };
               const sub = c.key === "proposal" ? proposalSub(c.state, signedDate)
-                : c.key === "install" ? installSub(c.state, appt) : copy.sub;
+                : c.key === "install" ? installSub(c.state, appt)
+                // B13: say which way the ball is pointing, since a change order can sit either way.
+                : c.key === "addendum" ? (c.state === "awaiting" ? "Added work — review and sign." : "Added work on your project.")
+                : copy.sub;
               const onClick = c.key === "phone"
                 ? () => { window.location.href = `/guide/mobile-setup?project=${accessId}`; }
                 : () => open(c.view, { sign: c.key === "proposal" && c.state === "awaiting" && !reopenPending });
@@ -262,13 +239,17 @@ export default function CustomerPortal({
                     <div className="cpv-card-title">{copy.title}{c.key === "proposal" && c.state === "signed" ? " ✓" : ""}</div>
                     {sub && <div className="cpv-card-sub">{sub}</div>}
                   </div>
-                  <span className="cpv-card-act">{c.key === "proposal" && c.state === "signed" ? "View" : copy.action} →</span>
+                  <span className="cpv-card-act">{c.key === "proposal" && c.state === "signed" ? "View"
+                    : c.key === "addendum" ? (c.state === "awaiting" ? "Sign" : "View")
+                    : copy.action} →</span>
                 </button>
               );
             })}
           </section>
         )}
       </main>
+
+      <PortalLog log={log} />
 
       {/* OVERLAY — focused full-screen; URL-addressable; Back/X returns to the portal. */}
       {activeView && (
@@ -375,9 +356,7 @@ export const PORTAL_CSS = `
 .cpv{--ink:#101418;--ink-soft:#3A4048;--meta:#787D84;--faint:#A1A6AC;--paper:#F4F4F2;--raise:#FBFBFA;--line:#E4E4DF;--line-soft:#EDEDE9;--gold:#C9A96E;--gold-deep:#A8842F;--gold-text:#8A6A1F;--green:#2E7D5B;
   position:fixed;inset:0;overflow-y:auto;background:#fff;color:var(--ink);font:15px/1.5 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
 .cpv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-.cpv-brand{display:flex;flex-direction:column;min-width:0}
 .cpv-mark{font-weight:800;letter-spacing:-.01em;font-size:14px;color:var(--ink)}
-.cpv-proj{font-size:12.5px;color:var(--meta);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cpv-port{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;white-space:nowrap;background:var(--raise);cursor:pointer;font-family:inherit}
 .cpv-port:hover{border-color:var(--ink);color:var(--ink)}
 .cpv-portwrap{position:relative}

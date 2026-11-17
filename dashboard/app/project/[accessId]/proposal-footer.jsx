@@ -8,6 +8,7 @@
 //   • Sent / unsigned        — Sent · date · by · v4           → [ Request Signature ][ Download ]
 //   • Unsent changes         — N unsent changes · ±$  (tap→diff)→ [ Send Revision ]    [ Download ]
 //   • Signed / locked        — Accepted · v4                   → [ Revise ]            [ Download ]
+// Utility order is always Record Payment · + Addendum (signed only) · Download.
 // Edit-to-revise: a sent/unsigned proposal is edited directly in the workspace; there is no Revise here —
 // Revise returns only once the proposal is lifecycle-locked (accepted/signed). No ••• menu: Copy Link /
 // Email live inside Request Signature, Views on the header eye, Configuration on the header gear.
@@ -21,7 +22,7 @@ export default function ProposalFooter({
   status, version, authBlocked, isStaff, busy, statusChip, saveStateEl,
   changeState, hasUnsent, isSentUnsigned, isDraftNew, isLocked,
   emailAsk, onEmailSend, onEmailDismiss, onSend, onRevise, onRequestSign, onCancelRevision,
-  dlBusy, onDownload, canRecordPayment, onRecordPayment,
+  dlBusy, onDownload, canRecordPayment, onRecordPayment, canAddendum, onAddendum,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -51,6 +52,12 @@ export default function ProposalFooter({
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
       Record Payment
     </button>
+  ) : null;
+
+  // + Addendum — same outline style as its neighbours; the caller only passes canAddendum once a proposal
+  // version has been signed, so before that the button is absent (never disabled).
+  const addendum = canAddendum ? (
+    <button type="button" className="prop-foot-pay" disabled={busy} onClick={onAddendum}>+ Addendum</button>
   ) : null;
 
   // Metadata (left) + primary action (right), by canonical state. Primary dominates; Download is quiet.
@@ -106,7 +113,7 @@ export default function ProposalFooter({
   return (
     <div className="prop-foot">
       <div className="prop-foot-metarow">{meta}</div>
-      <div className="prop-foot-acts">{cancelEl}{primary}{recordPay}{download}</div>
+      <div className="prop-foot-acts">{cancelEl}{primary}{recordPay}{addendum}{download}</div>
       {changesOpen && hasUnsent && <ChangesModal changeState={changeState} onClose={() => setChangesOpen(false)} />}
     </div>
   );

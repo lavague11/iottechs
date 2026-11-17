@@ -935,7 +935,7 @@ function _diffItems(o) {
   (o?.services || []).forEach((s) => (s.items || []).forEach((it) => {
     const key = it?.id || `${s?.name || ""}|${it?.name || ""}`;
     const subSum = (it?.sub || []).reduce((a, x) => a + (x?.waived ? 0 : (+x?.qty || 0) * (+x?.price || 0)), 0);
-    m.set(key, { name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
+    m.set(key, { id: it?.id || null, name: it?.name || "", svc: s?.name || "", qty: +it?.qty || 0, price: +it?.price || 0, waived: !!it?.waived, subSum });
   }));
   return m;
 }
@@ -950,11 +950,11 @@ export function proposalDiff(prev, cur) {
     if (!po || !co) { any = true; options.push({ id, name: (co || po)?.name || `Option ${id}`, optionAdded: !po, optionRemoved: !co, added: [], removed: [], changed: [] }); continue; }
     const a = _diffItems(po), b = _diffItems(co);
     const added = [], removed = [], changed = [];
-    for (const [k, v] of b) if (!a.has(k)) added.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
-    for (const [k, v] of a) if (!b.has(k)) removed.push({ name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of b) if (!a.has(k)) added.push({ id: v.id, name: v.name, svc: v.svc, qty: v.qty, price: v.price });
+    for (const [k, v] of a) if (!b.has(k)) removed.push({ id: v.id, name: v.name, svc: v.svc, qty: v.qty, price: v.price });
     for (const [k, v] of a) { const w = b.get(k); if (!w) continue;
       if (v.qty !== w.qty || v.price !== w.price || v.waived !== w.waived || v.subSum !== w.subSum)
-        changed.push({ name: w.name, svc: w.svc, from: { qty: v.qty, price: v.price, waived: v.waived }, to: { qty: w.qty, price: w.price, waived: w.waived } }); }
+        changed.push({ id: w.id, name: w.name, svc: w.svc, from: { qty: v.qty, price: v.price, waived: v.waived }, to: { qty: w.qty, price: w.price, waived: w.waived } }); }
     const discFrom = po.discount ?? null, discTo = co.discount ?? null;
     const disc = JSON.stringify(discFrom) !== JSON.stringify(discTo) ? { from: discFrom, to: discTo } : null;
     const pcp = (+po.pcpCredit || 0) !== (+co.pcpCredit || 0) ? { from: +po.pcpCredit || 0, to: +co.pcpCredit || 0 } : null;
@@ -1023,14 +1023,55 @@ export function proposalChangeState(published, working) {
 }
 
 // ---- Addendum fingerprint (ledger P4): what the customer agreed to on a change order ------------
-// Title, the customer-visible line items (name/qty/price) and the discount. techPay is internal and
-// excluded — a payout tweak never voids the customer's acceptance; a price/qty change does.
+// Title, the customer-visible line items (name/qty/price), the discount and the tax rate. techPay is
+// internal and excluded — a payout tweak never voids the customer's acceptance; a price/qty/tax change
+// does, because each moves what the customer owes.
+//
+// The tax term is included ONLY when a rate is actually set. That is deliberate, not tidiness: an
+// add-on with no tax must hash exactly as it did before tax existed, or every already-signed add-on
+// would stop matching its stored signedFingerprint, drop out of getApprovedAddons and silently
+// subtract itself from a live balance. Keys are sorted in _fpStable, so adding one changes nothing else.
 export function addendumFingerprint(a) {
-  const meaning = { t: a?.title || "", d: +a?.discount || 0, items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
+  const rate = +a?.taxRate || 0;
+  const meaning = { t: a?.title || "", d: +a?.discount || 0, ...(rate ? { x: rate } : {}),
+    items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
   return _fpHash(_fpStable(meaning));
+}
+// THE add-on money formula (one definition: db.getApprovedAddons / getPendingAddons, the add-on card and the
+// version snapshot all call it). Rounded to cents like every other money figure; a missing/non-numeric qty or
+// price counts as 0; the total never goes below 0 (a discount larger than the subtotal floors at 0).
+//
+// Tax (B1) is the add-on's OWN rate — `taxRate`, which exists only when someone clicked it, exactly like
+// the proposal's NJ/NY control. It is never inherited from the proposal: most proposals carry no tax at
+// all, so inheriting would invent tax on add-ons nobody taxed, and would restate add-ons already signed.
+// With no rate the arithmetic is the untaxed formula untouched. Tax is charged on the discounted net,
+// mirroring optionTotals. PCP is NOT applied here: the credit is a proposal-level figure already
+// subtracted from the proposal total, so applying it again on an add-on would credit it twice.
+export function addendumTotals(a) {
+  const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
+  const discount = r2(+a?.discount || 0);
+  const taxRate = +a?.taxRate || 0;
+  const taxable = Math.max(0, sub - discount);
+  const tax = r2(taxable * taxRate / 100);
+  return { sub, discount, taxRate, tax, total: r2(taxable + tax) };
 }
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
+
+// B13 — THE definition of "this add-on is in front of the customer, waiting on them". One predicate,
+// so the money line (getPendingAddons), the required-actions banner and the project card's Sign CTA
+// cannot disagree about whether an add-on is an outstanding ask.
+//
+// It is derived state, not a field. `requiredActionsFromState` used to read `a.shared`, which NOTHING
+// has ever written — so the change_order branch could not fire at any point in the record's life, and
+// B13's "0 projects are in that state" was an unreachable predicate rather than an empty set.
+//
+// Priced (the office has set a price) + pending (not yet approved) is exactly the set the customer
+// already sees in the portal, and it is also where an approved add-on lands when it is edited
+// afterwards (reconcileAddendumWrite drops it to pending + resignRequired), so re-signing is covered
+// by the same rule. Voided and declined ones are not asks.
+export const addendumAwaitingCustomer = (a) =>
+  !!a && a.status === "pending" && !a.needsPricing && !a.voidedAt;
 
 // ---- Canonical customer required-action resolver (PURE) ---------------------------------------
 // Given already-authoritative state, return the outstanding customer actions for a project — the single

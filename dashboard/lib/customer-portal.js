@@ -41,7 +41,7 @@ export function pickUpcomingAppt(events, nowMs = Date.now()) {
 // money — never cost/margin/processor IDs. `hasContract:false` ⇒ the portal hides the balance card entirely
 // (no misleading $0 before anything is sent).
 export function financeSummary(fin, depositDue = 0) {
-  if (!fin) return { hasContract: false, total: 0, paid: 0, balance: 0, amountDueNow: 0, depositDue: 0, paidInFull: false, financialState: "none" };
+  if (!fin) return { hasContract: false, pendingPayments: 0, total: 0, paid: 0, balance: 0, amountDueNow: 0, depositDue: 0, paidInFull: false, financialState: "none" };
   const total = Math.round((+fin.total || 0) * 100) / 100;
   const paid = Math.round((+fin.paid || 0) * 100) / 100;
   const balance = Math.round((fin.balance != null ? +fin.balance : Math.max(0, total - paid)) * 100) / 100;
@@ -52,6 +52,8 @@ export function financeSummary(fin, depositDue = 0) {
     amountDueNow: Math.round((+fin.amountDueNow || 0) * 100) / 100,
     depositDue: Math.round((+depositDue || 0) * 100) / 100,
     paidInFull,
+    // Submitted-but-unconfirmed money (informational — a pending row can be an abandoned checkout).
+    pendingPayments: Math.round((+fin.pendingPayments || 0) * 100) / 100,
     financialState: fin.financialState || "none",
     // Pending addendums: shown as a separate "awaiting approval" line, NOT added to the amount due
     // until the customer approves (then they fold into `total`/`balance` automatically).
@@ -110,6 +112,10 @@ export function viewAvailability(ctx = {}, finance = null) {
     closeout:   !!ctx.closeoutReady,
     completion: !!(ctx.complete && ctx.paidInFull),
     phone:      pState === "signed" && !ctx.installComplete,
+    // B13: the change-order overlay is available whenever the customer has an add-on to look at —
+    // one awaiting their signature, or an already-signed one they may re-read. `addendumCount`
+    // excludes add-ons still awaiting office pricing, so they never see an unpriced one.
+    addendum:   !!ctx.addendumAwaiting || (+ctx.addendumCount || 0) > 0,
   };
 }
 
@@ -119,21 +125,24 @@ export function viewAvailability(ctx = {}, finance = null) {
 // MERGE: System Preview (mockup) folded into Site Survey — one entry card. The customer reviews the
 // camera photos inside the survey's Walkthrough; `mockup` stays a valid ?view= overlay (deep links) but
 // is no longer its own card.
-const CARD_ORDER = ["survey", "proposal", "phone", "install", "closeout", "completion"];
+// B13: the change order sits after Installation — it is raised when something on site differs from the
+// proposal, so that is where the customer expects to find it.
+const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "closeout", "completion"];
 export function portalCards(ctx = {}, finance = null) {
   const avail = viewAvailability(ctx, finance);
   const pState = proposalCardState(ctx);
   const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
-  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available" };
+  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available",
+    addendum: ctx.addendumAwaiting ? "awaiting" : "signed" };
   return CARD_ORDER.filter((k) => avail[k]).map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
 }
 
 // The overlay keys the portal understands (URL ?view=<key>). Used to validate an incoming ?view / legacy
 // ?open mapping so a hand-typed value can't open something unexpected. `phone` is a link-out (a guide), not
 // an in-portal overlay, so it is deliberately absent from OVERLAY_VIEWS below.
-export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone"]);
+export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone", "addendum"]);
 // The views that render as an in-portal overlay (phone is excluded — it navigates to a support guide).
-export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install"]);
+export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "addendum"]);
 // Is `view` both a renderable overlay AND currently available? One check for direct-URL + card clicks.
 export function overlayAvailable(view, ctx = {}, finance = null) {
   return OVERLAY_VIEWS.includes(view) && !!viewAvailability(ctx, finance)[view];
@@ -141,7 +150,71 @@ export function overlayAvailable(view, ctx = {}, finance = null) {
 // Legacy email/SMS deep links (?open=proposal&sign=1, ?open=survey, …) → the V2 overlay key.
 export function viewFromParams({ view, open } = {}) {
   if (view && PORTAL_VIEWS.includes(view)) return view;
-  const map = { proposal: "proposal", survey: "survey", site_survey: "survey", mockup: "mockup", deposit: "payment", payment: "payment" };
+  // `addendum` is the gateway's own ?open= name (OPEN_TOOL_NAMES), so the project card's "Sign" link
+  // works whichever portal the customer is served (B13).
+  const map = { proposal: "proposal", survey: "survey", site_survey: "survey", mockup: "mockup", deposit: "payment", payment: "payment", addendum: "addendum" };
   if (open && map[open]) return map[open];
   return null;
+}
+
+// The ONLY fields of a schedule event a customer may receive. A whitelist, not a blacklist: crew, invitees,
+// confirmations, and the free-text `notes` (technician instructions, access concerns) are staff-internal and
+// can never ride along, whatever the event grows to carry. Server-side — page.jsx calls this before the prop.
+export const APPT_PUBLIC_FIELDS = Object.freeze(["kind", "title", "date", "time", "location"]);
+export function sanitizeAppt(ev) {
+  if (!ev || !ev.date) return null;
+  const out = {};
+  for (const k of APPT_PUBLIC_FIELDS) out[k] = ev[k] || null;
+  return out;
+}
+
+// Customer-safe payment ledger rows: what was paid, when, how, and whether staff has confirmed receipt.
+// Never the recorder's name, internal note, processor ids, fee internals or proof photos. Voided and
+// zero-amount rows are not payments. Newest first.
+export const PAYMENT_PUBLIC_FIELDS = Object.freeze(["id", "amount", "method", "kind", "paid_at", "status"]);
+export function paymentsSummary(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .filter((p) => p && (+p.amount || 0) > 0 && p.status !== "void")
+    .map((p) => {
+      const o = {};
+      for (const k of PAYMENT_PUBLIC_FIELDS) o[k] = p[k] ?? null;
+      o.amount = Math.round((+p.amount || 0) * 100) / 100;
+      return o;
+    });
+}
+
+// "Render only when real" in one place: which blocks the portal home draws. No contract → no balance card
+// (never a misleading $0); no appointment → no appointment card; no recorded payment → no payments list; no
+// saved survey → no survey entry. The component reads these booleans and nothing else decides.
+export function portalBlocks({ finance = null, appt = null, ctx = {}, payments = [] } = {}) {
+  const avail = viewAvailability(ctx, finance);
+  return {
+    appointment: !!appt,
+    balance: !!finance?.hasContract,
+    payments: !!finance?.hasContract && (payments || []).length > 0,
+    survey: avail.survey,
+    proposal: avail.proposal,
+  };
+}
+
+// THE gate for the raw payment ledger (project_payments rows carry recorder, note, processor ids, fee and proof
+// photos). Every server action that returns payments goes through this, so the rule lives in one place:
+//   · no `customer.financials.view` (tech, vendor, anyone else) → nothing at all
+//   · customer → whitelisted columns, plus `source`/`created_at`, and — ONLY on their own submissions
+//     (source === "customer") — the note, proof photos and their own name, which they authored
+//   · office roles → the full ledger
+// `canSeeFinancials` is passed in so this module stays free of the roles import cycle.
+export function paymentsForViewer(role, rows, canSeeFinancials) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!canSeeFinancials) return [];
+  if (role !== "customer") return list;
+  return list.filter((p) => p && p.status !== "void").map((p) => {
+    const o = {};
+    for (const k of PAYMENT_PUBLIC_FIELDS) o[k] = p[k] ?? null;
+    o.amount = Math.round((+p.amount || 0) * 100) / 100;
+    o.source = p.source ?? null;
+    o.created_at = p.created_at ?? null;
+    if (p.source === "customer") { o.note = p.note ?? null; o.photos = p.photos || []; o.recorded_by = p.recorded_by ?? null; }
+    return o;
+  });
 }
