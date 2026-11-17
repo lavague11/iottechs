@@ -7255,6 +7255,32 @@ export function getPendingSquareOrders(accessId) {
 }
 // What a customer can pay right now for a project: the deposit still owed, and the full remaining balance.
 // Reads the canonical financial state (published proposal), so it can never bill a staff working draft.
+// B9, OFF BY DEFAULT. A `pending` row is created when a payment LINK is made, not when money moves,
+// and nothing ever clears it — so one abandoned Square checkout counts against `applied` for ever and
+// the customer is refused by /api/pay/create with "Nothing is due right now." Option 1 of the three in
+// docs/blocked.md: stop counting a pending row once it is older than a real checkout could take.
+//
+// Why this one: it keeps the double-payment guard intact for money genuinely in flight (a checkout
+// under the window still blocks), and only releases rows that cannot still be live. The alternatives
+// either drop the guard for all Square rows or need a new payment state.
+//
+// Scope: this moves `due` ONLY — what the customer may pay right now. It does not touch `total`,
+// `paid` or `balance`, so no invoice figure is restated whether the flag is on or off.
+export const STALE_PENDING_MINUTES = 30;
+export const paymentsIgnoreStalePending = () => String(secretValue("PAYMENTS_IGNORE_STALE_PENDING") || "").toLowerCase() === "on";
+// Pending money that is too old to still be a live checkout. Rows with no timestamp are treated as
+// LIVE (never released) — an unknown age must not become a reason to ask for money twice.
+export function stalePendingTotal(accessId, nowMs = Date.now()) {
+  const cutoff = nowMs - STALE_PENDING_MINUTES * 60 * 1000;
+  const rows = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(String(accessId));
+  return Math.round(rows.reduce((s, r) => {
+    if (r.status !== "pending") return s;
+    const t = Date.parse(String(r.created_at || "").replace(" ", "T") + "Z");
+    if (!Number.isFinite(t) || t >= cutoff) return s;        // unknown or recent -> still counts
+    return s + (+r.amount || 0);
+  }, 0) * 100) / 100;
+}
+
 export function amountDueForPayment(accessId, kind) {
   const fin = getProjectFinancialState(accessId);
   if (!fin) return { ok: false, error: "No proposal to pay on yet." };
@@ -7264,9 +7290,10 @@ export function amountDueForPayment(accessId, kind) {
   const pending = +fin.pendingPayments || 0;
   const depositAmt = Math.round(total * ((+pub?.deposit_pct || 0) / 100) * 100) / 100;
   // Count money already applied OR in flight (pending), so the customer can't double-pay the same bucket.
-  const applied = paid + pending;
+  const stale = paymentsIgnoreStalePending() ? stalePendingTotal(accessId) : 0;
+  const applied = paid + pending - stale;
   const due = kind === "deposit" ? Math.max(0, depositAmt - applied) : Math.max(0, total - applied);
-  return { ok: true, due: Math.round(due * 100) / 100, total, paid, pending, depositAmt };
+  return { ok: true, due: Math.round(due * 100) / 100, total, paid, pending, stalePending: stale, depositAmt };
 }
 // Staff confirm a customer-submitted payment once the money is actually received.
 export function confirmProjectPayment(accessId, id) {
@@ -7335,10 +7362,25 @@ export function confirmedPaymentTotal(accessId, kind) {
 // "tracking" = equipment shipment info for the Schedule stage ({number, carrier, note}) —
 // staff set it, the customer's scheduling page displays it.
 export const TOOL_KEYS = new Set(["survey", "survey2", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
+// B14 — the version a client must echo to prove it is writing against what it read.
+//
+// A content hash rather than a column: it needs no migration, it cannot drift from the row it
+// describes, and two writes inside the same second (which `updated_at` cannot tell apart) get
+// different revs. "0" means there is no row, so a client that read "nothing" can only create.
+export function toolRev(data) {
+  return data == null ? "0" : createHash("sha256").update(String(data)).digest("hex").slice(0, 16);
+}
 export function getToolData(accessId, tool) {
   const r = db.prepare("SELECT data, updated_by, updated_at FROM project_tool_data WHERE project_access_id=? AND tool=?")
     .get(String(accessId), String(tool));
-  return r ? { data: r.data, updated_by: r.updated_by, updated_at: r.updated_at } : null;
+  return r ? { data: r.data, updated_by: r.updated_by, updated_at: r.updated_at, rev: toolRev(r.data) } : null;
+}
+// Is this write made against the version the caller last read? `baseRev` is OPTIONAL: a caller that
+// sends none is accepted exactly as before, so no existing client breaks. One that sends a rev and is
+// behind is refused rather than silently winning, which is the overwrite in B14.
+export function toolWriteIsStale(accessId, tool, baseRev) {
+  if (typeof baseRev !== "string" || !baseRev) return false;      // no claim made -> nothing to check
+  return baseRev !== toolRev(getToolData(accessId, tool)?.data ?? null);
 }
 export function saveToolData(accessId, tool, data, byName) {
   db.prepare(`

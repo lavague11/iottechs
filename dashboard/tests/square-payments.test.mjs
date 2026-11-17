@@ -119,3 +119,57 @@ test("B9: it is defined above its first use, so the module cannot be reordered i
   assert.ok(db.indexOf("const paymentCounts =") < db.indexOf("pays.filter(paymentCounts)"),
     "the predicate is declared before the first call site reads it");
 });
+
+// ---- B9 main: the stale-pending flag, OFF by default --------------------------------------------
+// A pending row is created when a payment LINK is made, not when money moves, and nothing clears it,
+// so one abandoned checkout refuses the customer for ever. Option 1: stop counting a pending row once
+// it is older than a real checkout could take. Shipped behind PAYMENTS_IGNORE_STALE_PENDING, off.
+test("B9: the flag is off unless explicitly turned on, and the window is a real checkout's length", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.match(db, /export const STALE_PENDING_MINUTES = 30;/, "30 minutes");
+  assert.match(db, /secretValue\("PAYMENTS_IGNORE_STALE_PENDING"\)[\s\S]{0,40}=== "on"/, "opt-in by exact value");
+  // the default path must be byte-identical to the old arithmetic
+  assert.match(db, /const stale = paymentsIgnoreStalePending\(\) \? stalePendingTotal\(accessId\) : 0;/);
+  assert.match(db, /const applied = paid \+ pending - stale;/, "flag off -> stale is 0 -> paid + pending, as before");
+});
+
+test("B9: an unknown or recent timestamp is never released — an unknown age must not re-bill", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  const fn = db.slice(db.indexOf("export function stalePendingTotal"), db.indexOf("export function amountDueForPayment"));
+  assert.match(fn, /if \(r\.status !== "pending"\) return s;/, "confirmed money is never 'stale'");
+  assert.match(fn, /if \(!Number\.isFinite\(t\) \|\| t >= cutoff\) return s;/, "unparseable or recent still counts");
+  // replicate the predicate to pin the direction of each boundary
+  const WINDOW = 30 * 60 * 1000, now = Date.parse("2026-11-16T12:00:00Z"), cutoff = now - WINDOW;
+  const releases = (status, created) => {
+    if (status !== "pending") return false;
+    const t = Date.parse(String(created || "").replace(" ", "T") + "Z");
+    return Number.isFinite(t) && t < cutoff;
+  };
+  assert.equal(releases("pending", "2026-07-09 05:49:00"), true, "months old -> released");
+  assert.equal(releases("pending", "2026-11-16 11:00:00"), true, "an hour old -> released");
+  assert.equal(releases("pending", "2026-11-16 11:45:00"), false, "15 minutes old -> still in flight");
+  assert.equal(releases("pending", null), false, "no timestamp -> never released");
+  assert.equal(releases("pending", "nonsense"), false, "unparseable -> never released");
+  assert.equal(releases("confirmed", "2026-07-09 05:49:00"), false, "confirmed money is not pending");
+});
+
+test("B9: the flag moves only what is payable now — never total, paid or balance", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  const fn = db.slice(db.indexOf("export function amountDueForPayment"), db.indexOf("// Staff confirm a customer-submitted payment"));
+  // `stale` may appear only in the `applied` line; total/paid come straight from fin
+  assert.match(fn, /const total = \+fin\.total \|\| 0;/);
+  assert.match(fn, /const paid = \+fin\.paid \|\| 0;/);
+  // `stale` may appear on three lines only: where it is computed, where it reduces `applied`, and
+  // where it is reported back. If it ever reaches the total/paid/deposit lines, the flag has started
+  // moving an invoice figure.
+  const staleLines = fn.split("\n").filter((l) => /\bstale/i.test(l));
+  assert.equal(staleLines.length, 3, `stale appears on ${staleLines.length} lines:\n${staleLines.join("\n")}`);
+  assert.match(staleLines[0], /const stale = /);
+  assert.match(staleLines[1], /const applied = paid \+ pending - stale;/);
+  assert.match(staleLines[2], /return \{ ok: true/);
+  for (const l of fn.split("\n").filter((l) => /const (total|paid|pending|depositAmt) =/.test(l)))
+    assert.doesNotMatch(l, /stale/i, `an invoice figure is derived from the flag: ${l.trim()}`);
+  // and getProjectFinancialState — the source of total/paid/balance — knows nothing about it
+  const gpfs = db.slice(db.indexOf("export function getProjectFinancialState"), db.indexOf("export function getProjectFinancialState") + 2500);
+  assert.doesNotMatch(gpfs, /stalePending|IGNORE_STALE/, "the invoice figures are untouched by the flag");
+});
