@@ -12,6 +12,12 @@ asks for a RED change, the safe part was built and the money/signature part is r
 
 ## B1 — Section I: addendum totals feeding project money (RED, owner decision)
 
+> **REPORTED 2026-11-16, NOT APPLIED.** Measured against the live database: **one** add-on would
+> change — ASC0034's "Added 3 back-lot cameras", $750.00 → $799.69 (+$49.69 tax at 6.625%), taking
+> that project's balance $3,693.73 → $3,743.42. Total across all customers: **+$49.69**. It is a
+> customer who has already signed, so restating it changes what they are told they owe after the
+> fact. Full figures in `docs/pending-decisions-report.md`.
+
 Section I says *"Signed addendum totals add into the project TOTAL, BALANCE and payment plan … and into
 the portal PROJECT BALANCE card."* Addendum totals **already** feed total and balance, via
 `getApprovedAddons` (`lib/db.js:7830`). What section I actually changes is *how much* they add, and that
@@ -67,6 +73,14 @@ implementable without them and **shipped in `c109f9b4`**. Nothing there touches 
 
 ## B2 — Section I: addendum e-sign needs a schema migration (RED, owner decision)
 
+> **PARTLY DONE 2026-11-16 — option 2 (parallel store), additive and reversible.** `sign_documents`
+> was not dropped, truncated or rewritten; it is byte-identical. `lib/addendum-schema.js` adds
+> `addendum_sign_documents` and `addendum_sign_sessions` with the same immutability trigger and CHECK
+> constraint, alongside the proposal tables rather than instead of them.
+> `scripts/migrate-addendum-store.mjs` is dry-run by default and `--down` is the exact inverse, proven
+> on a copy. **Still yours:** wiring `completeSession` onto the new store, which is real work on the
+> signature path, not a migration.
+
 Section I says each addendum gets "its own send, signature and version history" and to "reuse the
 proposal signing page". The signing **backend** cannot take a second document type as it stands:
 
@@ -94,6 +108,11 @@ asks; the backend is not forked.
 
 ## B3 — Section I: addendum storage has no row-per-version (owner decision)
 
+> **PARTLY DONE 2026-11-16 — the table exists and is populated, nothing reads it yet.** `addendums`
+> (one row per addendum, `seq` 1-based) and `addendum_versions` (row-per-version) were created
+> additively and the 3 existing addenda copied forward. The JSON blob is untouched and remains the
+> live source of truth. **Still yours:** which of the two becomes authoritative.
+
 There is no addendum table. Addenda live as an `addendums[]` array inside one `project_tool_data` JSON
 blob per project (tool key `"addendum"`, `lib/db.js:1415`), with no version number and no A1/A2
 numbering. Section I's "its own version history" needs either a new table (schema change) or an
@@ -110,6 +129,10 @@ rule 6 and the RED lane both say to raise first.
 ---
 
 ## B4 — Section I: the "A1" filename collides with a pinned test
+
+> **REPORTED 2026-11-16, NOT APPLIED.** 3 of 3 addendum filenames would change, e.g.
+> `Test Client - CCTV - 0034 - Addendum 1.pdf` → `… - A1.pdf`. No stored data moves — only what lands
+> in a download folder. Listed in `docs/pending-decisions-report.md`.
 
 `lib/doc-filename.js` is the single source for every downloaded file name and already has
 `DOC.ADDENDUM` (line 13), producing `"… - Addendum 2 - v<rev>.pdf"` — i.e. **"Addendum 2", not "A1"**.
@@ -281,6 +304,12 @@ instead. See D16's sibling lesson about gating on the real thing rather than a p
 
 ## B9 — RED: a customer can be shown "Pay" and then refused by the payment endpoint
 
+> **BUILT 2026-11-16 BEHIND A FLAG THAT IS OFF.** Option 1, as `PAYMENTS_IGNORE_STALE_PENDING`
+> (unset = off): a pending row older than 30 minutes stops counting against what may be paid. One
+> invoice moves with it on — ASC0034's deposit due $700.21 → $834.37 — and **no invoice figure
+> (total/paid/balance) differs in either mode**, because the flag only touches `amountDueForPayment`.
+> Before/after on five real invoices in `docs/pending-decisions-report.md`. Not turned on.
+
 Found by section N's verifier, one level below what N could fix. **Money — needs Ahmed's decision, not
 an agent's.**
 
@@ -334,6 +363,13 @@ the moment anyone adds failure handling, which option 3 above would do. Fix them
 ---
 
 ## B10 — the ordinary Room gesture cannot create a nested room
+
+> **BUILT 2026-11-16 BEHIND A FLAG THAT IS OFF.** Option 2 (tap-vs-drag), the resolution the
+> wall-grab path in that same file already uses, at the same 6px threshold. Off by default via
+> `?nest=1`, so today's tap behaviour is byte-for-byte unchanged — verified both ways by driving the
+> real widget: flag off, a drag inside the Garage creates nothing; flag on, it creates a nested
+> "Paint Booth" and a tap still only selects. Enable for everyone by dropping the condition in
+> `site-survey-widget.jsx`.
 
 **Section E, item 12.** Nesting works, and is proven working in a browser: a Stairs room or a
 multi-point polygon drawn wholly inside a Garage becomes its own room, leaves the container's cells
@@ -570,6 +606,15 @@ be guessing. Fold this into whatever you choose there.
 ---
 
 ## B14 — an open browser tab silently overwrites tool rows, including a freshly migrated one
+
+> **FIXED 2026-11-16 — option 1.** The version is a content hash of the stored bytes, so it needed no
+> migration at all. `getToolData` returns a `rev`; both write paths refuse a write whose `baseRev` is
+> behind, with "This was changed somewhere else since you opened it." It is optional, so a caller that
+> sends none is accepted exactly as before and nothing existing breaks. Proven end to end on a copy:
+> A reads, A writes, B writes, A's stale push is REFUSED and B's data survives.
+>
+> **Remaining caveat:** a tab loaded before this deploys runs the old bundle, sends no claim, and is
+> still accepted. That ends when the tab reloads.
 
 Predicted by the verifier on B11 and then **confirmed live, twice**. This is wider than B11 and it is a
 precondition for running the survey migration safely.
