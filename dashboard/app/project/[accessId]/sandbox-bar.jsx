@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { SANDBOX_ROLES, SANDBOX_ROLE_LABEL } from "../../../lib/sandbox";
+import { roleColor } from "../../../lib/roles";
 import { discardSandboxAction, resetSandboxAction } from "./actions";
 
 // The bar that sits above a sandbox ("Demo") project. Two jobs: make it impossible to mistake a demo for
@@ -16,6 +17,7 @@ export default function SandboxBar({ sourceAccessId, as = "admin", accessId }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [err, setErr] = useState("");
   const barRef = useRef(null);
+  const active = roleColor(as);   // tints the bar's underline, so the whole strip states the role
 
   // Publish the bar's height as --sbx-h so the FIXED tool overlays (.cpv-ovl, inset:0) can start below
   // it instead of underneath it. Without this the bar covers an overlay's own title row and × button,
@@ -61,17 +63,23 @@ export default function SandboxBar({ sourceAccessId, as = "admin", accessId }) {
   }
 
   return (
-    <div className="sbx" ref={barRef} role="region" aria-label="Demo">
+    <div className="sbx" ref={barRef} role="region" aria-label="Demo"
+         style={{ "--sbx-role": active.bg, "--sbx-role-fg": active.fg }}>
       <span className="sbx-tag">Demo</span>
       <span className="sbx-src">copy of {sourceAccessId}</span>
 
       <span className="sbx-roles" role="group" aria-label="View as">
-        <button type="button" className={as === "admin" ? "on" : ""} aria-pressed={as === "admin"}
-                disabled={busy} onClick={() => go("admin")}>Admin</button>
-        {SANDBOX_ROLES.map((r) => (
-          <button key={r} className={as === r ? "on" : ""} aria-pressed={as === r}
-                  disabled={busy} onClick={() => go(r)}>{SANDBOX_ROLE_LABEL[r]}</button>
-        ))}
+        {["admin", ...SANDBOX_ROLES].map((r) => {
+          const on = as === r;
+          // Each pill carries its OWN role colour when active, from the same map the role pill and the
+          // progress tint read — so green always means field, blue always means customer.
+          const c = roleColor(r);
+          return (
+            <button key={r} type="button" className={on ? "on" : ""} aria-pressed={on} disabled={busy}
+                    style={on ? { background: c.bg, color: c.fg } : undefined}
+                    onClick={() => go(r)}>{r === "admin" ? "Admin" : SANDBOX_ROLE_LABEL[r]}</button>
+          );
+        })}
       </span>
 
       <span className="sbx-acts">
@@ -93,23 +101,39 @@ export default function SandboxBar({ sourceAccessId, as = "admin", accessId }) {
   );
 }
 
+/* A quiet light-grey utility strip, not a second brand bar: the page below is the thing being demoed,
+   so the bar states the role and gets out of the way. The only colour is the ACTIVE role's — its pill
+   and the 3px underline — which is what makes "whose view is this" readable at a glance.
+   font-family is set EXPLICITLY: this strip renders outside the portal's token scope, so `inherit`
+   fell through to the browser's default serif and looked unlike every other surface in the app. */
 const SBX_CSS = `
-.sbx{position:sticky;top:0;z-index:90;display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;
-  padding:8px 14px;background:#2a2412;border-bottom:1px solid #5a4c22;color:#e7cf96;font-size:12.5px}
-.sbx-tag{font-weight:800;letter-spacing:.8px;text-transform:uppercase;font-size:11px;
-  background:#C9A96E;color:#1b1710;border-radius:999px;padding:3px 9px}
-.sbx-src{opacity:.75}
-.sbx-roles{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:4px}
-.sbx-roles button{border:1px solid transparent;background:none;color:#e7cf96;font:600 12.5px/1 inherit;
-  cursor:pointer;padding:5px 9px;border-radius:999px}
-.sbx-roles button:hover:not(:disabled){border-color:#5a4c22}
-.sbx-roles button.on{background:#C9A96E;color:#1b1710;font-weight:800}
-.sbx-acts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:12px;margin-left:auto}
-.sbx-acts button,.sbx-exit{border:0;background:none;color:#e7cf96;font:600 12.5px/1 inherit;cursor:pointer;padding:0;text-decoration:none}
-.sbx-acts button:hover,.sbx-exit:hover{text-decoration:underline}
-.sbx-acts .sbx-danger{color:#eba0a0}
-.sbx-ask{opacity:.85}
-.sbx-err{color:#eba0a0}
-.sbx button:disabled{opacity:.5;cursor:default}
+.sbx{position:sticky;top:0;z-index:90;display:flex;flex-wrap:wrap;align-items:center;gap:7px 14px;
+  padding:7px 14px;background:var(--dv-raise,#F2F2F0);
+  border-bottom:1px solid var(--dv-line,#E4E4DF);box-shadow:inset 0 -3px 0 var(--sbx-role,#C9A96E);
+  color:var(--dv-ink,#101418);
+  font-family:var(--font-sans),"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:12.5px;line-height:1.25;-webkit-font-smoothing:antialiased}
+.sbx-tag{font-weight:700;letter-spacing:.09em;text-transform:uppercase;font-size:10px;
+  background:var(--dv-ink,#101418);color:var(--dv-raise,#F2F2F0);border-radius:4px;padding:3px 7px}
+.sbx-src{color:var(--dv-meta,#787D84);font-variant-numeric:tabular-nums}
+.sbx-roles{display:inline-flex;flex-wrap:wrap;gap:3px;margin-left:2px}
+.sbx-roles button{border:0;background:none;color:var(--dv-meta,#787D84);font:600 12.5px/1.25 inherit;
+  cursor:pointer;padding:5px 10px;border-radius:999px;transition:background .12s,color .12s}
+.sbx-roles button:hover:not(:disabled):not(.on){background:rgba(16,20,24,.06);color:var(--dv-ink,#101418)}
+.sbx-roles button.on{font-weight:700}
+.sbx-acts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:14px;margin-left:auto}
+.sbx-acts button,.sbx-exit{border:0;background:none;color:var(--dv-meta,#787D84);font:600 12.5px/1.25 inherit;
+  cursor:pointer;padding:0;text-decoration:none}
+.sbx-acts button:hover,.sbx-exit:hover{color:var(--dv-ink,#101418)}
+.sbx-acts .sbx-danger{color:#9d3b3b}
+.sbx-acts .sbx-danger:hover{color:#7d2b2b}
+.sbx-ask{color:var(--dv-ink,#101418);font-weight:600}
+.sbx-err{color:#9d3b3b}
+.sbx button:disabled{opacity:.45;cursor:default}
 @media (max-width:560px){.sbx-src{display:none}.sbx-acts{margin-left:0;width:100%}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .sbx{background:#171a21;border-bottom-color:#2b303a;color:#e8eaee}
+  :root:not([data-theme="light"]) .sbx-tag{background:#e8eaee;color:#171a21}
+  :root:not([data-theme="light"]) .sbx-roles button:hover:not(:disabled):not(.on){background:rgba(255,255,255,.08);color:#e8eaee}
+  :root:not([data-theme="light"]) .sbx-acts button:hover,:root:not([data-theme="light"]) .sbx-exit:hover{color:#e8eaee}
+  :root:not([data-theme="light"]) .sbx-acts .sbx-danger{color:#e49a9a}}
 `;

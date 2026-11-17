@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { projectFileBase } from "../../../lib/doc-filename";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
-import { can, defaultProjectGroup } from "../../../lib/roles";
+import { can, defaultProjectGroup, ROLE_COLOR } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
@@ -223,15 +223,9 @@ const ACTIVITY = [
   { type:"stage",     label:"Install date confirmed — Jun 27",                  cl:"Your installation is scheduled for Jun 27",   who:"Devon",     when:"Jun 14", roles:["admin","manager","tech","customer"] },
   { type:"note",      label:"Field note: customer prefers 9 AM–12 PM window",  cl:null,                                           who:"Devon",     when:"Jun 20", roles:["admin","manager","tech"] },
 ];
-const ROLE_PILL = {
-  admin:    { bg: "#C9A96E", fg: "#0B0F1A" },
-  manager:  { bg: "#C9A96E", fg: "#0B0F1A" },
-  customer: { bg: "#4b6a9b", fg: "#fff" },
-  tech:     { bg: "#2f7d5a", fg: "#fff" },
-  sales:    { bg: "#7a5ea8", fg: "#fff" },
-  vendor:   { bg: "#2f7d5a", fg: "#fff" },
-  readonly: { bg: "#6f7686", fg: "#fff" },
-};
+// The role colours live in lib/roles.js now — the demo bar tints its role pills from the same map, so
+// "green means tech" cannot drift between the two surfaces. Aliased to keep this file's existing name.
+const ROLE_PILL = ROLE_COLOR;
 
 // Progress-bar tint per role — so the bar's color tells you at a glance whose view you're in
 // (gold = office, blue = customer, green = tech, purple = sales). Same hues as the role pill.

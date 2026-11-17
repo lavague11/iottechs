@@ -106,4 +106,17 @@ export const defaultProjectGroup = (role) => {
   const g = projectGroups(role);
   return g.includes("customer") ? "customer" : g[0];
 };
+// ONE role colour language, so "whose view am I in" reads the same everywhere it is shown — the role
+// pill, the progress tint and the demo bar. Gold = office (admin/manager), blue = customer, green =
+// field (tech/vendor), purple = sales, grey = read-only. bg/fg are a legible pair; use them together.
+export const ROLE_COLOR = {
+  admin:    { bg: "#C9A96E", fg: "#0B0F1A" },
+  manager:  { bg: "#C9A96E", fg: "#0B0F1A" },
+  customer: { bg: "#4b6a9b", fg: "#fff" },
+  tech:     { bg: "#2f7d5a", fg: "#fff" },
+  sales:    { bg: "#7a5ea8", fg: "#fff" },
+  vendor:   { bg: "#2f7d5a", fg: "#fff" },
+  readonly: { bg: "#6f7686", fg: "#fff" },
+};
+export const roleColor = (role) => ROLE_COLOR[role] || ROLE_COLOR.readonly;
 export { CAPS };
