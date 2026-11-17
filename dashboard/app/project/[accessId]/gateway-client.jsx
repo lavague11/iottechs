@@ -44,7 +44,7 @@ import CompletionPanel   from "./completion-panel";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
-import { stageFloorFacts, resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
+import { stageFloorFacts, resolveProjectStatus, balanceDueFact, ADMIN_STATUS, CUSTOMER_STATUS, statusToneHex, projectStatusView } from "../../../lib/project-status";
 import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
 import PortalSurvey from "./portal-survey";
@@ -2918,6 +2918,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       install_done: sFacts.install_done,
       completed_at: sFacts.completion_docs,
       final_paid: sFacts.final_balance_paid,
+      // The remaining balance from the canonical ledger. Without it the resolver falls back to the flag
+      // above, which can lag the ledger and tell a paid-in-full customer they still owe money.
+      balance_due: balanceDueFact(staffFinance || customerFinance),
       closed_not_completed: !!lp.lost_at && !sFacts.completion_docs,   // closeProject stamps lost_at (there is no closed_at column)
     };
     const projState = acceptLoaded ? resolveProjectStatus(resolverFacts, projectStage) : null;

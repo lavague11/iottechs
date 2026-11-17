@@ -7,7 +7,7 @@
 //   appointment  customer-portal.pickUpcomingAppt over the schedule blob
 // It returns an explicit WHITELIST of customer-safe fields — never cost, payout, commission, notes,
 // the invited list, change requests or assigned crew.
-import { stageFloorFacts, resolveProjectStatus, CUSTOMER_STATUS, statusToneHex } from "./project-status.js";
+import { stageFloorFacts, resolveProjectStatus, balanceDueFact, CUSTOMER_STATUS, statusToneHex } from "./project-status.js";
 import { threeStepForState, progressFromFacts } from "./staff-hub.js";
 import { pickUpcomingAppt, payable } from "./customer-portal.js";
 import { customerTodo } from "./customer-action.js";
@@ -98,6 +98,8 @@ export function buildMyProjectCard({ project: p, facts = {}, events = [], fin = 
     install_done: sf.install_done,
     completed_at: sf.completion_docs,
     final_paid: sf.final_balance_paid,
+    // Same canonical money input as the project page, so a card and the page it opens never disagree.
+    balance_due: balanceDueFact(fin),
     closed_not_completed: closed && !sf.completion_docs,
   };
   const state = resolveProjectStatus(resolverFacts, stored);

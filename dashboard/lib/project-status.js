@@ -29,6 +29,20 @@ export const PROJECT_STATES = [
   "CLOSED_NOT_COMPLETED",
 ];
 
+// The money input resolveProjectStatus wants, taken from the CANONICAL ledger summary (financeSummary)
+// rather than a boolean fact that can disagree with it. Returns undefined when there is no contract, so
+// the resolver falls back to its paid flag exactly as before for jobs with no money attached.
+//
+// Why this exists: without a numeric balance the resolver fell back to `!(final_paid || …)`, so a job
+// whose ledger said PAID IN FULL still reported "Final Payment Due" if that flag was unset — the hero
+// told a finished customer they owed money while the balance card right below it said paid in full.
+// Money has one source; the status must read it, not guess alongside it.
+export function balanceDueFact(fin) {
+  if (!fin || !fin.hasContract) return undefined;
+  if (fin.paidInFull) return 0;
+  return typeof fin.balance === "number" ? fin.balance : undefined;
+}
+
 // Derive the ONE current state from canonical facts (never from UI labels). `stage` is the project's
 // master stage, used only to tell INSTALL_IN_PROGRESS (field work started) from INSTALL_SCHEDULED.
 export function resolveProjectStatus(f = {}, stage = null) {

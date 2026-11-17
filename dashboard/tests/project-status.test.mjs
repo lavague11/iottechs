@@ -2,7 +2,8 @@
 // Covers the resolver priority matrix and that admin / customer render the SAME state differently.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveProjectStatus, ADMIN_STATUS, CUSTOMER_STATUS, PROJECT_STATES, projectStatusView } from "../lib/project-status.js";
+import { readFileSync } from "node:fs";
+import { resolveProjectStatus, balanceDueFact, ADMIN_STATUS, CUSTOMER_STATUS, PROJECT_STATES, projectStatusView } from "../lib/project-status.js";
 
 const st = (f, stage) => resolveProjectStatus(f, stage);
 
@@ -104,4 +105,39 @@ test("milestones remain history, not the primary status (the state answers 'now'
   // 'accepted' alone (milestone) is not a status — the state advances to what's owed NEXT.
   assert.equal(st({ survey_done: true, proposal_status: "accepted", proposal_signed: false }), "AWAITING_SIGNATURE");
   assert.notEqual(st({ survey_done: true, proposal_signed: true, deposit_recorded: true }), "AWAITING_DEPOSIT");
+});
+
+// --- Money comes from the ledger, not a flag -------------------------------------------------------
+// Regression: a completed, fully-paid job showed the customer "Final Payment Due" in the hero while the
+// balance card directly below said "Paid in full". The resolver had no numeric balance, so it fell back
+// to `!(final_paid || …)` — a boolean that can lag the ledger — and guessed "unpaid".
+test("balanceDueFact reads the canonical summary, and abstains when there is no contract", () => {
+  assert.equal(balanceDueFact({ hasContract: true, paidInFull: true, balance: 0 }), 0);
+  assert.equal(balanceDueFact({ hasContract: true, paidInFull: false, balance: 1250 }), 1250);
+  // paidInFull wins over a stray non-zero balance (rounding / a "collected" financial state).
+  assert.equal(balanceDueFact({ hasContract: true, paidInFull: true, balance: 0.004 }), 0);
+  // No contract, or no summary at all → undefined, so the resolver keeps its old fallback.
+  assert.equal(balanceDueFact({ hasContract: false }), undefined);
+  assert.equal(balanceDueFact(null), undefined);
+  assert.equal(balanceDueFact(undefined), undefined);
+  assert.equal(balanceDueFact({ hasContract: true, paidInFull: false, balance: null }), undefined);
+});
+
+test("a finished, fully-paid job reads COMPLETE even when the paid flag never got set", () => {
+  const done = { install_done: true, completion_docs: true, final_paid: false };
+  // The bug: no balance supplied → fell back to the flag → "they owe money".
+  assert.equal(resolveProjectStatus(done, "completion"), "AWAITING_FINAL_PAYMENT");
+  // Fixed: the ledger says nothing is owed.
+  const fin = { hasContract: true, paidInFull: true, balance: 0 };
+  assert.equal(resolveProjectStatus({ ...done, balance_due: balanceDueFact(fin) }, "completion"), "COMPLETE");
+  // And a real outstanding balance still reports as owed.
+  const owing = { hasContract: true, paidInFull: false, balance: 500 };
+  assert.equal(resolveProjectStatus({ ...done, balance_due: balanceDueFact(owing) }, "completion"), "AWAITING_FINAL_PAYMENT");
+});
+
+test("both surfaces feed the resolver the same money, so a card and its page cannot disagree", () => {
+  const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
+  assert.match(gw, /balance_due: balanceDueFact\(staffFinance \|\| customerFinance\)/);
+  const card = readFileSync(new URL("../lib/my-projects-card.js", import.meta.url), "utf8");
+  assert.match(card, /balance_due: balanceDueFact\(fin\)/);
 });
