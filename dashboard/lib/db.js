@@ -21,6 +21,7 @@ import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
+import { SANDBOX_SOURCE, SANDBOX_COPY_TABLES, SANDBOX_CHILD_TABLES, sandboxEmail, tagSandboxName } from "./sandbox.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
 // Legacy accounts were a single unsalted SHA-256; verifyPw still accepts those so existing
@@ -292,6 +293,15 @@ function init() {
   // links existing rows; projects.address/company_name stay as the frozen per-job snapshot. See customer_locations below.
   if (!cols.includes("location_id"))        db.exec("ALTER TABLE projects ADD COLUMN location_id INTEGER");
   db.exec("CREATE INDEX IF NOT EXISTS idx_projects_location ON projects(location_id)");
+  // Sandbox (admin "Demo"): a THROWAWAY copy of another project, holding the source access_id. A sandbox
+  // is a real project row — so every tool, signature and payment behaves for real inside it — but it is
+  // excluded from every list/report (see sandboxWhere) and can never email anyone (it is also stamped
+  // source='journey-test' + a @journey-test.local contact, the two checks lib/email.js isDemoProject reads).
+  // NULL on every real project; the column alone is the one test for "is this a sandbox".
+  if (!cols.includes("sandbox_of"))         db.exec("ALTER TABLE projects ADD COLUMN sandbox_of TEXT");
+  if (!cols.includes("sandbox_at"))         db.exec("ALTER TABLE projects ADD COLUMN sandbox_at TEXT");
+  if (!cols.includes("sandbox_by"))         db.exec("ALTER TABLE projects ADD COLUMN sandbox_by TEXT");
+  db.exec("CREATE INDEX IF NOT EXISTS idx_projects_sandbox ON projects(sandbox_of)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -2351,7 +2361,7 @@ export function getReceivables() {
          ON pr.id = (SELECT x.id FROM proposals x
                       WHERE x.project_access_id = p.access_id AND x.sent_at IS NOT NULL
                       ORDER BY x.version DESC, x.id DESC LIMIT 1)
-      WHERE pr.id IS NOT NULL OR p.lost_at IS NOT NULL
+      WHERE p.sandbox_of IS NULL AND (pr.id IS NOT NULL OR p.lost_at IS NOT NULL)
       ORDER BY p.id DESC`
   ).all().map((r) => {
     // A published row a newer draft has superseded reports its real contractual status, not 'superseded'.
@@ -2721,8 +2731,11 @@ const decorate = (r) => ({
   property_type: normalizePropertyType(r.property_type),
 });
 
+// Every real project. Sandboxes ("Demo" copies, sandbox_of set) are excluded HERE, which is what keeps
+// them out of the project lists, the dashboard counts AND the scheduled-email sweeps that walk getAllJobs
+// looking for mail to send. getJobByAccessId still returns one by id — that is how you open a demo.
 export function getAllJobs() {
-  return db.prepare("SELECT * FROM projects ORDER BY id DESC").all().map(decorate);
+  return db.prepare("SELECT * FROM projects WHERE sandbox_of IS NULL ORDER BY id DESC").all().map(decorate);
 }
 
 // Most-recent activity timestamp across the project's real events — the honest basis for "how
@@ -2746,7 +2759,7 @@ function lastActivityAt(accessId, createdAt) {
 // Sorted oldest-first so the most stalled float to the top.
 export function getStalledJobs() {
   const jobs = db.prepare(
-    "SELECT * FROM projects WHERE completed_at IS NULL AND lost_at IS NULL AND stage != 'completion' ORDER BY id DESC"
+    "SELECT * FROM projects WHERE sandbox_of IS NULL AND completed_at IS NULL AND lost_at IS NULL AND stage != 'completion' ORDER BY id DESC"
   ).all();
   const now = Date.now();
   const parseTs = (s) => { const t = new Date(String(s).replace(" ", "T")).getTime(); return Number.isFinite(t) ? t : NaN; };
@@ -2788,7 +2801,7 @@ export function getVisibleJobs(userId, role) {
     SELECT DISTINCT p.* FROM projects p
     LEFT JOIN project_assignments a
       ON a.project_access_id = p.access_id AND a.user_id = ?
-    WHERE p.restricted = 0 OR a.id IS NOT NULL
+    WHERE p.sandbox_of IS NULL AND (p.restricted = 0 OR a.id IS NOT NULL)
     ORDER BY p.id DESC
   `).all(Number(userId) || 0).map(decorate);
 }
@@ -2799,11 +2812,11 @@ export function setProjectRestricted(accessId, restricted) {
 }
 
 export function getCustomers() {
-  return db.prepare("SELECT DISTINCT customer FROM projects ORDER BY customer").all().map((r) => r.customer);
+  return db.prepare("SELECT DISTINCT customer FROM projects WHERE sandbox_of IS NULL ORDER BY customer").all().map((r) => r.customer);
 }
 
 export function getJobsForCustomer(name) {
-  return db.prepare("SELECT * FROM projects WHERE customer = ? ORDER BY id DESC").all(name).map(decorate);
+  return db.prepare("SELECT * FROM projects WHERE customer = ? AND sandbox_of IS NULL ORDER BY id DESC").all(name).map(decorate);
 }
 
 export function getJobByAccessId(accessId) {
@@ -2984,7 +2997,7 @@ export function getCustomersWithStats() {
            SUM(CASE WHEN category IN ('open','pending') THEN 1 ELSE 0 END) AS active_count,
            SUM(CASE WHEN category = 'completed' THEN 1 ELSE 0 END) AS completed_count,
            SUM(COALESCE(value, 0)) AS total_value
-    FROM projects GROUP BY customer ORDER BY MAX(id) DESC
+    FROM projects WHERE sandbox_of IS NULL GROUP BY customer ORDER BY MAX(id) DESC
   `).all();
 }
 
@@ -3340,7 +3353,7 @@ export function updateUser(userId, { name, username, email, phone, password }) {
 
 export function getProjectsByContactEmail(email) {
   if (!email) return [];
-  return db.prepare("SELECT * FROM projects WHERE LOWER(contact_email) = ? ORDER BY id DESC")
+  return db.prepare("SELECT * FROM projects WHERE LOWER(contact_email) = ? AND sandbox_of IS NULL ORDER BY id DESC")
     .all(String(email).trim().toLowerCase()).map(decorate);
 }
 
@@ -3360,7 +3373,7 @@ export function getOwnedProjectsForCustomer({ userId = null, email = null, phone
   }
   if (em) { where.push("access_id IN (SELECT project_access_id FROM project_assignments WHERE role='customer' AND LOWER(TRIM(user_email)) = ?)"); args.push(em); }
   if (!where.length) return [];
-  return db.prepare(`SELECT * FROM projects WHERE ${where.join(" OR ")} ORDER BY id DESC`).all(...args)
+  return db.prepare(`SELECT * FROM projects WHERE sandbox_of IS NULL AND (${where.join(" OR ")}) ORDER BY id DESC`).all(...args)
     .filter((r) => customerOwnsProjectAccount(r.access_id, { userId, email: em }))
     .map(decorate);
 }
@@ -3388,7 +3401,7 @@ export function customerSignLandingPath(user) {
 export function searchProjects(q) {
   const like = `%${q}%`;
   return db
-    .prepare("SELECT * FROM projects WHERE customer LIKE ? OR access_id LIKE ? OR address LIKE ? OR issue LIKE ? ORDER BY id DESC")
+    .prepare("SELECT * FROM projects WHERE sandbox_of IS NULL AND (customer LIKE ? OR access_id LIKE ? OR address LIKE ? OR issue LIKE ?) ORDER BY id DESC")
     .all(like, like, like, like)
     .map(decorate);
 }
@@ -3582,10 +3595,10 @@ export function findCustomerByIdentity(email, phone) {
 
 const CUSTOMER_SUMMARY_SQL = `
   SELECT u.id, u.name, u.email, u.phone,
-         (SELECT company_name FROM projects p WHERE p.customer_id=u.id AND company_name IS NOT NULL AND company_name<>'' ORDER BY p.id DESC LIMIT 1) AS company,
-         (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id) AS projects,
-         (SELECT service_code FROM projects p WHERE p.customer_id=u.id ORDER BY p.id DESC LIMIT 1) AS last_service,
-         (SELECT COALESCE(date, substr(created_at,1,10)) FROM projects p WHERE p.customer_id=u.id ORDER BY p.id DESC LIMIT 1) AS last_project_at
+         (SELECT company_name FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL AND company_name IS NOT NULL AND company_name<>'' ORDER BY p.id DESC LIMIT 1) AS company,
+         (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL) AS projects,
+         (SELECT service_code FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL ORDER BY p.id DESC LIMIT 1) AS last_service,
+         (SELECT COALESCE(date, substr(created_at,1,10)) FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL ORDER BY p.id DESC LIMIT 1) AS last_project_at
   FROM users u WHERE u.role='customer'`;
 
 // Compact rows for the New Project "Existing client" search — ranked in lib/crm.js. Server-side only;
@@ -3596,7 +3609,7 @@ export function searchCustomers(q, limit = 8) {
   const like = `%${term}%`, digits = normalizePhone(term), likeDigits = digits.length >= 3 ? `%${digits}%` : null;
   const rows = db.prepare(CUSTOMER_SUMMARY_SQL + `
     AND (u.name LIKE ? COLLATE NOCASE OR u.email LIKE ? COLLATE NOCASE
-         OR EXISTS (SELECT 1 FROM projects p WHERE p.customer_id=u.id AND p.company_name LIKE ? COLLATE NOCASE)
+         OR EXISTS (SELECT 1 FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL AND p.company_name LIKE ? COLLATE NOCASE)
          OR (? IS NOT NULL AND REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(u.phone,''),'(',''),')',''),'-',''),' ',''),'+','') LIKE ?))
     ORDER BY u.id DESC LIMIT 60`).all(like, like, like, likeDigits, likeDigits || "");
   return rankCustomers(term, rows).slice(0, limit);
@@ -3819,7 +3832,7 @@ export function updateCustomerUser(id, { name, email, phone }) {
 
 // Every project of one customer, newest first (id-based — the canonical relationship).
 export function getProjectsForCustomerId(id) {
-  return db.prepare("SELECT * FROM projects WHERE customer_id=? ORDER BY id DESC").all(Number(id)).map(decorate);
+  return db.prepare("SELECT * FROM projects WHERE customer_id=? AND sandbox_of IS NULL ORDER BY id DESC").all(Number(id)).map(decorate);
 }
 
 // ---- Customer hub (admin-side customer homepage) -----------------------------------------------------
@@ -3834,7 +3847,7 @@ export function findCustomerIdByName(name) {
   const n = String(name || "").trim();
   if (!n) return null;
   const row = db.prepare(`
-    SELECT u.id, (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id) AS projects
+    SELECT u.id, (SELECT COUNT(*) FROM projects p WHERE p.customer_id=u.id AND p.sandbox_of IS NULL) AS projects
     FROM users u WHERE u.role='customer' AND u.name = ? COLLATE NOCASE
     ORDER BY projects DESC, u.id DESC LIMIT 1`).get(n);
   return row ? row.id : null;
@@ -3866,7 +3879,7 @@ export function getCustomerQuotes(customerId) {
 // One merged activity timeline for the customer: the customer-level log, the Job Log of every one of
 // their projects, and their service-call events — newest first, capped.
 export function getCustomerActivity(customerId, limit = 50) {
-  const projIds = db.prepare("SELECT access_id FROM projects WHERE customer_id=?").all(Number(customerId)).map((r) => r.access_id);
+  const projIds = db.prepare("SELECT access_id FROM projects WHERE customer_id=? AND sandbox_of IS NULL").all(Number(customerId)).map((r) => r.access_id);
   const svcIds = db.prepare("SELECT svc_id FROM service_calls WHERE customer_id=?").all(Number(customerId)).map((r) => r.svc_id);
   const feed = [];
   for (const n of getCustomerNotes(customerId))
@@ -4263,7 +4276,8 @@ export function autoCloseExpiredUnsigned() {
         AND pr.id = (SELECT x.id FROM proposals x
                       WHERE x.project_access_id = p.access_id AND x.status != 'superseded'
                       ORDER BY x.version DESC, x.id DESC LIMIT 1)
-      WHERE p.lost_at IS NULL
+      WHERE p.sandbox_of IS NULL
+        AND p.lost_at IS NULL
         AND p.completed_at IS NULL
         AND pr.status = 'accepted'
         AND (pr.signed_name IS NULL OR pr.signed_name = '')
@@ -6581,7 +6595,7 @@ export function duplicateProject(accessId, actor) {
 export function findLikelyDuplicateProjects(limit = 8) {
   const rows = db.prepare(
     "SELECT access_id, customer, customer_id, address, stage, service_code, created_at FROM projects " +
-    "WHERE ar_archived_at IS NULL AND (lost_at IS NULL OR lost_at='') ORDER BY id DESC"
+    "WHERE sandbox_of IS NULL AND ar_archived_at IS NULL AND (lost_at IS NULL OR lost_at='') ORDER BY id DESC"
   ).all().map(decorate);
   const norm = (s) => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(st|street|ave|avenue|rd|road|blvd|suite|ste|unit|fl|floor)\b/g, "").replace(/\s+/g, " ").trim();
   const groups = new Map();
@@ -6836,6 +6850,100 @@ export function cloneProposal({ sourceProposalId, destAccessId, options = {}, ac
   logProjectEvent(destAccessId, { kind: "create", label: `Proposal created from ${src.project_access_id} (PROP-${String(src.id).padStart(4, "0")} v${src.version})`, actor: actor || null });
   return { proposal: getActiveProposal(destAccessId), source: { proposalId: src.id, accessId: src.project_access_id, version: src.version } };
 }
+// ---- Sandbox ("Demo") projects -----------------------------------------------------------------------
+// An admin-only throwaway COPY of a project, so the product can be walked through as any role with every
+// action behaving for real. See lib/sandbox.js for the full rationale and the table lists. Three rules
+// hold this together and must not be loosened:
+//   • the copy is a real project row, so no tool, signature or payment needs a "pretend" code path;
+//   • it is stamped source='journey-test' + a @journey-test.local contact, the two checks isDemoProject()
+//     reads, so no customer email can physically leave for it;
+//   • sandbox_of is set, which is what hides it from every list and permits discarding it.
+// Nothing here ever writes to the SOURCE project.
+
+// Copy a project row column-for-column. The column list is read from the live schema rather than typed
+// out, so a column added to `projects` next month is carried into the demo automatically instead of
+// silently reverting to its default in every sandbox.
+export function createSandboxProject(sourceAccessId, actor = null) {
+  const src = getJobByAccessId(sourceAccessId);
+  if (!src) return { error: "Project not found." };
+  if (src.sandbox_of) return { error: "This is already a demo — discard it and start a new one." };
+
+  const cols = db.prepare("PRAGMA table_info(projects)").all().map((c) => c.name);
+  // Identity, timestamps and the sandbox stamp itself are set explicitly below, never copied.
+  const skip = new Set(["id", "access_id", "created_at", "customer", "contact_email", "source",
+                        "sandbox_of", "sandbox_at", "sandbox_by"]);
+  const carry = cols.filter((c) => !skip.has(c));
+
+  // Same id shape as a real project (A + 2-letter service + base36) — downstream code parses that format
+  // (document filenames take the last 4), so a "DEMO…" id would break those. The [DEMO] name tag and the
+  // sandbox_of column are what mark it, not the id.
+  const svc = String(src.service_code || "MX").slice(0, 2).toUpperCase();
+  let accessId = "";
+  for (let i = 0; i < 40 && !accessId; i++) {
+    // .toString(36) on the NUMBER — String(n).toString(36) is a no-op that returns the decimal digits
+    // and yields a 6-7 character id, breaking the 4-character tail that document filenames rely on.
+    const cand = `A${svc}${Math.floor(Math.random() * 1679615).toString(36).toUpperCase().padStart(4, "0")}`;
+    if (!db.prepare("SELECT id FROM projects WHERE access_id = ?").get(cand)) accessId = cand;
+  }
+  if (!accessId) return { error: "Could not allocate a demo id — try again." };
+
+  // node:sqlite has no db.transaction() wrapper (that is better-sqlite3) — this codebase drives
+  // BEGIN/COMMIT/ROLLBACK explicitly, so a half-copied demo can never be left behind.
+  db.exec("BEGIN");
+  try {
+    const names = ["access_id", "customer", "contact_email", "source", "sandbox_of", "sandbox_at", "sandbox_by", ...carry];
+    const values = [accessId, tagSandboxName(src.company_name || src.customer), sandboxEmail(accessId),
+                    SANDBOX_SOURCE, String(sourceAccessId), new Date().toISOString(), actor || null,
+                    ...carry.map((c) => src[c] ?? null)];
+    db.prepare(`INSERT INTO projects (${names.join(",")}) VALUES (${names.map(() => "?").join(",")})`).run(...values);
+
+    // Per-project content the demo starts WITH (built survey/mockup, the proposal versions, sign-offs).
+    // Everything else — payments, events, work orders, issues — starts empty: those are things you go and
+    // do inside the demo. Column lists come from the schema for the same reason as above.
+    for (const { table, key } of SANDBOX_COPY_TABLES) {
+      const tcols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name).filter((c) => c !== "id");
+      if (!tcols.includes(key)) continue;
+      const rows = db.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).all(String(sourceAccessId));
+      if (!rows.length) continue;
+      const ins = db.prepare(`INSERT INTO ${table} (${tcols.join(",")}) VALUES (${tcols.map(() => "?").join(",")})`);
+      for (const r of rows) ins.run(...tcols.map((c) => (c === key ? accessId : (r[c] ?? null))));
+    }
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch { /* already rolled back */ }
+    return { error: `Could not create the demo: ${e?.message || e}` };
+  }
+
+  try { logProjectEvent(accessId, { kind: "create", label: `Demo copy of ${sourceAccessId}`, actor: actor || null }); } catch {}
+  return { ok: true, accessId, sourceAccessId: String(sourceAccessId) };
+}
+
+// Discard a sandbox: the row and every child row keyed to it. Guarded on sandbox_of so this can never be
+// pointed at a real project — the one place in this codebase that deletes a project outright, and it is
+// only ever reachable for a copy that exists to be thrown away.
+export function discardSandboxProject(accessId) {
+  const p = getJobByAccessId(accessId);
+  if (!p) return { error: "Demo not found." };
+  if (!p.sandbox_of) return { error: "Not a demo — refusing to delete a real project." };
+  db.exec("BEGIN");
+  try {
+    for (const [table, key] of SANDBOX_CHILD_TABLES) {
+      try { db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(String(accessId)); } catch { /* table/column may not exist yet */ }
+    }
+    db.prepare("DELETE FROM projects WHERE access_id = ? AND sandbox_of IS NOT NULL").run(String(accessId));
+    db.exec("COMMIT");
+  } catch (e) {
+    try { db.exec("ROLLBACK"); } catch { /* already rolled back */ }
+    return { error: `Could not discard the demo: ${e?.message || e}` };
+  }
+  return { ok: true, sourceAccessId: p.sandbox_of };
+}
+
+// Every sandbox an admin has left lying around, newest first — for a "your demos" list / cleanup.
+export function listSandboxProjects() {
+  return db.prepare("SELECT access_id, customer, sandbox_of, sandbox_at, sandbox_by, stage FROM projects WHERE sandbox_of IS NOT NULL ORDER BY sandbox_at DESC").all();
+}
+
 // Path B: a reviewed extraction becomes a fresh draft (same guard as the clone).
 export function createProposalFromImport({ destAccessId, payload, taxRate = 0, depositPct = 50, mediaId = null, actor }) {
   const dest = getJobByAccessId(destAccessId);

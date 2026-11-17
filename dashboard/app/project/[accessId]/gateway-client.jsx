@@ -9,7 +9,7 @@ import { can } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
-import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction } from "./actions";
+import { resolveAccess, setStage, techAdvanceStageAction, bookSurveyDateAction, updateProjectInfoAction, setCustomerPinAction, setProjectServiceAction, setPropertyTypeAction, skipSurveyAction, skipViewsAction, addAssignmentAction, removeAssignmentAction, submitWorkOrderAction, approveWorkOrderAction, rejectWorkOrderAction, updateWorkOrderNotesAction, getPreviewTokenAction, closeProjectAction, setAttentionAction, setRestrictedAction, setCommissionAction, submitExpenseAction, payExpenseAction, declineExpenseAction, submitRequestAction, approveRequestAction, rejectRequestAction, completeProjectAction, lockProjectAction, reactivateProjectAction, markAnnouncementSeenAction, setPortalVersionAction, startSandboxAction } from "./actions";
 import { archiveProjectAction } from "../../projects/actions";
 import ConfirmDialog from "../../components/confirm-dialog";
 import { GatewayScreen } from "../../components/gateway-screen";
@@ -49,6 +49,7 @@ import ProjectReady from "./project-ready";
 import CustomerPortal from "./customer-portal";
 import PortalSurvey from "./portal-survey";
 import StaffHub from "./staff-hub";
+import SandboxBar from "./sandbox-bar";
 import ProposalVersionLog from "./proposal-version-log";
 import { threeStepForState, progressFromFacts } from "../../../lib/staff-hub";
 import PaymentOptions from "./payment-options";
@@ -1562,12 +1563,24 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, sandbox = null, canSandbox = false }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
   const [custFin, setCustFin] = useState(customerFinance);
   const [custPays, setCustPays] = useState(customerPayments);   // customer-safe ledger rows (paymentsSummary)
+  // "Demo" (admin only): copy this project into a sandbox and open it. Offered only on a REAL project —
+  // inside a demo the bar already owns starting over (Reset) and leaving (Exit).
+  const [demoBusy, setDemoBusy] = useState(false);
+  const offerDemo = canSandbox && !sandbox;
+  async function startDemo() {
+    if (demoBusy) return;
+    setDemoBusy(true);
+    const r = await startSandboxAction(project.access_id).catch(() => null);
+    if (r?.ok) { window.location.assign(`/project/${r.accessId}`); return; }
+    setDemoBusy(false);
+    if (r?.error) window.alert(r.error);
+  }
   const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) { setCustFin(r.finance); setCustPays(r.payments || []); } }).catch(() => {}); };
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
@@ -1843,7 +1856,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     .sort((a, b) => (MEMBER_ROLE_ORDER[a.role] ?? 99) - (MEMBER_ROLE_ORDER[b.role] ?? 99));
   const teamCount = alwaysMembers.length + removableAssignments.length;
   // When admin/manager pick a preview role, render the stage content as that role instead.
-  const cView = (previewRole && ["admin","manager"].includes(view)) ? previewRole : view;
+  const cView = (previewRole && view === "admin") ? previewRole : view;
   const cell = cellFor(viewingStage, cView);
   // Canonical Residential/Commercial — one editor + one change path, shared by the Project Header and
   // the Site Survey. A change updates localProj so every mounted surface reflects it with no reload.
@@ -3141,7 +3154,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           onRefresh={() => { refreshCustFin(); refreshAcceptances(); }}
           previewRole={previewRole}
           onPreviewRole={onPreviewRole}
-          previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
+          previewRoles={view === "admin" ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
           onLock={onReAuth}
         />
       );
@@ -3395,9 +3408,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // survey's content fingerprint — an edit after approval re-opens the card.
         { key: "survey", title: "Site Survey", group: "customer", sub: sSurveyDone ? "Submitted." : (sHasSurvey || sHasMockup) ? "Map & photos." : "Capture the property.",
           ...toolCardState({ done: sSurveyDone, started: sHasSurvey || sHasMockup }) },
-        { key: "proposal", title: "Proposal", group: "customer", sub: pSigned ? "Signed." : pStatus ? "Sent." : "Draft.", ...toolCardState({ done: pSigned, started: !!pStatus }),
+        // The Proposal names its own states: "Sent" described what the OFFICE did, not what the job is
+        // waiting on, and the done word is "Signed" — the thing that actually happened. Both are green-on-
+        // done through the same toolCardState, so this card still speaks the one tool-card dialect.
+        // The sub never repeats the chip: awaiting pairs with Edit, signed pairs with who accepted it.
+        { key: "proposal", title: "Proposal", group: "customer",
+          sub: pSigned ? "Accepted by the customer." : pStatus ? "Awaiting signature." : "Draft.",
+          ...toolCardState({ done: pSigned, started: !!pStatus, labels: { done: "Signed" } }),
           // Addenda live inside the Proposal now (no separate card): the done chip carries the count.
-          action: proposalCardAction(toolCardState({ done: pSigned, started: !!pStatus }).action, toolMeta?.addendum?.count) },
+          action: proposalCardAction(toolCardState({ done: pSigned, started: !!pStatus, labels: { done: "Signed" } }).action, toolMeta?.addendum?.count, pSigned) },
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
@@ -3448,6 +3467,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             renderOverlay={renderStaffOverlay}
             onRefresh={() => { refreshAcceptances(); }}
             dashboardHref={DECK_DASH_HOME[view] || "/dashboard"}
+            onDemo={offerDemo ? startDemo : null}
+            demoBusy={demoBusy}
           />
           <RecordPaymentModal open={hubPayOpen} onClose={() => setHubPayOpen(false)} accessId={lp.access_id}
             stage={projectStage === "payment" ? "payment" : "approval_deposit"} showToast={showLiveToast}
@@ -3483,6 +3504,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             ? [{ label: `Customer portal: ${lp.portal_version === "v2" ? "V2" : lp.portal_version === "v1" ? "V1" : "Inherit"}`,
                 onClick: async () => { const next = lp.portal_version === "v2" ? "v1" : lp.portal_version === "v1" ? "" : "v2";
                   await setPortalVersionAction(lp.access_id, next).catch(() => {}); window.location.reload(); } }] : []),
+          // Demo (admin only): a throwaway copy of this project to walk through as any role, for real.
+          ...(offerDemo ? [{ label: demoBusy ? "Working…" : "Demo", onClick: startDemo }] : []),
           // Lock is not duplicated here — it lives in the Portal (view) dropdown for every role now.
         ]}
         roleLabel="Portal"
@@ -3492,7 +3515,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         log={cView === "customer" ? null : deckLog}
         previewRole={previewRole}
         onPreviewRole={onPreviewRole}
-        previewRoles={["admin", "manager"].includes(view) ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
+        previewRoles={view === "admin" ? ["customer", "tech", "sales", "vendor", "readonly"] : []}
         onLock={onReAuth}
       />
       {schedModalEl}
@@ -3634,7 +3657,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           every phase: right under the project/customer info card and above everything else (status
           pill, progress bar, tools), so all of it reads clearly as "what this role sees." Read-only
           (eye-icon preview); the real, controllable "view as" session opens from the header role pill. */}
-      {previewRole && ["admin","manager"].includes(view) && (
+      {previewRole && view === "admin" && (
         <div className="pv-custview-hint-bar">
           <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
           {previewRole === "customer"
@@ -4593,7 +4616,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, sandbox = null, canSandbox = false }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4642,14 +4665,23 @@ export default function GatewayClient({ project, initialView = null, currentUser
       staffHub={staffHub}
       staffFinance={staffFinance}
       staffAppt={staffAppt}
+      sandbox={sandbox}
+      canSandbox={canSandbox}
     />
   );
+
+  // The demo bar rides ABOVE whatever view resolved, including the customer portal — an admin walking a
+  // demo as the customer still needs the way back out. Rendered only for an admin on a sandbox row.
+  const sandboxBar = sandbox && canSandbox
+    ? <SandboxBar accessId={project.access_id} sourceAccessId={sandbox.sourceAccessId} as={sandbox.as} />
+    : null;
 
   // Deck mode: no legacy masthead / .wrap — the deck provides its own top bar and fills the page.
   if (deckMode) {
     return (
       <div className="pvx pvx-deck">
         <style>{PV_CSS}</style>
+        {sandboxBar}
         {body}
         <GlobalCommandBar currentAccessId={project.access_id} />
         {view === "customer" && <CustomerAssistant accessId={project.access_id} />}
@@ -4660,6 +4692,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
   return (
     <div className="pvx">
       <style>{PV_CSS}</style>
+      {sandboxBar}
       <ProjectHeader accessId={project.access_id} view={view} onReAuth={() => setView(null)} onViewChange={setView}
                      previewRole={previewRole} onPreviewRole={setPreviewRole} viewingStageRef={viewingStageRef} />
       <div className="wrap">

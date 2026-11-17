@@ -5,6 +5,7 @@ import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyU
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { can as roleCan } from "../../../lib/roles";
+import { canSandbox } from "../../../lib/sandbox";
 import { contactWriteError } from "../../../lib/contact-guard";
 import { makePreviewToken } from "../../../lib/auth";
 import { emailStageAdvance, sendAppointmentEmails } from "../../../lib/email";
@@ -190,6 +191,46 @@ export async function setInternalJobAction(accessId, on) {
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, internal: !!proj?.internal_job };
+}
+
+// ---- Sandbox ("Demo") -------------------------------------------------------------------------------
+// Admin only. Start one and you get a throwaway COPY of the project you can walk through as any role with
+// everything behaving for real; discard it and it is gone. See lib/sandbox.js for why this is safe. These
+// never touch the source project — createSandboxProject only reads it, and discard is hard-guarded on
+// sandbox_of so it can never be aimed at a real job.
+export async function startSandboxAction(accessId) {
+  const tok = await getAnyTok();
+  if (!tok || !canSandbox(tok.role)) return { error: "Only an admin can start a demo." };
+  if (tok.viaPin) return { error: "Log in to start a demo." };
+  const { createSandboxProject } = await import("../../../lib/db");
+  const r = createSandboxProject(accessId, tok.name || tok.email || "Admin");
+  if (r?.error) return r;
+  return { ok: true, accessId: r.accessId, sourceAccessId: r.sourceAccessId };
+}
+
+export async function discardSandboxAction(accessId) {
+  const tok = await getAnyTok();
+  if (!tok || !canSandbox(tok.role)) return { error: "Only an admin can discard a demo." };
+  if (tok.viaPin) return { error: "Log in to discard a demo." };
+  const { discardSandboxProject } = await import("../../../lib/db");
+  const r = discardSandboxProject(accessId);
+  if (r?.error) return r;
+  return { ok: true, sourceAccessId: r.sourceAccessId };
+}
+
+// Reset = throw this demo away and take a fresh copy of the same source, so you can run the walkthrough
+// again from the top. Two steps, one click; if the re-copy fails the old demo is already gone, so the
+// caller is sent back to the source rather than to a dead id.
+export async function resetSandboxAction(accessId) {
+  const tok = await getAnyTok();
+  if (!tok || !canSandbox(tok.role)) return { error: "Only an admin can reset a demo." };
+  if (tok.viaPin) return { error: "Log in to reset a demo." };
+  const { discardSandboxProject, createSandboxProject } = await import("../../../lib/db");
+  const gone = discardSandboxProject(accessId);
+  if (gone?.error) return gone;
+  const made = createSandboxProject(gone.sourceAccessId, tok.name || tok.email || "Admin");
+  if (made?.error) return { ...made, sourceAccessId: gone.sourceAccessId };
+  return { ok: true, accessId: made.accessId, sourceAccessId: gone.sourceAccessId };
 }
 
 // Customer Portal V2 per-project override (admin/manager). version: "v2" | "v1" | "" / null (inherit global).

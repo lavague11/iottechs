@@ -27,6 +27,7 @@ const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Wo
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
   sections = [], actions = [], primaryCta = null, onPrimaryAction = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
+  onDemo = null, demoBusy = false,
   role = "", signOptionId = "", onStageJump = null,
 }) {
   const router = useRouter();
@@ -176,6 +177,9 @@ export default function StaffHub({
             <div className="cpv-menu-scrim" onClick={() => setMenuOpen(false)} />
             <div className="cpv-menu" role="menu">
               {dashboardHref && <button role="menuitem" onClick={() => { setMenuOpen(false); window.location.href = dashboardHref; }}>Dashboard</button>}
+              {/* Admin only — makes a throwaway copy of this project and opens it, where every role can be
+                  walked through for real. The host passes onDemo only when the viewer is an admin. */}
+              {onDemo && <button role="menuitem" disabled={demoBusy} onClick={() => { setMenuOpen(false); onDemo(); }}>{demoBusy ? "Working…" : "Demo"}</button>}
             </div>
           </>
         )}
