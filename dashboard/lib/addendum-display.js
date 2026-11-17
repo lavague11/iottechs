@@ -3,7 +3,11 @@
 // table). Filenames are untouched (lib/doc-filename.js owns those). Pure — no money, no I/O.
 
 // "A1" for the first entry of the stored array, "A2" for the second… Position, not a stored number.
-export const addendumLabel = (index) => `A${(+index || 0) + 1}`;
+// addendumNumberLabel takes the 1-based number instead, and is THE one place the "A" scheme is spelled
+// — lib/doc-filename.js names downloads through it (B4), so a file can never disagree with the row
+// above it in the UI.
+export const addendumNumberLabel = (n) => `A${+n || 1}`;
+export const addendumLabel = (index) => addendumNumberLabel((+index || 0) + 1);
 
 // Month + day only ("Nov 20"); empty for a missing/unparseable date.
 export function shortDate(d) {

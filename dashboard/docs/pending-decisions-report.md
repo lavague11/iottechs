@@ -67,7 +67,19 @@ fact, which is why it is yours to decide.
 
 ---
 
-## B4 — the "A1" filename scheme · **3 of 3 filenames change**
+## B4 — the "A1" filename scheme · **APPLIED 2026-11-17** · ~~3 of 3 filenames change~~
+
+> **The table below measured a code path with no production caller.** `DOC.ADDENDUM` was referenced
+> only by `lib/doc-filename.js` and its own test; the file customers actually receive is the email
+> attachment, named by `attachmentName`. Renaming the in-app scheme changed nothing they see.
+>
+> What did change, and is the real fix: the emailed change order had **no A-number**, so two change
+> orders on one project shared one filename. Now:
+> `IOT TECHS Change Order - Test Client - ASC0034` **` - A1`**`.pdf`.
+>
+> `addendumNumberLabel` is now the single definition of the scheme (UI row, in-app download and email
+> all read it). An unnumbered add-on still reads "Addendum".
+
 
 | project | now | proposed |
 |---|---|---|

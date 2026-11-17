@@ -43,8 +43,11 @@ test("every document type in the standard shape", () => {
   assert.equal(name(com, { type: DOC.DETAILED_PROPOSAL, revision: 4 }), "Buck N Up Store - Sound System - 0046 - v4 - Detailed.pdf");
   assert.equal(name(com, { type: DOC.WORK_ORDER }), "Buck N Up Store - Sound System - 0046 - Work Order.pdf");
   const cc = { access_id: "ASC0087", property_type: "commercial", company_name: "Crazy Cars", service_code: "SC" };
-  assert.equal(name(cc, { type: DOC.ADDENDUM, addendum: 2 }), "Crazy Cars - CCTV - 0087 - Addendum 2.pdf");
-  assert.equal(name(cc, { type: DOC.ADDENDUM, addendum: 2, revision: 1 }), "Crazy Cars - CCTV - 0087 - Addendum 2 - v1.pdf");
+  // B4 (owner-approved 2026-11-17): the scheme is "A2", not "Addendum 2", so a download matches the
+  // "A2" the portal shows for that row. Re-pinned deliberately — see tests/addendum-label.test.mjs.
+  assert.equal(name(cc, { type: DOC.ADDENDUM, addendum: 2 }), "Crazy Cars - CCTV - 0087 - A2.pdf");
+  assert.equal(name(cc, { type: DOC.ADDENDUM, addendum: 2, revision: 1 }), "Crazy Cars - CCTV - 0087 - A2 - v1.pdf");
+  assert.equal(name(cc, { type: DOC.ADDENDUM }), "Crazy Cars - CCTV - 0087 - Addendum.pdf", "an unnumbered one stays the plain word");
   assert.equal(name(cc, { type: DOC.INVOICE, invoiceNo: "INV-0187" }), "Crazy Cars - CCTV - 0087 - INV-0187.pdf");
   assert.equal(name(cc, { type: DOC.INVOICE }), "Crazy Cars - CCTV - 0087 - Invoice.pdf");
   assert.equal(name(cc, { type: DOC.SERVICE_CALL, serviceCallId: "SVC0032" }), "Crazy Cars - CCTV - 0087 - Service Call 0032.pdf");

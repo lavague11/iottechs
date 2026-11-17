@@ -7,6 +7,7 @@
 // Identity: the business name on commercial projects, the contact's full name otherwise. No brand text,
 // no underscores, no ASC prefix, no browser-style copy numbers. Same document + version → same name.
 import { SERVICE_CATALOG, normalizePropertyType } from "./spec.js";
+import { addendumNumberLabel } from "./addendum-display.js";
 
 export const DOC = Object.freeze({
   PROPOSAL: "proposal", DETAILED_PROPOSAL: "detailed", SITE_SURVEY: "survey", WORK_ORDER: "work_order",
@@ -84,7 +85,8 @@ export function projectFileBase(project = {}, opts = {}) {
 // The filename. `base` from projectFileBase (or { identity, service, last4 }); `type` from DOC.
 //   revision       proposal version → "v4" (proposal-based documents only)
 //   draft          appends "Draft" for an intentionally exported draft
-//   addendum       addendum number (Addendum 2), with optional revision (Addendum 2 - v1)
+//   addendum       addendum number → "A2" (B4), with optional revision ("A2 - v1"). The label comes
+//                  from addendumNumberLabel so a download matches the "A2" the UI shows for that row.
 //   invoiceNo      canonical invoice id (INV-0187) preferred over "Invoice"
 //   serviceCallId  SVC id → "Service Call 0032" (+ " - Diagnostic" / " - Estimate" for those types)
 //   noProject      service call not linked to a project → no project last-4
@@ -97,7 +99,7 @@ export function documentFilename(base, { type = DOC.PROPOSAL, revision = null, d
     case DOC.PROPOSAL: if (rev) parts.push(rev); break;
     case DOC.DETAILED_PROPOSAL: if (rev) parts.push(rev); parts.push("Detailed"); break;
     case DOC.SITE_SURVEY: if (rev) parts.push(rev); parts.push("Site Survey"); break;
-    case DOC.ADDENDUM: parts.push(addendum != null ? `Addendum ${addendum}` : "Addendum"); if (rev) parts.push(rev); break;
+    case DOC.ADDENDUM: parts.push(addendum != null ? addendumNumberLabel(addendum) : "Addendum"); if (rev) parts.push(rev); break;
     case DOC.INVOICE: parts.push(clean(invoiceNo) || "Invoice"); break;
     case DOC.SERVICE_CALL: parts.push(svc || "Service Call"); break;
     case DOC.DIAGNOSTIC: parts.push(svc ? `${svc} - Diagnostic` : "Diagnostic Report"); break;

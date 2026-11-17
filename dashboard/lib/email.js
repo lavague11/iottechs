@@ -251,12 +251,20 @@ async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) 
   try {
     const { getJobByAccessId, getToolData } = await import("./db.js");
     const { buildAddendumPdfBytes } = await import("./addendum-pdf.js");
-    let add = null;
-    try { add = (JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []).find((a) => a && a.id === addendumId); } catch { /* no add-on */ }
+    const { addendumLabel } = await import("./addendum-display.js");
+    let add = null, addIdx = -1;
+    try {
+      const list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || [];
+      addIdx = list.findIndex((a) => a && a.id === addendumId);
+      add = addIdx >= 0 ? list[addIdx] : null;
+    } catch { /* no add-on */ }
     if (!add) return null;
     const p = getJobByAccessId(accessId);
     const bytes = buildAddendumPdfBytes({ customerName: customerLabelOf(p), projectId: accessId }, add, { newBalance });
-    return { filename: attachmentName("Change Order", { customer: customerLabelOf(p), docNo: accessId }),
+    // The A-number is part of the name (B4): without it a second change order on the same project
+    // arrives with a filename identical to the first, and the customer's download folder silently
+    // renames or overwrites it. It also matches the "A2" they see in the portal.
+    return { filename: attachmentName("Change Order", { customer: customerLabelOf(p), docNo: `${accessId} - ${addendumLabel(addIdx)}` }),
       content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" };
   } catch (e) { console.error(`[email:addendum-pdf] ${e?.message || e}`); return null; }
 }

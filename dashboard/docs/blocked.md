@@ -150,18 +150,37 @@ rule 6 and the RED lane both say to raise first.
 
 ## B4 — Section I: the "A1" filename collides with a pinned test
 
-> **REPORTED 2026-11-16, NOT APPLIED.** 3 of 3 addendum filenames would change, e.g.
-> `Test Client - CCTV - 0034 - Addendum 1.pdf` → `… - A1.pdf`. No stored data moves — only what lands
-> in a download folder. Listed in `docs/pending-decisions-report.md`.
+> **DECIDED 2026-11-17 — APPLIED (rename the scheme), and the report had the wrong target.**
+>
+> The measurement said "3 of 3 filenames change" for `documentFilename({ type: DOC.ADDENDUM })` — but
+> that path had **no production caller at all**; the only addendum file anyone receives is the email
+> attachment, named by `attachmentName` (`lib/email.js:205`, a deliberate branded scheme). So the
+> reported change would have altered **nothing that reaches a customer**.
+>
+> The real defect sat next to it: the emailed change order carried **no A-number**, so two change
+> orders on one project produced *the same filename* and the second would silently overwrite or get
+> renamed in the download folder. That is now fixed, and it is the only part of B4 that changes a file
+> anybody actually gets:
+>
+> | | |
+> |---|---|
+> | emailed, was | `IOT TECHS Change Order - Test Client - ASC0034.pdf` |
+> | emailed, now | `IOT TECHS Change Order - Test Client - ASC0034 - A1.pdf` |
+> | in-app, now | `Test Client - CCTV - 0034 - A1.pdf` (still no caller; names the future download) |
+>
+> **Decision taken: A1/A2 everywhere.** `addendumNumberLabel` in `lib/addendum-display.js` is now the
+> single definition of the scheme, and `lib/doc-filename.js` names through it, so a download can never
+> disagree with the row the portal shows. The pinned test was re-pinned deliberately. An *unnumbered*
+> add-on still reads "Addendum" — a bare "A" means nothing in a download folder.
 
 `lib/doc-filename.js` is the single source for every downloaded file name and already has
 `DOC.ADDENDUM` (line 13), producing `"… - Addendum 2 - v<rev>.pdf"` — i.e. **"Addendum 2", not "A1"**.
 `tests/doc-filename.test.mjs:46-47` pins that string deliberately.
 
-Section I wants the document titled "Addendum A1 to Proposal v2". **Decision needed:** rename the
+Section I wants the document titled "Addendum A1 to Proposal v2". ~~**Decision needed:** rename the
 scheme to A1/A2 (and update the pinned test), or keep "Addendum 2" in filenames while showing "A1" in
-the UI? Changing a filename scheme changes what lands in customers' and the owner's download folders,
-so it is the owner's call, not a refactor.
+the UI?~~ **Renamed to A1/A2** — the owner approved it, and keeping two names for one thing was the
+worse of the two options once it turned out the UI had been saying "A1" all along.
 
 ---
 
