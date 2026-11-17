@@ -50,7 +50,9 @@ test("Request-via-Email opens the scheduler and shows a scheduled state", () => 
   const sheet = read("../app/project/[accessId]/request-signature-sheet.jsx");
   assert.ok(sheet.includes("import SendScheduler"), "sheet uses the shared scheduler");
   assert.ok(sheet.includes("scheduleSignatureEmailAction") && sheet.includes("cancelSignatureEmailAction") && sheet.includes("getSignatureScheduleAction"), "wired to the schedule actions");
-  assert.ok(sheet.includes("Signature email scheduled for") && sheet.includes("Send now") && /Edit/.test(sheet) && /Cancel/.test(sheet), "scheduled row has Edit · Send now · Cancel");
+  assert.ok(sheet.includes("import ScheduledSendBanner") && sheet.includes('label="Signature email"')
+    && sheet.includes("onEdit=") && sheet.includes("onSendNow=") && sheet.includes("onCancel="),
+    "scheduled row is the shared banner, wired to Edit · Send now · Cancel");
   assert.ok(sheet.includes("setSchedOpen(true)"), "Request via Email opens the chooser instead of sending immediately");
 });
 
@@ -75,4 +77,56 @@ test("add-on approval emails reuse the same scheduler + 8:30 default", () => {
 test("a boot sweep + cron trigger run the scheduled signature emails", () => {
   assert.ok(read("../instrumentation.js").includes("sendDueSignatureEmails"), "boot scheduler runs the sweep");
   assert.ok(read("../app/api/cron/signature-emails/route.js").includes("sendDueSignatureEmails"), "cron route exists");
+});
+
+// ---- Submit the proposal → the same chooser, not an instant overnight email -------------------------
+
+test("sendProposalAction defers ONLY the email when emailAt is given", () => {
+  const act = read("../app/project/[accessId]/proposal-actions.js");
+  const i = act.indexOf("export async function sendProposalAction");
+  const send = act.slice(i, act.indexOf("export async function", i + 10));
+  assert.ok(/sendProposalAction\(accessId, \{ emailAt \} = \{\}\)/.test(send), "takes an optional emailAt");
+  assert.ok(send.includes("isNaN(when.getTime())"), "rejects an invalid time instead of sending now");
+  // The scheduled branch must return BEFORE the immediate email, and reuse the existing sig_email store.
+  const schedAt = send.indexOf("_saveSigSchedule");
+  const mailAt = send.indexOf("emailSignatureRequest");
+  assert.ok(schedAt > -1 && mailAt > -1 && schedAt < mailAt, "schedules through _saveSigSchedule ahead of the immediate send");
+  assert.ok(/if \(when\)[\s\S]*return \{ ok: true, stage, emailed: false, scheduledSendAt/.test(send), "scheduled submit reports emailed:false + the time");
+  // The binding must describe the SENT row, so the sweep's stale check compares like with like.
+  assert.ok(send.indexOf("markProposalSent") < schedAt, "the schedule is written after the proposal is marked sent");
+  assert.ok(send.includes("binding: _sigBinding(accessId)"), "binds to the current (sent) version + fingerprint");
+  // Lifecycle around the send is untouched by scheduling.
+  assert.ok(send.includes("advanceStageForward") && send.includes("seedTechPricingMap") && send.includes("createNotification"),
+    "stage advance, payout seeding and the in-app notification still happen");
+});
+
+test("sendProposalAction with no emailAt still emails immediately (the AI send_proposal path)", () => {
+  const act = read("../app/project/[accessId]/proposal-actions.js");
+  const i = act.indexOf("export async function sendProposalAction");
+  const send = act.slice(i, act.indexOf("export async function", i + 10));
+  assert.ok(send.includes("const er = await emailSignatureRequest(accessId, primaryOpt)"), "unscheduled send still emails inline");
+  assert.ok(read("../app/project/[accessId]/ai-actions.js").includes("await sendProposalAction(accessId)"), "the AI caller passes no options, so it is unchanged");
+});
+
+test("the proposal builder's Submit opens the chooser instead of sending straight away", () => {
+  const b = read("../app/project/[accessId]/proposal-builder.jsx");
+  assert.ok(b.includes("import SendScheduler"), "reuses the shared chooser");
+  assert.ok(b.includes("function send() { setSendSheet(true); }"), "Submit only opens the chooser");
+  assert.ok(b.includes("async function doSend({ emailAt } = {})"), "the real submit is separate");
+  assert.ok(b.includes("onSendNow={() => doSend()}") && b.includes("onSchedule={(iso) => doSend({ emailAt: iso })}"), "both chooser outcomes wired");
+  assert.ok(b.includes("sendProposalAction(accessId, emailAt ? { emailAt } : undefined)"), "passes the chosen time through");
+  assert.ok(!b.includes("confirmSend"), "the old two-step confirm is gone — the chooser IS the confirm");
+  assert.ok(b.includes("friendlyWhen(r.scheduledSendAt)"), "the toast names the scheduled time");
+});
+
+test("the scheduled-email row has ONE definition, used by all three surfaces", () => {
+  const banner = read("../app/project/[accessId]/scheduled-send-banner.jsx");
+  assert.ok(banner.includes("scheduled for {friendlyWhen(at)}"), "one wording");
+  assert.ok(banner.includes(">Edit<") && banner.includes(">Send now<") && banner.includes(">Cancel<"), "Edit · Send now · Cancel");
+  assert.ok(banner.includes('@media (prefers-color-scheme:dark)') && banner.includes(':root:not([data-theme="light"])'), "dark mode guarded the house way");
+  for (const host of ["request-signature-sheet.jsx", "staff-hub.jsx", "proposal-builder.jsx"]) {
+    const src = read(`../app/project/[accessId]/${host}`);
+    assert.ok(src.includes("import ScheduledSendBanner"), `${host} uses the shared banner`);
+    assert.ok(!/sig-sched-t|sig-sched-acts/.test(src), `${host} has no hand-rolled copy left`);
+  }
 });

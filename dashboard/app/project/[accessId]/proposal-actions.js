@@ -186,7 +186,11 @@ export async function saveProposalDraftAction(accessId, { payload, taxRate, depo
   return { ok: true, proposal: sanitizeProposal(row, tok.role) };
 }
 
-export async function sendProposalAction(accessId) {
+// Submitting a proposal sends the customer their signing link. `emailAt` (an ISO instant from the shared
+// Send-now / Schedule-send chooser) DEFERS only that email — the proposal is still marked sent, the work
+// order still seeds, the stage still advances, the portal still goes live. Omit it and the behaviour is
+// unchanged (immediate email), which is what the AI `send_proposal` path relies on.
+export async function sendProposalAction(accessId, { emailAt } = {}) {
   const tok = await getSessionRole();
   if (!tok || !STAFF_EDIT.has(tok.role)) return { error: "Unauthorized." };
   const cur = getActiveProposal(accessId);
@@ -195,6 +199,13 @@ export async function sendProposalAction(accessId) {
   try { payload = JSON.parse(cur.payload); } catch { return { error: "Malformed proposal." }; }
   const hasItems = payload.options?.some((o) => o.services?.some((s) => s.items?.length));
   if (!hasItems) return { error: "Add at least one line item first." };
+  // Validate the requested send time BEFORE anything is written — a bad value must not fall through
+  // and silently email the customer now, which is the very thing scheduling exists to prevent.
+  let when = null;
+  if (emailAt != null) {
+    when = new Date(emailAt);
+    if (isNaN(when.getTime())) return { error: "Pick a valid date and time." };
+  }
   let row = markProposalSent(accessId, actorName(tok));
   // Auto-create the work order the moment the proposal is sent: seed every line's technician
   // payout from the company standard rates (getEffectiveRates) so the tech's work order shows
@@ -224,11 +235,21 @@ export async function sendProposalAction(accessId) {
   // (?open=proposal&sign=<primaryOpt>, deep-linking straight into the signer), so staff no longer
   // mark-sent and then separately choose an email. Gated/best-effort (never blocks the send); the
   // "Request Signature" button remains for manual re-sends.
+  // Scheduled: write the SAME sig_email blob the Request Signature sheet uses, bound to the row we just
+  // marked sent (not the draft we read at the top), so a sign / void / revise before the send time cancels
+  // it — lib/signature-emails.js re-checks that binding on every sweep.
+  if (when) {
+    _saveSigSchedule(accessId, { scheduledSendAt: when.toISOString(), optionId: primaryOpt ?? null,
+      binding: _sigBinding(accessId), scheduledBy: actorName(tok), scheduledAt: new Date().toISOString() });
+    logProjectEvent(accessId, { kind: "request", label: `Signature email scheduled · ${when.toLocaleString("en-US")}`.slice(0, 300), actor: actorName(tok) });
+    await revalidate(accessId);
+    return { ok: true, stage, emailed: false, scheduledSendAt: when.toISOString(), proposal: sanitizeProposal(row, tok.role) };
+  }
   let emailed = false;
   try { const er = await emailSignatureRequest(accessId, primaryOpt); emailed = !!(er && (er.ok || er.id)); } catch { /* email best-effort */ }
   if (emailed) logProjectEvent(accessId, { kind: "email", label: "Signature request emailed to the customer", actor: actorName(tok) });
   await revalidate(accessId);
-  return { ok: true, stage, emailed, proposal: sanitizeProposal(row, tok.role) };
+  return { ok: true, stage, emailed, scheduledSendAt: null, proposal: sanitizeProposal(row, tok.role) };
 }
 
 // Manually (re)send the "your proposal is ready" email to the customer — the Email button on the

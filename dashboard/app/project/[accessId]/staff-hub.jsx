@@ -13,7 +13,7 @@ import PortalHeader from "./portal-header";
 import PortalBalance from "./portal-balance";
 import PortalLog from "./portal-log";
 import { getSignatureScheduleAction, requestSignatureEmailAction, cancelSignatureEmailAction } from "./proposal-actions";
-import { friendlyWhen } from "../../../lib/send-schedule";
+import ScheduledSendBanner from "./scheduled-send-banner";
 import RequestSignatureSheet from "./request-signature-sheet";
 import { useContextMenu, ContextMenu } from "../../components/context-menu";
 
@@ -126,12 +126,8 @@ export default function StaffHub({
 .cpv-collapse{margin-left:auto;width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:999px;background:var(--raise);color:var(--meta);cursor:pointer}
 .cpv-collapse:hover{border-color:var(--ink);color:var(--ink)}
 .cpv-collapse + .cpv-portwrap{margin-left:8px}
-.cpv-sig-sched{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:12px;padding:9px 12px;border-radius:10px;background:rgba(201,169,110,.14);border:1px solid rgba(201,169,110,.4)}
-.cpv-sig-sched-t{font-size:12.5px;font-weight:600;color:var(--ink);flex:1;min-width:150px}
-.cpv-sig-sched-acts{display:inline-flex;gap:12px}
-.cpv-sig-sched-acts button{border:0;background:none;color:#8a6d2f;font:700 12.5px/1 inherit;cursor:pointer;padding:0}
-.cpv-sig-sched-acts button:hover{text-decoration:underline}
-.cpv-sig-sched-acts .cpv-sig-cancel{color:#b23b3b}
+/* The row itself is the shared ScheduledSendBanner; the hero only sets its spacing. */
+.ssb.cpv-sig-sched{margin-top:12px}
 .cpv-seg.movable{cursor:context-menu}
 /* Phase 3 — frame every tool overlay as a calm page: a soft tint behind the tool's white cards,
    a slightly stronger title bar, and the project id for context. */
@@ -230,15 +226,9 @@ export default function StaffHub({
           <section className="cpv-hero" style={{ "--tone": status.color || "var(--gold,#C9A96E)" }}>
             <div className="cpv-status">{status.label}</div>
             {primaryCta && <button className="cpv-cta" onClick={() => primaryCta.inlineSign ? setReqSignOpen(true) : primaryCta.action ? onPrimaryAction?.(primaryCta.action) : open(primaryCta.view, { sign: primaryCta.sign, reqsign: primaryCta.reqsign })}>{primaryCta.label}</button>}
-            {awaitingSig && sigSched?.scheduledSendAt && (
-              <div className="cpv-sig-sched">
-                <span className="cpv-sig-sched-t">Signature email scheduled for {friendlyWhen(sigSched.scheduledSendAt)}</span>
-                <span className="cpv-sig-sched-acts">
-                  <button type="button" disabled={sigBusy} onClick={() => setReqSignOpen(true)}>Edit</button>
-                  <button type="button" disabled={sigBusy} onClick={sigSendNow}>Send now</button>
-                  <button type="button" className="cpv-sig-cancel" disabled={sigBusy} onClick={sigCancel}>Cancel</button>
-                </span>
-              </div>
+            {awaitingSig && (
+              <ScheduledSendBanner at={sigSched?.scheduledSendAt} label="Signature email" busy={sigBusy} className="cpv-sig-sched"
+                onEdit={() => setReqSignOpen(true)} onSendNow={sigSendNow} onCancel={sigCancel} />
             )}
           </section>
         ) : null}

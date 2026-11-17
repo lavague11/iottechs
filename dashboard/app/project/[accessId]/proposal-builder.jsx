@@ -11,8 +11,11 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
 import ServiceAdder from "./service-adder";
 import MobileFieldNav from "./mobile-field-nav";
-import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction } from "./proposal-actions";
+import { getProposalAction, saveProposalDraftAction, sendProposalAction, reviseProposalAction, cancelRevisionAction, emailProposalAction, getPriceBookAction, resolveFlagAction, getToolDataAction, getProjectAddonsAction, getProposalChangeStateAction, getApprovalDataAction, getSignatureScheduleAction, requestSignatureEmailAction, cancelSignatureEmailAction } from "./proposal-actions";
 import RequestSignatureSheet from "./request-signature-sheet";
+import SendScheduler from "./send-scheduler";
+import ScheduledSendBanner from "./scheduled-send-banner";
+import { friendlyWhen } from "../../../lib/send-schedule";
 import ProposalFooter from "./proposal-footer";
 import RecordPaymentModal from "./record-payment-modal";
 import InstallAddendum from "./install-addendum";
@@ -132,7 +135,10 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   const [dragSvc, setDragSvc] = useState(null);   // index of the service section being dragged
   const [overSvc, setOverSvc] = useState(null);   // index currently hovered as the drop target
   const [dragItem, setDragItem] = useState(null); // cross-section line-item drag: { svcIdx, id }
-  const [confirmSend, setConfirmSend] = useState(false);
+  // Submit opens the shared Send-now / Schedule-send chooser (it IS the confirm step) instead of firing
+  // the customer's signature email the instant someone hits Submit at 1 AM.
+  const [sendSheet, setSendSheet] = useState(false);
+  const [sigSched, setSigSched] = useState(null);    // pending signature email { scheduledSendAt } | null
   const [emailAsk, setEmailAsk] = useState(false);   // after a send/send-revision: ask whether to email the customer
   const [changeState, setChangeState] = useState(null);   // proposalChangeState — working draft vs published (drives the footer)
   const changeReq = useRef(0);
@@ -505,16 +511,44 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     setSavedAt(new Date());
     return true;
   }
-  async function send() {
-    setConfirmSend(false);
-    if (dirty && !(await save())) return;
+  // Submit / Send Revision → the chooser. Nothing is sent until the staffer picks Send now or a time,
+  // so after hours the default is a scheduled 8:30 AM email rather than a 1 AM one.
+  function send() { setSendSheet(true); }
+  // The actual submit. `emailAt` (ISO) defers only the customer's signature email; the proposal is
+  // marked sent either way.
+  async function doSend({ emailAt } = {}) {
+    if (dirty && !(await save())) { setSendSheet(false); return; }
     setBusy(true); setErr(null);
-    const r = await sendProposalAction(accessId);
+    const r = await sendProposalAction(accessId, emailAt ? { emailAt } : undefined);
     setBusy(false);
+    setSendSheet(false);
     if (r?.error) { setErr(r.error); return; }
     adopt(r.proposal);
+    if (r.scheduledSendAt) {
+      setSigSched({ scheduledSendAt: r.scheduledSendAt });
+      showToast(`Sent — signature email ${friendlyWhen(r.scheduledSendAt)}`);
+      return;
+    }
+    setSigSched(null);
     // Fix #4: the send now emails the direct signing link in the same step — no separate "email it?" prompt.
     showToast(r.emailed ? "Sent for signature — emailed to the customer" : "Sent for signature (email not configured)");
+  }
+  // The pending-schedule banner's own actions (same three the Request Signature sheet offers).
+  async function sigSendNow() {
+    if (busy) return;
+    setBusy(true);
+    const r = await requestSignatureEmailAction(accessId, opt?.id).catch(() => null);
+    setBusy(false);
+    setSigSched(null);
+    showToast(r?.sent ? "Signature request emailed" : (r?.note || r?.error || "Email isn’t configured yet"));
+  }
+  async function sigCancelSchedule() {
+    if (busy) return;
+    setBusy(true);
+    await cancelSignatureEmailAction(accessId).catch(() => null);
+    setBusy(false);
+    setSigSched(null);
+    showToast("Schedule cancelled");
   }
   async function resolveFlag(itemId, label) {
     const r = await resolveFlagAction(accessId, itemId);
@@ -601,6 +635,17 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // or email it. Sharing via the OS sheet gives no delivery proof, so it NEVER marks the customer notified
   // or logs — only a real email (requestSignatureEmailAction, staff-only + debounced + logged) does that.
   const [sigSheet, setSigSheet] = useState(false);
+  // A pending signature email (scheduled at Submit, or from the Request Signature sheet) only matters on a
+  // sent, still-unsigned proposal — anywhere else there is nothing outstanding to show. Re-reads when the
+  // sheet closes, since that sheet can schedule or cancel one too.
+  useEffect(() => {
+    if (!accessId || !isStaffDock || !isSentUnsigned) { setSigSched(null); return; }
+    let live = true;
+    getSignatureScheduleAction(accessId)
+      .then((r) => { if (live) setSigSched(r?.ok && r.scheduledSendAt ? r : null); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [accessId, isStaffDock, isSentUnsigned, sigSheet]);
   // Deep-link from the status command center: ?reqsign=1 opens the STAFF Request Signature modal once the
   // proposal page is up (staff, on a sent/unsigned proposal with NO unsent edits). Waits for the status to
   // resolve (doesn't clear the flag early); strips the param once consumed so a refresh won't reopen it.
@@ -864,6 +909,12 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           onApply={(updates) => { if (Object.keys(updates).length) { setPayload((p) => applyPrices(p, updates)); setDirty(true); } }} />
       )}
       {useForOpen && meta?.id && <UseForAnother accessId={accessId} proposalId={meta.id} onClose={() => setUseForOpen(false)} />}
+
+      {/* A signature email still waiting to go out — same row the hub and the share sheet show. */}
+      {isStaffDock && isSentUnsigned && (
+        <ScheduledSendBanner at={sigSched?.scheduledSendAt} label="Signature email" busy={busy}
+          onEdit={() => setSigSheet(true)} onSendNow={sigSendNow} onCancel={sigCancelSchedule} />
+      )}
 
       {/* Request Signature share sheet — the admin equivalent of the customer's "Review & Sign". */}
       {sigSheet && (
@@ -1186,15 +1237,8 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <span className={`prop-savestat${busy || dirty ? " saving" : ""}`}>
               {authBlocked ? "" : busy ? "Saving…" : dirty ? "Unsaved changes…" : savedAt ? `Saved ${savedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : ""}
             </span>
-            {confirmSend ? (
-              <>
-                <span className="prop-svc-sub" style={{ marginLeft: "auto" }}>Are you sure you want to submit?</span>
-                <button className="prop-mini gold" disabled={busy} onClick={send}>Submit</button>
-                <button className="prop-mini" onClick={() => setConfirmSend(false)}>Cancel</button>
-              </>
-            ) : (
-              <button className="prop-mini gold" disabled={busy} onClick={() => setConfirmSend(true)} style={{ marginLeft: "auto" }}>Submit</button>
-            )}
+            {/* One step: the Send-now / Schedule-send chooser is itself the confirm. */}
+            <button className="prop-mini gold" disabled={busy} onClick={send} style={{ marginLeft: "auto" }}>Submit</button>
           </>
         ) : (
           <>
@@ -1255,6 +1299,11 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     {embedded && canAddendum && addendumOpen && (
       <InstallAddendum accessId={accessId} role={role} readOnly={false} embedded composeOnly customerName={customerName} onClose={() => setAddendumOpen(false)} />
     )}
+    {/* Submit → Send now or Schedule send. Opens straight in schedule mode after hours. */}
+    <SendScheduler open={sendSheet} title={hasUnsent ? "Send the revision" : "Send the proposal"}
+      subtitle="The customer gets a signing link." busy={busy}
+      onSendNow={() => doSend()} onSchedule={(iso) => doSend({ emailAt: iso })}
+      onClose={() => setSendSheet(false)} />
     <RecordPaymentModal open={payModalOpen} accessId={accessId} stage="approval_deposit"
       onClose={() => setPayModalOpen(false)} showToast={showToast}
       onRecorded={(r) => { if (r?.payments) setPayments(r.payments); else refreshPayments(); }} />
