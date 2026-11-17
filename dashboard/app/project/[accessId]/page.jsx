@@ -4,7 +4,7 @@ import { resolveProjectRef, getProjectAssignments, getStaffUsers, getWorkOrdersB
 import { sanitizeProposal } from "../../../lib/proposal";
 import { parseToken, parseAccessToken, verifyPreviewToken } from "../../../lib/auth";
 import { LOGIN_VIEW } from "../../../lib/spec";
-import { customerPortalV2For, financeSummary, pickUpcomingAppt, sanitizeAppt, paymentsSummary } from "../../../lib/customer-portal";
+import { customerPortalV2For, portalV2GlobalOn, financeSummary, pickUpcomingAppt, sanitizeAppt, paymentsSummary } from "../../../lib/customer-portal";
 import { staffHubFor } from "../../../lib/staff-hub";
 import { can } from "../../../lib/roles";
 import { canSandbox, sandboxRoleFrom } from "../../../lib/sandbox";
@@ -403,7 +403,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // no cost/margin/processor data. V1 (the deck) is unaffected when this is off.
   // Resolved per-PROJECT (not per-viewer) so admin/manager previewing as a customer also see V2 to QA it;
   // the gateway only renders it when the effective view is the customer (cView === "customer").
-  const customerPortalV2 = customerPortalV2For(p, { globalOn: secretValue("CUSTOMER_PORTAL_V2") === "on" });
+  const customerPortalV2 = customerPortalV2For(p, { globalOn: portalV2GlobalOn(secretValue("CUSTOMER_PORTAL_V2")) });
   // Staff Project Hub (Phase 1) — the clean customer-style hub for STAFF, flag + per-project override.
   // Presentation-only; the same tools open from its cards in staff (editable) mode. Deck is unaffected when off.
   const staffHub = staffHubFor(p);   // Simple view (the hub) is the default for eligible projects; only a "deck" override opts out.

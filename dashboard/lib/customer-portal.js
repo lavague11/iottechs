@@ -11,10 +11,18 @@ export function eligibleForCustomerPortalV2(project) {
   return t === "A" || t === "B";
 }
 
+// Is the CURRENT customer portal on globally? V2 is the canonical customer view and V1 is the legacy
+// deck kept only as a rollback, so the flag reads as an OPT-OUT: anything other than an explicit "off"
+// means on. It used to require an exact "on", which meant an unset/missing/misspelled secret silently
+// served every live customer the legacy portal — and with it no 7-day price lock, because that check
+// lives in the V2 branch. An absent flag must not be able to turn a safety rail off.
+// (Same `!== "off"` shape as paymentsIgnoreStalePending in lib/db.js.)
+export const portalV2GlobalOn = (secret) => String(secret ?? "").trim().toLowerCase() !== "off";
+
 // Resolve V1 vs V2 for a project. Pure: the caller passes the resolved global flag (secretValue read stays
 // in the server layer). Precedence: ineligible → always V1; per-project override wins over global; else global.
 //   project.portal_version: "v2" force on · "v1" force off · null/undefined → inherit global
-export function customerPortalV2For(project, { globalOn = false } = {}) {
+export function customerPortalV2For(project, { globalOn = true } = {}) {
   if (!eligibleForCustomerPortalV2(project)) return false;
   const ov = project?.portal_version;
   if (ov === "v2") return true;

@@ -3,8 +3,9 @@
 // elsewhere). Covers the owner's checklist items that are decidable without a browser.
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  eligibleForCustomerPortalV2, customerPortalV2For, pickUpcomingAppt, financeSummary,
+  eligibleForCustomerPortalV2, customerPortalV2For, portalV2GlobalOn, pickUpcomingAppt, financeSummary,
   installStatusOf, proposalCardState, portalCards, viewFromParams, PORTAL_VIEWS, payable,
   viewAvailability, overlayAvailable, OVERLAY_VIEWS,
 } from "../lib/customer-portal.js";
@@ -179,4 +180,48 @@ test("viewFromParams: validates ?view and maps legacy ?open", () => {
   assert.equal(viewFromParams({ open: "deposit" }), "payment");
   assert.equal(viewFromParams({}), null);
   assert.ok(PORTAL_VIEWS.includes("completion"));
+});
+
+// --- The flag is an OPT-OUT -----------------------------------------------------------------------
+// Regression: production served every PIN customer the LEGACY portal because the global secret was not
+// the exact string "on". The legacy branch has no 7-day price lock (that check lives in the V2 block),
+// so an absent flag silently let customers sign at an expired price. Only an explicit "off" may do that.
+test("an unset / missing / odd flag value still serves the CURRENT portal", () => {
+  for (const v of [undefined, null, "", "  ", "on", "ON", "true", "1", "yes", "enabled", "garbage"])
+    assert.equal(portalV2GlobalOn(v), true, `${JSON.stringify(v)} must not fall back to the legacy portal`);
+});
+
+test("only an explicit off turns the current portal off", () => {
+  for (const v of ["off", "OFF", " off ", "Off"]) assert.equal(portalV2GlobalOn(v), false, `${JSON.stringify(v)} disables`);
+});
+
+test("a project with no override inherits that opt-out default", () => {
+  const proj = { project_type: "A" };                       // what every real customer project looks like
+  assert.equal(customerPortalV2For(proj, { globalOn: portalV2GlobalOn(undefined) }), true, "unset flag → current portal");
+  assert.equal(customerPortalV2For(proj, { globalOn: portalV2GlobalOn("off") }), false, "explicit off → legacy");
+  // The per-project escape hatch still wins either way.
+  assert.equal(customerPortalV2For({ project_type: "A", portal_version: "v1" }, { globalOn: true }), false);
+  assert.equal(customerPortalV2For({ project_type: "A", portal_version: "v2" }, { globalOn: false }), true);
+  // Calling it with no options at all defaults to ON, so a caller that forgets the flag cannot regress.
+  assert.equal(customerPortalV2For(proj), true);
+});
+
+test("the PIN customer view and the demo resolve through the SAME one-line branch", () => {
+  const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
+  assert.equal((gw.match(/if \(isCustomerView && customerPortalV2\) \{/g) || []).length, 1,
+    "exactly one place decides current-vs-legacy for a customer");
+  const page = readFileSync(new URL("../app/project/[accessId]/page.jsx", import.meta.url), "utf8");
+  assert.match(page, /globalOn: portalV2GlobalOn\(secretValue\("CUSTOMER_PORTAL_V2"\)\)/);
+  assert.doesNotMatch(page, /secretValue\("CUSTOMER_PORTAL_V2"\) === "on"/, "the exact-match read is gone");
+  // The /dev toggle must report the same resolution, or it lies about what customers are being served.
+  const dev = readFileSync(new URL("../app/dev/page.jsx", import.meta.url), "utf8");
+  assert.match(dev, /customerPortalV2: portalV2GlobalOn\(/);
+});
+
+test("the 7-day price lock only exists in the V2 branch — so V1 must never be the silent default", () => {
+  const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
+  const v2At = gw.indexOf("if (isCustomerView && customerPortalV2) {");
+  const hubAt = gw.indexOf("if (staffHub && !isCustomerView) {");
+  const lockAt = gw.indexOf("const priceExpired = priceActive && expired");
+  assert.ok(lockAt > v2At && lockAt < hubAt, "price-lock lives inside the customer V2 block");
 });

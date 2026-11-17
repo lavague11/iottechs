@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { getDevTasks, getAllJobs, listSecretsMeta, loginTwoFactorEnabled, secretValue } from "../../lib/db";
+import { portalV2GlobalOn } from "../../lib/customer-portal";
 import { getSessionUser, getNotifSummary } from "../../lib/session";
 import { INTEGRATIONS } from "../../lib/integrations";
 import { smsVerifyConfigured, smsProvider } from "../../lib/sms-verify";
@@ -15,7 +16,9 @@ export default async function DevPage() {
   // Display-safe key metadata only (masked values, source, timestamp) — never raw secrets.
   const secrets = listSecretsMeta(INTEGRATIONS);
   const twoFactor = { enabled: loginTwoFactorEnabled(), ready: smsVerifyConfigured(), provider: smsProvider() };
-  const flags = { customerPortalV2: secretValue("CUSTOMER_PORTAL_V2") === "on", sopBuilder: secretValue("SOP_BUILDER") === "on" };
+  // Reads through the SAME resolver the project page uses, so this toggle can never show "off" while
+  // customers are being served the current portal (or the reverse).
+  const flags = { customerPortalV2: portalV2GlobalOn(secretValue("CUSTOMER_PORTAL_V2")), sopBuilder: secretValue("SOP_BUILDER") === "on" };
 
   return <DevClient user={user} alerts={alerts} tasks={tasks} sampleProjectId={sample} secrets={secrets} twoFactor={twoFactor} flags={flags} />;
 }
