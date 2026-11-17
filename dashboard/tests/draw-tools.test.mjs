@@ -154,8 +154,8 @@ test("widget wires select, shapes, stairs, block, rotate-name and right-click", 
   assert.ok(html.includes("draw-geom.js?v="), "geometry module is loaded");
 });
 test("drawSrc cache key was bumped so the draw iframe actually reloads", () => {
-  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE3/.test(host), "the draw iframe key");
-  assert.ok(/draw-geom\.js\?v=20261116-sectionE3/.test(html), "the geometry module key moves with it");
+  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE4/.test(host), "the draw iframe key");
+  assert.ok(/draw-geom\.js\?v=20261116-sectionE4/.test(html), "the geometry module key moves with it");
 });
 
 // ---- the constraint: planHash of an untouched floor
@@ -186,4 +186,36 @@ test("an export's viewBox includes blocks; the footprint dimension still does no
   assert.doesNotMatch(pf, /planBoundsCells/, "a block must never inflate the stated square footage");
   // and svgPlanBody really does paint them, which is why the box has to reach
   assert.match(html, /\(blocks\|\|\[\]\)\.forEach\([\s\S]{0,220}fill="#101112"/, "blocks are drawn in the export body");
+});
+
+// ---- B10: the nested-room gesture, behind a flag that is OFF ------------------------------------
+// Only Stairs mode and the polygon shape could nest, because pointerdown on an existing room selects
+// and returns before any drag begins. The fix is tap-vs-drag, the same resolution the wall-grab path
+// in this file already uses — and it is opt-in, so today's tap behaviour is untouched by default.
+test("B10: the gesture is off unless ?nest=1, and off it cannot start a drag", () => {
+  assert.match(html, /var NESTG=_qs\.get\("nest"\)==="1";/, "opt-in by URL flag");
+  // the candidate is only ever created when the flag is on AND we are in plain room-draw mode
+  assert.match(html, /if\(NESTG && mode==="room" && shapeKind!=="poly" && structOp!=="erase"\)\{\s*\n\s*sel=h; redraw\(\); pendingNest=\{start:pt, room:h, named:!!hn\}; return; \}/,
+    "the candidate is gated on the flag");
+  // with the flag off the original line is still the one that runs
+  assert.match(html, /sel=h; redraw\(\); if\(!hn\) openLabel\(h\); return; \}/, "flag off -> select (and name) exactly as before");
+});
+
+test("B10: a drag past the threshold becomes a draw; a tap resolves as a tap", () => {
+  // promotion uses the SAME 6px threshold as the existing wall drag, in the same handler
+  assert.match(html, /if\(pendingNest && \(Math\.abs\(pt\.x-pendingNest\.start\.x\)\+Math\.abs\(pt\.y-pendingNest\.start\.y\) > 6\)\)\{/);
+  assert.match(html, /startPt=pendingNest\.start; dragCur=pt; dragging=true; pendingNest=null; \}/, "the draw starts where the finger went down");
+  // a candidate that never moved finishes what pointerdown used to do
+  assert.match(html, /if\(pendingNest\)\{ var pn=pendingNest; pendingNest=null; if\(!pn\.named\) openLabel\(pn\.room\); return; \}/,
+    "tap on an unnamed room still opens naming");
+  // and it is cleared wherever pendingWall is, so a mode change or a pinch cannot strand it
+  assert.match(html, /pendingWall=null; pendingNest=null; wallDrag=null; wallHover=null;/, "setMode clears it");
+  assert.match(html, /dragging=false; wallDrag=null; pendingWall=null; pendingNest=null; startPt=dragCur=null; beginPinch\(\);/, "a second finger clears it");
+});
+
+test("B10: the shell forwards the flag only when the page URL asks for it", () => {
+  assert.match(host, /get\("nest"\)==="1" \? "&nest=1" : ""/, "the survey shell forwards it to the draw iframe");
+  const widget = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.jsx", import.meta.url), "utf8");
+  assert.match(widget, /const nestOn = typeof window !== "undefined" && \/\[\?&\]nest=1\(\?:&\|\$\)\/\.test\(window\.location\.search\);/);
+  assert.match(widget, /\$\{nestOn \? "&nest=1" : ""\}/, "and the host forwards it from the page URL");
 });

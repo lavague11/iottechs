@@ -286,7 +286,7 @@
     </div>
 
 <script src="room-taxonomy.js?v=20260921-rooms"></script>
-<script src="draw-geom.js?v=20261116-sectionE3"></script>
+<script src="draw-geom.js?v=20261116-sectionE4"></script>
 <script>
   var _qs=new URLSearchParams(location.search);
   var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0", FID=_qs.get("fid")||"";   // FID = the survey floor's stable id
@@ -294,6 +294,14 @@
   // (customer/company + service line). Threaded down from the project via the survey shell.
   var PROP=(_qs.get("prop")||"").toLowerCase()==="residential"?"residential":"commercial";
   var BIZ=_qs.get("biz")||"";
+  // B10 - nested-room gesture, OFF by default. With it on, a DRAG that starts inside an existing
+  // room draws a new room nested in it (Paint Booth in Garage); a TAP still selects exactly as it
+  // does today. Off, pointerdown on a room selects and returns and no drag can begin, which is
+  // byte-for-byte the behaviour before this. Enable per-session with ?nest=1 (the shell forwards it
+  // from the page URL); to turn it on for everyone, forward it unconditionally from
+  // site-survey-widget.jsx.
+  var NESTG=_qs.get("nest")==="1";
+  var pendingNest=null;   // {start, room, named} - a tap-or-drag candidate, resolved on move/up
   // Per-floor geometry: the CANONICAL copy is the survey floor record's `plan` (reaches the server with the
   // survey), delivered over postMessage (iotPlanReady → iotPlanLoad, iotPlanSave on every persist). This
   // localStorage key — per (project, floor id) — is crash recovery only. LSK_OLD = the legacy index key, and
@@ -1014,7 +1022,7 @@
   // Undo appears after the first edit; Redo only while a redo state exists (cleared the moment a new edit lands).
   function updateTools(){ $("tUndo").style.display = hi>0 ? "inline-flex" : "none"; $("tRedo").style.display = hi<hist.length-1 ? "inline-flex" : "none"; var to=$("tOpening"); if(to) to.classList.toggle("locked", cells.size===0); }
 
-  function setMode(m){ closeRoomMenu(); closeDoorMenu(); cancelDoorCycle(); pendingWall=null; wallDrag=null; wallHover=null; mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
+  function setMode(m){ closeRoomMenu(); closeDoorMenu(); cancelDoorCycle(); pendingWall=null; pendingNest=null; wallDrag=null; wallHover=null; mode=m; if(m!=="opening") hoverWall=null; if(m!=="removewall") owHover=null;
     var to=$("tOpening"); if(to){ to.classList.toggle("on",m==="opening"); to.classList.toggle("locked", cells.size===0); }
     // Eraser is a dedicated block-erase tool: it forces erase; Structure always re-enters in add. The two are
     // separate dropdown entries, so the shared Add/Erase toggle tracks whichever we entered.
@@ -1041,7 +1049,7 @@
   cv.addEventListener("pointerdown", function(e){ if(busy||planState!=="loaded"||$("preview").classList.contains("show")) return;
     if(e.pointerType==="touch"){ _ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});
       if(_ptrs.size>=2){                                   // a second finger → pinch/pan; abort any in-progress draw
-        dragging=false; wallDrag=null; pendingWall=null; startPt=dragCur=null; beginPinch(); redraw(); return; } }
+        dragging=false; wallDrag=null; pendingWall=null; pendingNest=null; startPt=dragCur=null; beginPinch(); redraw(); return; } }
     if(e.button===2) return;   // right-click is handled by the contextmenu listener (menu), never starts a drag
     cv.setPointerCapture(e.pointerId); var pt=rel(e);
     if(mergeArmed){ var mb=roomHit(pt.x,pt.y); if(mb && mb!==mergeArmed) doMerge(mergeArmed, mb); else endMerge(); return; }   // one-shot merge pick (empty / same room cancels)
@@ -1066,6 +1074,11 @@
     var h=roomHit(pt.x,pt.y);
     if(h){ var hn=(h.label||"").trim();
       if(h===sel && hn && e.pointerType!=="mouse"){ openRoomMenu(h,false); return; }   // touch: second tap on the selected room → actions
+      // B10: with the gesture on, this is a CANDIDATE - a tap still selects, a drag past the
+      // threshold becomes a new room nested in this one. The naming popup for an unnamed room waits
+      // until we know it was a tap, so a drag never opens a dialog mid-gesture.
+      if(NESTG && mode==="room" && shapeKind!=="poly" && structOp!=="erase"){
+        sel=h; redraw(); pendingNest={start:pt, room:h, named:!!hn}; return; }
       sel=h; redraw(); if(!hn) openLabel(h); return; }   // UNNAMED → name it; NAMED → just select (actions via double-click / second-tap)
     closeLabel(); sel=null; startPt=pt; dragCur=pt; dragging=true; redraw(); });
   // Right-click a room/area → its Room Actions menu (same as double-click). Never while picking a merge target.
@@ -1091,6 +1104,8 @@
     if(mode==="select" && (selDrag||selBox)){ selectMove(pt); return; }
     if(polyPts.length){ redraw(); }
     if(pendingWall && (Math.abs(pt.x-pendingWall.start.x)+Math.abs(pt.y-pendingWall.start.y) > 6)){ wallDrag={run:pendingWall.run}; pendingWall=null; }   // movement past a tap → it's a drag
+    if(pendingNest && (Math.abs(pt.x-pendingNest.start.x)+Math.abs(pt.y-pendingNest.start.y) > 6)){   // same threshold as the wall drag
+      startPt=pendingNest.start; dragCur=pt; dragging=true; pendingNest=null; }
     if(wallDrag){ wallDrag.cur=pt; redraw(); return; }
     if(!dragging){ if(mode==="structure"||mode==="eraser"||mode==="block") redraw(); else if(mode==="opening"){ hoverWall=nearestWallUnit(pt.x,pt.y); redraw(); } else if(mode==="removewall"){ owHover = sel ? nearestInteriorUnit(sel,pt.x,pt.y) : null; redraw(); }
       else if(mode==="room" && sel){ var nh=wallRunAt(sel,pt.x,pt.y); cv.style.cursor = nh ? (nh.orient==="v"?"ew-resize":"ns-resize") : "crosshair"; if(wallKeyOf(nh)!==wallKeyOf(wallHover)){ wallHover=nh; redraw(); } }
@@ -1102,7 +1117,10 @@
     if(e.pointerType==="touch" && _ptrs.has(e.pointerId)){ var wasPinch=_pinching; _ptrs.delete(e.pointerId);
       if(wasPinch){ if(_ptrs.size<2) endPinch(); return; } }   // lifting a pinch finger never commits a draw
     if(wallDrag){ var b2=snappedWallB(wallDrag.run, wallDrag.cur.x, wallDrag.cur.y); commitWallMove(sel, wallDrag.run, b2); wallDrag=null; pendingWall=null; redraw(); return; }
-    if(pendingWall){ var pw=pendingWall; pendingWall=null; var hh=roomHit(pw.start.x,pw.start.y); if(hh && hh!==sel){ sel=hh; redraw(); } return; }   // a tap on a wall (no drag) just (re)selects
+    if(pendingWall){ var pw=pendingWall; pendingWall=null; var hh=roomHit(pw.start.x,pw.start.y); if(hh && hh!==sel){ sel=hh; redraw(); } return; }
+    // B10: a candidate that never moved is a TAP - finish exactly what pointerdown used to do,
+    // i.e. name an unnamed room. (Selection already happened on the way down.)
+    if(pendingNest){ var pn=pendingNest; pendingNest=null; if(!pn.named) openLabel(pn.room); return; }   // a tap on a wall (no drag) just (re)selects
     if(!dragging) return; dragging=false;
     if(mode==="zone"){
       if(structOp==="erase"){   // erase drags cells out of any area they overlap

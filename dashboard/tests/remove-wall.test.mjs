@@ -179,7 +179,10 @@ test("Delete uses a destructive confirm; closing the menu is wired to outside-cl
   assert.ok(src.includes('if(e.key!=="Escape") return;') && src.includes('if($("roomMenu").classList.contains("on")){ e.preventDefault(); closeRoomMenu(); return; }'), "Escape closes the menu");
 });
 test("newly created rooms/areas still auto-open naming (first-creation naming is unchanged)", () => {
-  const pu = src.slice(src.indexOf('cv.addEventListener("pointerup"'), src.indexOf('cv.addEventListener("pointerup"') + 2000);
+  // Scoped to the whole onPointerUp body rather than a fixed byte window: the window silently
+  // stopped reaching the assertion the moment anything was added above it.
+  const pu = src.slice(src.indexOf("function onPointerUp("), src.indexOf('cv.addEventListener("pointerleave"'));
+  assert.ok(pu.length > 500, "found the onPointerUp body");
   assert.ok(pu.includes("openLabel(shape)") || pu.includes("openLabel(ash,true)"), "a freshly drawn room/area opens the naming UI on creation");
 });
 

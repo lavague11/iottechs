@@ -11,7 +11,7 @@ import { survey2HasData } from "../../../lib/tool-data";
 // Cache-buster for the embedded widget HTML — BUMP THIS whenever public/widgets/site-survey-merged.html
 // changes so a returning browser doesn't keep running the previously-cached iframe (iOS Safari caches
 // iframe documents aggressively; a page reload alone won't re-fetch it).
-const WIDGET_VERSION = "20261116-sectionE3";
+const WIDGET_VERSION = "20261116-sectionE4";
 
 // Focus-mode overlay styles — GLOBAL (unscoped) because the overlay portals to document.body, outside
 // the page's .pvx scope. 100dvh + safe-area insets so it fills a phone correctly under the notch/home bar.
@@ -74,7 +74,10 @@ export default function SiteSurveyWidget({ accessId, view, customerView, custome
   // Dev/demo "Load sample" is out of the production chooser; forward &sample=1 only when the project URL
   // carries ?sample=1 (a deliberate dev/demo session) so the widget reveals the helper (body.devsample).
   const sampleOn = typeof window !== "undefined" && /[?&]sample=1(?:&|$)/.test(window.location.search);
-  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}${sampleOn ? "&sample=1" : ""}&v=${WIDGET_VERSION}`;
+  // B10 nested-room gesture: forwarded only when the page URL asks for it, so the default tap
+  // behaviour is untouched. Turning it on for everyone means dropping the condition here.
+  const nestOn = typeof window !== "undefined" && /[?&]nest=1(?:&|$)/.test(window.location.search);
+  const src = `/widgets/site-survey-merged.html?project=${encodeURIComponent(accessId)}&embed=1${readOnly ? "&ro=1" : ""}${noRoster ? "&planner=1" : ""}${bizContext ? `&biz=${encodeURIComponent(bizContext)}` : ""}${sampleOn ? "&sample=1" : ""}${nestOn ? "&nest=1" : ""}&v=${WIDGET_VERSION}`;
 
   // The iframe reads its data from localStorage on load — seed the server backup FIRST (only
   // when this browser has no local draft), then render the iframe and keep the server in sync.
