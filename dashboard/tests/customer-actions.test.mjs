@@ -104,3 +104,35 @@ test("B8: the card passes the UNFLOORED published fact, not the floored one", ()
   assert.match(card, /proposal_published: !!facts\.proposal_status/, "read from the raw facts, not sf");
   assert.doesNotMatch(card, /proposal_published: !!sf\.proposal_status/, "sf is floored and would defeat the guard");
 });
+
+// ---- B6: ONE add-on total ------------------------------------------------------------------------
+// CLAUDE.md forbids duplicating a financial calculation. Five copies of
+// `max(0, Σ qty×price − discount)` existed; four were label, email and PDF text that differed from the
+// shared helper only in sub-cent rounding. They now all call proposal.addendumTotals.
+import { addendumTotals } from "../lib/proposal.js";
+
+test("B6: every add-on total comes from addendumTotals, with no hand-rolled copies left", () => {
+  const files = {
+    "lib/addendum-pdf.js": "the change-order PDF",
+    "lib/email.js": "the approval email",
+    "app/api/addendum/route.js": "the signed-add-on event label",
+    "app/project/[accessId]/proposal-actions.js": "the same label server-side",
+  };
+  for (const [rel, what] of Object.entries(files)) {
+    const src = readFileSync(new URL("../" + rel, import.meta.url), "utf8");
+    assert.match(src, /addendumTotals\(/, `${what} uses the shared helper`);
+    assert.doesNotMatch(src, /Math\.max\(0,[^\n]*reduce\(\(s, it\) => s \+ \(\+it\?*\.qty \|\| 0\) \* \(\+it\?*\.price \|\| 0\)/,
+      `${what} still has its own copy of the add-on total`);
+  }
+});
+
+test("B6: the helper rounds the way the copies did, so no figure moves", () => {
+  const a = { items: [{ qty: 2, price: 175 }, { qty: 1, price: 150 }], discount: 50 };
+  assert.deepEqual(addendumTotals(a), { sub: 500, discount: 50, total: 450 });
+  // a discount larger than the subtotal floors at zero, never negative
+  assert.equal(addendumTotals({ items: [{ qty: 1, price: 10 }], discount: 99 }).total, 0);
+  // missing qty counts as 0 in the TOTAL — the long-standing rule the copies shared
+  assert.equal(addendumTotals({ items: [{ price: 100 }] }).total, 0);
+  assert.deepEqual(addendumTotals({}), { sub: 0, discount: 0, total: 0 });
+  assert.deepEqual(addendumTotals(null), { sub: 0, discount: 0, total: 0 });
+});

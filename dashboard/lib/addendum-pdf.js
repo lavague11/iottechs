@@ -4,6 +4,7 @@
 // computed from the stored add-on record's customer prices.
 import { jsPDF } from "jspdf";
 import { contactLine } from "./nap.js";
+import { addendumTotals } from "./proposal.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCaseX = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -14,7 +15,7 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
   const { customerName = "", projectId = "" } = meta;
   const items = Array.isArray(add.items) ? add.items : [];
   const discount = +add.discount || 0;
-  const addTotal = Math.max(0, items.reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - discount);
+  const addTotal = addendumTotals(add).total;
   const newBalance = fig.newBalance;
 
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });

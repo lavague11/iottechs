@@ -17,7 +17,7 @@ import {
   approvePcpAgreement, voidPcpAgreement, finalizePcp, actorName,
   customerOwnsProjectAccount, resolveCustomerRequiredActions,
 } from "../../../lib/db";
-import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint } from "../../../lib/proposal";
+import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerprint, proposalFingerprint, addendumTotals } from "../../../lib/proposal";
 import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
 import { addendumLabel } from "../../../lib/addendum-display";
 import { can, ROLE_KEYS } from "../../../lib/roles";
@@ -574,7 +574,7 @@ export async function signAddendumAction(accessId, addendumId, sign) {
   Object.assign(a, { status: "approved", signedName: name, signedAt: at, signatureData: sign?.data || null, signedFingerprint: addendumFingerprint(a), resignRequired: undefined,
     history: [...(a.history || []), { verb: wasResign ? "re-signed" : "approved", at, by: name }] });
   saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
-  const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
+  const total = addendumTotals(a).total;
   logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name });
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch {}
   await revalidate(accessId);

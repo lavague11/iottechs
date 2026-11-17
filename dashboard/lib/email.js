@@ -15,6 +15,7 @@ import { secretValue } from "./db";
 import { makeApptToken } from "./auth";
 import { reminderCopy, techRow } from "./appt-reminder-model";
 import { SUPPORT_PHONE, SUPPORT_TEL } from "./nap.js";
+import { addendumTotals } from "./proposal.js";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -755,7 +756,7 @@ export async function emailAddendumApproval(accessId, addendumId) {
     if (add.status !== "pending" || add.needsPricing) return { skipped: "not-pending" };
 
     const m = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    const addTotal = Math.max(0, (add.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+add.discount || 0));
+    const addTotal = addendumTotals(add).total;
     const fin = getProjectFinancialState(accessId);
     const newBalance = (fin ? +fin.balance || 0 : 0) + addTotal;
     const first = String(p.contact_name || p.customer || "there").trim().split(/\s+/)[0];

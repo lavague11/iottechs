@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import {
   getToolData, saveToolData, actorName, logProjectEvent, notifyRoles, customerOwnsProjectAccount,
 } from "../../../lib/db";
-import { addendumFingerprint } from "../../../lib/proposal";
+import { addendumFingerprint, addendumTotals } from "../../../lib/proposal";
 import { can } from "../../../lib/roles";
 
 // Stable JSON endpoint for the job-site ADDENDUM flow — READ the add-on list and the customer's SIGN
@@ -93,7 +93,7 @@ export async function POST(req) {
     history: [...(a.history || []), { verb: wasResign ? "re-signed" : "approved", at, by: name }],
   });
   saveToolData(accessId, "addendum", JSON.stringify(d), actorName(tok));
-  const total = Math.max(0, (a.items || []).reduce((s, it) => s + (+it.qty || 0) * (+it.price || 0), 0) - (+a.discount || 0));
+  const total = addendumTotals(a).total;
   try { logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name }); } catch { /* non-fatal */ }
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch { /* non-fatal */ }
   try { const { revalidatePath } = await import("next/cache"); revalidatePath(`/project/${accessId}`); } catch { /* non-fatal */ }

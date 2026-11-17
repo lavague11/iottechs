@@ -153,6 +153,20 @@ case the number should be corrected on its own.
 
 ## B6 — Found in passing: four more copies of the add-on total, and a qty that disagrees with itself
 
+> **PARTLY DONE 2026-11-16 — the four copies are consolidated; the qty rule is NOT touched.**
+>
+> All four now call `proposal.addendumTotals`, so the change-order PDF, the approval email and both
+> event labels read one function. They were label/email/PDF text only and differed from the helper
+> solely in sub-cent rounding the live data cannot trigger, so **no figure moved** — a test pins the
+> helper's arithmetic alongside the consolidation to keep it that way.
+>
+> **Still yours:** the `|| 1` / `|| 0` disagreement. `getApprovedAddons`' item-*display* qty uses
+> `|| 1` while its total uses `|| 0`, and that array feeds `cloneProposal`, so a missing qty would
+> count as **0** on the add-on and bill as **1** in the clone. Unreachable today only because the
+> single writer normalises qty on the way in. Making them agree is a one-token change that *could*
+> move a figure, which puts it in the RED lane — pick which one is right rather than having an agent
+> guess.
+
 Not blocking anything, and **not** caused by this run — recorded because `CLAUDE.md` forbids duplicating
 a financial calculation and these were found while consolidating the others.
 
