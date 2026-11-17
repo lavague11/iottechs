@@ -43,6 +43,12 @@ test("portal Proposal card: zero / one / several addenda", () => {
   assert.equal(proposalCardAction("Completed", 1), "Completed · 1 addendum");
   assert.equal(proposalCardAction("Completed", 3), "Completed · 3 addendums");
   assert.equal(proposalCardAction("Edit", 2), "Edit");   // only a done card carries the count
+  // The done WORD is the card's to choose, so the count follows the done FLAG, not the literal
+  // "Completed" — matching on the word dropped the addendum count the moment it became "Signed".
+  assert.equal(proposalCardAction("Signed", 1, true), "Signed · 1 addendum");
+  assert.equal(proposalCardAction("Signed", 2, true), "Signed · 2 addendums");
+  assert.equal(proposalCardAction("Signed", 0, true), "Signed");
+  assert.equal(proposalCardAction("Edit", 2, false), "Edit");
   const gw = read("../app/project/[accessId]/gateway-client.jsx");
   assert.doesNotMatch(gw, /key: "addendum", title: "Addendum"/);   // the separate card is gone
 });

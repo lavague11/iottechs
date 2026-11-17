@@ -7,6 +7,7 @@ import { LOGIN_VIEW } from "../../../lib/spec";
 import { customerPortalV2For, financeSummary, pickUpcomingAppt, sanitizeAppt, paymentsSummary } from "../../../lib/customer-portal";
 import { staffHubFor } from "../../../lib/staff-hub";
 import { can } from "../../../lib/roles";
+import { canSandbox, sandboxRoleFrom } from "../../../lib/sandbox";
 import { getToolData } from "../../../lib/db";
 import GatewayClient from "./gateway-client";
 import LinkNotFound from "./link-not-found";
@@ -46,7 +47,7 @@ export async function generateMetadata({ searchParams }) {
 //  - customer → only when they own the project (contact email matches)
 const STAFF_ROLES = new Set(["admin", "manager", "sales", "tech"]);
 
-async function resolveSessionView(project, previewRole, previewToken) {
+async function resolveSessionView(project, previewRole, previewToken, asRole = null) {
   // If a valid signed preview token is present, grant that role directly — no session required
   if (previewRole && previewToken) {
     const valid = await verifyPreviewToken(project.access_id, previewRole, previewToken);
@@ -75,12 +76,18 @@ async function resolveSessionView(project, previewRole, previewToken) {
     : null;
 
   if (user) {
-    // ?preview= is a view projection, not an auth grant — scope it tightly:
-    // admin/manager may preview any role; sales only the customer view; tech none.
-    if (previewRole) {
-      if (["admin", "manager"].includes(user.role)) return previewRole;
-      if (user.role === "sales" && previewRole === "customer") return previewRole;
-    }
+    // SANDBOX ("Demo"): on a throwaway copy an admin doesn't PREVIEW a role, they BECOME it. The view is
+    // returned as that role's real view, so every tool, signature and payment runs its normal writable
+    // path — no "pretend" branch anywhere in the app. That is only safe because the project is a demo
+    // copy: it is not the live job, it is hidden from every list, and it can physically never send mail
+    // (source='journey-test' + a @journey-test.local contact — the two checks isDemoProject reads).
+    // Admin only, and only on a sandbox row; nothing here widens access to a real project.
+    if (project?.sandbox_of && canSandbox(user.role) && asRole) return asRole === "admin" ? null : asRole;
+
+    // ?preview= is a view projection (read-only), not an auth grant. Owner's rule: ADMIN ONLY — a manager
+    // does not get to walk around in other people's views, sales no longer gets the customer view, and a
+    // tech never sees a customer view at all.
+    if (previewRole && user.role === "admin") return previewRole;
     if (user.role && user.role !== "customer") {
       return pinView || LOGIN_VIEW[user.role] || null;
     }
@@ -98,6 +105,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   const sp = await searchParams;
   const previewRole  = sp?.preview || null;
   const previewToken = sp?.pt || null;
+  const asRole       = sandboxRoleFrom(sp?.as);   // sandbox only: the role an admin is walking the demo as
   const p = resolveProjectRef(accessId);   // full project ID (ASC0041) or just the last-4 (0041)
 
   if (!p) {
@@ -150,9 +158,12 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     announced_seen:    p.announced_seen     || null,   // JSON array of "X has been published" pop-ups already shown
     needs_details:     p.needs_details      ? 1 : 0,   // field-logged by a tech — office still owes the contact details
     internal_job:      p.internal_job       ? 1 : 0,   // internal/legacy job (no customer sale) — WO skips sign+deposit
+    // Sandbox ("Demo"): the source project this throwaway copy was made from, else null. Drives the demo
+    // bar and the role switcher; `sandbox_of` being set is the ONE test for "this is a demo".
+    sandbox_of:        p.sandbox_of         || null,
   };
 
-  const initialView  = await resolveSessionView(p, previewRole, previewToken);
+  const initialView  = await resolveSessionView(p, previewRole, previewToken, asRole);
 
   // Track per-user "recently opened" for the dashboard launchpad (staff only, deduped upsert, best-effort).
   if (!previewRole) {
@@ -254,7 +265,9 @@ export default async function ProjectLinkPage({ params, searchParams }) {
   // link on the access roster so future auth is ID-based and survives a contact-email edit. Idempotent
   // + ambiguity-guarded in repairCustomerLink; gating on resolveCustomerOwnership().owner keeps a PIN
   // visitor from ever being written in as the project's customer.
-  if (initialView === "customer" && currentUser?.id) {
+  // Never during a sandbox impersonation: an admin walking a demo as "customer" is not the customer, and
+  // this would otherwise write their staff account in as the project's customer on the way past.
+  if (initialView === "customer" && currentUser?.id && !(p.sandbox_of && asRole)) {
     try {
       if (resolveCustomerOwnership(p.access_id, { userId: currentUser.id, email: currentUser.email }).owner) {
         const rep = repairCustomerLink(p.access_id, { userId: currentUser.id, email: currentUser.email, name: currentUser.name });
@@ -428,5 +441,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     }
   } catch { /* no schedule / bad blob → no appointment */ }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} customerPayments={customerPayments} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt} />;
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} customerPayments={customerPayments} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt}
+    sandbox={project.sandbox_of ? { sourceAccessId: project.sandbox_of, as: asRole || "admin" } : null}
+    canSandbox={canSandbox(currentUser?.role)} />;
 }

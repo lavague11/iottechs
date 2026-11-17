@@ -39,9 +39,12 @@ export function proposalIsSigned(meta, hasSignedVersion = false) {
 }
 export const canStartAddendum = ({ signed, canBuild }) => !!signed && !!canBuild;
 
-// Proposal portal card: "Completed · 1 addendum" when done and any exist; nothing extra otherwise.
-export function proposalCardAction(base, addendumCount) {
+// Proposal portal card: "Signed · 1 addendum" when done and any exist; nothing extra otherwise.
+// `done` is passed explicitly because the done WORD is the card's to choose (the Proposal says
+// "Signed", not "Completed") — matching on the literal label silently dropped the count the moment
+// that word changed. It defaults to the old literal so existing callers keep their behaviour.
+export function proposalCardAction(base, addendumCount, done = base === "Completed") {
   const n = +addendumCount || 0;
-  if (!n || base !== "Completed") return base;
-  return `Completed · ${n} addendum${n === 1 ? "" : "s"}`;
+  if (!n || !done) return base;
+  return `${base} · ${n} addendum${n === 1 ? "" : "s"}`;
 }
