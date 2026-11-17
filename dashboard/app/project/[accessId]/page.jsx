@@ -287,7 +287,10 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     project.install_photos = !!f.install_photos; project.install_confirmed = !!f.install_confirmed; project.completion_docs = !!f.completion_docs;
     // Work order: submitted (office froze it) / accepted (a tech signed it), on ANY version — the Staff Hub
     // card needs these because a `work_orders` row alone misses a WO the office submitted through the sheet.
-    project.work_order_submitted = !!f.work_order_submitted; project.work_order_accepted = !!f.work_order_accepted; }
+    project.work_order_submitted = !!f.work_order_submitted; project.work_order_accepted = !!f.work_order_accepted;
+    // B13: a priced change order still waiting on the customer's signature — server-derived so the
+    // portal's "Sign" card is right on first paint, not only once tool meta has loaded.
+    project.addendum_awaiting_signature = !!f.addendum_awaiting_signature; }
   let assignments    = getProjectAssignments(p.access_id).map(r=>({...r}));
   // The access roster carries each grantee's email — including the customer's. A tech must never
   // receive the customer's contact channel, so null it out of the customer rows for tech views.

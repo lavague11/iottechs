@@ -48,6 +48,7 @@ const TODO_ACTION = {
   3: { label: "Sign",    open: "proposal",    needs: "proposal" }, // accepted, awaiting signature
   4: { label: "Pay",     open: "deposit",     needs: "payment" },  // deposit due
   5: { label: "Pay",     open: "payment",     needs: "payment" },  // final balance due
+  6: { label: "Sign",    open: "addendum",    needs: "addendum" }, // B13: change order awaiting signature
 };
 export function projectCardAction(card = {}) {
   const base = `/project/${card.access_id}`;
@@ -155,6 +156,9 @@ export function buildMyProjectCard({ project: p, facts = {}, events = [], fin = 
       survey: !!facts.survey_submitted,    // something was actually submitted to approve
       proposal: !!facts.proposal_status,   // a PUBLISHED proposal exists (null when none was ever sent)
       payment: payable(fin),               // money is collectible now
+      // B13: a priced, unsigned change order really is there to open. Same fact the todo is derived
+      // from, so the button and the obligation cannot disagree.
+      addendum: !!facts.addendum_awaiting_signature,
     },
   };
 }

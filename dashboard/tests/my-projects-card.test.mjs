@@ -128,7 +128,8 @@ test("card payload carries no internal fields", () => {
   const json = JSON.stringify(c);
   for (const k of ["sales_rep", "commission", "tech_pin", "contact_message", "\"value\"", "\"tech\"", "Dana", "Lee", "9999", "internal"]) assert.ok(!json.includes(k), `leaked ${k}`);
   assert.deepEqual(Object.keys(c).sort(), ["access_id", "actionable", "address", "appt", "category", "customer_pin", "kind", "pct", "service", "state", "status", "step", "steps", "title", "todo"]);
-  assert.deepEqual(Object.keys(c.actionable).sort(), ["payment", "proposal", "survey"], "the gate is three booleans, nothing more");
+  // one boolean per thing a CTA may promise — `addendum` joined them with B13's Sign action
+  assert.deepEqual(Object.keys(c.actionable).sort(), ["addendum", "payment", "proposal", "survey"], "the gate is booleans, nothing more");
   for (const v of Object.values(c.actionable)) assert.equal(typeof v, "boolean");
 });
 

@@ -51,6 +51,7 @@ const CARD_COPY = {
   install:    { title: "Installation",   sub: null,                                   action: "View" },
   closeout:   { title: "Closeout",       sub: "Review and sign off the completed work.", action: "Review" },
   completion: { title: "Completion",     sub: "Your project is complete.",            action: "Certificate" },
+  addendum:   { title: "Change Order",   sub: null,                                   action: "Review" },
 };
 
 export default function CustomerPortal({
@@ -225,7 +226,10 @@ export default function CustomerPortal({
             {cards.map((c) => {
               const copy = CARD_COPY[c.key] || { title: c.key, action: "View" };
               const sub = c.key === "proposal" ? proposalSub(c.state, signedDate)
-                : c.key === "install" ? installSub(c.state, appt) : copy.sub;
+                : c.key === "install" ? installSub(c.state, appt)
+                // B13: say which way the ball is pointing, since a change order can sit either way.
+                : c.key === "addendum" ? (c.state === "awaiting" ? "Added work — review and sign." : "Added work on your project.")
+                : copy.sub;
               const onClick = c.key === "phone"
                 ? () => { window.location.href = `/guide/mobile-setup?project=${accessId}`; }
                 : () => open(c.view, { sign: c.key === "proposal" && c.state === "awaiting" && !reopenPending });
@@ -235,7 +239,9 @@ export default function CustomerPortal({
                     <div className="cpv-card-title">{copy.title}{c.key === "proposal" && c.state === "signed" ? " ✓" : ""}</div>
                     {sub && <div className="cpv-card-sub">{sub}</div>}
                   </div>
-                  <span className="cpv-card-act">{c.key === "proposal" && c.state === "signed" ? "View" : copy.action} →</span>
+                  <span className="cpv-card-act">{c.key === "proposal" && c.state === "signed" ? "View"
+                    : c.key === "addendum" ? (c.state === "awaiting" ? "Sign" : "View")
+                    : copy.action} →</span>
                 </button>
               );
             })}

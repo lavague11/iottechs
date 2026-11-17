@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { addendumAwaitingCustomer } from "../lib/proposal.js";
 
 const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
 const fin = readFileSync(new URL("../lib/customer-portal.js", import.meta.url), "utf8");
@@ -11,7 +12,13 @@ const hub = readFileSync(new URL("../app/project/[accessId]/staff-hub.jsx", impo
 test("getPendingAddons collects pending, priced, non-voided add-ons; excluded from billed total", () => {
   assert.ok(db.includes("export function getPendingAddons"), "getPendingAddons exists");
   const fn = db.slice(db.indexOf("export function getPendingAddons"), db.indexOf("export function getPendingAddons") + 700);
-  assert.ok(fn.includes('a.status === "pending"') && fn.includes("!a.needsPricing"), "only pending + priced add-ons");
+  // B13 replaced the inline filter with the ONE shared predicate, so the money line, the banner and
+  // the Sign CTA cannot disagree. Assert the rule it applies, not the literal it used to be spelled with.
+  assert.ok(fn.includes("filter(addendumAwaitingCustomer)"), "it reads the shared predicate");
+  assert.equal(addendumAwaitingCustomer({ status: "pending" }), true, "pending + priced is pending");
+  assert.equal(addendumAwaitingCustomer({ status: "pending", needsPricing: true }), false, "unpriced is not");
+  assert.equal(addendumAwaitingCustomer({ status: "approved" }), false, "approved is not");
+  assert.equal(addendumAwaitingCustomer({ status: "voided" }), false, "voided is not");
   // The billed total still uses ONLY approved add-ons — pending never inflates it.
   assert.ok(db.includes("const total = grand + (getApprovedAddons(accessId)?.total || 0);"), "total bills approved add-ons only");
   assert.ok(db.includes("pendingAddons: pendAdd.total") && db.includes("pendingAddonCount: pendAdd.count"), "finance state carries pending separately");

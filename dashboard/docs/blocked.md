@@ -653,11 +653,40 @@ it is not only this CTA — it is latent there only because those links are sent
 
 ## B13 — "addendum awaiting signature → Sign" was never implemented (part of the addendum cluster)
 
-> **DECIDED 2026-11-16 — deferred, folded into B2/B3.** Ahmed: *"B13: defer, fold into B2/B3."*
-> Nothing to build until the addendum signature model is settled. Whoever takes B2/B3 owns this:
-> once an addendum signature has a definition, add the branch to `customerTodo` and a `TODO_ACTION`
-> entry pointing at `?open=addendum`, and remember it changes the required-actions banner as well as
-> the project card, because both read the same engine.
+> **BUILT 2026-11-17.** B2/B3 settled the dependency: the JSON blob stays the source of truth, and an
+> addendum signature is the typed name + content fingerprint on that record (`addendumSignatureCurrent`),
+> not a PDF e-sign. With that fixed, the CTA has something real to point at.
+>
+> **The entry's diagnosis was wrong in a way worth recording.** It blamed missing data — *"0 projects
+> are in that state today"*. The actual cause: `requiredActionsFromState` gated the `change_order`
+> branch on `a.shared`, and **nothing has ever written a `shared` field** — not the builder, not
+> `/api/addendum`, not `reconcileAddendumWrite`. The branch could not fire for any record at any point
+> in its life. The banner was as silent as the card, and no amount of data would have changed that.
+>
+> Fixed by making "in front of the customer" derived state with ONE definition —
+> `addendumAwaitingCustomer` (priced + pending + not voided), which is also where an edited signed
+> add-on lands, so re-signing is the same rule. `getPendingAddons`, the banner, the card CTA and the
+> portal all read it, so the money line and the ask cannot disagree.
+>
+> **It was also wider than "add a branch".** The project card refuses to promise a link whose overlay
+> does not exist (`projectCardAction`), and Customer Portal V2 — which is **on** — had no addendum
+> view at all: `?open=addendum` mapped to nothing and would have dropped the customer on the portal
+> home. Shipping only the todo branch would have shipped exactly the dead button that code guards
+> against. So the view was added too: `PORTAL_VIEWS` / `OVERLAY_VIEWS`, `viewAvailability`,
+> `viewFromParams`, a Change Order card, and an overlay mounting the same `InstallAddendum` the deck
+> uses in its customer role.
+>
+> Verified live on ASC0128 (the one project with a pending add-on): the portal shows **Change Order ·
+> "Added work — review and sign." · Sign →**, which opens the overlay on the real **Approve & Sign**
+> control for the $200 line, and closing returns to the portal. `resolveCustomerRequiredActions` now
+> returns `change_order:signature` for it — **1 project**, where it was previously 0 by construction.
+> The two projects whose add-ons are signed correctly surface nothing.
+>
+> Ranked **last** (order 6) and deliberately not keyed on `stage`: a change order is raised whenever
+> site reality differs from the proposal, usually during install or QC — stages with no branch at all,
+> which is exactly how a project fell through to a plain "Open". Last means it can never displace an
+> earlier obligation, and a pending add-on is excluded from the balance, so "pay your balance" above
+> it is still complete on its own.
 
 
 Spec O·166 says *"Proposal/**addendum** awaiting signature → Sign"*. Only the proposal half exists.
@@ -669,7 +698,9 @@ The pieces are there: `resolveCustomerRequiredActions` (`lib/db.js:7297`) → `r
 (`lib/proposal.js:1057`) already emits `{documentType: "change_order", action: "signature"}`, and
 `?open=addendum` is already in the gateway's `OPEN_TOOL_NAMES`.
 
-**0 projects are in that state today**, so nothing is misbehaving right now.
+~~**0 projects are in that state today**, so nothing is misbehaving right now.~~ **That reading was
+wrong**: the count was 0 because `a.shared` is a field nothing writes, so the predicate was
+unreachable — not because no project qualified. See the note at the top.
 
 **Not done because** adding a branch to `customerTodo` changes the required-actions banner as well as
 the card, and it lands in the middle of the addendum cluster that is already waiting on you — **B2**

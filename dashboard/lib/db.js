@@ -15,7 +15,7 @@ import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentCon
 import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
 import { SUPPORT_PHONE } from "./nap.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumTotals, requiredActionsFromState } from "./proposal.js";
+import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { ensureEsignSchema } from "./esign/schema.js";
@@ -2915,6 +2915,9 @@ export function buildStageFacts(accessId) {
       install_done: m.install.allDone && m.install.openIssues === 0,
       install_photos: m.media.installPhotos > 0,
       install_confirmed: m.schedule.installConfirmed,
+      // B13: a priced change order the customer has not signed yet. An obligation of its own — it can
+      // outlive the stage it was raised in, so customerTodo checks it independently of `stage`.
+      addendum_awaiting_signature: m.addendum.awaitingSignature > 0,
       ...qcSignoffFacts(accessId, m),
     }; })(),
     completion_docs: !!p.completed_at,
@@ -7354,7 +7357,10 @@ export function resolveCustomerRequiredActions(accessId) {
   try {
     const addRow = getToolData(accessId, "addendum");
     addendums = (JSON.parse(addRow?.data || "{}").addendums || []).map((a) => ({
-      id: a?.id, title: a?.title, shared: !!a?.shared, needsPricing: !!a?.needsPricing,
+      // B13: `shared` is DERIVED. It was read as a stored field that nothing ever writes, so this
+      // branch never fired. An explicit `a.shared === true` still wins if a writer ever sets one.
+      id: a?.id, title: a?.title, shared: a?.shared === true || addendumAwaitingCustomer(a),
+      needsPricing: !!a?.needsPricing,
       signedCurrent: addendumSignatureCurrent(a),
     }));
   } catch { addendums = []; }
@@ -8050,7 +8056,7 @@ export function getApprovedAddons(accessId) {
 export function getPendingAddons(accessId) {
   const rec = getToolData(accessId, "addendum");
   let list = [];
-  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && a.status === "pending" && !a.needsPricing); } catch { list = []; }
+  try { list = (JSON.parse(rec?.data || "{}").addendums || []).filter(addendumAwaitingCustomer); } catch { list = []; }
   const each = list.map((a) => {
     return { id: a.id, title: a.title || "Job-site add-on", total: addendumTotals(a).total };
   });
@@ -8195,8 +8201,13 @@ export function getToolMeta(accessId) {
   // Exclude tech-submitted ones still awaiting office pricing (needsPricing) — the customer shouldn't
   // see an add-on before the office has set its price.
   const addRow = getToolData(accessId, "addendum");
-  let addCount = 0;
-  try { addCount = (JSON.parse(addRow?.data || "{}").addendums || []).filter((a) => !a?.needsPricing).length; } catch { /* bad blob */ }
+  let addCount = 0, addAwaiting = 0;
+  try {
+    const addList = JSON.parse(addRow?.data || "{}").addendums || [];
+    addCount = addList.filter((a) => !a?.needsPricing).length;
+    // B13: priced add-ons still waiting on the customer's signature — the fact behind their "Sign" CTA.
+    addAwaiting = addList.filter(addendumAwaitingCustomer).length;
+  } catch { /* bad blob */ }
   // Scheduled visits (survey + install share this store): drives "Scheduling" step green/open state
   // and keeps the scheduler hidden from the customer until a real booking exists.
   const schedRow = getToolData(accessId, "schedule");
@@ -8218,7 +8229,7 @@ export function getToolMeta(accessId) {
       cameras: surveyTool === "survey2" ? survey2CameraCount(surveyRow?.data) : 0 },   // gates the customer "Visualize" step (render only when cameras are placed)
     mockup: { has: toolHasData("mockup", mockupRow?.data), fingerprint: toolFingerprint("mockup", mockupRow?.data) },
     tracking: { count: trkCount, delivered: trkDelivered },
-    addendum: { count: addCount },
+    addendum: { count: addCount, awaitingSignature: addAwaiting },
     schedule: { count: schedCount, installConfirmed: installAppointmentConfirmed(schedRow?.data) },
     // Install photos = media rows tagged kind "install" (issue photos / survey shots don't count).
     media: { installPhotos: countProjectMedia(accessId, "install") },

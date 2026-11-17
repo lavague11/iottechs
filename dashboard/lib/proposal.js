@@ -1058,6 +1058,21 @@ export function addendumTotals(a) {
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
 
+// B13 — THE definition of "this add-on is in front of the customer, waiting on them". One predicate,
+// so the money line (getPendingAddons), the required-actions banner and the project card's Sign CTA
+// cannot disagree about whether an add-on is an outstanding ask.
+//
+// It is derived state, not a field. `requiredActionsFromState` used to read `a.shared`, which NOTHING
+// has ever written — so the change_order branch could not fire at any point in the record's life, and
+// B13's "0 projects are in that state" was an unreachable predicate rather than an empty set.
+//
+// Priced (the office has set a price) + pending (not yet approved) is exactly the set the customer
+// already sees in the portal, and it is also where an approved add-on lands when it is edited
+// afterwards (reconcileAddendumWrite drops it to pending + resignRequired), so re-signing is covered
+// by the same rule. Voided and declined ones are not asks.
+export const addendumAwaitingCustomer = (a) =>
+  !!a && a.status === "pending" && !a.needsPricing && !a.voidedAt;
+
 // ---- Canonical customer required-action resolver (PURE) ---------------------------------------
 // Given already-authoritative state, return the outstanding customer actions for a project — the single
 // answer to "whatever needs signing must get signed". The DB wrapper (db.resolveCustomerRequiredActions)

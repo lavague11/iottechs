@@ -112,6 +112,10 @@ export function viewAvailability(ctx = {}, finance = null) {
     closeout:   !!ctx.closeoutReady,
     completion: !!(ctx.complete && ctx.paidInFull),
     phone:      pState === "signed" && !ctx.installComplete,
+    // B13: the change-order overlay is available whenever the customer has an add-on to look at —
+    // one awaiting their signature, or an already-signed one they may re-read. `addendumCount`
+    // excludes add-ons still awaiting office pricing, so they never see an unpriced one.
+    addendum:   !!ctx.addendumAwaiting || (+ctx.addendumCount || 0) > 0,
   };
 }
 
@@ -121,21 +125,24 @@ export function viewAvailability(ctx = {}, finance = null) {
 // MERGE: System Preview (mockup) folded into Site Survey — one entry card. The customer reviews the
 // camera photos inside the survey's Walkthrough; `mockup` stays a valid ?view= overlay (deep links) but
 // is no longer its own card.
-const CARD_ORDER = ["survey", "proposal", "phone", "install", "closeout", "completion"];
+// B13: the change order sits after Installation — it is raised when something on site differs from the
+// proposal, so that is where the customer expects to find it.
+const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "closeout", "completion"];
 export function portalCards(ctx = {}, finance = null) {
   const avail = viewAvailability(ctx, finance);
   const pState = proposalCardState(ctx);
   const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
-  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available" };
+  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available",
+    addendum: ctx.addendumAwaiting ? "awaiting" : "signed" };
   return CARD_ORDER.filter((k) => avail[k]).map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
 }
 
 // The overlay keys the portal understands (URL ?view=<key>). Used to validate an incoming ?view / legacy
 // ?open mapping so a hand-typed value can't open something unexpected. `phone` is a link-out (a guide), not
 // an in-portal overlay, so it is deliberately absent from OVERLAY_VIEWS below.
-export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone"]);
+export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone", "addendum"]);
 // The views that render as an in-portal overlay (phone is excluded — it navigates to a support guide).
-export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install"]);
+export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "addendum"]);
 // Is `view` both a renderable overlay AND currently available? One check for direct-URL + card clicks.
 export function overlayAvailable(view, ctx = {}, finance = null) {
   return OVERLAY_VIEWS.includes(view) && !!viewAvailability(ctx, finance)[view];
@@ -143,7 +150,9 @@ export function overlayAvailable(view, ctx = {}, finance = null) {
 // Legacy email/SMS deep links (?open=proposal&sign=1, ?open=survey, …) → the V2 overlay key.
 export function viewFromParams({ view, open } = {}) {
   if (view && PORTAL_VIEWS.includes(view)) return view;
-  const map = { proposal: "proposal", survey: "survey", site_survey: "survey", mockup: "mockup", deposit: "payment", payment: "payment" };
+  // `addendum` is the gateway's own ?open= name (OPEN_TOOL_NAMES), so the project card's "Sign" link
+  // works whichever portal the customer is served (B13).
+  const map = { proposal: "proposal", survey: "survey", site_survey: "survey", mockup: "mockup", deposit: "payment", payment: "payment", addendum: "addendum" };
   if (open && map[open]) return map[open];
   return null;
 }

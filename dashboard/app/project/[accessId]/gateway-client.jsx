@@ -1911,6 +1911,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     qc_customer_signed:  acceptLoaded ? qcSignedCurrent("qc_customer") : !!lp.qc_customer_signed,
     install_photos:      acceptLoaded ? (toolMeta?.media?.installPhotos || 0) > 0 : !!lp.install_photos,
     install_confirmed:   acceptLoaded ? !!toolMeta?.schedule?.installConfirmed : !!lp.install_confirmed,
+    // B13: drives the customer's "Sign the change order" to-do and the portal's Change Order card.
+    addendum_awaiting_signature: acceptLoaded ? (toolMeta?.addendum?.awaitingSignature || 0) > 0 : !!lp.addendum_awaiting_signature,
     completion_docs:     !!lp.completed_at,
     // Work order (server facts): submitted = the office froze it; accepted = a technician signed it.
     // (proposalData is the live row, so submitting in the sheet flips the card without a reload.)
@@ -3025,6 +3027,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   customerName={lp.contact_name || lp.customer} hasData />
               </div>
             );
+          // B13: the change order the customer is asked to sign. The SAME component the deck mounts,
+          // in its customer role — the signing control lives inside it, so the card's "Sign" lands on
+          // the actual signature rather than the portal home.
+          case "addendum":
+            return (
+              <div style={padOvl}>
+                <InstallAddendum accessId={lp.access_id} role="customer" readOnly={!!previewRole}
+                  customerName={lp.contact_name || lp.customer} onCount={setAddonCount} />
+              </div>
+            );
           case "closeout": {
             const sign = (
               <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
@@ -3070,6 +3082,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         proposalStatus: resolverFacts.proposal_status,
         proposalSigned: !!resolverFacts.proposal_signed,
         installComplete: !!sFacts.install_done,
+        // B13: priced add-ons the customer can see, and whether any still wants their signature.
+        addendumCount: toolMeta?.addendum?.count || 0,
+        addendumAwaiting: !!sFacts.addendum_awaiting_signature,
         // Real install status: use the actual appointment (or a confirmed booking), never the inquiry's
         // requested install_date fallback — so the portal never shows a phantom "Scheduled".
         installStatus: (sFacts.install_done || ["qc", "payment", "completion"].includes(projectStage)) ? "complete"

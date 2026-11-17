@@ -79,6 +79,15 @@ export function customerTodo(f = {}) {
     return { label: "Pay your deposit to lock in your install date", cta: "Pay deposit", target: "approval_deposit", order: 4 };
   if (S === "payment" && !f.final_balance_paid)
     return { label: "Pay your final balance to complete your project", cta: "Pay balance", target: "approval_deposit", order: 5 };
+  // B13 (spec O·166: "Proposal/ADDENDUM awaiting signature → Sign"). Deliberately LAST and deliberately
+  // not keyed on `stage`: a change order is raised whenever something on site differs from the
+  // proposal — usually during install or QC, stages with no branch above — so a project whose only
+  // outstanding item was an unsigned change order fell through to a plain "Open", on the card and in
+  // the required-actions banner, which read the same engine. Ranking it last means it can never
+  // displace an obligation that comes earlier in the flow; a pending add-on is excluded from the
+  // balance, so "pay your balance" above is still a complete instruction on its own.
+  if (f.addendum_awaiting_signature)
+    return { label: "Sign the change order for your add-on", cta: "Sign", target: "install", order: 6 };
   return null;
 }
 
