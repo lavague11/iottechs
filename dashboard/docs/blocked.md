@@ -222,12 +222,27 @@ case the number should be corrected on its own.
 > solely in sub-cent rounding the live data cannot trigger, so **no figure moved** — a test pins the
 > helper's arithmetic alongside the consolidation to keep it that way.
 >
-> **Still yours:** the `|| 1` / `|| 0` disagreement. `getApprovedAddons`' item-*display* qty uses
-> `|| 1` while its total uses `|| 0`, and that array feeds `cloneProposal`, so a missing qty would
-> count as **0** on the add-on and bill as **1** in the clone. Unreachable today only because the
-> single writer normalises qty on the way in. Making them agree is a one-token change that *could*
-> move a figure, which puts it in the RED lane — pick which one is right rather than having an agent
-> guess.
+> **DECIDED 2026-11-17 — the qty rule is now 0 everywhere. Nothing moved.**
+>
+> It was **not** a one-token change: `|| 1` was applied **twice** on the clone path — once in
+> `getApprovedAddons`' item map and again in `lib/proposal-reuse.js:48` — so fixing the first alone
+> would have had the unit re-invented one call later. Both now read 0.
+>
+> **Why 0 and not 1**, since the entry asked for a pick rather than a guess:
+> 1. **It cannot move money.** 1 would mean changing `addendumTotals`, whose output is bound into
+>    `signedFingerprint`; a signed add-on's total could shift. 0 leaves that formula untouched, which
+>    is why this is provably zero-impact rather than argued to be.
+> 2. **The house rule is to never manufacture a number** — the same principle as the service call's
+>    `needsPrice` line, which refuses to invent a price rather than guessing one. A quantity nobody
+>    recorded is missing, not one. And of the two ways to be wrong, charging a customer for an
+>    unstated quantity lands in a document they sign, while under-charging is visible to staff first.
+>
+> Measured: **2 projects with approved add-ons, 2 line items, 0 missing quantities, 0 clones whose
+> total would differ.** ASC0034 unchanged at $750.00 / $3,693.73. A zero-qty line is still carried
+> into the clone with its price intact, so staff can see and fix it rather than having it vanish.
+>
+> **Left undone deliberately:** a missing qty is still silent. Surfacing it the way `needsPricing`
+> surfaces an unpriced line would be the next step, and is a new validation state, not this fix.
 
 Not blocking anything, and **not** caused by this run — recorded because `CLAUDE.md` forbids duplicating
 a financial calculation and these were found while consolidating the others.
@@ -255,8 +270,9 @@ draft, so a missing qty would count as **0** on the add-on and bill as **1** in 
 unreachable today only because the single writer normalises qty on the way in
 (`install-addendum.jsx:105`) and the live data has no missing quantities.
 
-**Recommended:** one small follow-up that points all five sites at `addendumTotals` and makes the qty
-rule agree with itself. Out of scope for this run's sections.
+~~**Recommended:** one small follow-up that points all five sites at `addendumTotals` and makes the qty
+rule agree with itself.~~ **Both halves are now done** — the four copies on 2026-11-16, the qty rule on
+2026-11-17 (see the note at the top of this entry; it turned out to be two sites, not one).
 
 ---
 

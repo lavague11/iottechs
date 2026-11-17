@@ -10,7 +10,14 @@ Database backed up first and the backup verified to restore:
 
 ---
 
-## B6 — the add-on qty rule · **nothing would change**
+## B6 — the add-on qty rule · **APPLIED 2026-11-17, resolved to 0** · nothing changed
+
+> Applied as measured: **0 of 2 line items affected, 0 clones differ.** The rule is now 0 everywhere
+> — `addendumTotals` (untouched), `getApprovedAddons` and `lib/proposal-reuse.js`, which applied the
+> `|| 1` a **second** time on the same clone path. 0 was chosen over 1 because it leaves the money
+> formula — the one bound into `signedFingerprint` — byte-identical, and because the house rule is to
+> never manufacture a number.
+
 
 The display qty defaults to `|| 1`; the total defaults to `|| 0`. A missing qty therefore counts as
 nothing on the add-on and bills as one in a clone.

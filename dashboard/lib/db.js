@@ -8026,7 +8026,11 @@ export function getApprovedAddons(accessId) {
     return {
       id: a.id, title: a.title || "Job-site add-on", signedName: a.signedName || null, signedAt: a.signedAt || null,
       discount, total, // customer owes the discounted total
-      items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 1, price: +it.price || 0 })),
+      // B6: a missing quantity is NOT a quantity of one. addendumTotals (the money formula, and the
+      // thing a signature is bound to) counts it as 0, and this array is copied straight into a clone
+      // by cloneProposal — so `|| 1` here meant an add-on that billed $0 came back as a charge in the
+      // new draft. Both ends now read 0, which is also the house rule: never manufacture a number.
+      items: (a.items || []).map((it) => ({ name: it.name, qty: +it.qty || 0, price: +it.price || 0 })),
     };
   });
   return { total: each.reduce((s, a) => s + a.total, 0), list: each };
