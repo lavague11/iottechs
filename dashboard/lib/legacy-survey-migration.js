@@ -23,38 +23,54 @@ import { renderableFloors } from "./survey2-model.js";
 
 export const SKIP = {
   HAS_SURVEY2: "already has its own survey2",
+  HAS_SURVEY2_ROW: "a survey2 row already exists (converting would overwrite it)",
   NOT_ADAPTABLE: "no renderable background — nothing to convert",
-  WOULD_VOID_APPROVAL: "a current survey approval is bound to the legacy fingerprint",
+  WOULD_VOID_APPROVAL: "a current survey/submission binding is on the legacy fingerprint",
   NO_LEGACY: "no legacy survey row",
 };
 
-// snapshot: { accessId, legacyRaw, survey2HasData, adapted, legacyFp, newFp, approvalFingerprint }
+// snapshot: { accessId, legacyRaw, survey2HasData, survey2RowExists, adapted, legacyFp, newFp, bindings }
 //   adapted ............ legacySurveyToSurvey2(legacyRaw) output, or null
 //   legacyFp / newFp ... toolFingerprint("survey", legacyRaw) / toolFingerprint("survey2", payload)
-//   approvalFingerprint  the fingerprint the survey acceptance is bound to, or null when unapproved
-export function planSurveyMigration(s = {}, { rebindApprovals = false } = {}) {
-  const base = { accessId: s.accessId, action: "skip", reason: null, floors: 0, devices: 0, rebind: false };
+//   bindings ........... { site_survey, submit_site_survey } — each the fingerprint that acceptance is
+//                        bound to, or null. They are DIFFERENT things: `site_survey` is the customer's
+//                        approval, `submit_site_survey` is the office's submission marker. They must
+//                        never be collapsed into one value (see the note on re-binding below).
+export function planSurveyMigration(s = {}) {
+  const base = { accessId: s.accessId, action: "skip", reason: null, floors: 0, devices: 0 };
   if (!s.legacyRaw) return { ...base, reason: SKIP.NO_LEGACY };
   if (s.survey2HasData) return { ...base, reason: SKIP.HAS_SURVEY2 };
+  // A survey2 row that exists but holds no survey CONTENT is still somebody's state — widget flags,
+  // `submitted`, step position. saveToolData is an upsert, so converting would overwrite it and the
+  // documented rollback (DELETE the survey2 row) would not bring it back. Leave it alone.
+  if (s.survey2RowExists) return { ...base, reason: SKIP.HAS_SURVEY2_ROW };
   // Only RENDERABLE floors count here. The adapter also carries backgroundless floors so their cameras
-  // reach the roster, but a survey2 row made of those would flip `toolHasData` for 35 projects and with
-  // it getToolMeta().survey.has and the stage facts that read it — a migration that moves gates, not
-  // one that recovers floor plans.
+  // reach the roster, but writing those as a survey2 row would flip `toolHasData("survey2")` for 34
+  // projects — and that is what decides WHICH tool getToolMeta reads. (`survey.has` is already true for
+  // them via the legacy fallback; it is the tool, the fingerprint and the camera count that move, and
+  // a camera count going 0 → N surfaces customer cards.) A migration that moves gates, not one that
+  // recovers floor plans.
   const renderable = renderableFloors(s.adapted);
   if (!renderable.length) return { ...base, reason: SKIP.NOT_ADAPTABLE };
 
   const floors = renderable.length;
   const devices = renderable.reduce((n, f) => n + ((f.devices || []).length), 0);
-  // An approval only matters while it still binds. One already adrift from the legacy blob is not
-  // something the migration can break.
-  const approvalLive = !!s.approvalFingerprint && s.approvalFingerprint === s.legacyFp;
-  const survivesAsIs = !!s.approvalFingerprint && s.approvalFingerprint === s.newFp;
-  if (approvalLive && !survivesAsIs && !rebindApprovals)
-    return { ...base, reason: SKIP.WOULD_VOID_APPROVAL, floors, devices };
+  // A binding only matters while it still binds; one already adrift from the legacy blob is not
+  // something the migration can break. Either binding being live is enough to hold the project back.
+  //
+  // There is deliberately NO re-bind option. An earlier version had one, and it was unsafe twice over:
+  // it read `site_survey || submit_site_survey` into a single value and then always re-accepted
+  // `site_survey`, so a project with only an office SUBMISSION marker came out with a customer
+  // APPROVAL the customer never gave. And even done correctly it would not last — opening the planner
+  // once renames a device ("" → "Camera 1") and swaps the inline background for a media URL, both of
+  // which are inside survey2Meaning, so the fingerprint moves again and the re-bound approval voids.
+  // A held-back project is re-approved by the customer, not by a script.
+  const b = s.bindings || {};
+  const live = [b.site_survey, b.submit_site_survey].filter((fp) => fp && fp === s.legacyFp);
+  const survives = live.length > 0 && live.every((fp) => fp === s.newFp);
+  if (live.length && !survives) return { ...base, reason: SKIP.WOULD_VOID_APPROVAL, floors, devices };
 
-  return { accessId: s.accessId, action: "convert", reason: null, floors, devices,
-    // a deliberate re-bind, only when the owner asked for it AND it is actually needed
-    rebind: !!(approvalLive && !survivesAsIs && rebindApprovals), newFp: s.newFp || null };
+  return { accessId: s.accessId, action: "convert", reason: null, floors, devices, newFp: s.newFp || null };
 }
 
 // The bytes to store. `__legacyAdapted` must NOT be persisted: it is the marker the outbound sync gate
@@ -66,9 +82,9 @@ export function migrationPayload(adapted) {
 }
 
 export function summarizeSurveyMigration(plans = []) {
-  const out = { total: plans.length, convert: 0, skip: 0, floors: 0, devices: 0, rebinds: 0, byReason: {} };
+  const out = { total: plans.length, convert: 0, skip: 0, floors: 0, devices: 0, byReason: {} };
   for (const p of plans) {
-    if (p.action === "convert") { out.convert++; out.floors += p.floors; out.devices += p.devices; if (p.rebind) out.rebinds++; }
+    if (p.action === "convert") { out.convert++; out.floors += p.floors; out.devices += p.devices; }
     else { out.skip++; out.byReason[p.reason] = (out.byReason[p.reason] || 0) + 1; }
   }
   return out;
@@ -84,7 +100,6 @@ export function surveyMigrationReport(plans = [], { applied = false, db = "" } =
   L.push(`- projects examined: **${s.total}**`);
   L.push(`- would convert: **${s.convert}** (${s.floors} floor(s), ${s.devices} device(s))`);
   L.push(`- held back: **${s.skip}**`);
-  if (s.rebinds) L.push(`- approvals re-bound: **${s.rebinds}** (--rebind-approvals was given)`);
   L.push("");
   if (s.skip) {
     L.push("## Held back");
@@ -96,9 +111,9 @@ export function surveyMigrationReport(plans = [], { applied = false, db = "" } =
   if (conv.length) {
     L.push("## " + (applied ? "Converted" : "Would convert"));
     L.push("");
-    L.push("| project | floors | devices | approval re-bound |");
-    L.push("|---|---:|---:|---|");
-    for (const p of conv) L.push(`| ${p.accessId} | ${p.floors} | ${p.devices} | ${p.rebind ? "yes" : "—"} |`);
+    L.push("| project | floors | devices |");
+    L.push("|---|---:|---:|");
+    for (const p of conv) L.push(`| ${p.accessId} | ${p.floors} | ${p.devices} |`);
     L.push("");
   }
   const held = plans.filter((p) => p.action === "skip" && p.reason !== SKIP.HAS_SURVEY2 && p.reason !== SKIP.NO_LEGACY);

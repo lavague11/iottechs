@@ -528,10 +528,23 @@ that is a scheduling note; as a general property it is a data-integrity hole.
 
 Related and separate: **the widget rewrites a migrated row on first open even with a clean client.** It
 uploads the inline data-URL background to `/api/media`, rewrites `bg` to the media id, re-serialises,
-and syncs — 9,390 bytes become 825 and the provenance becomes the viewer. The *geometry survives
-intact* (`cam@44.36,50.21`), so this is normalisation rather than corruption, but it means the
-migration's own output is not the steady state. If that matters, the migration should upload the
-background to the media store itself and write the media URL, matching what the widget produces.
+and syncs — 9,390 bytes become 825 and the provenance becomes the viewer. If that matters, the
+migration should upload the background to the media store itself and write the media URL, matching
+what the widget produces.
+
+The geometry survives that rewrite intact — x, y, aim, fov, range and cid are identical — but the
+verifier measured two things I had called cosmetic and which are not:
+
+- **It moves the fingerprint.** The widget also sets `name` from `""` to `"Camera 1"` and swaps the
+  inline background for a media URL, and both are inside `survey2Meaning`: `toolFingerprint` goes
+  `ijis6v → 1z9byv` on first open. So any binding carried across a migration is void the first time
+  someone opens the planner. That is the second reason the re-bind option was removed rather than
+  repaired (see B11) — it could not have held.
+- **The legacy identity tag is lost.** The widget's persisted record carries no `tag`
+  (`site-survey-merged.html:2463`) and recounts tags on restore, so `getProjectCameras`, which labels
+  from `tag`, falls back from the legacy `"IC1"` to `"Camera 1"`. Caused by the widget rather than the
+  migration, but it is the end state of every migrated project, and it means the legacy labelling a
+  customer may have seen on an old document does not survive.
 
 **Options for the owner:**
 1. A version/etag on `project_tool_data` that the client must echo; the server rejects a stale write.
@@ -542,3 +555,23 @@ background to the media store itself and write the media URL, matching what the 
 3. Accept it and run migrations in a maintenance window.
 
 File next to **B7** — same write path, same missing precondition.
+
+---
+
+## B15 — a legacy camera appears in the roster but cannot be renamed or photographed
+
+Adapter-scope consequence of B11, found by the verifier. Low impact, no data at risk.
+
+On a legacy-only project (not yet migrated) the read-time adapter now surfaces its cameras in the
+roster. But `setSurveyCameraName` and `setSurveyCameraPhoto` (`lib/db.js:7666`, `:7684`) read the
+**raw** `survey2` row — correctly, because they are writers and must never round-trip an adapted
+blob — and a legacy-only project has no such row. So they find nothing and return `null`: the rename
+or photo silently does not land.
+
+It is the right failure (far better than materialising an adapted blob through a write path) but it
+is a silent one. **Options:** have those two surface "this survey has not been migrated yet" instead
+of returning null, or migrate the project on demand when someone first edits it. Either is small;
+neither is in any section of this run.
+
+Note this disappears for any project the migration converts — it only affects legacy-only projects,
+and of the 27 whose rosters the adapter populates, only 1 can be migrated.

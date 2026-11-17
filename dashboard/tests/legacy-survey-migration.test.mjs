@@ -11,14 +11,14 @@ const legacy = { floors: [{ name: "Floor Plan 1", B: { bg: "image", img: "data:i
   markers: [{ id: 22, mode: "in", kind: "cam", x: 44.36, y: 50.21, _tag: "IC1" }] }] };
 const adapted = legacySurveyToSurvey2(legacy);
 const snap = (over = {}) => ({ accessId: "ASC0001", legacyRaw: JSON.stringify(legacy), survey2HasData: false,
-  adapted, legacyFp: "LEGFP", newFp: "NEWFP", approvalFingerprint: null, ...over });
+  survey2RowExists: false, adapted, legacyFp: "LEGFP", newFp: "NEWFP",
+  bindings: { site_survey: null, submit_site_survey: null }, ...over });
 
 test("a legacy survey with a background converts, counting its floors and devices", () => {
   const p = planSurveyMigration(snap());
   assert.equal(p.action, "convert");
   assert.equal(p.floors, 1);
   assert.equal(p.devices, 1);
-  assert.equal(p.rebind, false);
 });
 
 test("nothing is converted twice, and markers without a plan are not a survey", () => {
@@ -30,32 +30,49 @@ test("nothing is converted twice, and markers without a plan are not a survey", 
   assert.equal(planSurveyMigration(snap({ adapted: null })).reason, SKIP.NOT_ADAPTABLE);
 });
 
-// The one that protects a customer: getToolMeta falls back to the legacy tool for a project with no
-// survey2, so an approval is bound to the LEGACY fingerprint. Writing a survey2 row flips which tool
-// the gate reads, and a silent conversion would void the approval.
-test("a project whose live approval would be voided is HELD BACK, not converted", () => {
-  const p = planSurveyMigration(snap({ approvalFingerprint: "LEGFP" }));
+// A survey2 row holding no survey CONTENT is still somebody's widget state (flags, `submitted`, step).
+// saveToolData upserts, so converting would overwrite it and the documented DELETE rollback would not
+// bring it back. One such row exists in this database (ASC0036, 520 bytes, submitted:true).
+test("an existing but dataless survey2 row is left alone, not overwritten", () => {
+  const p = planSurveyMigration(snap({ survey2HasData: false, survey2RowExists: true }));
   assert.equal(p.action, "skip");
-  assert.equal(p.reason, SKIP.WOULD_VOID_APPROVAL);
-  assert.equal(p.floors, 1, "it still reports what it would have converted");
+  assert.equal(p.reason, SKIP.HAS_SURVEY2_ROW);
 });
 
-test("an approval that already drifted is not the migration's problem, and one that survives is fine", () => {
-  // bound to neither fingerprint → already broken before the migration
-  assert.equal(planSurveyMigration(snap({ approvalFingerprint: "SOMETHINGELSE" })).action, "convert");
-  // bound to the NEW fingerprint already → conversion changes nothing for it
-  assert.equal(planSurveyMigration(snap({ approvalFingerprint: "NEWFP" })).action, "convert");
-  assert.equal(planSurveyMigration(snap({ approvalFingerprint: null })).action, "convert");
+// The one that protects a customer: getToolMeta falls back to the legacy tool for a project with no
+// survey2, so a binding is on the LEGACY fingerprint. Writing a survey2 row flips which tool the gate
+// reads, and a silent conversion would void it.
+test("a project whose live binding would be voided is HELD BACK, not converted", () => {
+  const approved = planSurveyMigration(snap({ bindings: { site_survey: "LEGFP", submit_site_survey: null } }));
+  assert.equal(approved.action, "skip");
+  assert.equal(approved.reason, SKIP.WOULD_VOID_APPROVAL);
+  assert.equal(approved.floors, 1, "it still reports what it would have converted");
+  // the office's SUBMISSION marker counts too — it is bound to the same fingerprint and breaks the same way
+  const submitted = planSurveyMigration(snap({ bindings: { site_survey: null, submit_site_survey: "LEGFP" } }));
+  assert.equal(submitted.reason, SKIP.WOULD_VOID_APPROVAL);
 });
 
-test("--rebind-approvals converts the held-back ones and marks the re-bind explicitly", () => {
-  const p = planSurveyMigration(snap({ approvalFingerprint: "LEGFP" }), { rebindApprovals: true });
-  assert.equal(p.action, "convert");
-  assert.equal(p.rebind, true);
-  assert.equal(p.newFp, "NEWFP", "the script needs the new fingerprint to re-bind to");
-  // it only re-binds where a re-bind is actually needed
-  assert.equal(planSurveyMigration(snap({ approvalFingerprint: null }), { rebindApprovals: true }).rebind, false);
-  assert.equal(planSurveyMigration(snap({ approvalFingerprint: "NEWFP" }), { rebindApprovals: true }).rebind, false);
+test("a binding that already drifted is not the migration's problem, and one that survives is fine", () => {
+  assert.equal(planSurveyMigration(snap({ bindings: { site_survey: "SOMETHINGELSE" } })).action, "convert");
+  assert.equal(planSurveyMigration(snap({ bindings: { site_survey: "NEWFP" } })).action, "convert");
+  assert.equal(planSurveyMigration(snap()).action, "convert");
+});
+
+// The defect the verifier found and the reason the flag is gone: reading
+// `site_survey || submit_site_survey` into one value and then always re-accepting `site_survey` gave a
+// project with only an office SUBMISSION a customer APPROVAL nobody granted.
+test("the migration can never write an acceptance — no re-bind option exists", () => {
+  const p = planSurveyMigration(snap({ bindings: { site_survey: null, submit_site_survey: "LEGFP" } }));
+  assert.equal(p.action, "skip", "held back, never silently converted");
+  assert.equal(p.rebind, undefined, "there is no rebind field to act on");
+  const lib = readFileSync(new URL("../lib/legacy-survey-migration.js", import.meta.url), "utf8");
+  assert.doesNotMatch(lib, /rebindApprovals/, "no re-bind option in the planner");
+  const script = readFileSync(new URL("../scripts/migrate-legacy-surveys.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(script, /acceptStage/, "the script never writes an acceptance");
+  assert.doesNotMatch(script, /--rebind-approvals"/, "and the flag is gone");
+  // the two bindings must stay apart on the way in
+  assert.match(script, /site_survey: acc\.site_survey\?\.fingerprint \|\| null/);
+  assert.match(script, /submit_site_survey: acc\.submit_site_survey\?\.fingerprint \|\| null/);
 });
 
 // `__legacyAdapted` is the marker the outbound sync gate refuses. Persisting it would make the
@@ -71,14 +88,14 @@ test("the stored payload never carries the __legacyAdapted marker", () => {
 
 test("the summary and the report say what happened, including the rollback", () => {
   const plans = [planSurveyMigration(snap()), planSurveyMigration(snap({ accessId: "ASC0002", survey2HasData: true })),
-    planSurveyMigration(snap({ accessId: "ASC0003", approvalFingerprint: "LEGFP" }))];
+    planSurveyMigration(snap({ accessId: "ASC0003", bindings: { site_survey: "LEGFP" } }))];
   const s = summarizeSurveyMigration(plans);
   assert.equal(s.total, 3); assert.equal(s.convert, 1); assert.equal(s.skip, 2);
   assert.equal(s.byReason[SKIP.WOULD_VOID_APPROVAL], 1);
   const md = surveyMigrationReport(plans, { applied: false, db: "/tmp/x.db" });
   assert.match(md, /DRY RUN/);
   assert.match(md, /\| ASC0001 \| 1 \| 1 \|/, "the converted list names the project");
-  assert.match(md, /ASC0003 \| a current survey approval/, "and the held-back list says why");
+  assert.match(md, /ASC0003 \| a current survey\/submission binding/, "and the held-back list says why");
   assert.match(md, /DELETE FROM project_tool_data WHERE project_access_id = '<id>' AND tool = 'survey2'/, "rollback is written down");
   assert.match(surveyMigrationReport(plans, { applied: true, db: "x" }), /APPLIED/);
 });

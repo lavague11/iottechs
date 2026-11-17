@@ -17,10 +17,12 @@
 //
 // Optional:
 //   --only <id>            one project
-//   --rebind-approvals     ALSO convert projects whose current survey approval is bound to the legacy
-//                          fingerprint, re-binding it to the new one. Without this they are held back
-//                          and listed, because converting them silently would void a customer's
-//                          approval. Think before using it.
+//
+// There is deliberately NO --rebind-approvals. A project whose survey approval (or the office's
+// submission marker) is still bound to the legacy fingerprint is HELD BACK and listed, and a human
+// re-approves it. See the note in lib/legacy-survey-migration.js: the flag that used to be here
+// could manufacture a customer approval out of an office submission, and even done correctly the
+// re-bind did not survive the first time anyone opened the planner.
 //
 // What it writes: a `survey2` row per converted project. The legacy `survey` row is never touched —
 // it is the source and the rollback (delete the survey2 row and the read-time adapter resumes).
@@ -34,7 +36,6 @@ const val = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : nu
 const APPLY = has("--apply");
 const CONFIRMED = has("--i-have-a-backup");
 const ALLOW_LIVE = has("--allow-live");
-const REBIND = has("--rebind-approvals");
 const ONLY = val("--only");
 const OUT = val("--out") || path.join(process.cwd(), "docs", "legacy-survey-migration-report.md");
 const dbDirArg = val("--db");
@@ -95,20 +96,25 @@ for (const p of subject) {
   const s2 = db.getToolData(aid, "survey2")?.data || null;
   const adapted = legacySurveyToSurvey2(legacyRaw);
   const payload = migrationPayload(adapted);
-  let approvalFingerprint = null;
+  // The two bindings are kept APART. `site_survey` is the customer's approval and
+  // `submit_site_survey` is the office's submission marker; collapsing them into one value is how an
+  // earlier version came to re-accept `site_survey` for a project that only had a submission.
+  let bindings = { site_survey: null, submit_site_survey: null };
   try {
     const acc = db.getStageAcceptances(aid) || {};
-    approvalFingerprint = (acc.site_survey || acc.submit_site_survey || {}).fingerprint || null;
+    bindings = { site_survey: acc.site_survey?.fingerprint || null,
+                 submit_site_survey: acc.submit_site_survey?.fingerprint || null };
   } catch { /* no acceptances — unapproved */ }
   plans.push(planSurveyMigration({
     accessId: aid,
     legacyRaw,
     survey2HasData: toolHasData("survey2", s2),
+    survey2RowExists: s2 != null,
     adapted,
     legacyFp: toolFingerprint("survey", legacyRaw),
     newFp: payload ? toolFingerprint("survey2", payload) : null,
-    approvalFingerprint,
-  }, { rebindApprovals: REBIND }));
+    bindings,
+  }));
 }
 
 const sum = summarizeSurveyMigration(plans);
@@ -116,7 +122,6 @@ console.log(`\n  projects with a legacy survey: ${sum.total}`);
 console.log(`  ${APPLY ? "converting" : "would convert"}:                   ${sum.convert}  (${sum.floors} floor(s), ${sum.devices} device(s))`);
 console.log(`  held back:                     ${sum.skip}`);
 for (const [r, n] of Object.entries(sum.byReason)) console.log(`      ${n} × ${r}`);
-if (sum.rebinds) console.log(`  approvals re-bound:            ${sum.rebinds}`);
 
 // --- the write step (no-op unless --apply) -------------------------------------------------------
 if (APPLY) {
@@ -126,13 +131,9 @@ if (APPLY) {
     const legacyRaw = db.getToolData(plan.accessId, "survey")?.data;
     const payload = migrationPayload(legacySurveyToSurvey2(legacyRaw));
     if (!payload) continue;
+    // The ONLY write this script makes. It never touches the legacy row, and it never writes an
+    // acceptance — a migration does not get to sign anything on a customer's behalf.
     db.saveToolData(plan.accessId, "survey2", payload, "legacy-survey-migration");
-    if (plan.rebind && plan.newFp) {
-      // Only reached with --rebind-approvals: keep the customer's approval attached to the identical
-      // content in its new shape, rather than silently dropping it.
-      try { db.acceptStage(plan.accessId, "site_survey", "legacy-survey-migration", plan.newFp); }
-      catch (e) { console.log(`      ! ${plan.accessId}: approval re-bind failed — ${e.message}`); }
-    }
     done++;
   }
   console.log(`\n  WROTE ${done} survey2 row(s). The legacy rows were not touched.`);

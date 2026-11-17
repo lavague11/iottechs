@@ -863,3 +863,44 @@ Two further things only the live surface could have shown, both found this way:
 
 Neither is visible from a server-side call or a unit test. The rule: when the complaint is about a
 screen, the verification has to end on that screen, with storage cleared.
+
+## D29 — the migration may not sign anything on a customer's behalf
+
+The legacy-survey migration shipped with a `--rebind-approvals` flag: convert the projects whose
+survey approval was bound to the legacy fingerprint, and re-bind the approval to the identical content
+in its new shape. The verifier found it could **fabricate a customer approval**, and it is removed
+rather than repaired.
+
+The defect was one line. The script read
+
+```js
+approvalFingerprint = (acc.site_survey || acc.submit_site_survey || {}).fingerprint || null;
+```
+
+collapsing two different records into one value. `site_survey` is the **customer's approval**;
+`submit_site_survey` is the **office's submission marker**. Under the flag it then always wrote
+`acceptStage(accessId, "site_survey", …)`. So a project that only had an office submission came out of
+the migration with a customer sign-off nobody gave, and the stage-flow step "Customer accepted the site
+survey" flipped to satisfied. Reproduced on a copy: `site_survey: null` before,
+`{by: "legacy-survey-migration", fingerprint: "ijis6v"}` after. It also left the submission binding it
+was protecting still stale, so it did not even repair the thing it was for.
+
+Blast radius was zero — the three projects with a live submission binding are all unconvertible — so
+this was latent. It is still the most serious kind of bug this project can have: a script manufacturing
+consent. Two reasons it is deleted rather than fixed:
+
+1. **A correct version would not last.** Opening the planner once renames a device (`""` → `"Camera 1"`)
+   and swaps the inline background for a media URL, both inside `survey2Meaning`. The fingerprint moves
+   again (`ijis6v → 1z9byv`) and the re-bound approval voids on first view. The feature could not work.
+2. **Nothing needs it.** No project in the database is in the state it addressed.
+
+A held-back project is re-approved by the customer. The standing rule this leaves behind: a migration
+may move data; it may never create or move a record of someone's consent. The planner now takes the two
+bindings apart and holds a project back if **either** is live, and the script has no path to
+`acceptStage` at all — asserted by a test, because the next person to want this flag will reach for the
+same shortcut.
+
+A second guard came out of the same pass: a project with a `survey2` row that holds no survey *content*
+is still somebody's widget state (flags, `submitted`, step position). `saveToolData` upserts, so
+converting would overwrite it and the documented DELETE rollback would not bring it back. One real row
+is in that shape. The planner now skips on the row EXISTING, not on it having content.
