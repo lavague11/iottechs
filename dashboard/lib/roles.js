@@ -77,4 +77,33 @@ export function can(role, cap) {
 // Roles that only ever read a project page (no mutation control renders for them).
 export const VIEW_ONLY_ROLES = new Set(["readonly", "sales", "vendor"]);
 export const isViewOnlyRole = (role) => VIEW_ONLY_ROLES.has(role);
+
+// Which HALVES of the project page a role may see — the Customer / Internal split on the hub.
+// "customer" = what the client sees (survey, proposal, closeout, completion).
+// "internal"  = the office/field side (work order, payouts, activation QR).
+// ONE source for both the card list and whether the toggle renders at all, so a role can never be
+// shown a toggle to a half it is not allowed into — the two used to be decided separately, which is
+// how a tech ended up with a Customer tab onto the client's proposal.
+//   admin · manager · sales — both halves, so they get the toggle.
+//   tech                    — internal only: the field side, never the customer's proposal or pricing.
+//   vendor                  — customer only: they supply gear and see the job, not the office's work.
+//   customer · readonly     — the customer half only.
+const PROJECT_GROUPS = {
+  admin:    ["customer", "internal"],
+  manager:  ["customer", "internal"],
+  sales:    ["customer", "internal"],
+  tech:     ["internal"],
+  vendor:   ["customer"],
+  customer: ["customer"],
+  readonly: ["customer"],
+};
+export const projectGroups = (role) => PROJECT_GROUPS[role] || ["customer"];
+export const seesProjectGroup = (role, group) => projectGroups(role).includes(group || "customer");
+// The toggle exists only where the role actually has both halves to switch between.
+export const hasGroupToggle = (role) => projectGroups(role).length > 1;
+// Where a role lands first: its only half, or Customer when it has both.
+export const defaultProjectGroup = (role) => {
+  const g = projectGroups(role);
+  return g.includes("customer") ? "customer" : g[0];
+};
 export { CAPS };

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { SANDBOX_ROLES, SANDBOX_ROLE_LABEL } from "../../../lib/sandbox";
 import { discardSandboxAction, resetSandboxAction } from "./actions";
 
@@ -15,6 +15,23 @@ export default function SandboxBar({ sourceAccessId, as = "admin", accessId }) {
   const [busy, setBusy] = useState(false);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [err, setErr] = useState("");
+  const barRef = useRef(null);
+
+  // Publish the bar's height as --sbx-h so the FIXED tool overlays (.cpv-ovl, inset:0) can start below
+  // it instead of underneath it. Without this the bar covers an overlay's own title row and × button,
+  // which is unreachable — there is no other way out of a tool. Measured rather than hard-coded because
+  // the bar wraps to two lines on a narrow window.
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty("--sbx-h", `${Math.round(el.getBoundingClientRect().height)}px`);
+    apply();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(apply) : null;
+    ro?.observe(el);
+    window.addEventListener("resize", apply);
+    return () => { ro?.disconnect(); window.removeEventListener("resize", apply); root.style.removeProperty("--sbx-h"); };
+  }, []);
 
   const go = (role) => {
     const u = new URL(window.location.href);
@@ -44,7 +61,7 @@ export default function SandboxBar({ sourceAccessId, as = "admin", accessId }) {
   }
 
   return (
-    <div className="sbx" role="region" aria-label="Demo">
+    <div className="sbx" ref={barRef} role="region" aria-label="Demo">
       <span className="sbx-tag">Demo</span>
       <span className="sbx-src">copy of {sourceAccessId}</span>
 

@@ -16,6 +16,7 @@ import { getSignatureScheduleAction, requestSignatureEmailAction, cancelSignatur
 import ScheduledSendBanner from "./scheduled-send-banner";
 import RequestSignatureSheet from "./request-signature-sheet";
 import { useContextMenu, ContextMenu } from "../../components/context-menu";
+import { projectGroups, hasGroupToggle } from "../../../lib/roles";
 
 
 const fmtDate = (d) => { try { return new Date(`${d}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }); } catch { return d; } };
@@ -239,11 +240,17 @@ export default function StaffHub({
 
         {/* PROJECT tools — grouped Customer / Internal (admin sees both via the toggle). */}
         {sections.length > 0 && (() => {
-          const hasInternal = sections.some((s) => s.group === "internal");
-          const hasCustomer = sections.some((s) => (s.group || "customer") === "customer");
-          const showToggle = hasInternal && hasCustomer;
+          // What this ROLE may see decides the cards; what it HAS decides whether a toggle renders.
+          // Both come from roles.js, so a tech can never be handed a Customer tab onto the client's
+          // proposal. The old rule keyed off which groups happened to have cards, so whenever one half
+          // was empty it fell through to showing EVERY card to everyone.
+          const allowed = projectGroups(role);
+          const mine = sections.filter((s) => allowed.includes(s.group || "customer"));
+          const hasInternal = mine.some((s) => s.group === "internal");
+          const hasCustomer = mine.some((s) => (s.group || "customer") === "customer");
+          const showToggle = hasGroupToggle(role) && hasInternal && hasCustomer;
           // Locked tools (prerequisite not met yet) are hidden entirely, not shown greyed.
-          const shown = (showToggle ? sections.filter((s) => (s.group || "customer") === group) : sections).filter((s) => !s.locked);
+          const shown = (showToggle ? mine.filter((s) => (s.group || "customer") === group) : mine).filter((s) => !s.locked);
           return (
             <section className="cpv-cards">
               <div className="cpv-kick-row">

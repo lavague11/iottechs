@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { projectFileBase } from "../../../lib/doc-filename";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
-import { can } from "../../../lib/roles";
+import { can, defaultProjectGroup } from "../../../lib/roles";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
@@ -3458,7 +3458,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             actions={hubActions}
             contact={deckCustomer}
             log={deckLog}
-            defaultGroup={["tech", "vendor"].includes(cView) ? "internal" : "customer"}
+            defaultGroup={defaultProjectGroup(cView)}
             primaryCta={projState ? (CTA[projState] || null) : null}
             onPrimaryAction={(a) => { if (a === "payment") setHubPayOpen(true); }}
             role={cView}

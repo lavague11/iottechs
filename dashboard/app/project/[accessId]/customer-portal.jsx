@@ -426,7 +426,9 @@ export const PORTAL_CSS = `
 .cpv-card-title{font-size:16px;font-weight:700;color:var(--ink)}
 .cpv-card-sub{font-size:13px;color:var(--meta);margin-top:2px}
 .cpv-card-act{color:var(--gold-text);font-weight:700;font-size:14px;white-space:nowrap}
-.cpv-ovl{position:fixed;inset:0;z-index:40;background:#fff;display:flex;flex-direction:column}
+/* A fixed overlay starts BELOW the demo bar when one is present (--sbx-h is set by sandbox-bar.jsx;
+   0 everywhere else), so the bar never covers the overlay's own title row and close button. */
+.cpv-ovl{position:fixed;top:var(--sbx-h,0);right:0;bottom:0;left:0;z-index:40;background:#fff;display:flex;flex-direction:column}
 .cpv-ovl-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
 .cpv-ovl-x{background:none;border:0;color:var(--ink-soft);cursor:pointer;display:flex;padding:4px;flex:0 0 auto}
 .cpv-ovl-x:hover{color:var(--ink)}

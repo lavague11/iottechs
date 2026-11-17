@@ -6870,8 +6870,11 @@ export function createSandboxProject(sourceAccessId, actor = null) {
 
   const cols = db.prepare("PRAGMA table_info(projects)").all().map((c) => c.name);
   // Identity, timestamps and the sandbox stamp itself are set explicitly below, never copied.
+  // `portal_version` is NOT carried: a demo exists to show the product as it is now, so it is pinned to
+  // the current customer portal rather than inheriting a per-project "v1" override (or a global flag that
+  // happens to be off) and quietly demoing the legacy deck. Everything else is copied as-is.
   const skip = new Set(["id", "access_id", "created_at", "customer", "contact_email", "source",
-                        "sandbox_of", "sandbox_at", "sandbox_by"]);
+                        "portal_version", "sandbox_of", "sandbox_at", "sandbox_by"]);
   const carry = cols.filter((c) => !skip.has(c));
 
   // Same id shape as a real project (A + 2-letter service + base36) — downstream code parses that format
@@ -6891,9 +6894,11 @@ export function createSandboxProject(sourceAccessId, actor = null) {
   // BEGIN/COMMIT/ROLLBACK explicitly, so a half-copied demo can never be left behind.
   db.exec("BEGIN");
   try {
-    const names = ["access_id", "customer", "contact_email", "source", "sandbox_of", "sandbox_at", "sandbox_by", ...carry];
+    const names = ["access_id", "customer", "contact_email", "source", "portal_version",
+                   "sandbox_of", "sandbox_at", "sandbox_by", ...carry];
     const values = [accessId, tagSandboxName(src.company_name || src.customer), sandboxEmail(accessId),
-                    SANDBOX_SOURCE, String(sourceAccessId), new Date().toISOString(), actor || null,
+                    SANDBOX_SOURCE, "v2",
+                    String(sourceAccessId), new Date().toISOString(), actor || null,
                     ...carry.map((c) => src[c] ?? null)];
     db.prepare(`INSERT INTO projects (${names.join(",")}) VALUES (${names.map(() => "?").join(",")})`).run(...values);
 
