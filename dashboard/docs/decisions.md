@@ -972,3 +972,51 @@ of its four forms outside three allowlisted files that legitimately name it as a
 
 The general rule: when a finding is "a wrong constant is hardcoded here", the finding is never "here".
 Count the instances before writing the entry, and search every form the value can take.
+
+## D33 — the cheap option was ruled out by tracing it, not by trying it
+
+B14 offered three ways to stop a stale browser tab overwriting tool rows, and the middle one looked
+like the obvious first move: have `seedToolData` record the bytes it seeded as the push baseline, so
+a client that changed nothing never pushes. The verifier proposed it and said it "would have
+prevented both incidents". I wrote that into the blocked entry.
+
+It would have prevented neither, and five minutes of reading the call path shows why: **in both
+incidents seeding never ran.** `seedToolData` returns at "local draft wins" (`tool-sync.js:133`) the
+moment localStorage holds content, which it did both times. There were no seeded bytes to record.
+
+What actually pushed:
+- **Incident 1** (a deleted row came back): the deletion made the server return `saved: null`, and
+  `startToolAutosync` primes its baseline only when the server HAS data — on purpose, so a device
+  holding the last copy of a survey the server lost can put it back.
+- **Incident 2** (a migrated row overwritten): the stale localStorage genuinely differed from the
+  freshly migrated row, so any baseline comparison says "this is an edit, push it".
+
+The useful finding is the one underneath: *"don't recreate a deleted row"* and *"do restore a survey
+the server lost"* are **the same code path pointing in opposite directions**. No local heuristic can
+separate them, because the client cannot tell a row that was deleted from a row that was lost. Only a
+version the client must echo can. That is why B14 is a decision and not a cleanup, and why the option
+that looked cheapest was the one to discard.
+
+The habit: when a reviewer hands you a cheap option and an expensive one, trace the cheap one against
+the code before writing it down as available. A wrong option in a decision list is worse than a
+missing one — it is the one the reader will pick.
+
+## D34 — fix the trap before the thing that springs it is built
+
+Four call sites decided "is this payment money in hand?" with `status !== "pending"`. Allow-by-
+default: every status except that one literal counted as cash received. Today only `pending` and
+`confirmed` are ever written — verified against the data (6 confirmed, 1 pending) and against both
+writers — so the test was correct on every row that exists.
+
+It is also a trap armed for the exact change B9 proposes. Option 3 there adds a `failed` state, and
+the day that lands, a failed payment inflates `paid` and shrinks `balance` on a live invoice. The fix
+is one predicate, `paymentCounts = (p) => p?.status === "confirmed"`, and it moves no figure today.
+
+This is the cheapest kind of safety there is: a change with **zero behavioural delta now** that
+removes a failure mode from a change someone will make later. It needed no decision from the owner
+precisely because it changes nothing — and it would have needed a careful one if left until the
+`failed` state existed and the numbers started moving.
+
+Worth separating from the rest of B9 deliberately: the main half (a Pay button the endpoint refuses)
+really does change a money calculation and really is the owner's call. Shipping the half that is free
+does not pre-empt the half that is not.

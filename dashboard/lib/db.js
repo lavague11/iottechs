@@ -2324,6 +2324,14 @@ function financialStateFromRow(r, { total, paid, pendingPay, lastPay }) {
 // for history). Every money figure + bucket comes from the ONE canonical resolver (lib/receivables-model.js)
 // so the AR page, project page and dashboard can't disagree. Unsigned-approved deals appear (Awaiting
 // Signature) but are NEVER counted as money due.
+// Does this payment count as money received? Four call sites answer "is it paid?" and all four used
+// `status !== "pending"`, which is ALLOW-BY-DEFAULT: any status that is not the single value
+// "pending" counted as cash in hand. Only "pending" and "confirmed" are ever written today, so this
+// is the same answer on every existing row - but the moment anyone adds failure handling, a
+// `status = 'failed'` row would have inflated `paid` and shrunk `balance` on a real invoice
+// (docs/blocked.md B9). Name the one status that means paid.
+const paymentCounts = (p) => p?.status === "confirmed";
+
 export function getReceivables() {
   const dOnly = (v) => (v ? String(v).slice(0, 10) : null);
   const iso = (d) => (d instanceof Date ? d.toISOString() : (d || null));
@@ -2362,7 +2370,7 @@ export function getReceivables() {
     const addons = getApprovedAddons(r.access_id);
     const total  = grand + (addons?.total || 0);
     const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(r.access_id);
-    const paid    = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+    const paid    = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
     const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
     const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
 
@@ -2428,7 +2436,7 @@ export function getProjectFinancialState(accessId) {
   } catch { /* bad payload */ }
   const total = grand + (getApprovedAddons(accessId)?.total || 0);
   const pays = db.prepare("SELECT amount, status, created_at, paid_at FROM project_payments WHERE project_access_id=?").all(accessId);
-  const paid = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const paid = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
   const pendingPay = pays.filter((x) => x.status === "pending").reduce((s, x) => s + (+x.amount || 0), 0);
   const lastPay = pays.map((x) => x.paid_at || x.created_at).filter(Boolean).sort().slice(-1)[0] || null;
   const st = financialStateFromRow(r, { total, paid, pendingPay, lastPay });
@@ -2869,7 +2877,7 @@ export function buildStageFacts(accessId) {
   // the project keeps reflecting what the customer actually received until a revision is Sent.
   const prop = getPublishedProposal(accessId);
   const pays = db.prepare("SELECT amount, status FROM project_payments WHERE project_access_id=?").all(String(accessId));
-  const confirmedTotal = pays.filter((x) => x.status !== "pending").reduce((s, x) => s + (+x.amount || 0), 0);
+  const confirmedTotal = pays.filter(paymentCounts).reduce((s, x) => s + (+x.amount || 0), 0);
 
   // Final balance paid — same math as the payment portal (accepted option(s) total + approved
   // add-ons vs. confirmed payments). Lets `payment` auto-advance once the balance is truly $0,
@@ -7234,7 +7242,7 @@ export function svcAmountDue(svcId) {
   const inv = getSvcInvoice(svcId);
   if (!inv || !(inv.total > 0)) return { ok: false, error: "No invoice to pay yet." };
   const pays = getSvcPayments(svcId);
-  const paid = pays.filter((p) => p.status !== "pending").reduce((s, p) => s + (+p.amount || 0), 0);
+  const paid = pays.filter(paymentCounts).reduce((s, p) => s + (+p.amount || 0), 0);
   const pending = pays.filter((p) => p.status === "pending").reduce((s, p) => s + (+p.amount || 0), 0);
   return { ok: true, due: Math.round(Math.max(0, inv.total - paid - pending) * 100) / 100, total: inv.total, paid, pending };
 }

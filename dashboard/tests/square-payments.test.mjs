@@ -3,7 +3,7 @@
 // convenience fee math, webhook signature verification, and the dormant-until-configured gate.
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
@@ -90,4 +90,32 @@ test("webhook signature verification (HMAC-SHA256 over url+body)", () => {
   assert.equal(sq.verifyWebhook(good, body, url), true, "correct signature verifies");
   assert.equal(sq.verifyWebhook("tampered", body, url), false, "wrong signature rejected");
   assert.equal(sq.verifyWebhook(good, body + "x", url), false, "mutated body rejected");
+});
+
+// ---- B9 (latent half): "paid" names the status that means paid ----------------------------------
+// Four call sites asked "is this payment money in hand?" with `status !== "pending"` — allow-by-
+// default, so ANY status other than that one literal counted as cash. Only "pending" and "confirmed"
+// are ever written, so the answer is identical on every existing row; but the moment someone adds
+// failure handling (which B9's option 3 does), a `status='failed'` row would have inflated `paid` and
+// shrunk `balance` on a real invoice.
+test("B9: the paid filter names 'confirmed' rather than 'not pending'", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.match(db, /const paymentCounts = \(p\) => p\?\.status === "confirmed";/, "one predicate");
+  assert.equal((db.match(/pays\.filter\(paymentCounts\)/g) || []).length, 4, "all four call sites use it");
+  assert.doesNotMatch(db, /filter\(\((?:x|p)\) => (?:x|p)\.status !== "pending"\)/, "no allow-by-default copies left");
+
+  // the predicate itself, including the statuses that do not exist yet
+  const paymentCounts = (p) => p?.status === "confirmed";
+  assert.equal(paymentCounts({ status: "confirmed" }), true);
+  assert.equal(paymentCounts({ status: "pending" }), false);
+  assert.equal(paymentCounts({ status: "failed" }), false, "a failed payment is not money received");
+  assert.equal(paymentCounts({ status: "void" }), false);
+  assert.equal(paymentCounts({}), false);
+  assert.equal(paymentCounts(null), false);
+});
+
+test("B9: it is defined above its first use, so the module cannot be reordered into a TDZ error", () => {
+  const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
+  assert.ok(db.indexOf("const paymentCounts =") < db.indexOf("pays.filter(paymentCounts)"),
+    "the predicate is declared before the first call site reads it");
 });

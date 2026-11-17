@@ -311,7 +311,20 @@ pay by another method. That is why it is recorded rather than fixed mid-run.
 
 Option 3 is the honest fix and the largest; option 1 is the smallest that unblocks a customer.
 
-### Related, same function, also latent
+### Related, same function — FIXED 2026-11-16
+
+> `getProjectFinancialState` and three sibling call sites asked "is this payment money in hand?" with
+> `status !== "pending"` — allow-by-default, so any status other than that one literal counted as
+> cash. Only `pending` and `confirmed` are ever written (verified against the data: 6 confirmed, 1
+> pending, and the only writers insert one of those two), so the answer was identical on every
+> existing row — but option 3 below *adds* a `failed` state, and on the day it lands a failed payment
+> would have inflated `paid` and shrunk `balance` on a real invoice. All four now share
+> `paymentCounts = (p) => p?.status === "confirmed"`. **No figure moves today**; the trap is gone
+> before the thing that springs it is built.
+>
+> The main half of B9 — the Pay button the endpoint refuses — still needs your decision below.
+
+### The original note
 
 `getProjectFinancialState` filters `pays.filter(x => x.status !== "pending")`, so a row with
 `status='failed'` **counts as paid** — it inflates `paid` and shrinks `balance`. Nothing writes
@@ -596,13 +609,28 @@ verifier measured two things I had called cosmetic and which are not:
   migration, but it is the end state of every migrated project, and it means the legacy labelling a
   customer may have seen on an old document does not survive.
 
-**Options for the owner:**
-1. A version/etag on `project_tool_data` that the client must echo; the server rejects a stale write.
-   The honest fix, and it also closes **B7** (the write path never checks the project exists).
-2. Have `seedToolData` record the seeded bytes as the push baseline, so a client that changed nothing
-   never pushes. Cheap, and it would have prevented both incidents above, but it does not stop a
-   client that has genuinely diverged.
+**Options for the owner — and option 2 was traced and does NOT work.**
+
+1. **A version/etag on `project_tool_data`** that the client must echo; the server rejects a write
+   made against a version it did not read. The only option that addresses either incident.
+2. ~~Have `seedToolData` record the seeded bytes as the push baseline~~ — **ruled out.** Traced
+   against the code: in *both* incidents seeding never ran. `seedToolData` returns early at "local
+   draft wins" (`tool-sync.js:133`) whenever localStorage already holds content, which it did both
+   times, so there were no seeded bytes to record. Incident 1 then pushed because the deleted row made
+   the server return `saved: null` and `startToolAutosync`'s priming block only sets a baseline when
+   the server HAS data — deliberately, so a device holding the last copy of a survey the server lost
+   can restore it. Incident 2 pushed because the stale localStorage genuinely differed from the
+   migrated row. A baseline from seeding would have fired in neither.
 3. Accept it and run migrations in a maintenance window.
+
+Note what option 2's failure exposes: the push-when-the-server-is-empty behaviour is **deliberate
+data recovery**, and "don't recreate a deleted row" and "do restore a survey the server lost" are the
+same code path pointing in opposite directions. That is why this is a decision and not a cleanup —
+only a version check can tell the two apart.
+
+**B7 is now fixed**, which removes one way in: a stale tab can no longer write to a project that has
+been deleted outright. It does nothing for a tab writing stale bytes to a project that still exists,
+which is incident 2.
 
 File next to **B7** — same write path, same missing precondition.
 
