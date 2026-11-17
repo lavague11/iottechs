@@ -56,6 +56,7 @@ import PublishAnnounce from "./publish-announce";
 import InquiryExtras     from "./inquiry-extras";
 import ShipmentTracking from "./schedule-tracking-panel";
 import { missingReqs }   from "../../../lib/stage-flow";
+import { SUPPORT_PHONE as NAP_PHONE, SUPPORT_TEL as NAP_TEL } from "../../../lib/nap";
 import { getAcceptancesAction, getLiveSnapshotAction, logCallAction, getCustomerFinanceAction, requestReopenAction } from "./proposal-actions";
 // (loadApproval import removed — the old survey-signature requirement now lives in
 // lib/stage-flow.js as the customer's stage_acceptances-backed check)
@@ -1283,9 +1284,9 @@ function CustomerInquiryPanel({ project, accessId }) {
         <div className="ciq-pill">Inquiry received · <span className="mono">{project.access_id}</span></div>
         <h2 className="ciq-title">You&apos;re in. We&apos;ve got it from here.</h2>
         <p className="ciq-sub">We'll call within <b>one business day</b>.</p>
-        <a className="ciq-call" href="tel:6463960775">
+        <a className="ciq-call" href={`tel:${NAP_TEL}`}>
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-          Can&apos;t wait? Call 646-396-0775
+          Can&apos;t wait? Call {NAP_PHONE}
         </a>
       </div>
 
@@ -3846,7 +3847,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         </button>
       )}
       {tourOpen && (
-        <CustomerTour accessId={lp.access_id} phone="(646) 396-0775"
+        <CustomerTour accessId={lp.access_id} phone={NAP_PHONE}
           onClose={() => { setTourOpen(false); setLocalProj((p) => ({ ...p, tour_seen_at: p.tour_seen_at || new Date().toISOString() })); }} />
       )}
       {showAnnounce && (

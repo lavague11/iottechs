@@ -124,6 +124,22 @@ so it is the owner's call, not a refactor.
 
 ## B5 — Not blocked, but found and worth the owner knowing
 
+> **DECIDED 2026-11-16 — FIXED, and it was far bigger than this entry said.** This entry claimed the
+> wrong number was in `lib/addendum-pdf.js`, so "every change order" carried it. A sweep found
+> `(646) 396-0775` published as the contact number **31 times** across `lib/` and `app/`: the shared
+> PDF chrome — so **every proposal** — plus invoices, receipts, change orders, completion
+> certificates, service reports, the internal work order, the ADT portal, the customer tour, a help
+> article telling customers *"call us at 646-396-0775"*, and **five live `tel:`/`sms:` links** whose
+> "Call us" and "Text us" buttons dialled the payment handle. Only `lib/email.js` had the right
+> number, in a local const of its own.
+>
+> `lib/nap.js` is now the single source for name, phone, email and web, and every one of those sites
+> reads from it. Three uses are deliberately kept and allowlisted: `pay-zelle.jsx` (it *is* the Zelle
+> handle), `lib/seo/schema.js` (documents it as one), and the PDF-extraction prompt (names both
+> numbers so the model never returns either as the customer). `tests/nap.test.mjs` fails if the token
+> reappears anywhere else, in any of its four written forms — the hyphenated one is how the help
+> article and the five links stayed hidden from the first sweep.
+
 `lib/addendum-pdf.js` (the current "CHANGE ORDER" renderer) **hardcodes the phone number
 (646) 396-0775** in its header (~line 22). From the SEO work earlier in this session: that number is the
 **Zelle payment token**, not a contact number, and the canonical public number is **(917) 727-0081**.

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Wordmark } from "../../components/brand";
 import { requestRetakeAction } from "../../assessment/[appId]/actions";
+import { SUPPORT_TEL } from "../../../lib/nap";
 
 // Applicant status page — same shape as the project page the customers see: hero, stage strip,
 // collapsible cards, timeline. This is what "apply, then watch where it stands" looks like.
@@ -275,7 +276,7 @@ export default function ApplicationClient({ app, events = [], staff, viewerName 
           </ul>
         </Card>
 
-        <p className="aq-help">Questions? <a href="tel:6463960775">Call us</a> and mention <span className="mono">{app.app_id}</span>.</p>
+        <p className="aq-help">Questions? <a href={`tel:${SUPPORT_TEL}`}>Call us</a> and mention <span className="mono">{app.app_id}</span>.</p>
       </main>
 
       <style>{CSS}</style>

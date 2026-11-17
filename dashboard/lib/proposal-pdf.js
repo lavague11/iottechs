@@ -6,6 +6,7 @@ import { scopeMismatches } from "./survey2-model.js";
 import { DOC, documentFilename, MULTI_SERVICE_LABEL } from "./doc-filename.js";
 import { LAND, surveySheetBody } from "./pdf-chrome.js";
 import { PROPOSAL_TERMS, lineConditionBadges } from "./proposal-terms.js";
+import { contactLine, footerLine } from "./nap.js";
 
 // Ported from the legacy calculator's own PDF export (IOTTechs_ProposalCalculator.html
 // generatePDF) so the downloaded document matches the owner's established brand proposal —
@@ -202,7 +203,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
       doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
       doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 47, { charSpace: 1.2 });
       doc.setFontSize(6.5); doc.setTextColor(150, 150, 150);
-      doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 61);
+      doc.text(contactLine("   ·   "), 61.2, 61);
       doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 70);
       doc.setFontSize(7.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
       doc.text("DETAILED PROPOSAL", W - 28.8, 33, { align: "right", charSpace: 1.4 });
@@ -227,7 +228,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.line(61.2, 66.24, 216, 66.24);
 
     doc.setFontSize(7.5); doc.setTextColor(170, 170, 170);
-    doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 79.2);
+    doc.text(contactLine("   ·   "), 61.2, 79.2);
     doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 90.72);
 
     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
@@ -254,7 +255,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFillColor(...GOLD);
     doc.rect(39.6, H - FOOTER_H, W - 39.6, 1.44, "F");
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
-    doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential Proposal", W / 2 + 18, H - 10.08, { align: "center" });
+    doc.text(footerLine("  ·  ", "Confidential Proposal"), W / 2 + 18, H - 10.08, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(currentSection + " | " + doc.getNumberOfPages(), W - 28.8, H - 10.08, { align: "right" });
     chrome = false;
@@ -278,7 +279,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.setFillColor(...INK); doc.rect(0, LH - FH, LW, FH, "F");
     doc.setFillColor(...GOLD); doc.rect(0, LH - FH, LW, 1.44, "F");
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
-    doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential Proposal", LW / 2, LH - 11, { align: "center" });
+    doc.text(footerLine("  ·  ", "Confidential Proposal"), LW / 2, LH - 11, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(currentSection + " | " + doc.getNumberOfPages(), LW - LMg, LH - 11, { align: "right" });
     chrome = false;

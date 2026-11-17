@@ -5,6 +5,7 @@ import { startPinCanvas } from "../project/[accessId]/gateway-pin-canvas";
 import { lookupAccountAction } from "../login/actions";
 import FaceScan from "./face-scan";
 import { Wordmark, BrandLink } from "./brand";
+import { SUPPORT_TEL, SUPPORT_PHONE } from "../../lib/nap";
 
 // Mask the identifier for Step 2's "welcome back" line — client-side only. a••••@company.com · (•••) •••-1234
 function maskIdent(v) {
@@ -559,9 +560,9 @@ export function GatewayScreen({ onAuthenticated, attemptAccess }) {
                 <div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg></div>
                 <div><div className="gw2-hk">Email support</div><div className="gw2-hv">support@iot-techs.com</div></div>
               </a>
-              <a className="gw2-hrow" href="sms:+16463960775">
+              <a className="gw2-hrow" href={`sms:${SUPPORT_TEL}`}>
                 <div className="gw2-hic"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></div>
-                <div><div className="gw2-hk">Text us</div><div className="gw2-hv">646-396-0775</div></div>
+                <div><div className="gw2-hk">Text us</div><div className="gw2-hv">{SUPPORT_PHONE}</div></div>
               </a>
             </div>
           </div>

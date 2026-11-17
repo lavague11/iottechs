@@ -13,6 +13,7 @@ import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flo
 import { isStampableCompletionDate } from "./completion-date.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
 import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
+import { SUPPORT_PHONE } from "./nap.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
 import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
@@ -2015,7 +2016,7 @@ const GUIDE_SEED = [
       { art: "device", title: "Why reset",     text: "A monthly restart fixes about 90% of common problems and keeps your system healthy." },
       { art: "device", title: "Power it off",  text: "Unplug the recorder for 1–2 minutes." },
       { art: "device", title: "Power it on",   text: "Plug it back in and give it a few minutes to come up." },
-      { art: "device", title: "Still stuck?",  text: "If a camera is still offline, call us at 646-396-0775. We’re here 24/7." },
+      { art: "device", title: "Still stuck?",  text: `If a camera is still offline, call us at ${SUPPORT_PHONE}. We’re here 24/7.` },
     ],
   },
 ];

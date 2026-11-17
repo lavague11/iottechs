@@ -3,6 +3,7 @@
 // what was paid, how, when, and the balance that remains. Figures are passed in by the caller so the PDF
 // always matches the numbers the payment page showed (never re-derived here).
 import { jsPDF } from "jspdf";
+import { contactLine } from "./nap.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const KIND_LABEL = { deposit: "Deposit", final: "Final payment", partial: "Partial payment", other: "Payment" };
@@ -24,7 +25,7 @@ export function buildReceiptPdfBytes(meta = {}, fig = {}) {
   doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.text("IOT TECHS", lm, 44);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 184, 190);
   doc.text("Secure Tomorrow. Today.", lm, 60);
-  doc.text("(646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", lm, 74);
+  doc.text(contactLine("  ·  "), lm, 74);
   doc.setTextColor(...GOLD); doc.setFont("helvetica", "bold"); doc.setFontSize(15); rt("RECEIPT", rm, 42);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(210, 214, 220);
   if (receiptNo) rt(receiptNo, rm, 60);

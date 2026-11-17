@@ -2,6 +2,7 @@
 // from server code (the signer bakes it into the stored unsigned PDF), and a client module can't be called
 // there. It uses no browser globals, so it is a shared module both the client Download and the server use.
 import { jsPDF } from "jspdf";
+import { contactLine, footerLine } from "./nap.js";
 
 // Shared brand chrome for the smaller documents (Work Order, Site Survey, …): the same navy/gold
 // masthead, sidebar, footer, section bars and page-aware flow the proposal PDF uses (compact masthead
@@ -32,7 +33,7 @@ export function surveySheetBody(doc, f, { eyebrow = "SITE SURVEY", floorLabel = 
   doc.setFontSize(5.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
   doc.text("MAKE TOMORROW SAFER TODAY", MARGIN, 30, { charSpace: 1 });
   doc.setFontSize(5.5); doc.setTextColor(150, 150, 150);
-  doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", MARGIN, 39);
+  doc.text(contactLine("   ·   "), MARGIN, 39);
   // Right: the page title — SITE SURVEY eyebrow, the floor, and small context lines.
   doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
   doc.text(eyebrow, W - MARGIN, 19, { align: "right", charSpace: 1.6 });
@@ -113,7 +114,7 @@ export function createBrandDoc({ docLabel, rightLines = [], section = "Document"
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(...GOLD);
     doc.text("MAKE TOMORROW SAFER TODAY", 61.2, 47, { charSpace: 1.2 });
     doc.setFontSize(6.5); doc.setTextColor(150, 150, 150);
-    doc.text("(646) 396-0775   ·   support@iot-techs.com   ·   www.iot-techs.com", 61.2, 61);
+    doc.text(contactLine("   ·   "), 61.2, 61);
     doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 70);
     doc.setFontSize(7.5); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(docLabel, W - 28.8, 33, { align: "right", charSpace: 1.4 });
@@ -128,7 +129,7 @@ export function createBrandDoc({ docLabel, rightLines = [], section = "Document"
     doc.setFillColor(...INK); doc.rect(39.6, H - FOOTER_H, W - 39.6, FOOTER_H, "F");
     doc.setFillColor(...GOLD); doc.rect(39.6, H - FOOTER_H, W - 39.6, 1.44, "F");
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
-    doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential", W / 2 + 18, H - 10.08, { align: "center" });
+    doc.text(footerLine("  ·  ", "Confidential"), W / 2 + 18, H - 10.08, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(section + " | " + doc.getNumberOfPages(), W - 28.8, H - 10.08, { align: "right" });
     chrome = false;
@@ -142,7 +143,7 @@ export function createBrandDoc({ docLabel, rightLines = [], section = "Document"
     doc.setFillColor(...INK); doc.rect(0, LH - FH, LW, FH, "F");
     doc.setFillColor(...GOLD); doc.rect(0, LH - FH, LW, 1.44, "F");
     doc.setFontSize(6.5); doc.setFont("helvetica", "normal"); doc.setTextColor(136, 136, 136);
-    doc.text("IOT TECHS  ·  (646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com  ·  Confidential", LW / 2, LH - 11, { align: "center" });
+    doc.text(footerLine("  ·  ", "Confidential"), LW / 2, LH - 11, { align: "center" });
     doc.setFontSize(7); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
     doc.text(section + " | " + doc.getNumberOfPages(), LW - LMg, LH - 11, { align: "right" });
     chrome = false;

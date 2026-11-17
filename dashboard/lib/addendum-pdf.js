@@ -3,6 +3,7 @@
 // add-on total, and the new balance if approved. NEVER the tech payout (project role rule #4). Figures are
 // computed from the stored add-on record's customer prices.
 import { jsPDF } from "jspdf";
+import { contactLine } from "./nap.js";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const titleCaseX = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -27,7 +28,7 @@ export function buildAddendumPdfBytes(meta = {}, add = {}, fig = {}) {
   doc.setTextColor(255, 255, 255); doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.text("IOT TECHS", lm, 44);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 184, 190);
   doc.text("Secure Tomorrow. Today.", lm, 60);
-  doc.text("(646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", lm, 74);
+  doc.text(contactLine("  ·  "), lm, 74);
   doc.setTextColor(...GOLD); doc.setFont("helvetica", "bold"); doc.setFontSize(15); rt("CHANGE ORDER", rm, 42);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(210, 214, 220);
   rt(fmtDay(add.at || new Date().toISOString()), rm, 60);

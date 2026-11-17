@@ -2,7 +2,7 @@
 // a project points at it through projects.customer_id. These helpers decide when two contact records
 // are the SAME person: a strong identifier (normalized phone or email) matches. A name alone never does.
 
-// Digits only; a leading US country code is dropped so "+1 646 396 0775" and "(646) 396-0775" agree.
+// Digits only; a leading US country code is dropped so "+1 201 555 0123" and "(201) 555-0123" agree.
 export function normalizePhone(v) {
   let d = String(v || "").replace(/\D/g, "");
   if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
@@ -17,7 +17,7 @@ export function phoneKey(v) {
   const d = normalizePhone(v);
   return d.length >= 7 ? d : "";
 }
-// (646) 396-0775 for 10 digits; otherwise what was stored.
+// (201) 555-0123 for 10 digits; otherwise what was stored.
 export function formatPhone(v) {
   const d = normalizePhone(v);
   return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : String(v || "");

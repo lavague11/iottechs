@@ -14,6 +14,7 @@
 import { secretValue } from "./db";
 import { makeApptToken } from "./auth";
 import { reminderCopy, techRow } from "./appt-reminder-model";
+import { SUPPORT_PHONE, SUPPORT_TEL } from "./nap.js";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -868,7 +869,7 @@ function gcalUrl(ev) {
 // Chic editorial appointment email (Playfair serif, warm cream, gold hairline). Table-based + MSO
 // conditionals for Outlook; dynamic date/time/service/location(→maps)/technician + Confirm (calendar),
 // Reschedule (request page) buttons. One template for scheduled / rescheduled / reminder / canceled.
-const SUPPORT_PHONE = "(917) 727-0081", SUPPORT_TEL = "+19177270081";
+// contact details come from lib/nap.js — see the note there about the Zelle token
 export function renderAppointmentEmail({ verb, event, noun, projectNo, tech, ctaUrl, changeUrl, internal = false, customerName = "", recipientName = "", now = new Date() }) {
   const cancel = verb === "canceled", reminder = verb === "reminder", updated = verb === "updated";
   const cap = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());

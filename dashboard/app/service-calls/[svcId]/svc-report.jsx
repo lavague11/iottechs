@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { documentModel, timeOnSite, DEVICE_STATUS_META, CAUSE_CATEGORY_LABEL, SVC_CAUSE_CATEGORY, svcMoney as money } from "../../../lib/svc-model";
+import { SUPPORT_PHONE, SUPPORT_EMAIL, SUPPORT_WEB } from "../../../lib/nap";
 
 // The Service Call document — report / diagnostic / proposal — rendered from ONE record through
 // documentModel (lib/svc-model.js). Regions with nothing to say are not rendered; page 2 exists only
@@ -89,7 +90,7 @@ export default function SvcReport({ call, doc, invoice = null, payments = [], wa
               <div>
                 <div className="sr-brand">IOT TECHS</div>
                 <div className="sr-tag">Make Tomorrow Safer Today</div>
-                <div className="sr-contact">(646) 396-0775 · support@iot-techs.com · www.iot-techs.com<br />Assigned Contractor: LA VAGUE INC</div>
+                <div className="sr-contact">{SUPPORT_PHONE} · {SUPPORT_EMAIL} · {SUPPORT_WEB}<br />Assigned Contractor: LA VAGUE INC</div>
               </div>
               <div className="sr-meta">
                 <div className="sr-type">{m.type}</div>
@@ -115,7 +116,7 @@ export default function SvcReport({ call, doc, invoice = null, payments = [], wa
             )}
             {regions.map((r) => <section key={r.key}><div className="sr-sec-t">{r.title}</div><Region r={r} /></section>)}
           </div>
-          <footer className="sr-foot"><div>IOT TECHS · (646) 396-0775 · support@iot-techs.com · www.iot-techs.com · Confidential</div><div className="pg">PAGE {String(pi + 1).padStart(2, "0")}</div></footer>
+          <footer className="sr-foot"><div>IOT TECHS · {SUPPORT_PHONE} · {SUPPORT_EMAIL} · {SUPPORT_WEB} · Confidential</div><div className="pg">PAGE {String(pi + 1).padStart(2, "0")}</div></footer>
         </div>
       ))}
       <style>{CSS}</style>

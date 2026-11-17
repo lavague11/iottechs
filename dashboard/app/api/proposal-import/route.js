@@ -57,7 +57,7 @@ Return ONLY a JSON object. No preamble, no markdown fences.
 }
 
 CRITICAL rules:
-- CUSTOMER ONLY. This document was WRITTEN BY the contractor "IOT TECHS" (by La Vague Inc). NEVER return IOT TECHS, La Vague, "Assigned Contractor", their phone (646-396-0775), email (support@iot-techs.com) or website (iot-techs.com) as the customer or customer contact. The customer is the "Prepared For" party / project site (e.g. "Fuel Gas Station Hub").
+- CUSTOMER ONLY. This document was WRITTEN BY the contractor "IOT TECHS" (by La Vague Inc). NEVER return IOT TECHS, La Vague, "Assigned Contractor", their phone ((917) 727-0081 or the old 646-396-0775), email (support@iot-techs.com) or website (iot-techs.com) as the customer or customer contact. The customer is the "Prepared For" party / project site (e.g. "Fuel Gas Station Hub").
 - Detect EACH separate camera system as its own entry in "systems" (System 1, System 2, System 3, …), each with its coverage, camera count, NVR, storage, total, and its own line items.
 - Put every line item UNDER its system. Keep quantity, unit price and line total separate (never put a line total in unit_price). Parse "$1,250.00" as 1250.
 - Never invent a value — a field the document doesn't clearly show is null. Mark an item "low" confidence when any of its numbers is unclear, and list anything you couldn't read under "uncertain".`;

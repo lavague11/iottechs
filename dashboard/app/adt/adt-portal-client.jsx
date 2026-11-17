@@ -10,9 +10,10 @@ import ProposalSignModal from "../project/[accessId]/proposal-sign-modal";
 import ToolComments from "../project/[accessId]/tool-comments";
 import AdtIntake from "./adt-intake";
 import AdtGate from "./adt-gate";
+import { SUPPORT_PHONE as NAP_PHONE } from "../../lib/nap";
 
 // Customer support line shown on the Complete stage. TODO: replace with the real ADT/IOT TECHS number.
-const SUPPORT_PHONE = "(646) 396-0775";
+const SUPPORT_PHONE = NAP_PHONE;
 
 // Capitalize each word (names); format a phone as (xxx) xxx-xxxx as it's typed.
 const titleCase = (s) => String(s || "").replace(/\b\w/g, (c) => c.toUpperCase());

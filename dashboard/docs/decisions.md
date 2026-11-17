@@ -944,3 +944,31 @@ place. The suite cannot see any of them, and neither can a reviewer looking at a
 
 So the closing step of a run of this size is not the report; it is reading the original brief line by
 line against the code, treating every hedge in your own notes as a task. Budget for it.
+
+## D32 — the blocked entry understated its own finding by a factor of thirty
+
+**B5** was filed as a note in passing: the wrong phone number is hardcoded in `lib/addendum-pdf.js`,
+so every change order carries it. True, and about a thirtieth of the problem.
+
+`(646) 396-0775` is the **Zelle handle the business receives payments on**. It was published as the
+company's contact number **31 times** across `lib/` and `app/`: the shared PDF chrome and therefore
+every proposal, plus invoices, receipts, change orders, completion certificates, service reports, the
+internal work order, the ADT portal, the customer tour, a help article reading *"If a camera is still
+offline, call us at 646-396-0775"*, and five live `tel:`/`sms:` links — customers tapping **"Call us"**
+or **"Text us"** were dialling the payment handle. The correct number existed in exactly one place,
+a local const inside `lib/email.js`.
+
+Two things went wrong, and the second is the lesson:
+
+1. **The original note recorded the instance, not the class.** It was written while reading one file,
+   and nobody asked "where else?". A one-line `grep` was all it needed.
+2. **The first sweep I ran was also incomplete**, for the same reason in miniature: I searched for
+   `(646) 396-0775` and found 18 more sites, declared it done, and the guard test then caught five
+   files I had missed because they wrote it as `646-396-0775` or `6463960775`. A phone number has
+   several written forms and a search for one of them proves nothing.
+
+`lib/nap.js` is now the single source, and `tests/nap.test.mjs` fails if the token reappears in any
+of its four forms outside three allowlisted files that legitimately name it as a payment handle.
+
+The general rule: when a finding is "a wrong constant is hardcoded here", the finding is never "here".
+Count the instances before writing the entry, and search every form the value can take.

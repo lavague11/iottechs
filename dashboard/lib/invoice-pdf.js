@@ -2,6 +2,7 @@
 // calls it from server code with meta.__return to get bytes, the same way lib/esign/ reuses proposal-pdf.
 import { jsPDF } from "jspdf";
 import { DOC, documentFilename } from "./doc-filename.js";
+import { contactLine } from "./nap.js";
 
 // Brand invoice for a project: what was charged (accepted proposal + approved add-ons), what's been
 // paid (each confirmed payment), and the balance due. The caller passes the already-computed money
@@ -28,7 +29,7 @@ export function downloadInvoicePdf(meta = {}, figs = {}, payments = []) {
   doc.text("IOT TECHS", lm, 44);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(180, 184, 190);
   doc.text("Secure Tomorrow. Today.", lm, 60);
-  doc.text("(646) 396-0775  ·  support@iot-techs.com  ·  www.iot-techs.com", lm, 74);
+  doc.text(contactLine("  ·  "), lm, 74);
   doc.setTextColor(...GOLD); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
   rt("INVOICE", rm, 42);
   doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(210, 214, 220);
