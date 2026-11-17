@@ -7267,7 +7267,9 @@ export function getPendingSquareOrders(accessId) {
 // Scope: this moves `due` ONLY — what the customer may pay right now. It does not touch `total`,
 // `paid` or `balance`, so no invoice figure is restated whether the flag is on or off.
 export const STALE_PENDING_MINUTES = 30;
-export const paymentsIgnoreStalePending = () => String(secretValue("PAYMENTS_IGNORE_STALE_PENDING") || "").toLowerCase() === "on";
+// ON by default since B9 was approved (2026-11-17). The secret is now a kill switch: set
+// PAYMENTS_IGNORE_STALE_PENDING="off" to restore the old arithmetic without a deploy.
+export const paymentsIgnoreStalePending = () => String(secretValue("PAYMENTS_IGNORE_STALE_PENDING") || "").toLowerCase() !== "off";
 // Pending money that is too old to still be a live checkout. Rows with no timestamp are treated as
 // LIVE (never released) — an unknown age must not become a reason to ask for money twice.
 export function stalePendingTotal(accessId, nowMs = Date.now()) {
@@ -7275,7 +7277,13 @@ export function stalePendingTotal(accessId, nowMs = Date.now()) {
   const rows = db.prepare("SELECT amount, status, created_at FROM project_payments WHERE project_access_id=?").all(String(accessId));
   return Math.round(rows.reduce((s, r) => {
     if (r.status !== "pending") return s;
-    const t = Date.parse(String(r.created_at || "").replace(" ", "T") + "Z");
+    // created_at is written by `datetime('now','localtime')` — SERVER-LOCAL time (America/New_York)
+    // with no offset. Appending "Z" parsed it as UTC and made every row look 5 hours older than it
+    // was (4 in EDT), so with this rule live a link made seconds ago read as stale and the 30-minute
+    // guard protected nothing — the customer could be asked to pay while a real checkout was in
+    // flight. A date-time with no offset is parsed as local, which is how it was written. A value
+    // that DOES carry an offset (or a trailing Z) still parses correctly here.
+    const t = Date.parse(String(r.created_at || "").replace(" ", "T"));
     if (!Number.isFinite(t) || t >= cutoff) return s;        // unknown or recent -> still counts
     return s + (+r.amount || 0);
   }, 0) * 100) / 100;

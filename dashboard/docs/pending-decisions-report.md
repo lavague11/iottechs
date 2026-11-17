@@ -99,7 +99,17 @@ pins the current scheme deliberately. Unapplied.
 
 ---
 
-## B9 — the stale-pending flag · **built, OFF, moves no invoice figure**
+## B9 — the stale-pending rule · **LIVE since 2026-11-17** · moves no invoice figure
+
+> Approved and turned on. The secret is now a kill switch (`PAYMENTS_IGNORE_STALE_PENDING="off"`).
+> The figures below are what it does, re-measured live: **1 of 31 contracted projects moves**, and
+> total / paid / balance are identical in both modes.
+>
+> Turning it on also surfaced a clock bug that made the 30-minute window useless — `created_at` is
+> local time and was being parsed as UTC, inflating every row's age by 5 hours, so a brand-new
+> checkout read as stale. Fixed; no existing figure changed by the fix (the one live pending row is
+> four months old either way).
+
 
 Applied behind `PAYMENTS_IGNORE_STALE_PENDING` (unset = off). With it on, a `pending` payment row
 older than 30 minutes stops counting against what the customer may pay.

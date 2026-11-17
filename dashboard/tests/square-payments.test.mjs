@@ -120,17 +120,16 @@ test("B9: it is defined above its first use, so the module cannot be reordered i
     "the predicate is declared before the first call site reads it");
 });
 
-// ---- B9 main: the stale-pending flag, OFF by default --------------------------------------------
+// ---- B9 main: the stale-pending rule, ON since the owner approved it (2026-11-17) ----------------
 // A pending row is created when a payment LINK is made, not when money moves, and nothing clears it,
 // so one abandoned checkout refuses the customer for ever. Option 1: stop counting a pending row once
-// it is older than a real checkout could take. Shipped behind PAYMENTS_IGNORE_STALE_PENDING, off.
-test("B9: the flag is off unless explicitly turned on, and the window is a real checkout's length", () => {
+// it is older than a real checkout could take. The secret is now a KILL SWITCH, not an opt-in.
+test("B9: the rule is live, the secret turns it off, and the window is a real checkout's length", () => {
   const db = readFileSync(new URL("../lib/db.js", import.meta.url), "utf8");
   assert.match(db, /export const STALE_PENDING_MINUTES = 30;/, "30 minutes");
-  assert.match(db, /secretValue\("PAYMENTS_IGNORE_STALE_PENDING"\)[\s\S]{0,40}=== "on"/, "opt-in by exact value");
-  // the default path must be byte-identical to the old arithmetic
+  assert.match(db, /secretValue\("PAYMENTS_IGNORE_STALE_PENDING"\)[\s\S]{0,40}!== "off"/, "on unless disabled");
   assert.match(db, /const stale = paymentsIgnoreStalePending\(\) \? stalePendingTotal\(accessId\) : 0;/);
-  assert.match(db, /const applied = paid \+ pending - stale;/, "flag off -> stale is 0 -> paid + pending, as before");
+  assert.match(db, /const applied = paid \+ pending - stale;/, "switched off -> stale is 0 -> paid + pending, as before");
 });
 
 test("B9: an unknown or recent timestamp is never released — an unknown age must not re-bill", () => {
@@ -138,16 +137,18 @@ test("B9: an unknown or recent timestamp is never released — an unknown age mu
   const fn = db.slice(db.indexOf("export function stalePendingTotal"), db.indexOf("export function amountDueForPayment"));
   assert.match(fn, /if \(r\.status !== "pending"\) return s;/, "confirmed money is never 'stale'");
   assert.match(fn, /if \(!Number\.isFinite\(t\) \|\| t >= cutoff\) return s;/, "unparseable or recent still counts");
-  // replicate the predicate to pin the direction of each boundary
-  const WINDOW = 30 * 60 * 1000, now = Date.parse("2026-11-16T12:00:00Z"), cutoff = now - WINDOW;
+  // replicate the predicate to pin the direction of each boundary. created_at is SERVER-LOCAL, so
+  // the reference "now" is built the same way rather than from a UTC literal.
+  const WINDOW = 30 * 60 * 1000, now = Date.parse("2026-11-16T12:00:00"), cutoff = now - WINDOW;
   const releases = (status, created) => {
     if (status !== "pending") return false;
-    const t = Date.parse(String(created || "").replace(" ", "T") + "Z");
+    const t = Date.parse(String(created || "").replace(" ", "T"));
     return Number.isFinite(t) && t < cutoff;
   };
   assert.equal(releases("pending", "2026-07-09 05:49:00"), true, "months old -> released");
   assert.equal(releases("pending", "2026-11-16 11:00:00"), true, "an hour old -> released");
   assert.equal(releases("pending", "2026-11-16 11:45:00"), false, "15 minutes old -> still in flight");
+  assert.equal(releases("pending", "2026-11-16 11:59:30"), false, "30 seconds old -> certainly in flight");
   assert.equal(releases("pending", null), false, "no timestamp -> never released");
   assert.equal(releases("pending", "nonsense"), false, "unparseable -> never released");
   assert.equal(releases("confirmed", "2026-07-09 05:49:00"), false, "confirmed money is not pending");

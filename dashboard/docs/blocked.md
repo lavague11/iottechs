@@ -359,11 +359,30 @@ instead. See D16's sibling lesson about gating on the real thing rather than a p
 
 ## B9 — RED: a customer can be shown "Pay" and then refused by the payment endpoint
 
-> **BUILT 2026-11-16 BEHIND A FLAG THAT IS OFF.** Option 1, as `PAYMENTS_IGNORE_STALE_PENDING`
-> (unset = off): a pending row older than 30 minutes stops counting against what may be paid. One
-> invoice moves with it on — ASC0034's deposit due $700.21 → $834.37 — and **no invoice figure
-> (total/paid/balance) differs in either mode**, because the flag only touches `amountDueForPayment`.
-> Before/after on five real invoices in `docs/pending-decisions-report.md`. Not turned on.
+> **DECIDED 2026-11-17 — option 1 is now LIVE.** `PAYMENTS_IGNORE_STALE_PENDING` flipped from an
+> opt-in to a **kill switch**: set it to `"off"` to restore the old arithmetic without a deploy.
+>
+> Measured with it live: **1 of 31 contracted projects moves.** ASC0034 releases a $134.16 pending
+> row from 9 July — deposit due $700.21 → **$834.37**, balance due $3,559.57 → **$3,693.73**. No
+> invoice figure (total / paid / balance) differs in either mode, because the rule only touches
+> `amountDueForPayment`.
+>
+> **Turning it on exposed a defect that made the 30-minute window meaningless.** `created_at` is
+> written by `datetime('now','localtime')` — server-local (America/New_York), no offset — and
+> `stalePendingTotal` appended `"Z"`, parsing it as UTC. Every pending row therefore read **5 hours
+> older than it was** (4 in EDT). Harmless while the flag was off; with it on, a payment link created
+> *seconds* ago parsed as stale, was released from `applied`, and the customer could be asked to pay
+> while a real checkout was still in flight — precisely the double-billing the function's own comment
+> forbids. Now parsed as written (local). `tests/stale-pending-clock.test.mjs` drives the real
+> function against a real table so it cannot regress.
+>
+> The one live pending row is four months old, so both parses release it: the fix changes **no**
+> existing figure and protects every future checkout.
+>
+> **Still true, and still option 3's job:** this releases the row from the maths but never clears it.
+> That $134.16 stays `pending` on the payment list for ever, and staff see a payment that will never
+> resolve. A real `failed`/`void` state driven by the Square webhook is the honest fix; this is the
+> smallest thing that stops a customer being locked out.
 
 Found by section N's verifier, one level below what N could fix. **Money — needs Ahmed's decision, not
 an agent's.**
