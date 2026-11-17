@@ -72,14 +72,23 @@ export function toolPayloadSendable(tool, raw) {
 // "Retry" button and survey-approve's flushDraft all go through here, so the gate cannot be bypassed by
 // adding a caller. It never sets `allowEmpty`: a host mirror cannot distinguish a deliberate clear from
 // a stale or unreadable local copy, and guessing wrong is the data loss.
+// B14: the server revision this client last READ or successfully wrote, per accessId:tool. Sent
+// with every write so the server can refuse one made against a version we never saw. Unset means
+// "no claim" and the server accepts, which is how a client from before this shipped keeps working.
+const _baseRev = new Map();
+export const _setBaseRev = (accessId, tool, rev) => { if (typeof rev === "string" && rev) _baseRev.set(`${accessId}:${tool}`, rev); };
+
 export async function postToolData(accessId, tool, raw) {
   if (!toolPayloadSendable(tool, raw)) return { refused: true, error: "This device’s copy can’t be read, so it wasn’t sent." };
   const res = await fetch("/api/tool-data", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessId, tool, data: raw }),
+    body: JSON.stringify({ accessId, tool, data: raw, baseRev: _baseRev.get(`${accessId}:${tool}`) || undefined }),
   });
-  return res.json();
+  const out = await res.json();
+  // Our write became the new server version; remember it so the next push is not itself stale.
+  if (out?.ok && out.saved?.rev) _setBaseRev(accessId, tool, out.saved.rev);
+  return out;
 }
 
 // `force`: for read-only viewers (the customer), the SERVER is the source of truth — always pull
@@ -107,6 +116,7 @@ export async function seedToolData(accessId, tool, storageKey, { force = false }
       const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
       const r = await res.json();
       if (!r?.ok) { out.serverError = true; return null; }
+      _setBaseRev(accessId, tool, r.saved?.rev || "0");   // remember the version we just read
       return r.saved?.data != null ? r.saved.data : "";   // "" = the server genuinely has nothing
     } catch { out.serverError = true; return null; }
   };
@@ -277,6 +287,7 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
       try {
         const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
         const r = await res.json();
+        if (r?.ok) _setBaseRev(accessId, tool, r.saved?.rev || "0");
         if (r?.ok && r.saved?.data != null) _lastPushed.set(mapKey, r.saved.data);
       } catch { /* fall through */ }
     }

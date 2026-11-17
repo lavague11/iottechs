@@ -17,6 +17,8 @@ import {
   surveyFloorScales, surveyLastStep, surveyHasDevices, surveyFloors,
 } from "../lib/survey-state.js";
 import { surveyEditedAfterSubmit } from "../lib/survey-state.js";
+// the literal object the host mirror POSTs, for asserting what it does and does not carry
+const postBody = (s) => (s.match(/body: JSON\.stringify\(\{[^}]*\}\)/) || [""])[0];
 import { survey2HasData, survey2CameraCount, mockupHasData, toolFingerprint } from "../lib/tool-data.js";
 import { can } from "../lib/roles.js";
 import { toolPayloadSendable, postToolData, startToolAutosync, suspendToolSync, retryToolSync, seedToolData } from "../app/project/[accessId]/tool-sync.js";
@@ -519,8 +521,11 @@ test("a DELIBERATE clear still reaches the server — refused by inference, allo
   assert.match(extractFn(widget, "startOverFloor"), /clearIntent=true; flushNow\(\)/, "and so can Start Over on the only floor");
   assert.ok(!/clearIntent=true/.test(extractFn(widget, "save")) && !/clearIntent=true/.test(extractFn(widget, "serialize")),
     "but an ordinary save never declares it");
-  assert.ok(sync.includes("body: JSON.stringify({ accessId, tool, data: raw }),"),
-    "the host POST body carries no intent flag — a mirror cannot tell a clear from a stale copy");
+  // The host mirror's body may carry the B14 baseRev (a version claim), but NEVER allowEmpty: a
+  // mirror cannot tell a deliberate clear from a stale copy, so it must not be able to declare one.
+  assert.match(sync, /body: JSON\.stringify\(\{ accessId, tool, data: raw, baseRev:/,
+    "the host POST body is accessId/tool/data plus the version claim");
+  assert.doesNotMatch(postBody(sync), /allowEmpty/, "and no intent flag in the BODY — a mirror cannot declare a clear");
   // And the server honours the flag rather than inferring intent from emptiness.
   const route = readFileSync(new URL("../app/api/tool-data/route.js", import.meta.url), "utf8");
   assert.match(route, /function emptyOverContent\(accessId, tool, data, allowEmpty\)/);
@@ -532,7 +537,8 @@ test("a DELIBERATE clear still reaches the server — refused by inference, allo
   assert.match(route, /if \(tool !== "survey2" && tool !== "survey"\) return false;/);
   // Both server write paths agree, or the guard is only as strong as the path a caller picks.
   const actions = readFileSync(new URL("../app/project/[accessId]/proposal-actions.js", import.meta.url), "utf8");
-  assert.match(actions, /saveToolDataAction\(accessId, tool, data, \{ allowEmpty = false \} = \{\}\)/);
+  // allowEmpty is still an explicit opt-in on the action; B14 added an optional baseRev beside it.
+  assert.match(actions, /saveToolDataAction\(accessId, tool, data, \{ allowEmpty = false[^)]*\} = \{\}\)/);
   assert.match(actions, /Refused: that would replace the saved survey with an empty one\./);
   assert.equal((actions.match(/Refused: that would replace the saved survey with an empty one\./g) || []).length, 1);
 });
@@ -670,7 +676,7 @@ test("ONE validated host POST — every host-side writer of a tool blob goes thr
   // three are the same push()), and survey-approve's flushDraft.
   assert.match(sync, /export async function postToolData/);
   assert.match(sync, /if \(!toolPayloadSendable\(tool, raw\)\) return \{ refused: true/, "the gate is INSIDE postToolData");
-  assert.ok(sync.includes("body: JSON.stringify({ accessId, tool, data: raw }),"), "and a host mirror never declares clear-intent");
+  assert.doesNotMatch(postBody(sync), /allowEmpty/, "and a host mirror never declares clear-intent");
   assert.match(sync, /const r = await postToolData\(accessId, tool, cur\);/, "push() goes through it");
   const approve = readFileSync(new URL("../app/project/[accessId]/survey-approve.jsx", import.meta.url), "utf8");
   assert.match(approve, /const r = await postToolData\(accessId, d\.tool, raw\);/, "flushDraft goes through it");

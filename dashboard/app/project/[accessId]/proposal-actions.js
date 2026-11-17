@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
+  getJobByAccessId, toolWriteIsStale, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -1029,7 +1029,7 @@ export async function proposalLayoutMetaAction(accessId) {
   // normally /api/media URLs now, so the old scan both missed built layouts AND could show empty ones.
   return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
-export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false } = {}) {
+export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false, baseRev = null } = {}) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
@@ -1056,6 +1056,10 @@ export async function saveToolDataAction(accessId, tool, data, { allowEmpty = fa
   // never whether the target is real, and there is no foreign key on project_tool_data. A stale tab
   // on a deleted project would otherwise keep recreating orphan rows. The two write paths must agree.
   if (!getJobByAccessId(accessId)) return { error: "That project no longer exists." };
+  // B14, same gate as /api/tool-data: optional baseRev, refused when behind.
+  if (toolWriteIsStale(accessId, tool, baseRev)) {
+    return { error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true };
+  }
   // A customer's addendum write is a signature, nothing more: their copy came over the wire
   // without techPay (see sanitizeToolRead), so saving it verbatim would wipe payout data — and
   // trusting it verbatim would let a tampered client rewrite prices. Reduce the write to

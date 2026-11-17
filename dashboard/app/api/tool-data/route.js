@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolRev } from "../../../lib/db";
 import { can } from "../../../lib/roles";
 import { toolHasData } from "../../../lib/tool-data";
 
@@ -90,7 +90,7 @@ function emptyOverContent(accessId, tool, data, allowEmpty) {
 }
 
 export async function POST(req) {
-  const { accessId, tool, data, allowEmpty } = await req.json();
+  const { accessId, tool, data, allowEmpty, baseRev } = await req.json();
   const tok = await getSessionRole();
   if (!tok) return Response.json({ error: "Session expired." });
   if (!SYNC_TOOLS.has(tool)) return Response.json({ error: "Unknown tool." });
@@ -111,11 +111,18 @@ export async function POST(req) {
   // exists — unbounded growth from an abandoned tab, and it means deleting a project does not
   // reliably remove its tool data. Resolve the project first.
   if (!getJobByAccessId(accessId)) return Response.json({ error: "That project no longer exists." });
+  // B14: refuse a write made against a version the caller did not read. Optional, so a client that
+  // sends no baseRev is accepted exactly as before; one that sends a stale rev is told, rather than
+  // silently winning. `stale: true` lets the client re-seed instead of retrying the same bytes.
+  if (toolWriteIsStale(accessId, tool, baseRev)) {
+    return Response.json({ error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true });
+  }
   if (emptyOverContent(accessId, tool, data, allowEmpty)) {
     return Response.json({ error: "Refused: that would replace the saved survey with an empty one." });
   }
   const saved = saveToolData(accessId, tool, data, tok.name || tok.email || tok.role);
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
-  return Response.json({ ok: true, saved: { updated_at: saved.updated_at } });
+  // the rev the client should now claim on its next write (B14)
+  return Response.json({ ok: true, saved: { updated_at: saved.updated_at, rev: toolRev(data) } });
 }
