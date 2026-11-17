@@ -154,8 +154,8 @@ test("widget wires select, shapes, stairs, block, rotate-name and right-click", 
   assert.ok(html.includes("draw-geom.js?v="), "geometry module is loaded");
 });
 test("drawSrc cache key was bumped so the draw iframe actually reloads", () => {
-  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE2/.test(host), "the draw iframe key");
-  assert.ok(/draw-geom\.js\?v=20261116-sectionE2/.test(html), "the geometry module key moves with it");
+  assert.ok(/draw-floorplan\.html\?v=20261116-sectionE3/.test(host), "the draw iframe key");
+  assert.ok(/draw-geom\.js\?v=20261116-sectionE3/.test(html), "the geometry module key moves with it");
 });
 
 // ---- the constraint: planHash of an untouched floor
@@ -167,4 +167,23 @@ test("an existing floor's fingerprint is byte-identical to the pre-Section-E val
 });
 test("a drawn Block does move the fingerprint (it is part of what the customer approves)", () => {
   assert.notEqual(toolFingerprint("survey2", survey({ ...plan, blocks: [{ cells: ["9,9"] }] })), "1x5g6fk");
+});
+
+// Found auditing the spec's own "unchecked" note. svgPlanBody DRAWS blocks (a solid black area that
+// is not the customer's property), but the export viewBox came from planCells() — structure + rooms
+// only. A Block is by definition outside the property, so it sat outside the box and was clipped out
+// of the PNG, the stored plan SVG and the AI overlay.
+test("an export's viewBox includes blocks; the footprint dimension still does not", () => {
+  assert.match(html, /function planBoundsCells\(\)\{ var arr=planCells\(\);[\s\S]{0,180}blocks/, "a block-aware cell list exists");
+  // the three EXPORT bboxes use it
+  assert.match(html, /function sketchPNG\(\)\{\s*\n\s*var arr=planBoundsCells\(\);/, "raster export");
+  assert.match(html, /else \{ var arr=planBoundsCells\(\);/, "vector export");
+  assert.match(html, /function overlaySVG\(\)\{ var arr=planBoundsCells\(\);/, "AI overlay");
+  // ...and planFeet does NOT: a block is not the customer's building, so folding it into the
+  // footprint would overstate their square footage.
+  const pf = html.slice(html.indexOf("function planFeet("), html.indexOf("function planFeet(") + 400);
+  assert.match(pf, /var arr=planCells\(\);/, "the footprint stays on the customer's own cells");
+  assert.doesNotMatch(pf, /planBoundsCells/, "a block must never inflate the stated square footage");
+  // and svgPlanBody really does paint them, which is why the box has to reach
+  assert.match(html, /\(blocks\|\|\[\]\)\.forEach\([\s\S]{0,220}fill="#101112"/, "blocks are drawn in the export body");
 });

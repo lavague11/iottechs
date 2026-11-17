@@ -110,7 +110,10 @@ export function buildMyProjectCard({ project: p, facts = {}, events = [], fin = 
   const finalPending = state === "AWAITING_FINAL_PAYMENT" && (+fin?.pendingPayments || 0) > 0;
   const paymentPending = depositPending || finalPending;
 
-  const todo = customerTodo({ ...sf, stage: TODO_STAGE[state] || stored });
+  // `sf` is floored, which is right for a status label and wrong for a prompt that names a document:
+  // pass the UNFLOORED published-proposal fact alongside so customerTodo cannot announce one that was
+  // never sent (B8).
+  const todo = customerTodo({ ...sf, stage: TODO_STAGE[state] || stored, proposal_published: !!facts.proposal_status });
 
   let key, label, tone, detail = null;
   if (closed && state !== "COMPLETE") { key = "closed"; label = "Closed"; tone = "neutral"; }

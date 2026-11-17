@@ -236,7 +236,8 @@ prices typed by sales, so the old form let them enter a number that was silently
 approval email for an unpriced add-on. Kept deliberately — see the note in `docs/decisions.md`. If sales
 should genuinely price, the fix is to grant them `addendum.price`, not to restore the old illusion.
 
-**Outstanding:** one verifier re-run, then commit as `fix(G): …`.
+**Verified and shipped** in `f9397090`. (This line previously read "Outstanding: one verifier re-run,
+then commit" — it was written mid-flight and not updated when the section landed.)
 
 ---
 
@@ -368,13 +369,23 @@ row *before* the permission check. Plus a second path: a local blob of `{"floors
 server read opens the gate over a blank canvas — and that is exactly the blob the pre-fix failure wrote,
 so real devices may hold one.
 
-**The fix in flight** closes it at the choke point in two layers: one validated host-side `postToolData`
-that `push()`, `flushDraft` and `retryToolSync` all go through, plus a server-side rule that
-`/api/tool-data` will not replace a `survey2` row that *has* content with one that does not, absent an
-explicit clear. A client-only fix leaves the REST route open to any stale tab.
+**The fix closed it** at the choke point in two layers, and both are in `263f69e9`: one validated
+host-side `postToolData` (`tool-sync.js:75`) that `push()`, `flushDraft` and `retryToolSync` all go
+through, plus a server-side rule — `emptyOverContent` in `app/api/tool-data/route.js` — that the route
+will not replace a `survey2` row that *has* content with one that does not, unless the caller sends
+`allowEmpty`, which only the tool itself does because only the tool knows its state was loaded. A
+client-only fix would have left the REST route open to any stale tab.
 
-**Outstanding:** finish round 3, verify (including a test that drives the **host** write path — the gap
-that let 1333 green tests miss both losses), then commit as `fix(L): …`.
+**Done and shipped** in `263f69e9`, round 3 included, with tests that drive the **host** write path —
+the gap that let 1,333 green tests miss both losses. (These two paragraphs previously read "the fix in
+flight" and "Outstanding: finish round 3 … then commit"; they were written mid-flight and not updated
+when the section landed, which left the body of this entry contradicting its own DONE header.)
+
+One consequence of L worth carrying forward: the outbound gate it installed is **client-side**, and
+`docs/blocked.md` **B14** records the hole that remains — an open tab still pushes `localStorage` on a
+timer with no check that the server's copy has moved on, so a deleted row returns and a freshly
+migrated row is overwritten. L stopped the survey being *blanked*; it did not make the row's history
+safe from a stale client.
 
 ---
 
@@ -650,6 +661,34 @@ totals.
 
 ---
 
+## Who built what (spec rule 40)
+
+Agent and model per section, as the orchestration rules ask. The rule was to escalate
+haiku → sonnet → opus only after a failed attempt; where a section was reassigned, both are shown.
+
+| Section | Built by | Model | Reviewed / verified |
+|---|---|---|---|
+| A — step order | `builder` | sonnet | `reviewer` → `verifier` (opus) |
+| B + C — device delete, last floor | `builder` | sonnet | `reviewer` (2 rounds) → `verifier` |
+| D — Enhance watermark | `builder` → `data-fixer` | sonnet → opus | `reviewer` → `verifier`, **rejected twice** |
+| E — drawing tools | `builder` | sonnet | `reviewer` → `verifier`; re-opened later from a live browser pass |
+| F + I — card language, Addendum | `builder` | sonnet | `reviewer` → `verifier` |
+| G — Addendum item picker | `builder` | sonnet | `reviewer` → `verifier` |
+| H — sent versions | `builder` | sonnet | `reviewer` → `verifier` |
+| J — reminder day label | `reminder-fixer` | sonnet | `verifier` |
+| K — screenshot crop | `builder` | sonnet | `verifier` |
+| L — survey persistence | `data-fixer` | opus | `verifier`, **3 rounds** |
+| M + N — one portal, authorization | `builder` → `data-fixer` | sonnet → opus | `code-reviewer` → `verifier` |
+| O — legacy migration | `migrator` | opus | `verifier` |
+| O·165 + O·166 — my-projects | orchestrator | opus | `verifier`, **rejected on 4 defects** |
+| B11 + B12 — legacy adapter, signer | orchestrator | opus | `verifier` ×2, **rejected on scope, then on a consent bug** |
+
+The last two rows are the honest exception to the orchestration rules: they were built in the main
+session rather than delegated, because they came out of an audit *after* the run was reported
+complete. Both still went through an independent verifier, which rejected both.
+
+---
+
 ## How the work was checked
 
 Every section was built by one agent, reviewed by a second, and verified by a third that had to
@@ -682,3 +721,75 @@ what they actually read, and the one failure that was genuinely mine was found t
 were proven load-bearing**: each of B/C's three new guards was re-run with its fix reversed in memory,
 to confirm the test failed without it. A test that passes either way is worse than no test, because it
 reads as coverage.
+
+---
+
+## Deviations from the run's own rules
+
+Recorded so they are decisions rather than omissions.
+
+**Rule 9 — "Typecheck + lint + tests must pass before each commit."** This project has **neither a
+typecheck nor a lint**. There is no `tsc`, no eslint config and no `lint` script; `npm test` and
+`npm run build` are the only gates. Adding either would be a dependency change, which the scope guard
+forbids, so the rule was met as far as it can be: tests and a clean `npm run build` from a cleared
+`.next` before every commit, plus a new substitute gate.
+
+That substitute exists because the gap was not theoretical. `survey-devices.jsx` shipped mid-run with
+a stray brace: the file did not compile, the Cameras roster and System Planner would have 500'd, and
+**all 1,482 tests passed**, because nothing in the suite parsed JSX. `tests/source-parses.test.mjs`
+now runs every `app/` and `lib/` file through Next's own SWC transform and every inline `<script>` in
+`public/widgets` through `vm.Script`. It is not a type checker and does not pretend to be — it catches
+syntax, not types. **A real `tsc --noEmit` / eslint pass remains worth adding, and is the one piece of
+rule 9 still genuinely unmet.**
+
+**Rule 6 — "run dry-run only."** Honoured. Two migrations are now written, rehearsed and documented,
+and neither has been executed against anything real:
+
+| Migration | Script | Dry-run result |
+|---|---|---|
+| Section O — legacy projects onto the 3-stage model | `scripts/migrate-legacy-projects.mjs` | see `docs/migration-report.md` (gitignored) |
+| B11 — legacy surveys onto `survey2` | `scripts/migrate-legacy-surveys.mjs` | 38 examined → 1 converts, 3 already have `survey2`, 33 no background, 1 held back on an existing row |
+
+Before the survey one is run anywhere real, read **B14**: an open browser tab overwrites tool rows,
+so a migrated row can be reverted to pre-migration bytes about a minute later by anyone who has the
+project open. Nothing in the code enforces a quiet window.
+
+**Rule 3 — order of work.** Followed for L → A → B, C → G, H, I → M, O → N → J, E, D, F, K. The
+exceptions are the two pieces found by auditing the spec after the run was reported complete
+(O·165/O·166, then B11/B12), which necessarily ran last.
+
+---
+
+## Closing round — the spec's own leftovers
+
+A final pass over `site-survey-fixes.md`, checking the run's rules as well as its lettered sections.
+
+**B8 is fixed, and it was the only live customer-facing defect that could be closed without an owner
+decision.** `customerTodo` announced a proposal from the stage column alone, so any project parked
+past `proposal` with nothing published told its customer *"a new proposal is ready — review &
+accept"*. It now requires `proposal_published`, the unfloored fact, and the card passes it from the
+raw facts rather than from `sf`, which is floored and would have defeated the guard. **14 → 0** on
+the live database. The same defect one branch up went with it: `ASC00SR` was asking a customer to
+approve a survey that was never submitted.
+
+**Section E's "unchecked" note was a real defect.** `svgPlanBody` draws Blocks, but the export
+viewBox came from `planCells()` — structure and rooms only. A Block is by definition land that is
+*not* the customer's property, so it sits outside that box, and it was being clipped out of the PNG,
+the stored plan SVG and the AI overlay. `planBoundsCells()` now feeds those three. It deliberately
+does **not** feed `planFeet()`: the footprint dimension describes the customer's building, and folding
+a block into it would overstate their square footage.
+
+**Still open in E, and genuinely ambiguous rather than merely undone.** Spec item 11 asks for a Select
+tool that can "move/edit/delete together". Move and delete together are implemented; *edit* together
+is not, and the spec does not say what it should mean for a mixed selection of rooms, areas and
+blocks — the properties they share are position and existence, which are exactly the two already
+covered. Rather than invent a bulk-edit surface, this is left for the owner to specify.
+
+**Section D's `PAD = 40`** remains an estimate. It clears Google's roughly 25–30px attribution strip
+with margin, and the rendered credit has been verified at four output sizes, but the trim has never
+been measured against a real Static Maps tile because this environment has no Maps key.
+
+Housekeeping done in the same pass: the `ASC-TEST-LEG` legacy clone was deleted now that B11 is
+verified (`CSC0119`, its source, untouched), and the **432 untracked zero-byte files** left by an old
+shell-quoting bug were removed — the repo's untracked list is now just this spec and the journey-audit
+docs.

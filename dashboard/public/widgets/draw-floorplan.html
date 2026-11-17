@@ -286,7 +286,7 @@
     </div>
 
 <script src="room-taxonomy.js?v=20260921-rooms"></script>
-<script src="draw-geom.js?v=20261116-sectionE2"></script>
+<script src="draw-geom.js?v=20261116-sectionE3"></script>
 <script>
   var _qs=new URLSearchParams(location.search);
   var PID=_qs.get("project")||"", FLOOR=_qs.get("floor")||"0", FID=_qs.get("fid")||"";   // FID = the survey floor's stable id
@@ -1234,8 +1234,14 @@
   // as the floor background). Cropping to the geometry bbox — not a padded square — is what makes the Done
   // result fill the frame the same way the editor does (no tiny plan floating in white). ----
   function planCells(){ var arr=Array.from(cells); rooms.forEach(function(r){ (r.cells||[]).forEach(function(k){ arr.push(k); }); }); return arr; }
+  // The cells an EXPORT has to fit in its viewBox. svgPlanBody draws blocks, but planCells() is
+  // structure + rooms only — and a Block is by definition land that is NOT the customer's property, so
+  // it usually sits outside that box and was being clipped straight out of the PNG, the stored plan SVG
+  // and the AI overlay. Deliberately NOT used by planFeet(): the footprint dimension describes the
+  // customer's building, and folding a block into it would overstate their square footage.
+  function planBoundsCells(){ var arr=planCells(); (blocks||[]).forEach(function(b){ (b.cells||[]).forEach(function(k){ arr.push(k); }); }); return arr; }
   function sketchPNG(){
-    var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
+    var arr=planBoundsCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));      // ~6% margin, min one half-cell
     var worldW=bb.w+2*m, worldH=bb.h+2*m, sc=1200/Math.max(worldW,worldH), cellPx=HALF*sc;
     var c=document.createElement("canvas"); c.width=Math.max(1,Math.round(worldW*sc)); c.height=Math.max(1,Math.round(worldH*sc));
@@ -1293,7 +1299,7 @@
   function sketchSVG(vb){
     var x0,y0,vw,vh;
     if(vb){ x0=vb.x0; y0=vb.y0; vw=vb.vw; vh=vb.vh; }
-    else { var arr=planCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
+    else { var arr=planBoundsCells(); var bb=arr.length ? cellsBBoxPx(arr) : {x:0,y:0,w:W(),h:H()};
       var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06));
       x0=bb.x-m; y0=bb.y-m; vw=bb.w+2*m; vh=bb.h+2*m; }
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
@@ -1371,7 +1377,7 @@
      TRANSPARENT, framed on the SAME tight bbox + 6% margin the enhanced raster was rendered from (sketchPNG/sketchSVG
      default). Drawn 1:1 over the AI PNG (both object-fit:contain, matched aspect, preserveAspectRatio meet) it proves
      the AI added/moved/removed nothing — the authoritative walls sit on top. Reuses svgPlanBody so it can't drift. */
-  function overlaySVG(){ var arr=planCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
+  function overlaySVG(){ var arr=planBoundsCells(); if(!arr.length) return null; var bb=cellsBBoxPx(arr);
     var m=Math.max(HALF, Math.round(Math.max(bb.w,bb.h)*0.06)), x0=bb.x-m, y0=bb.y-m, vw=bb.w+2*m, vh=bb.h+2*m;
     var swS=Math.max(2, HALF*0.28), swR=Math.max(1.2, HALF*0.16), fs=Math.max(9, Math.round(HALF*0.62));
     var o=['<svg xmlns="http://www.w3.org/2000/svg" width="'+Math.round(vw*3)+'" height="'+Math.round(vh*3)+'" viewBox="'+x0+' '+y0+' '+vw+' '+vh+'" preserveAspectRatio="xMidYMid meet" font-family="system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">'];

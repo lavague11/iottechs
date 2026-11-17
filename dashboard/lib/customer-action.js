@@ -55,8 +55,21 @@ export function customerAnnouncement(f = {}) {
 // pending actions in chronological order. `target` is the stage the project's gateway centers on.
 export function customerTodo(f = {}) {
   const S = f.stage;
-  if (S === "site_survey" && !f.survey_accepted)
+  // B8: every branch below the survey asks the customer to act on a PROPOSAL, and until now they were
+  // keyed on the stage column alone. The stage column is a cache, not evidence — and `stageFloorFacts`
+  // additionally invents `proposal_status: "accepted"` for anything at approval_deposit or later — so
+  // any project parked past `proposal` with no published proposal told its customer "a new proposal is
+  // ready — review & accept", or "sign your agreement", for a document that does not exist. 14 projects
+  // in the database were doing it. `proposal_published` is the UNFLOORED fact (buildStageFacts sets
+  // `proposal_status` from the published row, null when there is none); callers that don't pass it keep
+  // the old behaviour rather than silently losing a prompt.
+  const published = f.proposal_published !== false;
+  // Same defect one branch up: a survey that exists but was never SUBMITTED to the customer is not
+  // theirs to approve, and asking them to approve it is the survey-shaped version of announcing a
+  // proposal nobody sent. `survey_submitted` is explicit; absent, keep the old behaviour.
+  if (S === "site_survey" && !f.survey_accepted && f.survey_submitted !== false)
     return { label: "Review & approve your site survey", cta: "Review survey", target: "site_survey", order: 1 };
+  if (!published) return null;   // nothing below here is true without a contract to act on
   if ((S === "proposal" || S === "approval_deposit") && f.proposal_status !== "accepted")
     return { label: (f.proposal_version > 1 ? "Your proposal has been revised — review & accept" : "A new proposal is ready — review & accept"),
              cta: "Review proposal", target: "proposal", order: 2 };

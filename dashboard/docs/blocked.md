@@ -206,6 +206,17 @@ payloads, not payloads aimed at a *missing* project.
 
 ## B8 — Found by the section-O dry run: 14 projects are telling customers a proposal exists when none does
 
+> **DECIDED 2026-11-16 — FIXED.** `customerTodo` now takes `proposal_published`, the UNFLOORED fact
+> (`buildStageFacts` sets `proposal_status` from the published row, null when there is none), and every
+> branch below the survey returns null without it. `buildMyProjectCard` passes it from the raw facts,
+> not from `sf`, because `sf` is floored and would defeat the guard. Measured on the live database:
+> **14 → 0** projects announcing a proposal that does not exist.
+>
+> The same defect one branch up was fixed with it: a survey that exists but was never SUBMITTED is not
+> the customer's to approve, and `ASC00SR` was being asked to approve one. `survey_submitted !== false`
+> now gates that branch. Both flags are opt-in — a caller that omits them keeps the old behaviour, so
+> no other surface silently loses a prompt.
+
 **Live, customer-facing, and not caused by this run.** Found while section O was planning the legacy
 migration; recorded here because it needs fixing and sits in sections M/N's files rather than O's.
 

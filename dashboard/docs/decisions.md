@@ -904,3 +904,43 @@ A second guard came out of the same pass: a project with a `survey2` row that ho
 is still somebody's widget state (flags, `submitted`, step position). `saveToolData` upserts, so
 converting would overwrite it and the documented DELETE rollback would not bring it back. One real row
 is in that shape. The planner now skips on the row EXISTING, not on it having content.
+
+## D30 — writing a file from Python on Windows silently rewrites every line ending
+
+Rewriting `public/widgets/draw-floorplan.html` with a short Python script converted **1,777** line
+endings from LF to CRLF. Python's text mode reads with universal newlines and writes with
+`os.linesep`, so a round-trip through `open(p).read()` / `open(p, "w").write(s)` normalises the whole
+file to CRLF on this machine, however small the intended edit.
+
+`git diff` showed **9 insertions, 3 deletions** — it normalises on both sides, so the damage was
+invisible there. What broke were two tests that read the **working** file and assert on literal
+`\n` sequences (`"renderFloorSel();\n  $(\"mClean\")"`). Three other files edited the same way were
+already committed; their stored blobs were fine, and only the working copies had turned over.
+
+Rules for this repo:
+- Prefer the Edit tool. When a script is genuinely easier, open in **binary** (`open(p, "rb")` /
+  `"wb"`) so bytes are preserved, or pass `newline=""`.
+- `git diff` is not the check. `file <path>` reports the terminators, and a suite run against the
+  working tree is what actually catches it.
+
+Related: [[shell-oneliner-junk]] — the same class of problem from the other direction, where a
+mis-parsed one-liner writes stray files instead of mangling a real one. This run cleaned up 432 of
+those, most predating it.
+
+## D31 — the audit found more than the run did, twice
+
+Both of the last two rounds of real defects came from re-reading the spec against the code *after*
+the work was reported complete — not from building, and not from the test suite.
+
+The first audit found two sub-items of section O that had never been built at all (`O·165`, `O·166`),
+after I had told the owner every section was done. The second found that the report's own L and G
+entries still said *"Outstanding … then commit"* for sections that had shipped, that rule 40's
+per-section agent/model log had never been written, and that section E's own parenthetical
+"unchecked" note was hiding a live clipping bug.
+
+What they have in common: each was recorded somewhere as a word rather than a check. "Not exercised
+in a browser", "unchecked", "outstanding" — prose that reads as a caveat and functions as a hiding
+place. The suite cannot see any of them, and neither can a reviewer looking at a diff.
+
+So the closing step of a run of this size is not the report; it is reading the original brief line by
+line against the code, treating every hedge in your own notes as a task. Budget for it.

@@ -36,7 +36,7 @@ const HALF = 13, FULL = 26;
 const NAMES = [
   "key", "has", "ptLess", "wallKey", "canonOpening", "openKey", "sanitizeOpenings", "sanitizeOpenWalls", "segDistSq",
   "edgesOf", "boundaryEdges", "cellsBBoxPx", "roomLabelCell", "esc", "openSet", "doorArcD", "wallPathD", "structFill", "svgPlanBody",
-  "namedRooms", "sanitizeBlocks", "planCells",
+  "namedRooms", "sanitizeBlocks", "planCells", "planBoundsCells",
   "_fnv", "planRev", "sanitizeEnhanced", "enhanceStale", "planOut", "applyPlan", "overlaySVG"];
 const PURE = NAMES.map((n) => extractFn(src, n)).join("\n");
 const api = new Function("IOTDrawGeom", `

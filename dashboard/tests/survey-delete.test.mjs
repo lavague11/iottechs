@@ -270,7 +270,7 @@ test("Start Over clears the stash, so Undo cannot resurrect a device onto a blan
 // The point is that the key MOVED — not what it currently says. Pinning the live value made every later
 // section that edits the widget fail this test and retype it, which is how a cache-buster quietly stops
 // being bumped. So: it must still look like a dated key, and must not be any value already superseded.
-const STALE_WIDGET_KEYS = ["20261116-sectionA3", "20261116-sectionBCD3"];
+const STALE_WIDGET_KEYS = ["20261116-sectionA3", "20261116-sectionBCD3", "20261116-sectionE2"];
 test("the widget cache-buster moved with the widget", () => {
   const w = readFileSync(new URL("../app/project/[accessId]/site-survey-widget.jsx", import.meta.url), "utf8");
   const m = w.match(/WIDGET_VERSION = "([^"]+)"/);
