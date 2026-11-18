@@ -176,7 +176,14 @@ export default function SopBuilder({ canManage = false }) {
       const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", transcript: transcript.trim(), steps };
       setSop(next); saveDraftSoon(next); setStatus("");
       const lost = lostIds.size;
-      toast(lost ? `Couldn't save ${lost} file${lost === 1 ? "" : "s"}.` : "Done — photos put in the order you described.");
+      if (lost) toast(`Couldn't save ${lost} file${lost === 1 ? "" : "s"}.`);
+      // Build runs straight into the enhancement it just chose for each photo — one action, not two.
+      // The guide is already in state and queued to save ABOVE this line, so if enhancing fails (no key,
+      // out of credits, a dead connection) the built steps survive and only the enhancement is missing;
+      // every photo keeps its original either way, and Enhance all can be tapped again later.
+      const toEnhance = steps.filter((s) => s.img && !s.video);
+      if (!toEnhance.length) { if (!lost) toast("Done — photos put in the order you described."); }
+      else await runEnhance(toEnhance);
     } catch (e) { setStatus(e.message); }
     setBusy(false);
   }

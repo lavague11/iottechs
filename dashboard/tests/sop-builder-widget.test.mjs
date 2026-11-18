@@ -138,3 +138,19 @@ test("build waits for in-flight clips, caches uploads per photo, and counts lost
   assert.ok(/failed: true/.test(main), "failed clip tiles are marked finished");
   assert.ok(/file\$\{lost === 1/.test(b) && !/photo\$\{lost/.test(b));
 });
+
+test("Build runs the enhancement it just chose, without risking the built guide", () => {
+  const b = read("sop-builder.jsx");
+  const build = b.slice(b.indexOf("async function build()"), b.indexOf("async function runEnhance"));
+  // The guide is put in state AND queued to save BEFORE enhancing, so a dead key or an out-of-credits
+  // account costs the enhancement only — the steps survive.
+  const save = build.indexOf("saveDraftSoon(next)");
+  const enh = build.indexOf("await runEnhance(toEnhance)");
+  assert.ok(save > -1 && enh > -1, "build saves and then enhances");
+  assert.ok(save < enh, "the built guide is saved before any enhancement runs");
+  // Videos are never sent to the image editor, and a photoless build doesn't fire a pointless call.
+  assert.match(build, /steps\.filter\(\(s\) => s\.img && !s\.video\)/);
+  assert.match(build, /if \(!toEnhance\.length\)/, "no photos → no enhance call");
+  // Awaited, so Build stays disabled for the whole run rather than re-arming mid-enhance.
+  assert.match(build, /else await runEnhance\(toEnhance\);/);
+});
