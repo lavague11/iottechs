@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import sharpMod from "sharp";
-import { processImage, webSafeMime, looksHeic } from "../lib/media-process.js";
+import { processImage, webSafeMime, looksHeic, looksSvg, looksAvif } from "../lib/media-process.js";
 
 const realSharp = sharpMod;
 async function makePng(w = 120, h = 80) {
@@ -66,4 +66,51 @@ test("a non-image with no sharp is rejected (nothing a browser could render)", a
     () => processImage(Buffer.from("just some text, not an image"), "notes.txt", "text/plain", { loadSharp: async () => null }),
     /not a web-safe image/,
   );
+});
+
+// --- SVG / AVIF are refused before any decoder runs -----------------------------------------------
+// webSafeMime already stops them being STORED, but sharp was still being handed the raw bytes, and it
+// decodes SVG via librsvg (CVE-2026-96889) and AVIF via libheif/libaom — the surfaces behind the Next
+// image RCEs GHSA-2464-fhr4-w9xw and GHSA-2xp9-vwfh-vxw4. The parse is the risk, not the storage.
+const svgBytes = (s) => Buffer.from(s, "utf8");
+const avifBytes = (brand = "avif") => {
+  const b = Buffer.alloc(16);
+  b.write("ftyp", 4, "latin1");
+  b.write(brand, 8, "latin1");
+  return b;
+};
+
+test("looksSvg catches the shapes an SVG actually arrives in", () => {
+  assert.equal(looksSvg(svgBytes('<svg xmlns="http://www.w3.org/2000/svg"></svg>'), "a.png", ""), true, "bare <svg>");
+  assert.equal(looksSvg(svgBytes('<?xml version="1.0"?><svg></svg>'), "", ""), true, "xml prolog");
+  assert.equal(looksSvg(svgBytes('<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN">'), "", ""), true, "doctype");
+  assert.equal(looksSvg(svgBytes('﻿  <svg/>'), "", ""), true, "BOM + leading space");
+  assert.equal(looksSvg(svgBytes('<!-- a comment --><svg/>'), "", ""), true, "leading comment");
+  assert.equal(looksSvg(Buffer.alloc(32), "x.svg", ""), true, "by filename");
+  assert.equal(looksSvg(Buffer.alloc(32), "", "image/svg+xml"), true, "by mime");
+  // A real raster must not be caught.
+  assert.equal(looksSvg(Buffer.from("89504e470d0a1a0a", "hex"), "a.png", "image/png"), false);
+});
+
+test("looksAvif catches the ISO-BMFF brands and the obvious labels", () => {
+  assert.equal(looksAvif(avifBytes("avif"), "", ""), true);
+  assert.equal(looksAvif(avifBytes("avis"), "", ""), true, "image sequence");
+  assert.equal(looksAvif(Buffer.alloc(32), "x.avif", ""), true);
+  assert.equal(looksAvif(Buffer.alloc(32), "", "image/avif"), true);
+  // HEIC is also ftyp-based but stays ALLOWED — iPhone photos are the main upload path.
+  const heic = Buffer.alloc(16); heic.write("ftyp", 4, "latin1"); heic.write("heic", 8, "latin1");
+  assert.equal(looksAvif(heic, "", ""), false, "HEIC must not be blocked");
+});
+
+test("processImage refuses SVG/AVIF without ever calling sharp", async () => {
+  let sharpCalled = false;
+  const deps = { loadSharp: async () => { sharpCalled = true; return null; }, loadHeicConvert: async () => null };
+  for (const [label, buf, name, type] of [
+    ["svg", svgBytes("<svg/>"), "logo.svg", "image/svg+xml"],
+    ["svg disguised as png", svgBytes('<?xml version="1.0"?><svg onload="x()"/>'), "photo.png", "image/png"],
+    ["avif", avifBytes(), "shot.avif", "image/avif"],
+  ]) {
+    await assert.rejects(() => processImage(buf, name, type, deps), /isn’t accepted/, `${label} is refused`);
+  }
+  assert.equal(sharpCalled, false, "the decoder is never reached for a blocked format");
 });

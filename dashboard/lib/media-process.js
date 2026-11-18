@@ -43,7 +43,36 @@ const defaultLoadSharp = async () => {
 const defaultLoadHeicConvert = async () => (await import("heic-convert")).default;
 
 // → { bytes, mime, w, h }. Throws only when nothing a browser could render can be produced.
+// SVG and AVIF are REFUSED before any decoder sees them. webSafeMime already stops them being stored,
+// but that is not where the danger is: the sharp branch below hands the raw upload to sharp regardless,
+// and sharp decodes SVG through librsvg and AVIF through libheif/libaom — the exact surfaces behind
+// CVE-2026-96889 (librsvg) and the Next image RCEs GHSA-2464-fhr4-w9xw (SVG) / GHSA-2xp9-vwfh-vxw4
+// (AVIF). Rejecting at the door means a malicious file is never parsed at all, which holds even if the
+// next librsvg/libaom CVE lands before we patch. Nothing in this product uploads either format — the
+// only SVGs are repo assets like public/logo.svg, which never go through here.
+export function looksSvg(buf, name, type) {
+  if (/^image\/svg/i.test(type || "") || /\.svgz?$/i.test(name || "")) return true;
+  try {
+    // Sniff the first bytes as text: an SVG may open with a BOM, an XML prolog, a doctype or comments.
+    const head = buf.toString("latin1", 0, Math.min(buf.length, 1024)).replace(/^﻿/, "").trimStart();
+    return /^<(\?xml|!doctype\s+svg|svg[\s/>])/i.test(head) || /<svg[\s/>]/i.test(head);
+  } catch { return false; }
+}
+export function looksAvif(buf, name, type) {
+  if (/^image\/avif/i.test(type || "") || /\.avifs?$/i.test(name || "")) return true;
+  try {
+    // ISO-BMFF: bytes 4-8 are "ftyp", then the major brand. avif = still, avis = sequence.
+    if (buf.length >= 12 && buf.toString("latin1", 4, 8) === "ftyp") {
+      return /^(avif|avis)$/i.test(buf.toString("latin1", 8, 12));
+    }
+  } catch { /* fall through */ }
+  return false;
+}
+export const BLOCKED_UPLOAD_FORMAT = "That image format isn’t accepted. Use JPEG, PNG, GIF, WEBP or HEIC.";
+
 export async function processImage(buf, name, type, deps = {}) {
+  // Refuse first, decode second.
+  if (looksSvg(buf, name, type) || looksAvif(buf, name, type)) throw new Error(BLOCKED_UPLOAD_FORMAT);
   const loadSharp = deps.loadSharp || defaultLoadSharp;
   const loadHeicConvert = deps.loadHeicConvert || defaultLoadHeicConvert;
   const sharp = await loadSharp();
