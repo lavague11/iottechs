@@ -38,14 +38,24 @@ export default function GuidesClient({ sops = [], staff = false, canBuild = fals
       ) : (
         <div className="supl-grid">
           {list.map((s) => (
-            <Link className="supl-card" key={s.slug} href={`/guides/${s.slug}`}>
-              <div className="supl-thumb">{s.thumb ? <img src={s.thumb} alt="" /> : <span className="supl-ph"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-9 9" /></svg></span>}
-                {staff && s.visibility === "internal" && <span className="supl-badge">Internal</span>}</div>
-              <div className="supl-meta">
-                <div className="supl-title">{s.title}</div>
-                <div className="supl-sub">{s.steps} step{s.steps === 1 ? "" : "s"}{s.business ? ` · ${s.business}` : ""}{s.category ? ` · ${s.category}` : ""}</div>
-              </div>
-            </Link>
+            // The card is a wrapper, not a Link, because the Edit pencil is itself a link and an anchor
+            // cannot be nested inside another anchor. The whole card stays clickable via .supl-open.
+            <div className="supl-card" key={s.slug}>
+              <Link className="supl-open" href={`/guides/${s.slug}`}>
+                <div className="supl-thumb">{s.thumb ? <img src={s.thumb} alt="" /> : <span className="supl-ph"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-9 9" /></svg></span>}
+                  {staff && s.visibility === "internal" && <span className="supl-badge">Internal</span>}</div>
+                <div className="supl-meta">
+                  <div className="supl-title">{s.title}</div>
+                  <div className="supl-sub">{s.steps} step{s.steps === 1 ? "" : "s"}{s.business ? ` · ${s.business}` : ""}{s.category ? ` · ${s.category}` : ""}</div>
+                </div>
+              </Link>
+              {canBuild && (
+                <Link className="supl-edit" href={`/tools/sop-builder?sop=${encodeURIComponent(s.slug)}`}
+                      title="Edit" aria-label={`Edit ${s.title}`}>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                </Link>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -67,8 +77,13 @@ const CSS = `
 .supl-chips button{border:1px solid var(--line);background:var(--card);color:var(--mut);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:700}
 .supl-chips button.on{background:#fff;color:#000;border-color:#fff}
 .supl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
-.supl-card{display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;text-decoration:none;color:#fff}
+.supl-card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;color:#fff}
 .supl-card:hover{border-color:#4a4a52}
+.supl-open{display:flex;flex-direction:column;text-decoration:none;color:inherit}
+/* Edit — staff only, top-right over the thumbnail. Sits above the card link so it stays clickable. */
+.supl-edit{position:absolute;right:8px;top:8px;z-index:2;display:flex;align-items:center;justify-content:center;
+  width:30px;height:30px;border-radius:9px;background:rgba(0,0,0,.72);border:1px solid var(--line);color:var(--acc);text-decoration:none}
+.supl-edit:hover{background:rgba(0,0,0,.9);border-color:var(--acc)}
 .supl-thumb{position:relative;aspect-ratio:16/10;background:#000;display:flex;align-items:center;justify-content:center}
 .supl-thumb img{width:100%;height:100%;object-fit:cover}
 .supl-ph{color:#333;display:inline-flex}

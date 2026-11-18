@@ -3,7 +3,7 @@ import { mkdirSync, copyFileSync, existsSync, rmSync, statSync } from "node:fs";
 import { createHash, randomBytes, scryptSync, timingSafeEqual, createCipheriv, createDecipheriv } from "node:crypto";
 import path from "node:path";
 import { parseUserAgent, deviceFingerprint } from "./device.js";
-import { SOP_STEP_REAL_SQL, SOP_STEP_UNTAGGED_SQL } from "./sop-model.js";
+import { SOP_STEP_REAL_SQL, SOP_STEP_UNTAGGED_SQL, shotKind } from "./sop-model.js";
 import { makeAccessId, stageLabel, stagesForType, SERVICE_CODES, serviceCodeFromText, normalizePropertyType, DEFAULT_PROPERTY_TYPE } from "./spec.js";
 import { normalizePhone, normalizeEmail, phoneKey, rankCustomers } from "./crm.js";
 import { sanitizeDiagnosis, stableJson, devicesFromCameras, emptyDiagnosis, proposalScopeLines } from "./svc-model.js";
@@ -1528,7 +1528,11 @@ function init() {
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sop_steps_sop ON sop_steps(sop_id, position)`);
   { const c = db.prepare("PRAGMA table_info(sop_steps)").all().map((x) => x.name);
     if (!c.includes("video_path")) db.exec("ALTER TABLE sop_steps ADD COLUMN video_path TEXT");
-    if (!c.includes("tags")) db.exec("ALTER TABLE sop_steps ADD COLUMN tags TEXT"); }
+    if (!c.includes("tags")) db.exec("ALTER TABLE sop_steps ADD COLUMN tags TEXT");
+    // What the photo IS, which decides how "Enhance" treats it: a product shot gets isolated onto a
+    // clean backdrop, a screen gets de-glared and squared up, a scene is only cleaned in place.
+    // NULL = auto (inferred from the step text). See SHOT_KINDS in lib/sop-model.js.
+    if (!c.includes("shot_kind")) db.exec("ALTER TABLE sop_steps ADD COLUMN shot_kind TEXT"); }
   db.exec(`
     CREATE TABLE IF NOT EXISTS sop_versions (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -7624,7 +7628,14 @@ function normTags(tags) {
 function sopStepOut(r) {
   return { id: r.id, title: r.title || "", instruction: r.instruction || "", target: r.target || "",
     where: r.where_hint || "", img: r.image_path || null, enh: r.enhanced_path || null, useEnh: !!r.use_enhanced,
-    video: r.video_path || null, tags: r.tags ? r.tags.split(",").map((t) => t.trim()).filter(Boolean) : [] };
+    video: r.video_path || null, kind: r.shot_kind || "",
+    tags: r.tags ? r.tags.split(",").map((t) => t.trim()).filter(Boolean) : [] };
+}
+// The id behind a published guide's public slug — so "Edit" on a guide card can open that guide in the
+// builder without the public slug list ever having to carry internal ids.
+export function sopIdBySlug(slug) {
+  const r = db.prepare("SELECT id FROM sops WHERE slug=?").get(String(slug || ""));
+  return r?.id || null;
 }
 // One SOP with its ordered steps (null if missing).
 export function getSop(id) {
@@ -7662,12 +7673,12 @@ export function saveSopDraft({ id, title, business = null, category = null, tran
         .run(sid, String(title || "New SOP").slice(0, 120), business, category, String(transcript || ""), createdBy, createdById);
     }
     db.prepare("DELETE FROM sop_steps WHERE sop_id=?").run(sid);
-    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced, video_path, tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+    const ins = db.prepare("INSERT INTO sop_steps (id, sop_id, position, title, instruction, target, where_hint, image_path, enhanced_path, use_enhanced, video_path, tags, shot_kind) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)");
     (Array.isArray(steps) ? steps : []).forEach((st, i) => {
       ins.run(String(st.id || ("st" + i + Date.now().toString(36) + Math.random().toString(36).slice(2, 5))), sid, i,
         String(st.title || "").slice(0, 120), String(st.instruction || "").slice(0, 1000),
         String(st.target || "").slice(0, 200), String(st.where || "").slice(0, 80),
-        st.img || null, st.enh || null, st.useEnh ? 1 : 0, st.video || null, normTags(st.tags));
+        st.img || null, st.enh || null, st.useEnh ? 1 : 0, st.video || null, normTags(st.tags), shotKind(st.kind) || null);
     });
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); throw e; }

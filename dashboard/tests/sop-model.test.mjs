@@ -2,7 +2,7 @@
 // handoff and the §5 post-processing rules so a reword/regression fails loudly.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SOP_SYSTEM, sopUserInstruction, enhancePrompt, normalizeSopResult, parseSopJson, sopSlug, canEditSop, cleanTags, SOP_TAG_SYSTEM, sopTagUserMessage, parseTagResult, fallbackTags, isDividerTitle } from "../lib/sop-model.js";
+import { SOP_SYSTEM, sopUserInstruction, enhancePrompt, normalizeSopResult, parseSopJson, sopSlug, canEditSop, cleanTags, SOP_TAG_SYSTEM, sopTagUserMessage, parseTagResult, fallbackTags, isDividerTitle, SHOT_KINDS, SHOT_KIND_LABEL, shotKind, inferShotKind } from "../lib/sop-model.js";
 
 test("system prompt is the handoff's, verbatim intent", () => {
   assert.ok(/step-by-step SOP/.test(SOP_SYSTEM));
@@ -21,16 +21,59 @@ test("user instruction wraps the transcript as untrusted data + asks for the exa
 });
 
 test("enhance prompt: cleanup goal + circle only when target + editable note", () => {
-  const withTarget = enhancePrompt({ title: "Open panel", instruction: "Flip it.", target: "the red switch", where: "upper right" });
+  const withTarget = enhancePrompt({ title: "Open panel", instruction: "Flip it.", target: "the red switch", where: "upper right", kind: "scene" });
   assert.ok(/Clean up this photo/.test(withTarget), "leads with the cleanup goal");
   assert.ok(/Reduce noise/.test(withTarget) && /background/.test(withTarget), "denoise + declutter background");
   assert.ok(/bright yellow circle/.test(withTarget));
   assert.ok(/the red switch \(upper right of the photo\)/.test(withTarget));
-  assert.ok(/do not add, remove or change any real objects/.test(withTarget));
+  assert.ok(/do not add, remove, move or alter any real object/i.test(withTarget), "a scene shot stays truthful to the site");
   const noTarget = enhancePrompt({ title: "Overview", instruction: "Look at it.", target: "", where: "" });
   assert.ok(!/yellow circle/.test(noTarget), "no circle sentence without a target");
   const noted = enhancePrompt({ title: "x", instruction: "y", note: "blur the background more" });
   assert.ok(/blur the background more/.test(noted), "operator's note is appended to the prompt");
+});
+
+test("a PRODUCT shot is cut out of its surroundings, but the item itself is untouchable", () => {
+  const p = enhancePrompt({ title: "The 6TB drive", instruction: "Unbox it.", kind: "product" });
+  assert.match(p, /PRODUCT shot/);
+  assert.match(p, /Remove the hands, fingers, arms/, "the owner's case: lose the hand holding it");
+  assert.match(p, /neutral light-grey studio background/);
+  // The part shown must stay the real part — a restyled or stock stand-in would mislead a tech.
+  assert.match(p, /pixel-faithful/);
+  assert.match(p, /every printed label, logo, serial or marking exactly as photographed/);
+  assert.match(p, /do not swap it for a stock or idealised version/);
+});
+
+test("a SCREEN shot is squared and de-glared, and its text may never be invented", () => {
+  const p = enhancePrompt({ title: "NVR network page", instruction: "Set the IP.", kind: "screen" });
+  assert.match(p, /photo of a SCREEN/);
+  assert.match(p, /remove glare, reflections, camera shadow, moiré/);
+  assert.match(p, /correct the keystone\/skew/);
+  // The safety rule that matters most: a guide showing a made-up menu is worse than a bad photo.
+  assert.match(p, /Reproduce what is on that screen EXACTLY/);
+  assert.match(p, /Never invent, translate, re-word, re-order, complete or correct any on-screen text/);
+  assert.match(p, /leave it as-is rather than guessing/);
+});
+
+test("kind is inferred from the step's own words when the operator hasn't chosen", () => {
+  assert.equal(inferShotKind({ title: "Open the settings menu" }), "screen");
+  assert.equal(inferShotKind({ instruction: "Log in to the dashboard" }), "screen");
+  assert.equal(inferShotKind({ title: "Factory reset a dome camera" }), "product");
+  assert.equal(inferShotKind({ target: "the RJ45 connector" }), "product");
+  assert.equal(inferShotKind({ title: "Walk the parking lot" }), "scene", "anything unclear stays the safe treatment");
+  assert.equal(inferShotKind({}), "scene");
+  // A screen beats a product when both appear — "the NVR menu" is a screen, not a box.
+  assert.equal(inferShotKind({ title: "The NVR settings screen" }), "screen");
+  // An explicit choice always wins over the guess.
+  assert.match(enhancePrompt({ title: "Open the settings menu", kind: "product" }), /PRODUCT shot/);
+  assert.match(enhancePrompt({ title: "Open the settings menu" }), /photo of a SCREEN/);
+});
+
+test("shotKind only accepts the known kinds", () => {
+  assert.equal(shotKind("product"), "product");
+  assert.equal(shotKind("screen"), "screen");
+  assert.equal(shotKind("scene"), "scene");
+  for (const bad of ["", null, undefined, "PRODUCT", "widget", 7]) assert.equal(shotKind(bad), "", `${bad} → auto`);
 });
 
 test("normalizeSopResult: keeps Claude's order, ignores bad/duplicate photo indexes", () => {

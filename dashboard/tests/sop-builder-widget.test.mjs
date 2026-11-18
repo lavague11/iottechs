@@ -116,7 +116,7 @@ test("library: newest response wins, refresh uses the latest query", () => {
 });
 
 test("step card: dividers get no media or tags; media locked while busy; short placeholders", () => {
-  assert.ok(/import \{ isDividerTitle \} from "..\/..\/..\/lib\/sop-model"/.test(card));
+  assert.ok(/import \{ isDividerTitle, SHOT_KINDS, SHOT_KIND_LABEL \} from "..\/..\/..\/lib\/sop-model"/.test(card));
   assert.ok(/!divider && <input className="sopb-tagin"/.test(card));
   assert.ok(/aria-disabled=\{locked/.test(card) && /disabled=\{busy\}/.test(card));
   assert.ok(/placeholder="Tags"/.test(card) && /placeholder="Search"/.test(sheets));

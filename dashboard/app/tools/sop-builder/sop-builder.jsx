@@ -6,7 +6,7 @@
 // (black, gradient primary) scoped under .sopb. Mobile-first; drag-reorder works by touch and mouse.
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Wordmark } from "../../components/brand";
-import { saveSopDraftAction, listSopsAction, getSopAction, deleteSopAction, publishSopAction, searchStepsAction } from "./actions";
+import { saveSopDraftAction, listSopsAction, getSopAction, getSopBySlugAction, deleteSopAction, publishSopAction, searchStepsAction } from "./actions";
 import { CSS } from "./sop-builder-css";
 import { uid, sleep, readURL, photoFrom, videoPoster, uploadMedia, uploadFileRaw, move, makeSortable } from "./sop-media";
 import { Ic } from "./sop-icons";
@@ -191,7 +191,7 @@ export default function SopBuilder({ canManage = false }) {
         const srcBlob = await (await fetch(s.img)).blob();   // always enhance from the ORIGINAL photo
         const dataUrl = await readURL(new File([srcBlob], "o.jpg", { type: srcBlob.type || "image/jpeg" }));
         const r = await fetch("/api/sop/enhance", { method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image: dataUrl, title: s.title, instruction: s.instruction, target: s.target, where: s.where, note }) });
+          body: JSON.stringify({ image: dataUrl, title: s.title, instruction: s.instruction, target: s.target, where: s.where, note, kind: s.kind || "" }) });
         const j = await r.json();
         if (!r.ok) throw new Error(j.error || "Enhance failed");
         const url = await uploadMedia(j.b64);
@@ -312,14 +312,33 @@ export default function SopBuilder({ canManage = false }) {
 
   /* ---------- library ---------- */
   async function openLib() { setTab("lib"); setLib(null); const r = await listSopsAction(); setLib(r?.ok ? r.sops : []); }
+  // One place that adopts a loaded guide into the editor, so opening from the library and opening from a
+  // /guides card's Edit land in exactly the same state.
+  function adoptSop(s) {
+    setSop({ id: s.id, title: s.title, business: s.business || "", category: s.category || "", transcript: s.transcript || "",
+      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where, kind: x.kind || "", tags: x.tags || [] })) });
+    setTab("build");
+  }
   async function openSop(id) {
     const r = await getSopAction(id);
     if (!r?.ok) return toast(r?.error || "Couldn't open it.");
-    const s = r.sop;
-    setSop({ id: s.id, title: s.title, business: s.business || "", category: s.category || "", transcript: s.transcript || "",
-      steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where, tags: x.tags || [] })) });
-    setTab("build");
+    adoptSop(r.sop);
   }
+  // Deep link from a guide card: /tools/sop-builder?sop=<slug>. Runs once; the param is then stripped so a
+  // reload after edits doesn't re-open the stored copy over unsaved work.
+  const deepLinked = useRef(false);
+  useEffect(() => {
+    if (deepLinked.current || typeof window === "undefined") return;
+    const slug = new URLSearchParams(window.location.search).get("sop");
+    if (!slug) return;
+    deepLinked.current = true;
+    (async () => {
+      const r = await getSopBySlugAction(slug);
+      if (!r?.ok) return toast(r?.error || "Couldn't open that guide.");
+      adoptSop(r.sop);
+      try { const u = new URL(window.location.href); u.searchParams.delete("sop"); window.history.replaceState({}, "", u); } catch { /* non-fatal */ }
+    })();
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   async function removeSop(id) {
     if (!confirm("Delete this SOP?")) return;
     await deleteSopAction(id); setLib((l) => (l || []).filter((s) => s.id !== id));

@@ -26,7 +26,7 @@ export async function POST(req) {
   if (!m) return Response.json({ error: "No image" }, { status: 400 });
   if (m[2].length > MAX_DATAURL) return Response.json({ error: "Photo is too large to enhance." }, { status: 413 });
 
-  const prompt = enhancePrompt({ title: body?.title, instruction: body?.instruction, target: body?.target, where: body?.where, note: body?.note });
+  const prompt = enhancePrompt({ title: body?.title, instruction: body?.instruction, target: body?.target, where: body?.where, note: body?.note, kind: body?.kind });
   const buf = Buffer.from(m[2], "base64");
   const model = secretValue("SOP_IMAGE_MODEL") || SOP_IMAGE_MODEL_DEFAULT;
   // Full-size, full-detail output (owner request). size:auto keeps the photo's aspect; high quality keeps the

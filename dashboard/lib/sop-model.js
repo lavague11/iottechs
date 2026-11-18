@@ -27,18 +27,62 @@ export function sopUserInstruction(transcript) {
 }
 
 // ---- OpenAI: per-step image-edit prompt (verbatim, handoff §5; circle sentence omitted when no target) --
+// What the photo IS decides how hard "Enhance" is allowed to work on it. A field shot of a camera on a
+// wall must stay truthful to the site; a product shot of the part in someone's hand should lose the hand;
+// a photo of a screen should come back square and glare-free. One blanket prompt cannot do all three, so
+// each kind carries its own rule. "" = auto, inferred from the step's own words (see inferShotKind).
+export const SHOT_KINDS = ["", "product", "screen", "scene"];
+export const SHOT_KIND_LABEL = { "": "Auto", product: "Product", screen: "Screen", scene: "Scene" };
+export const shotKind = (k) => (SHOT_KINDS.includes(String(k || "")) ? String(k || "") : "");
+
+// Guess the kind from what the step talks about. Deliberately conservative: anything that isn't clearly a
+// screen or a loose part stays a SCENE, because scene is the only non-destructive treatment.
+const SCREEN_WORDS = /\b(screen|display|monitor|app|menu|settings?|dialog|page|tab|field|login|dashboard|software|browser|phone|ipad|tablet|nvr menu|web ?ui|interface)\b/i;
+const PRODUCT_WORDS = /\b(camera|lens|dome|bullet|nvr|drive|hdd|ssd|cable|connector|rj45|adapter|bracket|mount|screw|tool|box|unit|device|part|module|speaker|amplifier|sensor|keypad|panel)\b/i;
+export function inferShotKind(step = {}) {
+  const text = `${step.title || ""} ${step.instruction || ""} ${step.target || ""}`;
+  if (SCREEN_WORDS.test(text)) return "screen";
+  if (PRODUCT_WORDS.test(text)) return "product";
+  return "scene";
+}
+
+// The per-kind body of the enhance instruction. Two rules hold across all three and must not be relaxed:
+// nothing on a screen may ever be invented or re-worded, and the real object being worked on is never
+// altered — a guide that shows a subtly wrong part or a made-up menu is worse than an ugly photo.
+const KIND_RULES = {
+  product: "This is a PRODUCT shot. Cut the item being worked on out of its surroundings and present it on "
+    + "a clean, plain, evenly-lit neutral light-grey studio background. Remove the hands, fingers, arms, "
+    + "table clutter, other products and any background scenery entirely. Keep the item itself pixel-faithful "
+    + "— identical shape, proportions, colour, finish, wear, cabling, ports, buttons and every printed label, "
+    + "logo, serial or marking exactly as photographed. Do not restyle it, do not swap it for a stock or "
+    + "idealised version, and do not straighten or re-pose it.",
+  screen: "This is a photo of a SCREEN. Return the display squared up and legible: remove glare, reflections, "
+    + "camera shadow, moiré and screen-door patterning, correct the keystone/skew so the screen is rectangular, "
+    + "and crop tightly to the display itself. Reproduce what is on that screen EXACTLY — every character, "
+    + "number, label, menu item, icon, checkbox state, highlight and layout position must match the photo. "
+    + "Never invent, translate, re-word, re-order, complete or correct any on-screen text or value, even if it "
+    + "looks truncated, misspelled or wrong; if part of the screen is unreadable, leave it as-is rather than "
+    + "guessing. Do not restyle the interface or substitute a different theme.",
+  scene: "This is an IN-SITU shot of real equipment where it is installed. Clean it up without changing the "
+    + "site: de-clutter by gently de-emphasizing or softly blurring the busy background so the equipment being "
+    + "worked on is the clear focus. Do not add, remove, move or alter any real object, surface, text, label, "
+    + "number, button or screen, and keep the same framing.",
+};
+
 export function enhancePrompt(step = {}) {
   const title = String(step.title || "").trim();
   const instruction = String(step.instruction || "").trim();
   const target = String(step.target || "").trim();
   const where = String(step.where || "").trim();
   const note = String(step.note || "").replace(/[\r\n]+/g, " ").trim().slice(0, 300);   // operator's editable tweak for THIS photo
+  const kind = shotKind(step.kind) || inferShotKind(step);
   const circle = target
     ? ` Then draw one bright yellow circle with a short yellow arrow pointing at ${target}${where ? ` (${where} of the photo)` : ""}.`
     : "";
   const extra = note ? ` ${note}.` : "";
-  // Primary goal (owner): clean up the shot — denoise, de-clutter, and make the product/equipment the clear focus.
-  return `Clean up this photo so it works as a clear, professional illustration for a how-to guide step: "${title}. ${instruction}". Reduce noise and grain, fix the lighting, sharpness and contrast, and remove glare. De-clutter the scene — gently de-emphasize or softly blur the busy background so the main product or equipment being worked on is the clear focus of the shot.${circle}${extra} Keep everything else exactly as it is — do not add, remove or change any real objects, text, labels, numbers, buttons or screens, and keep the same framing.`;
+  return `Clean up this photo so it works as a clear, professional illustration for a how-to guide step: `
+    + `"${title}. ${instruction}". Reduce noise and grain, fix the lighting, sharpness and contrast, and remove glare. `
+    + `${KIND_RULES[kind] || KIND_RULES.scene}${circle}${extra}`;
 }
 
 // ---- Post-processing of Claude's steps (handoff §5) ----------------------------------------------------

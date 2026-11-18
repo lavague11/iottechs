@@ -70,6 +70,7 @@ export const CSS = `
 .sopb-enhedit{display:flex;flex-direction:column;gap:6px;margin-top:8px}
 .sopb-enhedit input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-left:0;font-size:13px;font-weight:400;color:#f2f3f5}
 .sopb-enhedit button{min-height:40px;padding:0 15px;border-radius:10px;border:1px solid var(--line);background:#1c1f24;color:#f2f3f5;font-weight:700;font-size:13px;white-space:nowrap}
+.sopb-enhedit .kind{min-height:40px;padding:0 11px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:#f2f3f5;font:400 13px/1 inherit}
 .sopb-enhedit button.go{background:var(--acc);color:var(--acc-ink);border:0;align-self:flex-end}
 .sopb-hd{display:flex;align-items:center;gap:6px;padding:8px 12px 0;color:var(--mut);font-size:13px}
 .sopb-hd .sopb-h{touch-action:none;display:inline-flex;padding:4px 8px;cursor:grab}

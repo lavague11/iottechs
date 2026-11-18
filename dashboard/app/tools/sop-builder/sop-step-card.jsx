@@ -4,7 +4,7 @@
 // the root is a `.sopb-step` with `data-i={index}` and contains a `.sopb-h` handle.
 import { useState } from "react";
 import { Ic } from "./sop-icons";
-import { isDividerTitle } from "../../../lib/sop-model";
+import { isDividerTitle, SHOT_KINDS, SHOT_KIND_LABEL } from "../../../lib/sop-model";
 
 const ACCEPT = "image/*,.heic,.heif,video/*";
 
@@ -74,6 +74,13 @@ export default function StepCard({ s, i, busy, mediaBusy, aimOpen, enhNote, setE
             <input value={s.where || ""} placeholder="Where" onChange={(e) => onEdit(s.id, "where", e.target.value)} />
             <input value={enhNote} placeholder="Tweak" onChange={(e) => setEnhNote(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !busy) goAim(); }} />
+            {/* What the photo is, which decides how hard Enhance works: Product cuts the item out onto a
+                clean backdrop, Screen squares up and de-glares the display, Scene only tidies it in place.
+                Auto reads the step's own words. */}
+            <select className="kind" value={s.kind || ""} aria-label="Shot type"
+                    onChange={(e) => onEdit(s.id, "kind", e.target.value)}>
+              {SHOT_KINDS.map((k) => <option key={k || "auto"} value={k}>{SHOT_KIND_LABEL[k]}</option>)}
+            </select>
             <button className="go" disabled={busy} onClick={goAim}>{s.enh ? "Redo" : "Enhance"}</button>
           </div>
         )}

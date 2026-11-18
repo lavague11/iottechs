@@ -20,6 +20,19 @@ export async function listSopsAction() {
   return { ok: true, sops: listSops({ ownerId: u.id, all: isManager(u) }) };
 }
 
+// Open a published guide for editing straight from its card on /guides, by its public slug. Same staff
+// gate as getSopAction — the slug is public, the contents are not.
+export async function getSopBySlugAction(slug) {
+  const u = await staff();
+  if (!u) return { error: "Forbidden" };
+  const { sopIdBySlug } = await import("../../../lib/db");
+  const id = sopIdBySlug(slug);
+  if (!id) return { error: "Not found" };
+  const sop = getSop(id);
+  if (!sop) return { error: "Not found" };
+  return { ok: true, sop };
+}
+
 export async function getSopAction(id) {
   const u = await staff();
   if (!u) return { error: "Forbidden" };
