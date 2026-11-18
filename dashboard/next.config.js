@@ -19,6 +19,14 @@ const nextConfig = {
   // caps the blob near ~5MB, so 8MB gives comfortable headroom.
   experimental: {
     serverActions: { bodySizeLimit: "8mb" },
+    // Cap the build's worker pool. Next sizes it from os.cpus(), and the Hostinger build container
+    // advertises 63 CPUs while capping the threads a process may actually spawn — so "Collecting page
+    // data using 63 workers" died with
+    //   panicked ... OS can't spawn worker thread: Resource temporarily unavailable (os error 11)
+    //   ⨯ Next.js build worker exited with code: null and signal: SIGABRT
+    // every deploy, while the same commit built fine on a laptop. 4 is plenty for ~111 pages and costs
+    // only a little wall-clock; raising it risks the same abort on whatever host builds next.
+    cpus: 4,
   },
   // `ws` (server-side WebSocket to OpenAI's Realtime API for neural TTS) has optional native deps — keep it
   // external so webpack doesn't try to bundle them.
