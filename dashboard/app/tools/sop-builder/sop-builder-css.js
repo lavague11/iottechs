@@ -74,8 +74,21 @@ export const CSS = `
 .sopb-enhedit button.go{background:var(--acc);color:var(--acc-ink);border:0;align-self:flex-end}
 .sopb-hd{display:flex;align-items:center;gap:6px;padding:8px 12px 0;color:var(--mut);font-size:13px}
 .sopb-hd .sopb-h{touch-action:none;display:inline-flex;padding:4px 8px;cursor:grab}
+.sopb-subtabs{margin-bottom:12px}
+.sopb-librow{display:flex;gap:8px;align-items:center}
+.sopb-ib.wide{width:auto;min-width:84px;padding:0 14px;font-size:14px;font-weight:700}
+.sopb-ib.danger{width:auto;min-width:76px;padding:0 14px;font-size:14px;font-weight:800;background:#c4553d;border-color:#c4553d}
+.sopb-btn.danger{background:#c4553d;border-color:#c4553d;color:#fff}
+/* Autosave + publish state. Quiet by default — it only speaks when it has something to say. */
+.sopb-save{display:flex;align-items:center;gap:10px;min-height:18px;margin:-4px 0 10px;font-size:12.5px;color:var(--mut)}
+.sopb-save .ok{color:#6fae7d}
+.sopb-save .er{color:#e08b7a}
+.sopb-save .dirty,.sopb-lib .dirty{color:var(--acc);font-weight:700}
+.sopb-save .livelink{color:var(--mut);text-decoration:none;border-bottom:1px solid var(--line)}
+.sopb-save .livelink:hover{color:#f2f3f5}
 .sopb-lib{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:10px;margin-bottom:10px;flex:1;text-align:left;color:#fff}
-.sopb-lib img{width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#222}
+.sopb-lib img,.sopb-lib .sopb-libph{width:64px;height:64px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#222}
+.sopb-lib .sopb-libph{display:inline-flex;align-items:center;justify-content:center;color:#3a3a40}
 .sopb-lib .t{font-weight:700}.sopb-lib .m{font-size:13px;color:var(--mut)}
 .sopb-empty{text-align:center;color:var(--mut);padding:40px 0}
 .sopb-sheet{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1200;display:flex;align-items:flex-end}

@@ -58,7 +58,8 @@ export function ImportSheet({ list, onClose, onPick }) {
             : list.length === 0 ? <div className="sopb-empty">No other guides to import yet.</div>
             : list.map((s) => (
               <button key={s.id} type="button" className="sopb-lib" onClick={() => onPick(s.id, s.title)}>
-                <img src={s.thumb || ""} alt="" />
+                {/* No photo yet → an empty tile, not <img src="">, which makes the browser re-request the page. */}
+                {s.thumb ? <img src={s.thumb} alt="" /> : <span className="sopb-libph" aria-hidden="true"><Ic n="image" s={22} /></span>}
                 <span><div className="t">{s.title}</div><div className="m">{s.steps} step{s.steps === 1 ? "" : "s"}{s.category ? ` · ${s.category}` : ""}</div></span>
               </button>
             ))}

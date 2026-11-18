@@ -9,7 +9,9 @@ const read = (f) => fs.readFileSync(path.join(dir, f), "utf8");
 const main = read("sop-builder.jsx");
 const card = read("sop-step-card.jsx");
 const sheets = read("sop-sheets.jsx");
-const widgetFiles = ["sop-builder.jsx", "sop-builder-css.js", "sop-media.js", "sop-step-card.jsx", "sop-sheets.jsx", "sop-icons.jsx"];
+const capture = read("sop-capture.jsx");   // photo intake + dictation (step 1), split out of the widget
+const widgetFiles = ["sop-builder.jsx", "sop-builder-css.js", "sop-media.js", "sop-step-card.jsx", "sop-sheets.jsx",
+  "sop-icons.jsx", "sop-capture.jsx", "sop-persist.js", "sop-library.jsx"];
 
 const fnBody = (src, sig) => {
   const i = src.indexOf(sig);
@@ -135,7 +137,7 @@ test("build waits for in-flight clips, caches uploads per photo, and counts lost
   assert.ok(/p\.isVideo && !p\.video && !p\.failed/.test(b) && /Uploading video…/.test(b) && /sleep\(500\)/.test(b) && /120000/.test(b));
   assert.ok(/urlById\.has\(ph\.id\)/.test(b) && /new Map\(\)/.test(b));
   assert.ok(/ph\.isVideo \? !ph\.video : !img/.test(b));
-  assert.ok(/failed: true/.test(main), "failed clip tiles are marked finished");
+  assert.ok(/failed: true/.test(capture), "failed clip tiles are marked finished (intake lives in sop-capture)");
   assert.ok(/file\$\{lost === 1/.test(b) && !/photo\$\{lost/.test(b));
 });
 

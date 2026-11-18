@@ -2,19 +2,42 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { archiveSopBySlugAction, restoreSopAction } from "../tools/sop-builder/actions";
 
 // SOP Guides grid — search + category chips + cards (first photo + step count). Mobile-first, dark look
 // matching the builder so a shared public link reads as one product.
 export default function GuidesClient({ sops = [], staff = false, canBuild = false }) {
+  const router = useRouter();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState("");
+  const [ask, setAsk] = useState("");      // slug awaiting the second tap of Delete
+  const [gone, setGone] = useState([]);    // removed this session, hidden before the refresh lands
+  const [note, setNote] = useState(null);  // { msg, undo }
   const cats = useMemo(() => [...new Set(sops.map((s) => s.category).filter(Boolean))].sort(), [sops]);
   const list = useMemo(() => {
     const t = q.trim().toLowerCase();
     return sops.filter((s) =>
+      !gone.includes(s.slug) &&
       (!cat || s.category === cat) &&
       (!t || (s.title || "").toLowerCase().includes(t) || (s.business || "").toLowerCase().includes(t) || (s.category || "").toLowerCase().includes(t)));
-  }, [sops, q, cat]);
+  }, [sops, q, cat, gone]);
+
+  // Delete here ARCHIVES: the guide and its published snapshots are kept, it just leaves this library
+  // and its public URL. Two taps to fire, then Undo puts it straight back.
+  async function remove(s) {
+    setAsk("");
+    const r = await archiveSopBySlugAction(s.slug);
+    if (!r?.ok) { setNote({ msg: r?.error || "Couldn't remove it." }); return; }
+    setGone((g) => [...g, s.slug]);
+    setNote({ msg: `“${s.title}” removed.`, undo: async () => {
+      const u = await restoreSopAction(r.id);
+      setGone((g) => g.filter((x) => x !== s.slug));
+      setNote(null);
+      if (!u?.ok) setNote({ msg: u?.error || "Couldn't restore it." }); else router.refresh();
+    } });
+    router.refresh();
+  }
 
   return (
     <div className="supl">
@@ -49,14 +72,38 @@ export default function GuidesClient({ sops = [], staff = false, canBuild = fals
                   <div className="supl-sub">{s.steps} step{s.steps === 1 ? "" : "s"}{s.business ? ` · ${s.business}` : ""}{s.category ? ` · ${s.category}` : ""}</div>
                 </div>
               </Link>
-              {canBuild && (
-                <Link className="supl-edit" href={`/tools/sop-builder?sop=${encodeURIComponent(s.slug)}`}
-                      title="Edit" aria-label={`Edit ${s.title}`}>
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
-                </Link>
+              {s.editable && (
+                <div className="supl-acts">
+                  {ask === s.slug ? (
+                    <>
+                      <button type="button" className="supl-act" title="Keep" aria-label="Keep it" onClick={() => setAsk("")}>
+                        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                      </button>
+                      <button type="button" className="supl-act danger" onClick={() => remove(s)}>Delete</button>
+                    </>
+                  ) : (
+                    <>
+                      <Link className="supl-act" href={`/tools/sop-builder?sop=${encodeURIComponent(s.slug)}`}
+                            title="Edit" aria-label={`Edit ${s.title}`}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                      </Link>
+                      <button type="button" className="supl-act" title="Delete" aria-label={`Delete ${s.title}`} onClick={() => setAsk(s.slug)}>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14" /></svg>
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
             </div>
           ))}
+        </div>
+      )}
+      {note && (
+        <div className="supl-toast" role="status">{note.msg}
+          {note.undo && <button type="button" onClick={note.undo}>Undo</button>}
+          <button type="button" className="supl-toast-x" aria-label="Dismiss" onClick={() => setNote(null)}>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
         </div>
       )}
     </div>
@@ -80,10 +127,18 @@ const CSS = `
 .supl-card{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden;color:#fff}
 .supl-card:hover{border-color:#4a4a52}
 .supl-open{display:flex;flex-direction:column;text-decoration:none;color:inherit}
-/* Edit — staff only, top-right over the thumbnail. Sits above the card link so it stays clickable. */
-.supl-edit{position:absolute;right:8px;top:8px;z-index:2;display:flex;align-items:center;justify-content:center;
-  width:30px;height:30px;border-radius:9px;background:rgba(0,0,0,.72);border:1px solid var(--line);color:var(--acc);text-decoration:none}
-.supl-edit:hover{background:rgba(0,0,0,.9);border-color:var(--acc)}
+/* Edit + Delete — staff only, top-right over the thumbnail. Above the card link so they stay clickable. */
+.supl-acts{position:absolute;right:8px;top:8px;z-index:2;display:flex;gap:6px}
+.supl-act{display:flex;align-items:center;justify-content:center;height:30px;min-width:30px;padding:0;
+  border-radius:9px;background:rgba(0,0,0,.72);border:1px solid var(--line);color:var(--acc);text-decoration:none;
+  font:800 12.5px/1 inherit;cursor:pointer}
+.supl-act:hover{background:rgba(0,0,0,.9);border-color:var(--acc)}
+.supl-act.danger{padding:0 11px;background:#c4553d;border-color:#c4553d;color:#fff}
+.supl-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;
+  padding:12px 14px;font-size:14px;font-weight:600;z-index:40;max-width:92vw;box-shadow:0 8px 30px rgba(0,0,0,.6);
+  display:flex;gap:12px;align-items:center}
+.supl-toast button{border:0;background:none;color:#0a84ff;font-weight:800;cursor:pointer;padding:0}
+.supl-toast .supl-toast-x{color:#777;display:inline-flex}
 .supl-thumb{position:relative;aspect-ratio:16/10;background:#000;display:flex;align-items:center;justify-content:center}
 .supl-thumb img{width:100%;height:100%;object-fit:cover}
 .supl-ph{color:#333;display:inline-flex}

@@ -7646,15 +7646,22 @@ export function getSop(id) {
 }
 // My SOPs list (builder landing). Scoped to the signed-in author by default; admin/manager may pass
 // all:true to see every non-archived SOP. Lightweight (no step bodies) + a thumbnail image path.
-export function listSops({ ownerId = null, all = false } = {}) {
+// `archived:true` returns the archived ones INSTEAD (the restore list), under the same owner scope.
+export function listSops({ ownerId = null, all = false, archived = false } = {}) {
+  const test = archived ? "status='archived'" : "status!='archived'";
+  const order = archived ? "archived_at DESC" : "updated_at DESC";
   const rows = all
-    ? db.prepare("SELECT * FROM sops WHERE status!='archived' ORDER BY updated_at DESC").all()
-    : db.prepare("SELECT * FROM sops WHERE status!='archived' AND created_by_id=? ORDER BY updated_at DESC").all(ownerId);
+    ? db.prepare(`SELECT * FROM sops WHERE ${test} ORDER BY ${order}`).all()
+    : db.prepare(`SELECT * FROM sops WHERE ${test} AND created_by_id=? ORDER BY ${order}`).all(ownerId);
   return rows.map((s) => {
     const thumb = db.prepare("SELECT image_path, enhanced_path, use_enhanced FROM sop_steps WHERE sop_id=? AND image_path IS NOT NULL ORDER BY position ASC LIMIT 1").get(s.id);
     const count = db.prepare("SELECT COUNT(*) n FROM sop_steps WHERE sop_id=?").get(s.id).n;
     return { id: s.id, title: s.title, business: s.business, category: s.category, status: s.status, visibility: s.visibility,
-      slug: s.slug, updated_at: s.updated_at, steps: count,
+      slug: s.slug, updated_at: s.updated_at, published_at: s.published_at, archived_at: s.archived_at,
+      // A published guide whose draft moved on since: /guides still serves the frozen snapshot until
+      // it is published again, so the library has to say so rather than look identical to a clean one.
+      dirty: s.status === "published" && !!s.published_at && String(s.updated_at || "") > String(s.published_at),
+      steps: count,
       thumb: thumb ? ((thumb.use_enhanced && thumb.enhanced_path) ? thumb.enhanced_path : thumb.image_path) : null };
   });
 }
@@ -7684,6 +7691,33 @@ export function saveSopDraft({ id, title, business = null, category = null, tran
   } catch (e) { db.exec("ROLLBACK"); throw e; }
   return sid;
 }
+// A guide is NEVER hard-deleted. Archiving flips the status; the row, its steps and every published
+// version snapshot stay for the record. An archived guide drops out of /guides (listPublishedSops),
+// out of its public slug URL (getPublishedSopBySlug requires status='published'), out of the builder
+// library and out of the step library (SOP_STEP_REAL_SQL) — so it behaves like a delete to everyone
+// but is recoverable. Returns false when there is no such guide.
+export function archiveSop(id) {
+  return db.prepare("UPDATE sops SET status='archived', archived_at=datetime('now','localtime') WHERE id=? AND status!='archived'")
+    .run(String(id)).changes > 0;
+}
+// Undo an archive: back to published when a version snapshot exists (the public URL works again at the
+// version it was archived with), otherwise back to draft. updated_at is deliberately untouched by both
+// so the "published, with unpublished edits" signal (updated_at > published_at) stays honest.
+export function restoreSop(id) {
+  const s = db.prepare("SELECT version FROM sops WHERE id=? AND status='archived'").get(String(id));
+  if (!s) return false;
+  db.prepare("UPDATE sops SET status=?, archived_at=NULL WHERE id=?").run((s.version || 0) > 0 ? "published" : "draft", String(id));
+  return true;
+}
+// Author of a guide, for the write gate in the server actions. null = no author recorded;
+// undefined = no such guide (so a first save can create it).
+export function sopOwnerId(id) {
+  const r = db.prepare("SELECT created_by_id FROM sops WHERE id=?").get(String(id));
+  return r ? (r.created_by_id ?? null) : undefined;
+}
+// True hard delete — row, steps AND published snapshots. NOTHING calls this, and nothing should: the
+// product's delete is archiveSop() above. Kept only so a purge has one audited place to live if the
+// owner ever asks for one; do not wire it to a button.
 export function deleteSop(id) {
   db.exec("BEGIN");
   try {
@@ -7698,6 +7732,7 @@ export function deleteSop(id) {
 export function publishSop(id, { visibility = "internal", publishedBy = null, slug = null } = {}) {
   const sop = getSop(id);
   if (!sop) throw new Error("SOP not found");
+  if (sop.status === "archived") throw new Error("That guide is archived — restore it first.");
   const vis = visibility === "public" ? "public" : "internal";
   const version = (sop.version || 0) + 1;
   // Unique slug: reuse the sop's existing slug, else the caller's suggestion, deduped against other sops.
@@ -7724,12 +7759,24 @@ export function listPublishedSops({ includeInternal = false } = {}) {
   const rows = includeInternal
     ? db.prepare("SELECT * FROM sops WHERE status='published' ORDER BY published_at DESC").all()
     : db.prepare("SELECT * FROM sops WHERE status='published' AND visibility='public' ORDER BY published_at DESC").all();
+  // A card must describe what the LINK opens. /guides/<slug> renders the frozen snapshot, so the card
+  // reads the snapshot too — otherwise an edited-but-not-republished guide advertises a title, photo
+  // or step count the reader will not find when they tap it. The live rows are only the fallback for
+  // a guide published before snapshots, or one whose snapshot won't parse.
   return rows.map((s) => {
-    const thumb = db.prepare("SELECT image_path, enhanced_path, use_enhanced FROM sop_steps WHERE sop_id=? AND image_path IS NOT NULL ORDER BY position ASC LIMIT 1").get(s.id);
-    const count = db.prepare("SELECT COUNT(*) n FROM sop_steps WHERE sop_id=?").get(s.id).n;
-    return { slug: s.slug, title: s.title, business: s.business, category: s.category, visibility: s.visibility,
-      published_at: s.published_at, steps: count,
-      thumb: thumb ? ((thumb.use_enhanced && thumb.enhanced_path) ? thumb.enhanced_path : thumb.image_path) : null };
+    const v = db.prepare("SELECT snapshot FROM sop_versions WHERE sop_id=? ORDER BY version DESC LIMIT 1").get(s.id);
+    let snap = null; try { snap = v ? JSON.parse(v.snapshot) : null; } catch { snap = null; }
+    const pub = Array.isArray(snap?.steps) ? snap.steps : null;
+    const shot = pub ? pub.find((x) => x.img) : db.prepare("SELECT image_path, enhanced_path, use_enhanced FROM sop_steps WHERE sop_id=? AND image_path IS NOT NULL ORDER BY position ASC LIMIT 1").get(s.id);
+    return { slug: s.slug, title: snap?.title || s.title, business: snap?.business ?? s.business, category: snap?.category ?? s.category,
+      visibility: s.visibility,
+      // Author, so the page can decide who gets Edit/Delete on the card. The page strips it before it
+      // reaches the browser — a public visitor has no business knowing who wrote what.
+      ownerId: s.created_by_id ?? null,
+      published_at: s.published_at,
+      steps: pub ? pub.length : db.prepare("SELECT COUNT(*) n FROM sop_steps WHERE sop_id=?").get(s.id).n,
+      // A snapshot step already stores the chosen image in `img`; a live row has to pick.
+      thumb: !shot ? null : pub ? shot.img : ((shot.use_enhanced && shot.enhanced_path) ? shot.enhanced_path : shot.image_path) };
   });
 }
 // Step library: search every guide's steps (with their photo) so a step can be reused in another guide.

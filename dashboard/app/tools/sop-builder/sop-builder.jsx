@@ -6,11 +6,14 @@
 // (black, gradient primary) scoped under .sopb. Mobile-first; drag-reorder works by touch and mouse.
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Wordmark } from "../../components/brand";
-import { saveSopDraftAction, listSopsAction, getSopAction, getSopBySlugAction, deleteSopAction, publishSopAction, searchStepsAction } from "./actions";
+import { listSopsAction, getSopAction, getSopBySlugAction, archiveSopAction, restoreSopAction, publishSopAction, searchStepsAction } from "./actions";
 import { CSS } from "./sop-builder-css";
 import { uid, sleep, readURL, photoFrom, videoPoster, uploadMedia, uploadFileRaw, move, makeSortable } from "./sop-media";
+import { useAutosave, usePreDraft } from "./sop-persist";
 import { Ic } from "./sop-icons";
+import Capture from "./sop-capture";
 import StepCard from "./sop-step-card";
+import SopLibrary from "./sop-library";
 import { Player, PublishSheet, ImportSheet, LibrarySheet } from "./sop-sheets";
 
 export default function SopBuilder({ canManage = false }) {
@@ -22,8 +25,6 @@ export default function SopBuilder({ canManage = false }) {
   const [libUntagged, setLibUntagged] = useState(0);
   const [tagging, setTagging] = useState(false);
   const [status, setStatus] = useState("");
-  const [upst, setUpst] = useState("");
-  const [dragOver, setDragOver] = useState(false);
   const [enhEdit, setEnhEdit] = useState(null);   // step id whose enhance prompt is being edited
   const [enhNote, setEnhNote] = useState("");      // the operator's tweak for that re-enhance
   const [importOpen, setImportOpen] = useState(false);
@@ -35,36 +36,29 @@ export default function SopBuilder({ canManage = false }) {
   const [busy, setBusy] = useState(false);
   const [est, setEst] = useState("");
   const [toasts, setToasts] = useState([]);
-  const [recording, setRecording] = useState(false);
   const [player, setPlayer] = useState(null);     // {sop, i}
   const [lib, setLib] = useState(null);
+  const [libArch, setLibArch] = useState(false);   // My SOPs showing the archived list
+  const [askArch, setAskArch] = useState("");      // id awaiting the second tap of Delete
+  const [askOver, setAskOver] = useState(false);   // Start over awaiting its second tap
   const [pubOpen, setPubOpen] = useState(false);
+  const [saveState, setSaveState] = useState("");  // "" | "saving" | "saved" | an error
+  const [pubDirty, setPubDirty] = useState(false); // published, and edited since
 
-  const gridRef = useRef(null);
   const stepsRef = useRef(null);
   const photosRef = useRef([]);   // always the latest photos (build() awaits the AI; its closure goes stale)
   photosRef.current = photos;
   const libQRef = useRef("");     // latest library query
   const libSeq = useRef(0);        // only the newest library response is applied
-  const recRef = useRef(null);
-  const saveTimer = useRef(null);
 
   const toast = useCallback((msg, action, ms = 3800) => {
     const id = uid(); setToasts((t) => [...t, { id, msg, action }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), ms);
   }, []);
 
-  /* ---------- autosave the draft (once a sop exists) ---------- */
-  const saveDraftSoon = useCallback((next) => {
-    clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      const cur = next || sop; if (!cur) return;
-      const r = await saveSopDraftAction({ id: cur.id, title: cur.title, business: cur.business, category: cur.category,
-        transcript: cur.transcript || transcript,
-        steps: cur.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video, tags: s.tags })) });
-      if (r?.ok && cur.id !== r.id) setSop((p) => (p ? { ...p, id: r.id } : p));
-    }, 600);
-  }, [sop, transcript]);
+  /* ---------- persistence (lib: sop-persist.js) ---------- */
+  const { saveNow, saveDraftSoon, cancelPending } = useAutosave({ sop, setSop, transcript, setSaveState, setPubDirty });
+  const clearPre = usePreDraft({ sop, photos, setPhotos, transcript, setTranscript });
 
   const patchSop = useCallback((updater) => {
     setSop((prev) => { const next = typeof updater === "function" ? updater(prev) : updater; if (next && next !== prev) saveDraftSoon(next); return next; });
@@ -72,75 +66,11 @@ export default function SopBuilder({ canManage = false }) {
 
   /* ---------- drag wiring ---------- */
   useEffect(() => {
-    if (sop || !gridRef.current) return;
-    return makeSortable(gridRef.current, ".sopb-tile", ".sopb-tile", (a, b) => {
-      setPhotos((p) => { const c = [...p]; move(c, a, b); return c; });
-    }, 260);
-  }, [sop, photos.length]);
-
-  useEffect(() => {
     if (!sop || !stepsRef.current) return;
     return makeSortable(stepsRef.current, ".sopb-step", ".sopb-h", (a, b) => {
       patchSop((p) => { const steps = [...p.steps]; move(steps, a, b); return { ...p, steps }; });
     }, 0);
   }, [sop, patchSop]);
-
-  /* ---------- photos in ---------- */
-  // Shared by the file picker AND drag-and-drop. Dropped HEIC files from Windows often arrive with an empty
-  // MIME type, so we don't gate on type here — photoFrom() tries to decode, and anything it can't (HEIC)
-  // falls back to a raw /api/media upload that converts it server-side.
-  async function addFiles(fileList) {
-    const fs = [...(fileList || [])];
-    if (!fs.length) return;
-    let k = 0, bad = 0;
-    for (const f of fs) {
-      k++; setUpst(`Adding ${k} of ${fs.length}…`);
-      if ((f.type || "").startsWith("video")) {
-        // Video: keep it AS a video (played, not enhanced). Grab a poster still for the grid + AI ordering,
-        // and upload the raw clip in parallel.
-        const poster = await videoPoster(f);
-        const id = uid();
-        setPhotos((p) => [...p, { id, dataUrl: poster || "", isVideo: true }]);
-        if (poster) uploadMedia(poster).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x)));
-        uploadFileRaw(f, "clip.mp4").then((vurl) => { if (vurl) setPhotos((p) => p.map((x) => x.id === id ? { ...x, video: vurl } : x)); else { bad++; setPhotos((p) => p.map((x) => x.id === id ? { ...x, failed: true } : x)); setUpst("Couldn't upload a video (25MB max)."); } });
-      } else {
-        const d = await photoFrom(f);
-        if (d) { const id = uid(); setPhotos((p) => [...p, { id, dataUrl: d }]); uploadMedia(d).then((url) => url && setPhotos((p) => p.map((x) => x.id === id ? { ...x, url } : x))); }
-        else {
-          // The browser couldn't decode it client-side — almost always an iPhone HEIC/HEIF. Upload the raw
-          // file; /api/media converts HEIC→JPEG server-side, then we fetch the converted JPEG back for the
-          // grid preview + the AI build call (which needs the image bytes).
-          const id = uid();
-          const url = await uploadFileRaw(f, "photo.heic");
-          if (url) {
-            let du = "";
-            try { du = await readURL(new File([await (await fetch(url, { credentials: "same-origin" })).blob()], "c.jpg", { type: "image/jpeg" })); } catch {}
-            setPhotos((p) => [...p, { id, dataUrl: du, url }]);
-          } else { bad++; setUpst("Couldn't read a photo (HEIC)."); }
-        }
-      }
-    }
-    setUpst(bad ? `Couldn't read ${bad} file(s).` : "");
-  }
-  function onFiles(e) { const fl = [...e.target.files]; e.target.value = ""; addFiles(fl); }
-  function onDrop(e) { e.preventDefault(); setDragOver(false); if (e.dataTransfer?.files?.length) addFiles(e.dataTransfer.files); }
-  function removePhoto(i) {
-    setPhotos((p) => { const c = [...p]; const [r] = c.splice(i, 1);
-      toast("Photo removed.", { label: "Undo", fn: () => setPhotos((q) => { const x = [...q]; x.splice(i, 0, r); return x; }) }); return c; });
-  }
-
-  /* ---------- dictation ---------- */
-  function toggleMic(taId) {
-    const SR = typeof window !== "undefined" && (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SR) { toast("Tap the mic on your keyboard to talk."); document.getElementById(taId)?.focus(); return; }
-    if (recording) { try { recRef.current?.stop(); } catch {} setRecording(false); return; }
-    const rec = new SR(); recRef.current = rec; rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true;
-    const base = transcript ? transcript.replace(/\s*$/, " ") : "";
-    rec.onresult = (e) => { let s = ""; for (let i = 0; i < e.results.length; i++) s += e.results[i][0].transcript; setTranscript(base + s); };
-    rec.onerror = (e) => { if (e.error === "not-allowed") toast("Allow the microphone for this site."); setRecording(false); };
-    rec.onend = () => setRecording(false);
-    try { rec.start(); setRecording(true); } catch { toast("Couldn't start the mic."); }
-  }
 
   /* ---------- build ---------- */
   async function build() {
@@ -152,8 +82,19 @@ export default function SopBuilder({ canManage = false }) {
       const t0 = Date.now();
       while (photosRef.current.some((p) => p.isVideo && !p.video && !p.failed) && Date.now() - t0 < 120000) { setStatus("Uploading video…"); await sleep(500); }
       setStatus("Reading your photos and instructions…");
+      // The AI call needs image BYTES. A photo restored from the pre-build draft has only its stored
+      // URL, so fetch those back; index order is preserved (the route labels by index and skips
+      // anything it can't read, so a failed fetch costs that one photo, not the alignment).
+      const shots = [];
+      for (const p of photos) {
+        if (p.dataUrl) { shots.push(p.dataUrl); continue; }
+        try {
+          const b = await (await fetch(p.url, { credentials: "same-origin" })).blob();
+          shots.push(await readURL(new File([b], "p.jpg", { type: b.type || "image/jpeg" })));
+        } catch { shots.push(""); }
+      }
       const r = await fetch("/api/sop/build", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ photos: photos.map((p) => p.dataUrl), transcript: transcript.trim() }) });
+        body: JSON.stringify({ photos: shots, transcript: transcript.trim() }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Build failed");
       // Only /api/media URLs (or null) go into a step: take each photo's LIVE entry, and finish its upload if needed.
@@ -173,8 +114,9 @@ export default function SopBuilder({ canManage = false }) {
           // How to enhance this photo, chosen at build time by the model that looked at it.
           kind: s.kind || "", tags: s.tags || [] });
       }
-      const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", transcript: transcript.trim(), steps };
-      setSop(next); saveDraftSoon(next); setStatus("");
+      const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", status: "draft", slug: null,
+        transcript: transcript.trim(), steps };
+      setSop(next); setPubDirty(false); saveDraftSoon(next); clearPre(); setStatus("");
       const lost = lostIds.size;
       if (lost) toast(`Couldn't save ${lost} file${lost === 1 ? "" : "s"}.`);
       // Build runs straight into the enhancement it just chose for each photo — one action, not two.
@@ -320,12 +262,20 @@ export default function SopBuilder({ canManage = false }) {
   const toggleAim = (s) => { setEnhEdit(enhEdit === s.id ? null : s.id); setEnhNote(s.note || ""); };
 
   /* ---------- library ---------- */
-  async function openLib() { setTab("lib"); setLib(null); const r = await listSopsAction(); setLib(r?.ok ? r.sops : []); }
+  async function openLib(archived = false) {
+    setTab("lib"); setLib(null); setLibArch(archived); setAskArch("");
+    const r = await listSopsAction({ archived });
+    setLib(r?.ok ? r.sops : []);
+  }
   // One place that adopts a loaded guide into the editor, so opening from the library and opening from a
   // /guides card's Edit land in exactly the same state.
   function adoptSop(s) {
     setSop({ id: s.id, title: s.title, business: s.business || "", category: s.category || "", transcript: s.transcript || "",
+      status: s.status || "draft", slug: s.slug || null,
       steps: s.steps.map((x) => ({ id: x.id || uid(), img: x.img, enh: x.enh, useEnh: x.useEnh, video: x.video, title: x.title, instruction: x.instruction, target: x.target, where: x.where, kind: x.kind || "", tags: x.tags || [] })) });
+    // Published, but the draft has moved on since: say so rather than look identical to a clean one.
+    setPubDirty(s.status === "published" && !!s.published_at && String(s.updated_at || "") > String(s.published_at));
+    setSaveState("");
     setTab("build");
   }
   async function openSop(id) {
@@ -348,29 +298,47 @@ export default function SopBuilder({ canManage = false }) {
       try { const u = new URL(window.location.href); u.searchParams.delete("sop"); window.history.replaceState({}, "", u); } catch { /* non-fatal */ }
     })();
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
-  async function removeSop(id) {
-    if (!confirm("Delete this SOP?")) return;
-    await deleteSopAction(id); setLib((l) => (l || []).filter((s) => s.id !== id));
+  // "Delete" here ARCHIVES: the guide and every published snapshot are kept, it just leaves /guides,
+  // its public URL and both libraries. Two taps to fire, then an Undo that restores it.
+  async function archiveGuide(s) {
+    setAskArch("");
+    const r = await archiveSopAction(s.id);
+    if (!r?.ok) return toast(r?.error || "Couldn't remove it.");
+    setLib((l) => (l || []).filter((x) => x.id !== s.id));
+    // Don't let a queued autosave write the guide that was just taken down.
+    if (sop?.id === s.id) { cancelPending(); setSop(null); setSaveState(""); }
+    toast(`“${s.title}” removed.`, { label: "Undo", fn: async () => {
+      const u = await restoreSopAction(s.id);
+      if (u?.ok) openLib(false); else toast(u?.error || "Couldn't restore it.");
+    } }, 7000);
+  }
+  async function restoreGuide(s) {
+    const r = await restoreSopAction(s.id);
+    if (!r?.ok) return toast(r?.error || "Couldn't restore it.");
+    setLib((l) => (l || []).filter((x) => x.id !== s.id));
+    toast(`“${s.title}” restored.`);
   }
 
   /* ---------- publish ---------- */
   async function doPublish(visibility) {
     setPubOpen(false); if (!sop) return;
     setBusy(true); setStatus("Publishing…");
-    // Make sure the latest edits are saved first.
-    await saveSopDraftAction({ id: sop.id, title: sop.title, business: sop.business, category: sop.category, transcript: sop.transcript || transcript,
-      steps: sop.steps.map((s) => ({ id: s.id, title: s.title, instruction: s.instruction, target: s.target, where: s.where, img: s.img, enh: s.enh, useEnh: s.useEnh, video: s.video, tags: s.tags })) });
+    // Flush the latest edits first — the snapshot is frozen from the stored rows, not from this state.
+    cancelPending();
+    await saveNow(sop);
     const r = await publishSopAction(sop.id, { visibility });
     setBusy(false); setStatus("");
     if (!r?.ok) return toast(r?.error || "Publish failed.");
+    setSop((p) => (p ? { ...p, status: "published", slug: r.slug } : p));
+    setPubDirty(false);
     toast(`Published to Guides (${visibility}).`, { label: "Open", fn: () => window.open(`/guides/${r.slug}`, "_blank") }, 7000);
   }
 
   function startOver() {
-    if (!confirm("Start over? Your steps will be cleared (photos + what you said stay).")) return;
-    setTranscript(sop?.transcript || transcript); setSop(null);
+    setAskOver(false);
+    setTranscript(sop?.transcript || transcript); setSop(null); setPubDirty(false); setSaveState("");
   }
-  async function newSop() { setPhotos([]); setSop(null); setTranscript(""); setTab("build"); }
+  async function newSop() { clearPre(); setPhotos([]); setSop(null); setTranscript(""); setPubDirty(false); setSaveState(""); setTab("build"); }
 
   /* ================= RENDER ================= */
 
@@ -390,43 +358,12 @@ export default function SopBuilder({ canManage = false }) {
       </div>
       <div className="sopb-tabs">
         <button className={tab === "build" ? "on" : ""} onClick={() => setTab("build")}>Build</button>
-        <button className={tab === "lib" ? "on" : ""} onClick={openLib}>My SOPs</button>
+        <button className={tab === "lib" ? "on" : ""} onClick={() => openLib(false)}>My SOPs</button>
       </div>
 
       {tab === "build" && !sop && (
-        <>
-          <div className="sopb-sec">
-            <div className="sopb-lbl"><b>1</b> Photos</div>
-            <label className={`sopb-up${dragOver ? " drop" : ""}`}
-                   onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
-                   onDragEnter={(e) => { e.preventDefault(); setDragOver(true); }}
-                   onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
-                   onDrop={onDrop}>
-              {dragOver ? "Drop photos or videos here" : <><Ic n="upload" s={18} /> Add photos</>}<small>Pick as many as you want, or drag &amp; drop. iPhone HEIC is fine.</small>
-              <input type="file" accept="image/*,.heic,.heif,video/*" multiple onChange={onFiles} /></label>
-            <div className="sopb-grid" ref={gridRef}>
-              {photos.map((p, i) => (
-                <div className="sopb-tile" data-i={i} key={p.id}>
-                  <img src={p.dataUrl || p.url || ""} alt={`Item ${i + 1}`} />
-                  {p.isVideo && <span className="vid"><Ic n="play" s={22} /></span>}
-                  <span className="n">{i + 1}</span>
-                  <button className="x" aria-label="Remove" title="Remove" onClick={(e) => { e.stopPropagation(); removePhoto(i); }}><Ic n="x" s={14} /></button>
-                </div>
-              ))}
-            </div>
-            <div className="sopb-status">{upst}</div>
-          </div>
-          <div className="sopb-sec">
-            <div className="sopb-lbl"><b>2</b> Talk through the steps</div>
-            <div className="sopb-talk">
-              <textarea id="sopb-say" value={transcript} onChange={(e) => setTranscript(e.target.value)}
-                placeholder="Tap the mic and explain it like you're training someone: first do this, then that…" />
-              <button className={`sopb-mic${recording ? " on" : ""}`} aria-label="Talk" title="Talk" onClick={() => toggleMic("sopb-say")}><Ic n={recording ? "stop" : "mic"} s={18} /></button>
-            </div>
-          </div>
-          <button className="sopb-btn go" disabled={busy} onClick={build}>Build SOP</button>
-          <div className="sopb-status">{status}</div>
-        </>
+        <Capture photos={photos} setPhotos={setPhotos} transcript={transcript} setTranscript={setTranscript}
+          busy={busy} status={status} onBuild={build} toast={toast} />
       )}
 
       {tab === "build" && sop && (
@@ -435,6 +372,17 @@ export default function SopBuilder({ canManage = false }) {
           <div className="sopb-meta">
             <input className="sopb-metain" value={sop.business} placeholder="Business (optional)" onChange={(e) => patchSop((p) => ({ ...p, business: e.target.value }))} />
             <input className="sopb-metain" value={sop.category} placeholder="Category (optional)" onChange={(e) => patchSop((p) => ({ ...p, category: e.target.value }))} />
+          </div>
+          {/* Save + publish state. Autosave is silent until it has something to report: that it is
+              writing, that it failed, or — the one thing the editor can't show by itself — that a
+              published guide is serving an older snapshot than what's on screen. */}
+          <div className="sopb-save">
+            <span className={saveState === "saving" ? "sv" : saveState === "saved" ? "ok" : saveState ? "er" : ""}>
+              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState}
+            </span>
+            {sop.status === "published" && (pubDirty
+              ? <b className="dirty">Unpublished changes</b>
+              : <a className="livelink" href={`/guides/${sop.slug}`} target="_blank" rel="noreferrer">Live</a>)}
           </div>
           <div className="sopb-row" style={{ marginBottom: 12 }}><button className="sopb-btn go" disabled={busy} onClick={() => enhanceSteps(sop.steps)}>Enhance all</button></div>
           <div className="sopb-status" style={{ margin: "-4px 0 8px" }}>{est}</div>
@@ -451,11 +399,22 @@ export default function SopBuilder({ canManage = false }) {
             <button className="sopb-btn" onClick={openImport}><Ic n="import" /> Guide</button>
           </div>
           <div className="sopb-row" style={{ marginTop: 8 }}>
-            <button className="sopb-btn" onClick={startOver}>Start over</button>
-            <button className="sopb-btn w" onClick={() => setPlayer({ sop, i: 0 })}><Ic n="play" /> Play</button>
+            {askOver ? (
+              <>
+                <button className="sopb-btn" onClick={() => setAskOver(false)}>Cancel</button>
+                <button className="sopb-btn danger" onClick={startOver}>Clear steps</button>
+              </>
+            ) : (
+              <>
+                <button className="sopb-btn" onClick={() => setAskOver(true)}>Start over</button>
+                <button className="sopb-btn w" onClick={() => setPlayer({ sop, i: 0 })}><Ic n="play" /> Play</button>
+              </>
+            )}
           </div>
           <div className="sopb-row" style={{ marginTop: 8 }}>
-            <button className="sopb-btn go" disabled={busy} onClick={() => setPubOpen(true)}>Publish</button>
+            <button className="sopb-btn go" disabled={busy} onClick={() => setPubOpen(true)}>
+              {sop.status === "published" ? (pubDirty ? "Publish update" : "Republish") : "Publish"}
+            </button>
           </div>
           <div className="sopb-row" style={{ marginTop: 8 }}>
             <button className="sopb-btn" onClick={newSop}>New SOP</button>
@@ -464,20 +423,8 @@ export default function SopBuilder({ canManage = false }) {
       )}
 
       {tab === "lib" && (
-        <div>
-          {lib === null ? <div className="sopb-empty">Loading…</div>
-            : lib.length === 0 ? <div className="sopb-empty">No SOPs yet.<br />Build one and tap Publish or save a draft.</div>
-            : lib.map((s) => (
-              <div key={s.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <button className="sopb-lib" onClick={() => openSop(s.id)}>
-                  <img src={s.thumb || ""} alt="" />
-                  <span><div className="t">{s.title}</div>
-                    <div className="m">{s.steps} steps · {s.status}{s.status === "published" ? ` · ${s.visibility}` : ""}{s.slug && s.status === "published" ? "" : ""}</div></span>
-                </button>
-                <button className="sopb-ib" aria-label="Delete" title="Delete" onClick={() => removeSop(s.id)}><Ic n="trash" s={18} /></button>
-              </div>
-            ))}
-        </div>
+        <SopLibrary list={lib} archived={libArch} ask={askArch} onTab={openLib} onOpen={openSop}
+          onAsk={setAskArch} onArchive={archiveGuide} onRestore={restoreGuide} />
       )}
 
       {pubOpen && <PublishSheet onClose={() => setPubOpen(false)} onPublish={doPublish} />}

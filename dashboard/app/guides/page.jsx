@@ -19,7 +19,12 @@ export const metadata = {
 export default async function GuidesPage() {
   const user = await getSessionUser();
   const staff = !!user?.id && canEditSop(user.role);
-  const sops = listPublishedSops({ includeInternal: staff });
   const canBuild = staff && secretValue("SOP_BUILDER") === "on";
+  const manager = ["admin", "manager"].includes(user?.role);
+  // Edit/Delete ride on the card, so decide per guide: managers may touch any, everyone else only what
+  // they wrote (the same rule the server actions enforce). ownerId never leaves the server.
+  const sops = listPublishedSops({ includeInternal: staff }).map(({ ownerId, ...s }) => ({
+    ...s, editable: canBuild && (manager || (ownerId != null && Number(ownerId) === Number(user.id))),
+  }));
   return <GuidesClient sops={sops} staff={staff} canBuild={canBuild} />;
 }
