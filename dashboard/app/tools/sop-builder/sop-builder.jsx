@@ -169,7 +169,9 @@ export default function SopBuilder({ canManage = false }) {
           if (ph.isVideo ? !ph.video : !img) lostIds.add(ph.id);
         }
         steps.push({ id: uid(), img, enh: null, useEnh: false, video: ph?.video || null,
-          title: s.title || "", instruction: s.instruction || "", target: s.target || "", where: s.where || "", tags: s.tags || [] });
+          title: s.title || "", instruction: s.instruction || "", target: s.target || "", where: s.where || "",
+          // How to enhance this photo, chosen at build time by the model that looked at it.
+          kind: s.kind || "", tags: s.tags || [] });
       }
       const next = { id: uid(), title: j.title || "New SOP", business: "", category: "", transcript: transcript.trim(), steps };
       setSop(next); saveDraftSoon(next); setStatus("");

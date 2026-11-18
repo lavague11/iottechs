@@ -180,3 +180,50 @@ test("isDividerTitle", () => {
   assert.ok(!isDividerTitle("Reset camera"));
   assert.ok(!isDividerTitle(null));
 });
+
+// --- Build decides the treatment by LOOKING at the photo ------------------------------------------
+// Better than inferring from the step's words: at build time the model already has the image in front
+// of it. The word-based guess stays as the fallback for steps added by hand afterwards.
+test("the build prompt asks for a per-step shot type, and says what each one does", () => {
+  const u = sopUserInstruction("do the thing");
+  assert.match(u, /"shot":"product \| screen \| scene"/, "shot is part of the requested JSON shape");
+  assert.match(u, /LOOK at that step's photo/, "decided from the image, not the wording");
+  assert.match(u, /cut out onto a plain backdrop/);
+  assert.match(u, /squared up and de-glared/);
+  assert.match(u, /Nothing in it will be altered/);
+  // The safe default must be stated, or an unsure model picks the destructive one.
+  assert.match(u, /unsure, answer "scene"/);
+  assert.match(u, /no photo, answer ""/);
+});
+
+test("normalizeSopResult carries the model's shot choice, and refuses junk", () => {
+  const r = normalizeSopResult({ title: "T", steps: [
+    { photo: 0, title: "Unbox the drive", instruction: "Take it out.", shot: "product" },
+    { photo: 1, title: "Open settings", instruction: "Tap it.", shot: "screen" },
+    { photo: 2, title: "Mount it", instruction: "On the wall.", shot: "scene" },
+    { photo: 3, title: "Odd one", instruction: "x", shot: "sideways" },
+    { photo: 4, title: "Missing", instruction: "x" },
+  ] }, 5);
+  assert.deepEqual(r.steps.map((s) => s.kind), ["product", "screen", "scene", "", ""]);
+});
+
+test("a step with no photo never carries a shot kind", () => {
+  const r = normalizeSopResult({ title: "T", steps: [
+    { photo: null, title: "Talk to the client", instruction: "Explain it.", shot: "product" },
+  ] }, 0);
+  assert.equal(r.steps[0].kind, "", "nothing to enhance, so no treatment");
+});
+
+test("photos the model never matched come back as steps with no kind", () => {
+  const r = normalizeSopResult({ title: "T", steps: [{ photo: 0, title: "A", instruction: "a", shot: "screen" }] }, 3);
+  assert.equal(r.steps.length, 3);
+  assert.equal(r.steps[0].kind, "screen");
+  assert.deepEqual(r.steps.slice(1).map((s) => s.kind), ["", ""], "appended photos default to auto");
+});
+
+test("a build-time choice beats the word guess, and auto still falls back to it", () => {
+  // The words say screen; the model looked and said product. The model wins.
+  assert.match(enhancePrompt({ title: "Open the settings menu", kind: "product" }), /PRODUCT shot/);
+  // No choice recorded → the word guess still runs, so hand-added steps keep working.
+  assert.match(enhancePrompt({ title: "Open the settings menu", kind: "" }), /photo of a SCREEN/);
+});
