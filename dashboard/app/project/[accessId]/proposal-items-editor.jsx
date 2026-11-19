@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useLayoutEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup, WAIVER_CAUSES, waiverCausesOf, hasWaiverCause, withWaiverCause, isWaived } from "../../../lib/proposal";
+import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, techItemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup, WAIVER_CAUSES, waiverCausesOf, hasWaiverCause, withWaiverCause, isWaived } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import ItemNameField from "./item-name-field";
 import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
@@ -80,7 +80,7 @@ function BulkPrompt({ b, optionCount, onApply, onClose }) {
     return () => { document.removeEventListener("mousedown", onDown); document.removeEventListener("keydown", onKey); };
   }, [onClose]);
   const multi = optionCount > 1;
-  const fmt = (v) => (b.field === "price" ? money(v) : String(Math.round((+v || 0) * 100) / 100));
+  const fmt = (v) => (b.field === "price" || b.field === "techPrice" ? money(v) : String(Math.round((+v || 0) * 100) / 100));
   const count = (scope === "all" ? b.all : b.cur).length;
   return (
     <div className="prop-bulk" role="dialog" aria-label="Update matching items" ref={ref}>
@@ -438,9 +438,24 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   headerRight = null,
   // Camera service only: { floors, onImport, onSync } — surfaces "Import from floor plan" + "Sync from
   // survey" inside the gear menu (SvcHeadMenu) instead of as separate buttons above the service.
-  surveyImport }) {
+  surveyImport,
+  // PAYOUT MODE — the work order (docs/WORK_ORDERS.md). Same renderer, same grouping, same add/delete;
+  // the single money column becomes the TECHNICIAN PAYOUT (`techPrice`) instead of the retail price, and
+  // no retail figure is computed or drawn anywhere. Two deliberate differences from retail:
+  //   • A waived / CPE line is NOT struck through and NOT zeroed. The customer isn't charged for it, but
+  //     the technician still installs it and is still paid — so it reads like any other payable line and
+  //     keeps its badge. (techItemTotal, unlike itemTotal, never zeroes a waived line.)
+  //   • Picking a catalog name never writes a payout: a retail price is meaningless as a payout, so the
+  //     name lands and the office types the figure (or Reset to standard pulls it from the rate book).
+  payout = false }) {
   // hidePrices (Addendum for a role that may not price): no retail figure is rendered at all — not drawn-and-hidden.
   const money = hidePrices ? () => "" : fmtMoney;
+  const AMT = payout ? "techPrice" : "price";          // the money field this render edits
+  const sumOf = payout ? techItemTotal : itemTotal;     // …and the matching total formula
+  const amtTitle = payout ? "Payout" : "Price";
+  const strikeWaived = !payout;                         // retail comps a waived line; payout does not
+  const amtOf = (it) => (+it?.[AMT] || 0);
+  const setAmt = (v) => ({ [AMT]: v });
   const flags = customerFlags || {};
   const reqFlags = requestFlags || {};
   // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
@@ -848,7 +863,11 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // drive / HDD, displays), which are grouped under the system bar but are still real priced lines you may
   // comp. Management lives in contextual actions: item ••• (Waive/Restore) and the service gear's "Waive
   // Items…" batch manager. The accounting is unchanged (it.waived drives itemTotal).
-  const canWaiveItem = (it) => isWaived(it) || itemTotal({ ...it, waived: false }) > 0;
+  // Waiving is a RETAIL act (comp it off the customer's price), so payout mode never offers the toggle —
+  // a line already waived on the proposal still shows its badge, it just can't be waived from here.
+  const canWaiveItem = (it) => !payout && (isWaived(it) || itemTotal({ ...it, waived: false }) > 0);
+  // Catalog pick: a retail price is not a payout, so payout mode takes the NAME only (see the `payout` prop).
+  const pickPatch = (c) => (payout ? { name: c.name } : { name: c.name, price: c.price });
   const svcWaivable = (svc.items || []).filter(canWaiveItem);
   const svcWaivedCount = svcWaivable.filter((it) => isWaived(it)).length;
   // The ••• Waive / Restore control and the "Waive Items…" batch manager operate ONLY on the MANUAL cause,
@@ -882,8 +901,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const displayItems = camMode ? svc.items.filter((it) => it.displaySlot != null) : [];
   // Displays are add-on-demand: show 1 by default, reveal more with "+ Add display" (or as many as are filled).
   const dispVisible = Math.max(1, displayItems.reduce((m, it) => Math.max(m, it.displaySlot || 0), 0), dispShown);
-  const nvrGroupTotal = nvrItem ? itemTotal(nvrItem) + driveItems.reduce((s, it) => s + itemTotal(it), 0) : 0;
-  const displaysTotal = displayItems.reduce((s, it) => s + itemTotal(it), 0);
+  const nvrGroupTotal = nvrItem ? sumOf(nvrItem) + driveItems.reduce((s, it) => s + sumOf(it), 0) : 0;
+  const displaysTotal = displayItems.reduce((s, it) => s + sumOf(it), 0);
   // NVR + Displays are now ALWAYS inline-editable lead rows (no "Edit mode" form takeover). The camera
   // sysbar form is gone; a no-NVR service shows the recorder child as a compact inline selector instead.
   // Amp (audio) keeps its own sysbar for now. Every child carries its real item ref + kind + slot so the
@@ -892,8 +911,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const leadRows = [];
   if (camMode) {
     const nvrChildren = nvrItem
-      ? [{ ref: nvrItem, kind: "nvr", name: nvrItem.name, price: +nvrItem.price || 0, total: itemTotal(nvrItem) },
-         ...driveItems.map((d) => ({ ref: d, kind: "drive", slot: d.slot, name: d.name || "Storage drive", price: +d.price || 0, total: itemTotal(d) }))]
+      ? [{ ref: nvrItem, kind: "nvr", name: nvrItem.name, price: amtOf(nvrItem), total: sumOf(nvrItem) },
+         ...driveItems.map((d) => ({ ref: d, kind: "drive", slot: d.slot, name: d.name || "Storage drive", price: amtOf(d), total: sumOf(d) }))]
       : [{ kind: "nvr", placeholder: true, name: "", price: 0, total: 0 }];   // pick the recorder inline
     leadRows.push({ key: "nvr", title: nvrItem ? `NVR · ${nvrShort(nvrItem.name)}` : "NVR",
       summary: nvrItem ? nvrSummary(nvrItem, driveItems) : null,
@@ -905,17 +924,17 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       summary: displayItems.length > 0 ? dispSummary(displayItems) : null,
       total: displaysTotal,
       add: displayItems.length < 4 ? { label: "+ Add Display", pick: "display" } : null,
-      items: displayItems.map((d) => ({ ref: d, kind: "display", slot: d.displaySlot, name: `Display ${d.displaySlot} · ${d.name || "—"}`, price: +d.price || 0, total: itemTotal(d) })) });
+      items: displayItems.map((d) => ({ ref: d, kind: "display", slot: d.displaySlot, name: `Display ${d.displaySlot} · ${d.name || "—"}`, price: amtOf(d), total: sumOf(d) })) });
   }
   // Audio amp — same inline-editable grammar as NVR/Displays. Amp = the "recorder" (always a child,
   // selector); Rack & Mount = its optional add-on child. No Edit-mode form.
   if (soundMode) {
     const ampChildren = ampItem
-      ? [{ ref: ampItem, kind: "amp", name: ampItem.name, price: +ampItem.price || 0, total: itemTotal(ampItem) },
-         ...(rackItem ? [{ ref: rackItem, kind: "rack", name: rackItem.name, price: +rackItem.price || 0, total: itemTotal(rackItem) }] : [])]
+      ? [{ ref: ampItem, kind: "amp", name: ampItem.name, price: amtOf(ampItem), total: sumOf(ampItem) },
+         ...(rackItem ? [{ ref: rackItem, kind: "rack", name: rackItem.name, price: amtOf(rackItem), total: sumOf(rackItem) }] : [])]
       : [{ kind: "amp", placeholder: true, name: "", price: 0, total: 0 }];
     leadRows.push({ key: "amp", title: ampItem ? `Amp · ${ampItem.name}` : "Amp",
-      total: (ampItem ? itemTotal(ampItem) : 0) + (rackItem ? itemTotal(rackItem) : 0),
+      total: (ampItem ? sumOf(ampItem) : 0) + (rackItem ? sumOf(rackItem) : 0),
       add: ampItem && !rackItem ? { label: "+ Add Rack & Mount", onClick: () => setRack(true) } : null,
       items: ampChildren });
   }
@@ -1002,7 +1021,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             style={{ ...(parent ? { marginLeft: 18 } : null), ...(!parent && it.outdoor ? { color: "var(--red)", fontWeight: 700 } : null) }}
             currentService={svc.key} allCatalog={allCatalog} hidePrice={hidePrices}
             onChange={(v) => (parent ? patchSub(parent.id, it.id, { name: v }) : patchItem(it.id, { name: v }))}
-            onPick={(c) => (parent ? patchSub(parent.id, it.id, { name: c.name, price: c.price }) : patchItem(it.id, { name: c.name, price: c.price }))}
+            onPick={(c) => (parent ? patchSub(parent.id, it.id, pickPatch(c)) : patchItem(it.id, pickPatch(c)))}
             onBlur={!parent ? () => { setFocusNewId((f) => (f === it.id ? null : f)); if (!String(it.name || "").trim() && !(+it.price)) removeItem(it.id); } : undefined}
           />
         )}
@@ -1061,20 +1080,20 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           price; editing sets the price and keeps any quantity). Waived: struck, read-only. */}
       {hasSub ? (
         <span className="prop-line-total" {...expandCell}>
-          {it.waived
-            ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s>
-            : money(itemTotal(it))}
+          {it.waived && strikeWaived
+            ? <s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(sumOf({ ...it, waived: false }))}</s>
+            : money(sumOf(it))}
         </span>
-      ) : it.waived ? (
-        <span className="prop-line-total"><s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(itemTotal({ ...it, waived: false }))}</s></span>
+      ) : it.waived && strikeWaived ? (
+        <span className="prop-line-total"><s className="prop-waived-strike" title="Comped off the invoice — you still see the value waived">{money(sumOf({ ...it, waived: false }))}</s></span>
       ) : readOnly ? (
         // Read-only (customer view / preview): show the formatted amount like every other row — NOT a bare,
         // disabled number input ("240") which reads as unformatted and visually breaks the line.
-        <span className="prop-line-total">{money(itemTotal(it))}</span>
+        <span className="prop-line-total">{money(sumOf(it))}</span>
       ) : hidePrices ? <span className="prop-line-total" /> : (
-        <input className="num prop-line-amt" type="number" step="0.01" value={(+it.qty || 0) * (+it.price || 0)} disabled={readOnly}
-               title="Price" aria-label="Price"
-               onChange={(e) => { const total = +e.target.value || 0; const q = +it.qty || 1; patchItem(it.id, { price: q ? total / q : total }); }} />
+        <input className="num prop-line-amt" type="number" step="0.01" value={(+it.qty || 0) * amtOf(it)} disabled={readOnly}
+               title={amtTitle} aria-label={amtTitle}
+               onChange={(e) => { const total = +e.target.value || 0; const q = +it.qty || 1; patchItem(it.id, setAmt(q ? total / q : total)); }} />
       )}
       {!readOnly ? (
         <div className="prop-im-wrap">
@@ -1096,7 +1115,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               waived={!parent && canWaiveItem(it) ? manualOn(it) : undefined}
               onToggleWaive={!parent && canWaiveItem(it) ? () => setItemWaived(it.id, !manualOn(it)) : null}
               onRemove={() => (parent ? removeSub(parent.id, it.id) : removeItem(it.id))}
-              removeLabel={`${camName || it.name || "Item"}${!parent && !hidePrices ? ` · ${money(itemTotal(it))}` : ""}`}
+              removeLabel={`${camName || it.name || "Item"}${!parent && !hidePrices ? ` · ${money(sumOf(it))}` : ""}`}
               /* Equipment/Labor type — offered on ATOMIC top-level lines (custom/manual items); a container
                  bundle carries its type on its children, not the header. */
               itemType={(!parent && !(it.sub?.length)) ? itemTypeOf(it, svc.key) : undefined}
@@ -1152,7 +1171,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   // are preserved in edit mode.
   const subRow = (x, parent, idx = 0) => {
     const q = +x.qty || 1;
-    const amount = (+x.qty || 0) * (+x.price || 0);
+    const amount = (+x.qty || 0) * amtOf(x);
     const isDrop = /^line drop/i.test(x.name || "");
     const isExisting = /existing/i.test(x.name || "");
     const editing = !readOnly && (subEditId === x.id || !String(x.name || "").trim());
@@ -1160,8 +1179,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const conds = lineConditions(x);
     const canWaive = canWaiveItem(x);
     const condBadges = <CondBadges keys={conds} condMap={condMap} />;
-    const waivedMark = x.waived ? <span className="prop-wvd" title="Waived — comped off this block's price">Waived</span> : null;
-    const amtDisplay = x.waived
+    const waivedMark = x.waived ? <span className="prop-wvd" title={payout ? "Waived off the customer's price — still installed, still paid" : "Waived — comped off this block's price"}>Waived</span> : null;
+    const amtDisplay = x.waived && strikeWaived
       ? <s className="prop-waived-strike" title="Comped off this block's price — the value stays visible">{money(amount)}</s>
       : money(amount);
     // ••• menu for a component — the same control the top-level rows use (reused ItemMenu): Duplicate ·
@@ -1193,19 +1212,19 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
             <ItemNameField value={x.name} disabled={readOnly} placeholder="Sub-item" currentService={svc.key} allCatalog={allCatalog} hidePrice={hidePrices}
               autoFocus
               onChange={(v) => patchSub(parent.id, x.id, { name: v })}
-              onPick={(c) => patchSub(parent.id, x.id, { name: c.name, price: c.price })} />
+              onPick={(c) => patchSub(parent.id, x.id, pickPatch(c))} />
             {condBadges}
             {waivedMark}
             {isDrop && <button type="button" className={`prop-exist-tog${isExisting ? " on" : ""}`} title={hidePrices ? "Existing cable" : "Existing cable — test & map only ($50) instead of a new Cat6 run ($150)"} onClick={() => toggleExisting(parent, x)}>Existing</button>}
             {/* ONE editable number — the component's amount (qty × price). Editing sets the price and keeps
                 any quantity; use Duplicate for more of the same. A waived component shows struck (comped). */}
-            {x.waived || hidePrices ? (
+            {(x.waived && strikeWaived) || hidePrices ? (
               <span className="prop-sub2-amt prop-sub2-amt-edit">{amtDisplay}</span>
             ) : (
-              <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title="Price" aria-label="Price"
-                onFocus={(e) => { preEdit.current[`${x.id}_price`] = x.price; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, "price")}
+              <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title={amtTitle} aria-label={amtTitle}
+                onFocus={(e) => { preEdit.current[`${x.id}_${AMT}`] = x[AMT]; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, AMT)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
-                onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, { price: q ? total / q : total }); }} />
+                onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, setAmt(q ? total / q : total)); }} />
             )}
             {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}
@@ -1220,7 +1239,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               <span className="prop-sub2-name">{x.name || "Sub-item"}{isExisting && <span className="prop-sub2-tag">existing</span>}</span>
               {condBadges}
               {waivedMark}
-              {!hidePrices && q > 1 && !x.waived && <span className="prop-sub2-math">{q} × {money(x.price)}</span>}
+              {!hidePrices && q > 1 && !(x.waived && strikeWaived) && <span className="prop-sub2-math">{q} × {money(amtOf(x))}</span>}
               <span className="prop-sub2-amt">{amtDisplay}</span>
             </button>
             {subMenu}
@@ -1316,7 +1335,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
         <div className={`prop-cols${gridClass}`}>
           <span>Item</span><span /><span />
           {showCost && <span className="r">Cost</span>}
-          <span className="r hcell-lt">Total</span><span />
+          <span className="r hcell-lt">{payout ? "Payout" : "Total"}</span><span />
         </div>
       )}
 
@@ -1404,10 +1423,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                     )}
                     {/* ONE editable amount (= qty × price; editing sets the price), matching the camera
                         components — no separate price box + read-only total. A waived child shows struck. */}
-                    {bi.ref && (bi.ref.waived
-                      ? <span className="prop-sub2-amt prop-sub2-amt-edit"><s className="prop-waived-strike" title="Comped off this block's price">{money(itemTotal({ ...bi.ref, waived: false }))}</s></span>
-                      : hidePrices ? <span className="prop-sub2-amt prop-sub2-amt-edit" /> : <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" min="0" step="0.01" value={bi.total} disabled={readOnly} title="Price" aria-label="Price"
-                               onChange={(e) => { const t = +e.target.value || 0; const q = +bi.qty || 1; setField({ price: q ? t / q : t }); }} />)}
+                    {bi.ref && (bi.ref.waived && strikeWaived
+                      ? <span className="prop-sub2-amt prop-sub2-amt-edit"><s className="prop-waived-strike" title="Comped off this block's price">{money(sumOf({ ...bi.ref, waived: false }))}</s></span>
+                      : hidePrices ? <span className="prop-sub2-amt prop-sub2-amt-edit" /> : <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" min="0" step="0.01" value={bi.total} disabled={readOnly} title={amtTitle} aria-label={amtTitle}
+                               onChange={(e) => { const t = +e.target.value || 0; const q = +bi.qty || 1; setField(setAmt(q ? t / q : t)); }} />)}
                     {bi.ref && showCost && (
                       <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={bi.ref.cost ?? 0} disabled={readOnly} title="Internal cost"
                              onChange={(e) => setField({ cost: e.target.value })} />
@@ -1422,8 +1441,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
                       <span className="prop-sub2-name">{bi.name}</span>
                       {bi.ref && <CondBadges keys={lineConditions(bi.ref)} condMap={condMap} />}
                       {bi.ref?.waived && <span className="prop-wvd">Waived</span>}
-                      {!hidePrices && (+bi.qty || 1) > 1 && !bi.ref?.waived && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
-                      <span className="prop-sub2-amt">{bi.ref?.waived ? <s className="prop-waived-strike">{money(itemTotal({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
+                      {!hidePrices && (+bi.qty || 1) > 1 && !(bi.ref?.waived && strikeWaived) && <span className="prop-sub2-math">{bi.qty} × {money(bi.price)}</span>}
+                      <span className="prop-sub2-amt">{bi.ref?.waived && strikeWaived ? <s className="prop-waived-strike">{money(sumOf({ ...bi.ref, waived: false }))}</s> : money(bi.total)}</span>
                     </button>
                     {childMenu}
                   </div>

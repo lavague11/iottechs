@@ -27,7 +27,7 @@ import GlobalCommandBar   from "../../components/global-command-bar";
 import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
-import WorkOrderSheet   from "./work-order-sheet";
+import WorkOrderEditor  from "./work-order-editor";
 import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -3342,14 +3342,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>);
           case "workorder":
             return (<div style={ovl(820)}>
-              {/* The work order IS the proposal, re-priced at tech payout — editable while creating,
-                  Submit to finalize, then the technician signs to accept. Assign/create controls below. */}
-              <WorkOrderSheet accessId={lp.access_id} proposal={proposalData} role={cView} onProposalChange={setProposalData}
-                preview={!!previewRole} signerName={currentUser?.name || currentUser?.email || ""}
-                assignedTech={lp.tech ? { name: lp.tech } : null} />
-              <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
-                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
-                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
+              {/* ONE work order surface (docs/WORK_ORDERS.md): a COPY of the published proposal, valued at
+                  technician payout, built from the same ProposalItemsEditor in payout mode. It replaced
+                  work-order-sheet.jsx, proposal-tech-pricing.jsx and the duplicate "Create Work Order"
+                  card that used to sit right under the editor (requirement 8) — technician assignment
+                  moved into its header (requirement 10). */}
+              <WorkOrderEditor accessId={lp.access_id} role={cView} preview={!!previewRole}
+                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments} />
               {/* Installation scheduling — merged into the Work Order (was its own card). */}
               <div className="wo-merge-sec"><h3 className="wo-merge-h">Installation</h3>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}

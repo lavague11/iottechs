@@ -18,6 +18,7 @@ import { installProgress, qcProgress, qcItemStates } from "./install-checklist-m
 import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
+import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
@@ -303,6 +304,8 @@ function init() {
   if (!cols.includes("sandbox_by"))         db.exec("ALTER TABLE projects ADD COLUMN sandbox_by TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_projects_sandbox ON projects(sandbox_of)");
 
+  // The technician's COMPLETION SUBMISSION — "I'm done, please review" — not the work order document.
+  // Named `work_orders` historically; the document itself lives in `wo` / `wo_versions` below.
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -318,6 +321,173 @@ function init() {
       review_notes TEXT
     )
   `);
+
+  // ---- THE WORK ORDER DOCUMENT (docs/WORK_ORDERS.md) ------------------------------------------
+  // One live work order per project, copied from a published proposal option and valued at technician
+  // payout. `payload` is the WORKING draft in proposal shape (`options:[one]`, `techPrice` per line) so
+  // ProposalItemsEditor renders it unchanged; `wo_versions` keeps every sent version immutably. Editing
+  // a work order NEVER writes the proposal row — that independence is the whole point of the table.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      source_proposal_id INTEGER,
+      source_version    INTEGER,
+      source_option     TEXT,
+      payload           TEXT NOT NULL DEFAULT '{}',
+      notes             TEXT,
+      show_payouts      INTEGER NOT NULL DEFAULT 1,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      version           INTEGER NOT NULL DEFAULT 0,
+      created_by        TEXT,
+      closed_at         TEXT,
+      closed_by         TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      updated_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_project ON wo(project_access_id)");
+
+  // Immutable sent versions. A row here is what a technician signed; nothing ever updates its payload.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_versions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id        INTEGER NOT NULL,
+      version      INTEGER NOT NULL,
+      payload      TEXT NOT NULL,
+      fingerprint  TEXT,
+      sent_at      TEXT DEFAULT (datetime('now','localtime')),
+      sent_by      TEXT,
+      superseded_at TEXT,
+      UNIQUE(wo_id, version)
+    )
+  `);
+
+  // Live per-line FIELD state. Relational, not part of the payload, so one technician's tap is one
+  // UPDATE — which is what makes several phones on one job, and an offline replay, safe.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_lines (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id         INTEGER NOT NULL,
+      line_key      TEXT NOT NULL,
+      parent_key    TEXT,
+      status        TEXT NOT NULL DEFAULT 'incomplete',
+      status_by_id  INTEGER,
+      status_by     TEXT,
+      status_at     TEXT,
+      owner_id      INTEGER,
+      owner_name    TEXT,
+      needs_photos  INTEGER NOT NULL DEFAULT 0,
+      removed_at    TEXT,
+      UNIQUE(wo_id, line_key)
+    )
+  `);
+
+  // Per technician, per version signature — a work order can be accepted by more than one tech, and a
+  // sent revision voids them all (requirement 13). Bound to workOrderFingerprint, like a proposal.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_signatures (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id          INTEGER NOT NULL,
+      version        INTEGER NOT NULL,
+      user_id        INTEGER,
+      name           TEXT NOT NULL,
+      signature_data TEXT,
+      fingerprint    TEXT,
+      signed_at      TEXT DEFAULT (datetime('now','localtime')),
+      voided_at      TEXT,
+      voided_by      TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_sig ON wo_signatures(wo_id, version)");
+
+  // On-site check-in. No line may be marked until the acting technician has a check-in for TODAY.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_checkins (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id    INTEGER NOT NULL,
+      user_id  INTEGER,
+      name     TEXT NOT NULL,
+      day      TEXT NOT NULL,
+      in_at    TEXT DEFAULT (datetime('now','localtime')),
+      out_at   TEXT,
+      lat      REAL,
+      lng      REAL,
+      UNIQUE(wo_id, user_id, day)
+    )
+  `);
+
+  // Append-only action trail: who did what, to which line, when. `client_at` is the device clock, kept
+  // so an offline replay can be de-duplicated and reported in the order it actually happened.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_events (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id        INTEGER NOT NULL,
+      line_key     TEXT,
+      action       TEXT NOT NULL,
+      from_status  TEXT,
+      to_status    TEXT,
+      actor_id     INTEGER,
+      actor_name   TEXT,
+      note         TEXT,
+      meta         TEXT,
+      client_at    TEXT,
+      at           TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(wo_id, line_key, action, actor_name, client_at)
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_events ON wo_events(wo_id, at)");
+
+  // Before / after / issue photos per line. The image itself goes through /api/media — a data: URL must
+  // never reach one of these rows (the same rule the install checklist learned the hard way).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_line_media (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id     INTEGER NOT NULL,
+      line_key  TEXT NOT NULL,
+      slot      TEXT NOT NULL,
+      media_url TEXT NOT NULL,
+      by_name   TEXT,
+      at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_media ON wo_line_media(wo_id, line_key)");
+
+  // End of day: a LOCKED daily log per technician. Locking a day does not close the work order —
+  // installs run over several days (requirement 22).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_day_logs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id           INTEGER NOT NULL,
+      user_id         INTEGER,
+      name            TEXT NOT NULL,
+      day             TEXT NOT NULL,
+      lines_completed INTEGER NOT NULL DEFAULT 0,
+      payout_total    REAL NOT NULL DEFAULT 0,
+      note            TEXT,
+      locked_at       TEXT DEFAULT (datetime('now','localtime')),
+      locked_by       TEXT,
+      UNIQUE(wo_id, user_id, day)
+    )
+  `);
+
+  // Who is paid for a line, and in what share. `share` sums to 1 across a line's credits; `amount` is
+  // the dollar figure at lock time, so a later payout edit never silently restates a paid day.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_line_credits (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id      INTEGER NOT NULL,
+      line_key   TEXT NOT NULL,
+      user_id    INTEGER,
+      name       TEXT NOT NULL,
+      share      REAL NOT NULL DEFAULT 1,
+      amount     REAL NOT NULL DEFAULT 0,
+      day_log_id INTEGER,
+      set_by     TEXT,
+      set_at     TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_credits ON wo_line_credits(wo_id, line_key)");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_assignments (
@@ -8625,6 +8795,135 @@ export function approveWorkOrder(id, {reviewedById, reviewedByName}) {
 }
 export function rejectWorkOrder(id, {reviewedById, reviewedByName, reviewNotes}) {
   db.prepare("UPDATE work_orders SET status='rejected',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=? WHERE id=?").run(reviewedById??null, reviewedByName??null, reviewNotes??null, id);
+}
+
+// ---- THE WORK ORDER DOCUMENT (docs/WORK_ORDERS.md) -------------------------------------------
+// A copy of ONE published proposal option, valued at technician payout, with its own versions. Every
+// function here reads and writes `wo*` tables ONLY — none of them touches `proposals`, which is what
+// makes requirement 9 ("editing the work order never changes the signed proposal") structural rather
+// than a promise. The scope is copied from the PUBLISHED proposal, because that is what the customer
+// actually received; an unsent draft is not a job anyone can be dispatched to.
+
+// Keep wo_lines in step with the payload: insert a row for each new line (so a tap has something to
+// update), and tombstone rows whose line left the draft. A line that comes BACK keeps its old status —
+// that is the whole reason for the tombstone instead of a delete.
+function woSyncLines(woId, payload) {
+  const lines = woLines(payload);
+  const keys = new Set(lines.map((l) => l.key));
+  const ins = db.prepare("INSERT INTO wo_lines (wo_id, line_key, parent_key, needs_photos) VALUES (?,?,?,?) ON CONFLICT(wo_id, line_key) DO UPDATE SET parent_key=excluded.parent_key, needs_photos=excluded.needs_photos, removed_at=NULL");
+  for (const l of lines) ins.run(woId, l.key, l.parentKey, l.needsPhotos ? 1 : 0);
+  for (const r of db.prepare("SELECT line_key FROM wo_lines WHERE wo_id=? AND removed_at IS NULL").all(woId)) {
+    if (!keys.has(String(r.line_key))) db.prepare("UPDATE wo_lines SET removed_at=datetime('now','localtime') WHERE wo_id=? AND line_key=?").run(woId, r.line_key);
+  }
+}
+
+export function woRow(accessId) {
+  const r = db.prepare("SELECT * FROM wo WHERE project_access_id=?").get(String(accessId));
+  return r ? { ...r } : null;
+}
+export function woLatestSentVersion(woId) {
+  const r = db.prepare("SELECT * FROM wo_versions WHERE wo_id=? ORDER BY version DESC LIMIT 1").get(woId);
+  return r ? { ...r, payload: JSON.parse(r.payload) } : null;
+}
+export function woVersionList(woId) {
+  return db.prepare("SELECT id, version, fingerprint, sent_at, sent_by, superseded_at FROM wo_versions WHERE wo_id=? ORDER BY version DESC").all(woId).map((r) => ({ ...r }));
+}
+
+// The one read every work-order surface uses. Returns null when there is nothing to show yet (no sent
+// proposal, or no work order created), so a caller renders an empty state instead of a $0 sheet.
+export function getWorkOrderDoc(accessId) {
+  const row = woRow(accessId);
+  if (!row) return null;
+  let payload = {};
+  try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
+  const sent = woLatestSentVersion(row.id);
+  const state = db.prepare("SELECT * FROM wo_lines WHERE wo_id=? AND removed_at IS NULL").all(row.id).map((r) => ({ ...r }));
+  const lineState = {};
+  for (const s of state) lineState[s.line_key] = s;
+  return {
+    id: row.id, accessId: row.project_access_id,
+    sourceProposalId: row.source_proposal_id, sourceVersion: row.source_version, sourceOption: row.source_option,
+    payload, notes: row.notes || "", showPayouts: !!row.show_payouts,
+    status: row.status, version: row.version,
+    closedAt: row.closed_at, closedBy: row.closed_by, updatedAt: row.updated_at,
+    total: woTotal(payload),
+    lines: woLines(payload).map((l) => ({ ...l, state: lineState[l.key] || null })),
+    lineState,
+    versions: woVersionList(row.id),
+    changeState: workOrderChangeState(sent, { payload }),
+    fingerprint: workOrderFingerprint(payload),
+  };
+}
+
+// Create the work order from the published proposal. Idempotent: if one exists it is returned as-is,
+// never re-snapshotted, because a re-snapshot would silently discard the office's payout edits.
+export function createWorkOrderDoc(accessId, { byName = null, optionId = null } = {}) {
+  const existing = woRow(accessId);
+  if (existing) return { ok: true, id: existing.id, existed: true };
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return { error: "Send the proposal first — the work order is copied from the version the customer received." };
+  const rates = getEffectiveRates(null);
+  const payload = workOrderPayloadFrom(pub, { optionId: optionId ?? pub.selected_option, rates });
+  if (!payload) return { error: "That proposal has no priced option to copy." };
+  const r = db.prepare("INSERT INTO wo (project_access_id, source_proposal_id, source_version, source_option, payload, created_by) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), pub.id, pub.version ?? null, String(payload.options[0].id), JSON.stringify(payload), byName || null);
+  const id = Number(r.lastInsertRowid);
+  woSyncLines(id, payload);
+  return { ok: true, id, existed: false };
+}
+
+// Save the working draft. Validated at this boundary; a bad payload is never written.
+export function saveWorkOrderDraft(accessId, payload, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  const err = validateWorkOrderPayload(payload);
+  if (err) return { error: err };
+  const json = JSON.stringify(typeof payload === "string" ? JSON.parse(payload) : payload);
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo SET payload=?, updated_at=datetime('now','localtime') WHERE id=?").run(json, row.id);
+    woSyncLines(row.id, JSON.parse(json));
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not save the work order." }; }
+  return { ok: true };
+}
+
+export function setWorkOrderNotesDoc(accessId, notes) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET notes=?, updated_at=datetime('now','localtime') WHERE id=?").run(String(notes ?? "").slice(0, 8000), row.id);
+  return { ok: true };
+}
+// Requirement 7: payouts hidden from the technician. Payroll still tracks them — this flag is a
+// display rule on the tech's copy, never a change to what is owed.
+export function setWorkOrderShowPayouts(accessId, on) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET show_payouts=?, updated_at=datetime('now','localtime') WHERE id=?").run(on ? 1 : 0, row.id);
+  return { ok: true };
+}
+// Re-pull the standard rates onto every line of the draft (the office can then tweak and save).
+export function reseedWorkOrderPayouts(accessId, techName = null) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  return saveWorkOrderDraft(accessId, reseedPayouts(doc.payload, getEffectiveRates(techName)));
+}
+
+// A technician must never receive a payout figure when the office has hidden them (requirement 7), and
+// must never receive a retail figure at all. The payload carries no retail by construction, so this
+// strips payout only — belt and braces at the serialization boundary, like sanitizeProposal.
+export function sanitizeWorkOrderDoc(doc, role) {
+  if (!doc) return null;
+  const office = role === "admin" || role === "manager" || role === "readonly";
+  if (office || doc.showPayouts) return doc;
+  const blank = (it) => { const { techPrice, ...rest } = it; return { ...rest, ...(it.sub ? { sub: it.sub.map(blank) } : null) }; };
+  const payload = { options: (doc.payload.options || []).map((o) => ({ ...o, services: (o.services || []).map((s) => ({ ...s, items: (s.items || []).map(blank) })) })) };
+  return {
+    ...doc, payload, total: null,
+    lines: doc.lines.map(({ payout, total, ...l }) => l),
+    changeState: doc.changeState?.hasUnsentChanges ? { ...doc.changeState, payoutDelta: null } : doc.changeState,
+  };
 }
 
 export function getProjectAssignments(accessId) {

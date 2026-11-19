@@ -148,9 +148,15 @@ new payload gets its own `sanitizeWorkOrder(row, role)`.
 `node:sqlite`, ensure-column pattern in `lib/db.js`, explicit `BEGIN/COMMIT` (there is no
 `db.transaction()`). All names prefixed `wo_` to stay clear of the legacy `work_orders` table.
 
+**The draft is a payload, the field state is rows.** The working draft is stored as a JSON payload in
+the *same shape as a proposal* (`options → services → items → sub`), with `payout` where the proposal has
+`price` — which is what lets `ProposalItemsEditor` render it unchanged. Per-line *field* state (status,
+owner, photos) is relational, because a tap has to be one `UPDATE` for multi-tech and offline to be safe.
+
 ```
 wo                      one live work order per project
   id · project_access_id · source_proposal_id · source_version · source_option
+  payload TEXT                          -- the working draft (proposal shape, `payout` per line)
   show_payouts INTEGER DEFAULT 1        -- requirement 7
   notes TEXT                            -- requirement 6
   status  draft|sent|signed|closed      -- requirement 25
@@ -158,18 +164,16 @@ wo                      one live work order per project
   closed_at · closed_by · created_at · updated_at
 
 wo_versions             immutable sent versions (requirement 13)
-  wo_id · version · payload TEXT (lines + payouts snapshot) · fingerprint
+  wo_id · version · payload TEXT (frozen copy of wo.payload) · fingerprint
   sent_at · sent_by · superseded_at
   UNIQUE(wo_id, version)
 
-wo_lines                the working draft's lines + live field state
+wo_lines                live per-line field state, synced from the payload on save
   id · wo_id · line_key (proposal line id, or minted) · parent_key
-  name · kind (camera|speaker|nvr|pos|equip|labor|custom) · qty
-  payout · payout_source (rate|manual) · waived INTEGER · waiver_cause · cpe INTEGER
   status  incomplete|attention|complete  DEFAULT 'incomplete'   -- requirement 17
   status_by · status_at · owner_user_id · owner_name
   needs_photos INTEGER                  -- requirement 19
-  position · removed_at
+  removed_at
   UNIQUE(wo_id, line_key)
 
 wo_signatures           per tech, per version (requirement 12/13)

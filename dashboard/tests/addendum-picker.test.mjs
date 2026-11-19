@@ -186,12 +186,14 @@ test("a non-pricer's editor renders no price: money is blanked, inputs/labels/ti
     const at = ed.indexOf(cls); assert.ok(at > 0, cls);
     assert.ok(ed.slice(Math.max(0, at - 160), at).includes("hidePrices"), `${cls} is gated by hidePrices`);
   }
-  assert.ok(ed.includes("x.waived || hidePrices ?"), "sub-row price input swapped for an empty span");
+  assert.ok(ed.includes("(x.waived && strikeWaived) || hidePrices ?"), "sub-row price input swapped for an empty span");
   // accessible strings: every removeLabel / title that carried money is gated
   for (const m of ed.matchAll(/removeLabel=\{[^\n]*money\([^\n]*/g)) assert.ok(/hidePrices/.test(m[0]), `removeLabel gated: ${m[0].slice(0, 60)}`);
   assert.ok(!/title="[^"]*\(\$\d+\)/.test(ed), "no literal $ amount left in a static title");
   assert.ok(ed.includes('hidePrices ? "" : money(itemTotal') && ed.includes("hidePrices={hidePrices} svcLabel"), "waive modal amount covered");
-  assert.ok(ed.includes("× {money(x.price)}") && /!hidePrices && q > 1/.test(ed) && /!hidePrices && \(\+bi\.qty/.test(ed), "qty x price math skipped");
+  // amtOf(x) is x.price in retail mode (x.techPrice in the work order's payout mode) — same column, one read.
+  assert.ok(ed.includes("× {money(amtOf(x))}") && /const amtOf = \(it\) => \(\+it\?\.\[AMT\] \|\| 0\);/.test(ed)
+    && /!hidePrices && q > 1/.test(ed) && /!hidePrices && \(\+bi\.qty/.test(ed), "qty x price math skipped");
   assert.equal((ed.match(/hidePrice=\{hidePrices\}/g) || []).length, 2, "both type-ahead fields hide catalog prices");
   assert.ok(nf.includes("!hidePrice &&") && nf.includes("prop-name-opt-price"));
   // the builder turns it on for every role without addendum.price, and no CSS-hide shortcut remains

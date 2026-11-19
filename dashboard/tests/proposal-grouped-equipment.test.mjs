@@ -23,13 +23,16 @@ test("NVR parent lists the recorder + every real drive record; totals use the un
   assert.ok(/total: nvrGroupTotal/.test(editor));
   // Children carry the real item ref + kind + slot so they can be edited inline (recorder + each drive).
   assert.ok(/\{ ref: nvrItem, kind: "nvr", name: nvrItem\.name[\s\S]*?\.\.\.driveItems\.map\(\(d\) => \(\{ ref: d, kind: "drive", slot: d\.slot/.test(editor), "recorder + driveItems with refs");
-  assert.ok(/const nvrGroupTotal = nvrItem \? itemTotal\(nvrItem\) \+ driveItems\.reduce/.test(editor), "aggregate math untouched");
+  // `sumOf` IS itemTotal in retail mode and techItemTotal in the work order's payout mode — the aggregate
+  // shape is unchanged, it just reads the column this render is editing (see the `payout` prop).
+  assert.ok(/const nvrGroupTotal = nvrItem \? sumOf\(nvrItem\) \+ driveItems\.reduce/.test(editor), "aggregate math untouched");
+  assert.ok(/const sumOf = payout \? techItemTotal : itemTotal;/.test(editor), "sumOf resolves to itemTotal for retail");
 });
 
 test("Displays parent renders one child per distinct display record, named Display N", () => {
   assert.ok(/total: displaysTotal/.test(editor));
   assert.ok(/items: displayItems\.map\(\(d\) => \(\{ ref: d, kind: "display", slot: d\.displaySlot, name: `Display \$\{d\.displaySlot\} · /.test(editor));
-  assert.ok(/const displaysTotal = displayItems\.reduce\(\(s, it\) => s \+ itemTotal\(it\)/.test(editor));
+  assert.ok(/const displaysTotal = displayItems\.reduce\(\(s, it\) => s \+ sumOf\(it\)/.test(editor));
 });
 
 test("nvrSummary: channel + each drive capacity, derived from children; repeats collapse to N×", () => {
