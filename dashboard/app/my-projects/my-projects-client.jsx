@@ -507,7 +507,9 @@ export default function MyProjectsClient({ user, projects, serviceCalls = [] }) 
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+        /* Fonts: Hanken Grotesk + Bricolage Grotesque are self-hosted and declared once in
+   app/globals.css. They used to be pulled in here with an @import to fonts.googleapis.com,
+   which the browser could not discover until this stylesheet had been parsed. */
         .cp-root{--bg:#ffffff;--bg-soft:#f6f7f9;--bg-tint:#f0f2f7;--ink:#0e1320;--slate:#2C3347;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--accent:#3257ff;--accent-soft:#eef1ff;--green:#1c8a45;--green-soft:#e7f6ec;--red:#d23c3c;--red-soft:#fdeaea;font-family:'Hanken Grotesk',sans-serif;background:var(--bg-soft);color:var(--ink);line-height:1.6;-webkit-font-smoothing:antialiased;min-height:100vh}
         .cp-root *{box-sizing:border-box;margin:0;padding:0}
         .cp-root a{text-decoration:none;color:inherit}

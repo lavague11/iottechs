@@ -1,0 +1,40 @@
+Fonts self-hosted by IOT TECHS (iot-techs.com)
+==============================================
+
+These font files are redistributed under the SIL Open Font License, Version 1.1,
+which permits self-hosting provided this notice travels with them.
+
+Hanken Grotesk
+  Copyright 2021 The Hanken Grotesk Project Authors
+  https://github.com/marcologous/hanken-grotesk
+  Files: hanken-grotesk-latin.woff2, hanken-grotesk-latin-ext.woff2
+  Variable weight axis 400-800.
+
+Bricolage Grotesque
+  Copyright 2022 The Bricolage Grotesque Project Authors
+  https://github.com/ateliertriay/bricolage
+  Files: bricolage-grotesque-latin.woff2, bricolage-grotesque-latin-ext.woff2
+  Variable weight axis 400-800, optical-size axis 12-96.
+
+Both are licensed under the SIL Open Font License, Version 1.1:
+  https://openfontlicense.org
+  https://scripts.sil.org/OFL
+
+Full licence text for each family:
+  https://raw.githubusercontent.com/google/fonts/main/ofl/hankengrotesk/OFL.txt
+  https://raw.githubusercontent.com/google/fonts/main/ofl/bricolagegrotesque/OFL.txt
+
+WHY THESE ARE SELF-HOSTED
+-------------------------
+They were loaded from fonts.googleapis.com, which cost two third-party DNS
+lookups plus two TLS handshakes before a single glyph could be requested, and
+the stylesheet was render-blocking: roughly 2.1s of the home page's 3.1s LCP.
+Served from our own origin on the already-open connection, that cost disappears.
+
+Both families are VARIABLE fonts, so one file per subset covers every weight the
+site uses (400-800) — replacing the four to five static weights the Google CSS
+used to request.
+
+These files came from Google Fonts' own CDN (fonts.gstatic.com) and are the
+same binaries it serves; see dashboard/app/globals.css and public/home.html for
+the @font-face declarations that reference them.

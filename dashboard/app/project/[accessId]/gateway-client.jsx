@@ -4751,7 +4751,9 @@ export default function GatewayClient({ project, initialView = null, currentUser
 // Pure restyle — every override is scoped under .pvx so it wins over globals.css
 // without changing any JSX, text, or logic. The dark PIN gateway is untouched.
 const PV_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* Fonts: Hanken Grotesk + Bricolage Grotesque are self-hosted and declared once in
+   app/globals.css. They used to be pulled in here with an @import to fonts.googleapis.com,
+   which the browser could not discover until this stylesheet had been parsed. */
 /* ===== DESIGN TOKENS — single source of truth for the whole project page =====
    Anchored to the FlowStep tool-cards (the agreed reference look). Every component
    should consume these vars; no hand-typed hex/px. See /style for the living guide. */

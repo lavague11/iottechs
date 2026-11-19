@@ -811,7 +811,9 @@ export default function AdminShell({ user, alerts, active, children }) {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* Fonts: Hanken Grotesk + Bricolage Grotesque are self-hosted and declared once in
+   app/globals.css. They used to be pulled in here with an @import to fonts.googleapis.com,
+   which the browser could not discover until this stylesheet had been parsed. */
 .apx{
   --bg:#ffffff;--bg-soft:#f6f7f9;--bg-tint:#f0f2f7;
   --ink:#0e1320;--slate:#2C3347;--muted:#5b6275;--line:#e6e8ee;

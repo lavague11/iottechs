@@ -239,7 +239,9 @@ export default function WelcomeClient({ app, staff }) {
 }
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&display=swap');
+/* Fonts: Hanken Grotesk + Bricolage Grotesque are self-hosted and declared once in
+   app/globals.css. They used to be pulled in here with an @import to fonts.googleapis.com,
+   which the browser could not discover until this stylesheet had been parsed. */
 .wl-root{--ink:#0e1320;--muted:#5b6275;--line:#e6e8ee;--gold:#C9A96E;--gold-deep:#b08f4f;--bg-soft:#f6f7f9;--green:#1c8a45;
   min-height:100vh;background:radial-gradient(1100px 480px at 50% -10%,#f0f2f7 0%,#fff 55%);color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;line-height:1.55}
 .wl-top{display:flex;align-items:center;justify-content:space-between;max-width:720px;margin:0 auto;padding:20px 20px 0}
