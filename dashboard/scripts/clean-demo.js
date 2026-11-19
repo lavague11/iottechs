@@ -18,6 +18,7 @@ const path = require("node:path");
 const DEMO_SOURCE = "journey-test";
 const DEMO_DOMAIN = "journey-test.local";
 const ADMIN_EMAIL = `demo-admin@${DEMO_DOMAIN}`;
+const TECH_EMAIL = `demo-tech@${DEMO_DOMAIN}`;
 const DRY = process.argv.includes("--dry");
 const ALL = process.argv.includes("--all");
 const SANITY_MAX = 30; // the seed makes 8; refuse to run if far more match (guards against a logic bug)
@@ -76,7 +77,7 @@ const SANITY_MAX = 30; // the seed makes 8; refuse to run if far more match (gua
       h.prepare(`DELETE FROM projects WHERE access_id IN (${ph})`).run(...demoIds);
     }
     for (const c of demoCustomers) h.prepare("DELETE FROM users WHERE id = ?").run(c.id);
-    if (ALL) h.prepare("DELETE FROM users WHERE email = ?").run(ADMIN_EMAIL);
+    if (ALL) h.prepare("DELETE FROM users WHERE email IN (?, ?)").run(ADMIN_EMAIL, TECH_EMAIL);
     h.prepare("COMMIT").run();
     console.log(`[clean] deleted ${demoIds.length} project(s), ${childTotal} child row(s), ${demoCustomers.length} customer(s)${ALL ? ", demo admin" : ""}.`);
     if (!ALL) console.log(`[clean] demo admin (${ADMIN_EMAIL}) left in place — re-run seed-demo.js to repopulate.`);

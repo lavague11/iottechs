@@ -19,6 +19,7 @@ import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatu
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, workOrderDiff, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
+import { lineStatusGate, stepsAfterStatus, stepCount, creditsForAdvance, normalizeOp, sortQueue, opKey, fieldProgress } from "./work-order-field.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
@@ -378,10 +379,18 @@ function init() {
       owner_id      INTEGER,
       owner_name    TEXT,
       needs_photos  INTEGER NOT NULL DEFAULT 0,
+      steps_done    INTEGER NOT NULL DEFAULT 0,
       removed_at    TEXT,
       UNIQUE(wo_id, line_key)
     )
   `);
+  // Decision A (owner, 2026-11-19): the three-state line keeps the install checklist's STEP path inside
+  // it, so partial work still pays. `steps_done` is how far along a line's path the crew has got;
+  // `status` is the three-state the popup sets. Ensure-column for a database created before this.
+  {
+    const lineCols = db.prepare("PRAGMA table_info(wo_lines)").all().map((c) => c.name);
+    if (!lineCols.includes("steps_done")) db.exec("ALTER TABLE wo_lines ADD COLUMN steps_done INTEGER NOT NULL DEFAULT 0");
+  }
 
   // Per technician, per version signature — a work order can be accepted by more than one tech, and a
   // sent revision voids them all (requirement 13). Bound to workOrderFingerprint, like a proposal.
@@ -414,6 +423,11 @@ function init() {
   }
 
   // On-site check-in. No line may be marked until the acting technician has a check-in for TODAY.
+  //
+  // `assigned` records whether this person was on the job's crew AT THE MOMENT they arrived — a
+  // technician can open a project link, PIN in as themselves and start work without ever having been
+  // assigned. That is allowed (the work is real), but it is flagged: their credits are held pending
+  // until an admin decides, and `decision` is that decision — NULL while nobody has made one.
   db.exec(`
     CREATE TABLE IF NOT EXISTS wo_checkins (
       id       INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -425,9 +439,22 @@ function init() {
       out_at   TEXT,
       lat      REAL,
       lng      REAL,
+      assigned INTEGER NOT NULL DEFAULT 1,
+      decision TEXT,
+      decided_by TEXT,
+      decided_at TEXT,
+      device   TEXT,
       UNIQUE(wo_id, user_id, day)
     )
   `);
+  {
+    const ciCols = db.prepare("PRAGMA table_info(wo_checkins)").all().map((c) => c.name);
+    if (!ciCols.includes("assigned"))   db.exec("ALTER TABLE wo_checkins ADD COLUMN assigned INTEGER NOT NULL DEFAULT 1");
+    if (!ciCols.includes("decision"))   db.exec("ALTER TABLE wo_checkins ADD COLUMN decision TEXT");
+    if (!ciCols.includes("decided_by")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_by TEXT");
+    if (!ciCols.includes("decided_at")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_at TEXT");
+    if (!ciCols.includes("device"))     db.exec("ALTER TABLE wo_checkins ADD COLUMN device TEXT");
+  }
 
   // Append-only action trail: who did what, to which line, when. `client_at` is the device clock, kept
   // so an offline replay can be de-duplicated and reported in the order it actually happened.
@@ -496,10 +523,20 @@ function init() {
       amount     REAL NOT NULL DEFAULT 0,
       day_log_id INTEGER,
       set_by     TEXT,
-      set_at     TEXT DEFAULT (datetime('now','localtime'))
+      set_at     TEXT DEFAULT (datetime('now','localtime')),
+      pending    INTEGER NOT NULL DEFAULT 0,
+      voided_at  TEXT
     )
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_wo_credits ON wo_line_credits(wo_id, line_key)");
+  // `pending` = earned by a technician who was not on this job's crew when they did it. Real work, and
+  // it stays in the record either way — but it does not reach payroll until an admin assigns them.
+  // `voided_at` is the Reject decision: the credit is cancelled, the log keeps every trace of it.
+  {
+    const crCols = db.prepare("PRAGMA table_info(wo_line_credits)").all().map((c) => c.name);
+    if (!crCols.includes("pending"))   db.exec("ALTER TABLE wo_line_credits ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
+    if (!crCols.includes("voided_at")) db.exec("ALTER TABLE wo_line_credits ADD COLUMN voided_at TEXT");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_assignments (
@@ -8843,7 +8880,7 @@ export function woVersionList(woId) {
 
 // The one read every work-order surface uses. Returns null when there is nothing to show yet (no sent
 // proposal, or no work order created), so a caller renders an empty state instead of a $0 sheet.
-export function getWorkOrderDoc(accessId) {
+export function getWorkOrderDoc(accessId, { actorId = null, actorName = null } = {}) {
   const row = woRow(accessId);
   if (!row) return null;
   let payload = {};
@@ -8852,6 +8889,12 @@ export function getWorkOrderDoc(accessId) {
   const state = db.prepare("SELECT * FROM wo_lines WHERE wo_id=? AND removed_at IS NULL").all(row.id).map((r) => ({ ...r }));
   const lineState = {};
   for (const s of state) lineState[s.line_key] = s;
+  // Field data (Stage 3). Photos are grouped per line so the popup can tell before from after without
+  // a second round trip, and `checkedInToday` is the gate the popup greys its buttons on.
+  const media = woLineMediaFor(row.id);
+  const photos = {};
+  for (const m of media) (photos[m.line_key] ||= []).push({ id: m.id, slot: m.slot, url: m.media_url, by: m.by_name, at: m.at });
+  const liveLines = woLines(payload).map((l) => ({ ...l, state: lineState[l.key] || null, photos: photos[l.key] || [], steps: stepCount(l.kind) }));
   return {
     id: row.id, accessId: row.project_access_id,
     sourceProposalId: row.source_proposal_id, sourceVersion: row.source_version, sourceOption: row.source_option,
@@ -8859,8 +8902,19 @@ export function getWorkOrderDoc(accessId) {
     status: row.status, version: row.version,
     closedAt: row.closed_at, closedBy: row.closed_by, updatedAt: row.updated_at,
     total: woTotal(payload),
-    lines: woLines(payload).map((l) => ({ ...l, state: lineState[l.key] || null })),
+    lines: liveLines,
     lineState,
+    progress: fieldProgress(liveLines),
+    checkedInToday: woCheckedInToday(row.id, actorId, actorName),
+    // Requirement 4 of the unassigned-check-in addendum: who is on site right now, assigned or not,
+    // with the time they arrived. The office sees the whole list; it is also what drives the prompt.
+    checkins: woCheckinsFor(row.id, localDay()),
+    // This caller's own arrival, so the technician's banner can say they are not on the crew yet.
+    myCheckin: woCheckinsFor(row.id, localDay()).find((c) =>
+      (actorId != null && String(c.user_id) === String(actorId)) ||
+      (!!actorName && String(c.name || "").toLowerCase() === String(actorName).toLowerCase())) || null,
+    // Undecided arrivals by people who were not on the crew — the admin prompt's queue.
+    pendingCheckins: woCheckinsFor(row.id).filter((c) => !c.assigned && !c.decision),
     versions: woVersionList(row.id),
     changeState: workOrderChangeState(sent, { payload }),
     fingerprint: workOrderFingerprint(payload),
@@ -9090,6 +9144,204 @@ export function syncWorkOrderFromProposal(accessId) {
   if (saved.error) return saved;
   db.prepare("UPDATE wo SET source_proposal_id=?, source_version=? WHERE id=?").run(pub.id, pub.version ?? null, row.id);
   return { ok: true, changed: diff.added.length + diff.removed.length + diff.changed.length, diff };
+}
+
+// ---- Stage 3: the field (check-in, line status, photos, the log, offline replay) --------------
+// Every write here is idempotent on (wo_id, line_key, action, actor, client_at) via the UNIQUE index on
+// wo_events, which is what makes an offline replay safe: the same tap arriving twice is one act, and a
+// retry can never double-pay. The DEVICE clock is the key, because it is the only value stable across
+// a retry — the server clock moves between them.
+
+export const localDay = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+// Is this person on the job's crew? Admin and manager always are — they run it. A technician is only
+// on it if someone put them there (project_assignments), which is exactly the fact the unassigned
+// check-in flow turns on.
+export function woIsAssigned(accessId, { userId = null, name = null, role = null } = {}) {
+  if (["admin", "manager"].includes(role)) return true;
+  if (userId == null && !name) return false;
+  const rows = getProjectAssignments(accessId);
+  return rows.some((a) => a.role === "tech" && (
+    (userId != null && String(a.user_id) === String(userId)) ||
+    (!!name && String(a.user_name || "").toLowerCase() === String(name).toLowerCase())
+  ));
+}
+// Whether this person's work TODAY counts toward payroll yet. Assigned → yes. Unassigned → only once
+// an admin has pressed Assign; "Not now" and an undecided check-in both leave it pending.
+export function woWorkIsPending(woId, { userId = null, name = null, day = null } = {}) {
+  const d = day || localDay();
+  const c = userId != null
+    ? db.prepare("SELECT assigned, decision FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(woId, userId, d)
+    : db.prepare("SELECT assigned, decision FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(woId, String(name || ""), d);
+  if (!c) return false;                                  // no check-in → the gate refuses anyway
+  return !c.assigned && c.decision !== "assigned";
+}
+
+// Requirement 16 — "I'm on site". One row per technician per day; a second tap is not an error, it is
+// the same arrival. A technician who is NOT on the crew may still check in — the work is real and we
+// want it recorded — but the row is flagged `assigned = 0` and waits for an admin decision.
+export function woCheckIn(accessId, { userId = null, name, lat = null, lng = null, day = null, assigned = true, device = null } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const d = day || localDay();
+  const who = String(name || "").trim();
+  if (!who) return { error: "Who is checking in?" };
+  const existing = userId != null
+    ? db.prepare("SELECT * FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(row.id, userId, d)
+    : db.prepare("SELECT * FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(row.id, who, d);
+  if (existing) return { ok: true, day: d, first: false, assigned: !!existing.assigned, decision: existing.decision || null };
+  db.prepare("INSERT INTO wo_checkins (wo_id, user_id, name, day, lat, lng, assigned, device) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(wo_id, user_id, day) DO NOTHING")
+    .run(row.id, userId, who, d, lat, lng, assigned ? 1 : 0, device);
+  // Requirement 5 of the addendum: the log says who, when, on what device, and whether they were on
+  // the crew — so a later payroll question can be answered from the record alone.
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+    .run(row.id, "checkin", userId, who, d, JSON.stringify({ assigned: !!assigned, device: device || null }), new Date().toISOString());
+  return { ok: true, day: d, first: true, assigned: !!assigned, decision: null };
+}
+
+// The admin's answer to "<Tech> just checked in — assign them?".
+//   assign    → they join the crew (and so the installation event, which invites from assignments),
+//               and everything they have already done stops being pending.
+//   reject    → their credits are voided. The work stays in the log; the money does not count.
+//   not_now   → nothing changes; the prompt stays on the work order.
+export function woDecideCheckin(accessId, checkinId, decision, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!["assign", "reject", "not_now"].includes(decision)) return { error: "Unknown decision." };
+  const c = db.prepare("SELECT * FROM wo_checkins WHERE id=? AND wo_id=?").get(checkinId, row.id);
+  if (!c) return { error: "That check-in is gone." };
+  if (decision === "not_now") {
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "checkin_decision", byName, c.name, JSON.stringify({ decision: "not_now", checkinId }), new Date().toISOString());
+    return { ok: true, decision: "not_now" };
+  }
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_checkins SET decision=?, decided_by=?, decided_at=datetime('now','localtime') WHERE id=?")
+      .run(decision === "assign" ? "assigned" : "rejected", byName, c.id);
+    if (decision === "assign") {
+      db.prepare("UPDATE wo_line_credits SET pending=0 WHERE wo_id=? AND name=? COLLATE NOCASE AND pending=1 AND voided_at IS NULL").run(row.id, c.name);
+    } else {
+      db.prepare("UPDATE wo_line_credits SET voided_at=datetime('now','localtime') WHERE wo_id=? AND name=? COLLATE NOCASE AND voided_at IS NULL AND day_log_id IS NULL").run(row.id, c.name);
+    }
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "checkin_decision", byName, c.name, JSON.stringify({ decision, checkinId: c.id }), new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record that decision." }; }
+  return { ok: true, decision, techName: c.name, techId: c.user_id ?? null };
+}
+export function woCheckedInToday(woId, userId, name, day = null) {
+  const d = day || localDay();
+  const r = userId != null
+    ? db.prepare("SELECT 1 FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(woId, userId, d)
+    : db.prepare("SELECT 1 FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(woId, String(name || ""), d);
+  return !!r;
+}
+export function woCheckinsFor(woId, day = null) {
+  const sql = day ? "SELECT * FROM wo_checkins WHERE wo_id=? AND day=? ORDER BY in_at" : "SELECT * FROM wo_checkins WHERE wo_id=? ORDER BY day DESC, in_at";
+  return (day ? db.prepare(sql).all(woId, day) : db.prepare(sql).all(woId)).map((r) => ({ ...r }));
+}
+
+export function woLineMediaFor(woId, lineKey = null) {
+  const sql = lineKey ? "SELECT * FROM wo_line_media WHERE wo_id=? AND line_key=? ORDER BY at" : "SELECT * FROM wo_line_media WHERE wo_id=? ORDER BY at";
+  return (lineKey ? db.prepare(sql).all(woId, lineKey) : db.prepare(sql).all(woId)).map((r) => ({ ...r }));
+}
+// A photo arrives as a /api/media URL. A data: URL must never land in a row — that lesson is already
+// written into the install checklist, and the rule is the same here.
+export function addWoLineMedia(accessId, { lineKey, slot, mediaUrl, byName = null }) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!["before", "after", "issue"].includes(String(slot))) return { error: "Unknown photo slot." };
+  const url = String(mediaUrl || "");
+  if (!url || /^data:/i.test(url)) return { error: "Upload the photo first." };
+  db.prepare("INSERT INTO wo_line_media (wo_id, line_key, slot, media_url, by_name) VALUES (?,?,?,?,?)").run(row.id, String(lineKey), String(slot), url, byName);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
+    .run(row.id, String(lineKey), "photo", byName, String(slot), new Date().toISOString());
+  return { ok: true };
+}
+export function removeWoLineMedia(accessId, id) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const r = db.prepare("DELETE FROM wo_line_media WHERE id=? AND wo_id=?").run(id, row.id);
+  return r.changes ? { ok: true } : { error: "That photo is already gone." };
+}
+
+// Requirements 17–20. The three-state line, with the step path inside it (decision A) and the step
+// credits that follow (decision B). Refuses rather than half-applies: the gate runs first, and the
+// write is one transaction.
+export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, note = "", actorId = null, actorName = null, clientAt = null }) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (doc.status === "closed") return { error: "This work order is closed." };
+  const line = doc.lines.find((l) => l.key === String(lineKey));
+  if (!line) return { error: "That line isn't on this work order." };
+  const who = String(actorName || "").trim();
+  if (!who) return { error: "Who is marking it?" };
+  const day = localDay();
+  const photos = woLineMediaFor(doc.id, line.key);
+  const gate = lineStatusGate({ status, checkedInToday: woCheckedInToday(doc.id, actorId, who, day), line, photos, note });
+  if (gate) return { error: gate };
+
+  const prev = line.state || {};
+  const from = Math.min(+prev.steps_done || 0, stepCount(line.kind));
+  const to = stepsAfterStatus(line.kind, status, { stepsDone: from, pickStep });
+  const stamp = clientAt || new Date().toISOString();
+  // Idempotence: this exact tap, from this person, at this device clock reading, already landed.
+  const seen = db.prepare("SELECT 1 FROM wo_events WHERE wo_id=? AND line_key=? AND action='status' AND actor_name=? AND client_at=?").get(doc.id, line.key, who, stamp);
+  if (seen) return { ok: true, replayed: true };
+
+  const rates = getEffectiveRates(who);
+  // Unassigned work is still work: it is saved, logged and shown, but its money waits for an admin.
+  const pending = woWorkIsPending(doc.id, { userId: actorId, name: who, day });
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_lines SET status=?, steps_done=?, status_by_id=?, status_by=?, status_at=datetime('now','localtime'), owner_id=COALESCE(owner_id,?), owner_name=COALESCE(owner_name,?) WHERE wo_id=? AND line_key=?")
+      .run(status, to, actorId, who, actorId, who, doc.id, line.key);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, from_status, to_status, actor_id, actor_name, note, meta, client_at) VALUES (?,?,'status',?,?,?,?,?,?,?)")
+      .run(doc.id, line.key, prev.status || "incomplete", status, actorId, who, String(note || "").slice(0, 2000) || null, JSON.stringify({ assigned: !pending }), stamp);
+    // Decision B — each NEWLY crossed step credits the person who crossed it. Rewinding a line removes
+    // the credits for the steps that were undone, so pay never outruns the work.
+    if (to > from) {
+      const ins = db.prepare("INSERT INTO wo_line_credits (wo_id, line_key, user_id, name, share, amount, set_by, pending) VALUES (?,?,?,?,?,?,?,?)");
+      // `line.total` (qty × payout), NOT `line.payout` (the per-unit figure). A six-camera line pays
+      // its whole total across its steps; crediting the unit figure would pay a sixth of the work.
+      // `pending` holds the money when the person doing the work is not on this job's crew.
+      for (const c of creditsForAdvance(line.kind, from, to, line.total, rates)) {
+        ins.run(doc.id, line.key, actorId, who, 0, c.amount, who, pending ? 1 : 0);
+      }
+    } else if (to < from) {
+      db.prepare("DELETE FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NULL").run(doc.id, line.key);
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not save that." }; }
+  return { ok: true, status, stepsDone: to };
+}
+
+// Requirement 21 — replay a device's queue, oldest first, each op idempotent. One op failing does not
+// abandon the rest: the result says what landed and what didn't, so the phone can keep what it must
+// retry and drop what it must not.
+export function applyWoFieldQueue(accessId, ops, { actorId = null, actorName = null } = {}) {
+  const out = [];
+  for (const raw of sortQueue(ops || []).slice(0, 500)) {
+    const { op, error } = normalizeOp(raw);
+    if (error) { out.push({ key: opKey(raw), error }); continue; }
+    const r = op.action === "checkin"
+      ? woCheckIn(accessId, { userId: actorId, name: actorName })
+      : setWoLineStatus(accessId, { lineKey: op.lineKey, status: op.status, pickStep: op.pickStep, note: op.note, actorId, actorName, clientAt: op.clientAt });
+    out.push({ key: opKey(op), ...(r.error ? { error: r.error } : { ok: true, replayed: !!r.replayed }) });
+  }
+  return { ok: true, results: out };
+}
+
+export function woEventsFor(woId, limit = 300) {
+  return db.prepare("SELECT * FROM wo_events WHERE wo_id=? ORDER BY at DESC, id DESC LIMIT ?").all(woId, limit).map((r) => ({ ...r }));
+}
+export function woCreditsFor(woId, { lineKey = null, unlockedOnly = false } = {}) {
+  let sql = "SELECT * FROM wo_line_credits WHERE wo_id=?";
+  const args = [woId];
+  if (lineKey) { sql += " AND line_key=?"; args.push(lineKey); }
+  if (unlockedOnly) sql += " AND day_log_id IS NULL";
+  return db.prepare(sql + " ORDER BY set_at").all(...args).map((r) => ({ ...r }));
 }
 
 // A technician must never receive a payout figure when the office has hidden them (requirement 7), and

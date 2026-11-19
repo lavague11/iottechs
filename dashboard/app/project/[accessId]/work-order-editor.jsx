@@ -12,6 +12,9 @@ import ProposalItemsEditor from "./proposal-items-editor";
 import MicButton from "../../components/mic-button";
 import { can } from "../../../lib/roles";
 import WorkOrderFooter from "./work-order-footer";
+import WorkOrderField from "./work-order-field";
+import WorkOrderCrew from "./work-order-crew";
+import { WFD_CSS } from "./work-order-field-css";
 import {
   getWorkOrderAction, createWorkOrderDocAction, saveWorkOrderDraftAction,
   setWorkOrderNotesAction, setWorkOrderPayoutVisibilityAction, reseedWorkOrderPayoutsAction,
@@ -189,7 +192,7 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
   }
 
   if (doc === undefined) return <div className="woe"><style>{WOE_CSS}</style><div className="woe-empty">Loading…</div></div>;
-  const css = <style>{PROP_CSS + WOE_CSS}</style>;
+  const css = <style>{PROP_CSS + WOE_CSS + WFD_CSS}</style>;
 
   // Not created yet. One button, and the reason it may not be available — the work order is copied from
   // the version the customer received, so there is nothing to copy before the proposal is sent.
@@ -325,6 +328,19 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
           <span>Payout total</span>
           <span>{money(doc.total)}</span>
         </div>
+      )}
+
+      {/* Stage 3 — the field half. It appears once the work order has been sent, because before that
+          there is no agreed scope to work from. Everyone who can mark a line sees it; the office sees
+          it too, so an admin can correct a line or close a day for a technician. */}
+      {(doc.version || 0) > 0 && can(role, "wo.line.status") && (
+        <>
+          {/* Who is on site, and the prompt when someone arrived who isn't on the crew. The office
+              decides; the technician only ever sees their own banner inside the field view. */}
+          <WorkOrderCrew accessId={accessId} doc={doc} canDecide={canAssign} onDoc={(d) => setDoc(d)} />
+          <WorkOrderField accessId={accessId} doc={doc} role={role} showMoney={showMoney}
+            canAct={!preview} onDoc={(d) => setDoc(d)} />
+        </>
       )}
 
       <WorkOrderFooter

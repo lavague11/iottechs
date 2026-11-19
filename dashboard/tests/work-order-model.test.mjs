@@ -189,7 +189,9 @@ test("every work-order action gates on a capability, never a role string", () =>
   for (const name of exported) {
     const body = woActions.slice(woActions.indexOf(`export async function ${name}`));
     const head = body.slice(0, body.indexOf("\n}"));
-    assert.match(head, /await gate\(accessId, "(wo|payroll)\./, `${name} runs the gate`);
+    // Every action gates on a capability. Most are `wo.*`; deciding an unassigned check-in changes the
+    // CREW, so it gates on `assignment.edit` — the same capability the assign control itself uses.
+    assert.match(head, /await gate\(accessId, "(wo|payroll|assignment)\./, `${name} runs the gate`);
   }
   assert.ok(/if \(!can\(tok\.role, cap\)\) return/.test(woActions), "the gate ends in a capability check");
   assert.ok(!/tok\.role === "admin"/.test(woActions), "no hand-rolled role comparison");
