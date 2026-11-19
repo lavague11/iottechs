@@ -1,4 +1,5 @@
 import { publishedSlugs, SITE_ORIGIN } from "../lib/seo";
+import { CONTENT_PAGES } from "../lib/seo/content";
 import { listPublishedSops } from "../lib/db";
 
 // XML sitemap — the home page plus every PUBLISHED SEO page. Auto-updates as pages go live, so there's
@@ -39,6 +40,18 @@ export default function sitemap() {
       priority: 0.8,
     }));
   } catch { /* DB not ready during build — ship at least the home entry */ }
+  // Code-driven service / location / hub pages (lib/seo/content.js). They deploy with the repo, so the
+  // build stamp is their last-modified. Skipped where a PUBLISHED seo_pages row owns the same slug —
+  // the route serves the DB row there, and one URL must appear once.
+  const dbSlugs = new Set(pages.map((p) => p.url));
+  const content = CONTENT_PAGES
+    .map((p) => ({
+      url: `${SITE_ORIGIN}/${p.slug}`,
+      lastModified: BUILT,
+      changeFrequency: "monthly",
+      priority: p.page_type === "hub" ? 0.8 : 0.9,
+    }))
+    .filter((p) => !dbSlugs.has(p.url));
   // Published PUBLIC guides (/guides/<slug>). Real, indexable content that was missing from the sitemap
   // entirely. Internal guides are excluded — they 404 for anyone who isn't signed-in staff.
   let guides = [];
@@ -47,5 +60,5 @@ export default function sitemap() {
       .filter((s) => s.slug)
       .map((s) => ({ url: `${SITE_ORIGIN}/guides/${s.slug}`, lastModified: w3cDate(s.published_at), changeFrequency: "monthly", priority: 0.6 }));
   } catch { /* DB not ready during build */ }
-  return [home, ...statics, ...pages, ...guides];
+  return [home, ...statics, ...content, ...pages, ...guides];
 }

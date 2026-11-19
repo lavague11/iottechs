@@ -279,7 +279,9 @@
 
   /* FOOTER */
   footer{background:var(--ink);color:#9aa0b0;padding:56px 0 26px}
-  .foot-grid{display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr;gap:48px;padding-bottom:34px;border-bottom:1px solid rgba(255,255,255,.08)}
+  /* Five columns since the Service Area column was added (the location pages need a link from the
+     home page, not just from the /locations hub). Collapses to one column on mobile below. */
+  .foot-grid{display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr 1fr;gap:32px;padding-bottom:34px;border-bottom:1px solid rgba(255,255,255,.08)}
   footer .brand .name{color:#fff}
   footer .f-about{margin-top:15px;font-size:.9rem;line-height:1.6;max-width:290px}
   footer h5{color:#fff;font-size:.74rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;margin-bottom:15px}
@@ -709,15 +711,30 @@
       </div>
       <div>
         <h5>Services</h5>
+        <!-- These were all on-page anchors to #services. Each service that now has a real page links
+             to it, which is how those pages get their inbound links from the home page. The three
+             without a page yet (ADT Monitoring, AI Camera Development, LPR) still anchor to the
+             section. -->
         <ul>
-          <li><a href="#services">Security Cameras</a></li>
-          <li><a href="#services">Commercial Audio</a></li>
-          <li><a href="#services">Networking &amp; Cat6</a></li>
-          <li><a href="#services">Toast / POS Cabling</a></li>
-          <li><a href="#services">Access Control</a></li>
+          <li><a href="/commercial-security-camera-installation">Security Cameras</a></li>
+          <li><a href="/commercial-sound-systems">Commercial Audio</a></li>
+          <li><a href="/commercial-networking-wifi">Networking &amp; Cat6</a></li>
+          <li><a href="/restaurant-technology-installation">Toast / POS Cabling</a></li>
+          <li><a href="/commercial-access-control">Access Control</a></li>
+          <li><a href="/commercial-alarm-systems">Alarm Systems</a></li>
           <li><a href="#services">ADT Monitoring</a></li>
           <li><a href="#services">AI Camera Development</a></li>
           <li><a href="#services">LPR &amp; Automation</a></li>
+          <li><a href="/services">All services</a></li>
+        </ul>
+      </div>
+      <div>
+        <h5>Service Area</h5>
+        <ul>
+          <li><a href="/security-camera-installation-union-nj">Union, NJ</a></li>
+          <li><a href="/security-camera-installation-queens-ny">Queens, NY</a></li>
+          <li><a href="/security-camera-installation-brooklyn-ny">Brooklyn, NY</a></li>
+          <li><a href="/locations">All areas</a></li>
         </ul>
       </div>
       <div>
@@ -727,7 +744,7 @@
           <li><a href="mailto:support@iot-techs.com">support@iot-techs.com</a></li>
           <!-- Apex, not www: www 301s to the apex, so linking it spent a redirect hop for nothing. -->
           <li><a href="https://iot-techs.com">iot-techs.com</a></li>
-          <li>NY / NJ Metro Area</li>
+          <li><a href="/locations">NY / NJ Metro Area</a></li>
         </ul>
       </div>
       <div>

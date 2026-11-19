@@ -286,13 +286,8 @@ unindexed URL — is boilerplate that cannot rank for anything.
 
 Ordered by expected return.
 
-1. **Location pages — the highest-value item.** One genuinely unique page each for Union NJ,
-   Queens, Brooklyn and the wider NJ/NYC area: real local detail, jobs done in that area, the
-   boroughs/townships covered, local schema. Thin duplicated "we serve X" pages actively hurt;
-   these have to be real. This is what makes "security camera installation union nj" possible at
-   all.
-2. **Service pages.** Access control, alarms, networking, commercial audio, Toast/POS — each sold
-   today with no page. Currently the home page is the only service content on the site.
+1. ~~**Location pages**~~ and 2. ~~**Service pages**~~ — **APPROVED AND SHIPPED 2026-11-19.**
+   See §9 below. Items 3-6 are still open.
 3. **Per-vertical builder landing pages** so `/build/audio`, `/build/toast` and `/build/adt` get
    their own title, description, H1 and self-canonical instead of inheriting the camera page's.
    Requires a route change.
@@ -333,3 +328,101 @@ memberships are paid but give a genuine local `.org` link and real referrals.
 The guides library is the natural asset here — local news and trade press will link to a
 practical "how to position cameras on a commercial property" piece far sooner than to a services
 page.
+
+---
+
+## 9. Service & location pages — shipped 2026-11-19
+
+Items 1 and 2 of §7, approved by the owner and built. **Eleven new pages.**
+
+### What went live
+
+| URL | Type | Targets |
+|---|---|---|
+| `/services` | hub | commercial security installation services nj nyc |
+| `/locations` | hub + service area | commercial security installer nj nyc service area |
+| `/commercial-security-camera-installation` | service | commercial security camera installation |
+| `/restaurant-technology-installation` | service | restaurant toast pos installation |
+| `/commercial-access-control` | service | commercial access control installation |
+| `/commercial-alarm-systems` | service | commercial alarm system installation |
+| `/commercial-networking-wifi` | service | commercial network cabling wifi installation |
+| `/commercial-sound-systems` | service | commercial sound system installation |
+| `/security-camera-installation-union-nj` | location | security camera installation union nj |
+| `/security-camera-installation-queens-ny` | location | security camera installation queens ny |
+| `/security-camera-installation-brooklyn-ny` | location | security camera installation brooklyn ny |
+
+450–800 words each, every primary keyword unique (no cannibalization).
+
+### Three decisions worth knowing about
+
+**1. The content is in CODE, not in `seo_pages`.** The SEO engine stores pages in the app
+database, which is per-environment — production's `seo_pages` is empty, and a page authored in
+`/dev/seo` on a laptop would never reach the live site. So these pages are
+`lib/seo/content/*.js`: they deploy with the repo, are reviewable in a diff, and are covered by
+tests. The engine is **not** replaced — `app/[...seoSlug]/page.jsx` asks the database first, so a
+published `seo_pages` row at the same slug still wins and can supersede a code page without a
+deploy. The slugs deliberately match the engine's seeded `PLAN_PAGES`, so each topic is one URL
+rather than two competing ones.
+
+**2. "Rest of NJ/NYC" is `/locations`, not a fourth city page.** A thin fourth page would have
+competed with the three deep ones for the same queries. Instead `/locations` is a real
+service-area page naming the actual counties and towns — Bergen, Hudson, Essex, Union, Passaic,
+Middlesex, all five boroughs, Westchester, Nassau and Suffolk — and doubles as the hub.
+
+**3. Security camera installation was added to the approved list of five.** It is the #1 money
+page (priority 95 in the engine's own plan), `/build` is a calculator rather than a page that can
+rank, and every location page needs a camera service page to link to. Six service pages, not five.
+
+### Claim discipline
+
+Everything on these pages is either a capability the fact store records as verified AND cleared
+for public use, or general trade practice. Deliberately **absent**, because nothing verifies
+them: install counts, "1500+ locations", Port Authority, NYPD, client names, licence numbers,
+prices, warranty length, response times, "licensed and insured", "free". The alarm and camera
+pages state the self-monitored model plainly — *IOT TECHS does not run a central station* —
+because `company.monitoring` says so and silence would be a monitored-service claim by omission.
+
+NAP is never a literal: pages write `{{phone}}` / `{{phoneDigits}}` / `{{email}}` and the renderer
+substitutes from `publicFacts()`. A test fails if any phone number is typed into a content file,
+which is what keeps the old Zelle payment number from reappearing as the published line.
+
+**The street address is not rendered on any of these pages** (per your instruction). The *town*
+is — Little Ferry — because it matches the Google Business Profile and carries local relevance.
+
+### Internal linking
+
+The home-page footer's eight "Services" links were all on-page `#services` anchors. Six now point
+at real pages, and a fifth footer column links the three location pages plus `/locations`. Every
+new page is one click from the home page; a test asserts none is an orphan, that every internal
+link resolves, and that both hubs link to everything.
+
+### Defects fixed along the way
+
+- **`/#contact` was a dead CTA.** The old catch-all renderer's "Request a Site Survey" button and
+  the `cta` block default both pointed at `/#contact` — an anchor that does not exist, because the
+  home page's enquiry form is a JS modal. Every click silently dumped the visitor at the top of
+  the home page. Now each page carries its own CTA to the matching quote builder, plus tap-to-call.
+- **The brand was plain text** in the SEO page header; it now renders `logo.svg`.
+- **JSON-LD was unescaped** against `</script>` injection on this route.
+- On a phone the header leads with the **phone number**, not the quote button — tap-to-call is the
+  conversion that matters on a handset.
+
+### Schema
+
+Location pages now emit `Service` scoped to their own `areaServed` (Queens gets "Queens, NY", not
+the company-wide four-region area), alongside `Organization`, `LocalBusiness`, `BreadcrumbList`
+and `FAQPage`. Verified live on the rendered page, not just in source.
+
+### One contradiction for you to resolve
+
+The **home page hero still says "monitored 24/7/365" and "Licensed & Insured"**. The fact store
+marks both as unverified — `company.licensing` is empty and `company.monitoring` explicitly says
+IOT TECHS does not run a central station — so the new pages avoid both. That leaves the site
+saying two different things on two pages. Either the home page copy should change, or those facts
+should be verified and recorded in `/dev/seo` → Facts. Your call; I have not touched the home
+page's claims.
+
+### Tests
+
+`tests/seo-content.test.mjs`, 25 tests. The two that matter most: location pages may not share a
+paragraph (the doorway-page guard), and no page may contain an unverified claim.

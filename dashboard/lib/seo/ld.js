@@ -58,9 +58,13 @@ export function faqLd(faqs = []) {
 }
 
 // Service — for a money page describing a service we provide.
+// A LOCATION page carries its own `areas` (e.g. ["Queens, NY", "New York City"]); that is the whole
+// point of the page, so it overrides the company-wide service area. Without this a Queens page would
+// claim the same four-state-wide areaServed as every other page and say nothing locally specific.
 export function serviceLd(page = {}, facts = {}) {
   if (!page.title) return null;
-  const area = areaServed(facts);
+  const own = (page.areas || []).filter(Boolean).map((name) => ({ "@type": "AdministrativeArea", name }));
+  const area = own.length ? own : areaServed(facts);
   return clean({
     "@context": "https://schema.org", "@type": "Service",
     name: page.primary_topic || page.title,
@@ -78,7 +82,8 @@ export function pageLdGraph(page, facts, { breadcrumbs = [], faqs = [] } = {}) {
   const org = organizationLd(facts); if (org) graph.push(org);
   const lb = localBusinessLd(facts); if (lb) graph.push(lb);
   const bc = breadcrumbLd(breadcrumbs); if (bc) graph.push(bc);
-  if (page?.page_type === "service") { const s = serviceLd(page, facts); if (s) graph.push(s); }
+  // A location page IS a service page with a narrower areaServed, so it earns Service schema too.
+  if (page?.page_type === "service" || page?.page_type === "location") { const s = serviceLd(page, facts); if (s) graph.push(s); }
   const faq = faqLd(faqs); if (faq) graph.push(faq);
   return graph;
 }
