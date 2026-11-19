@@ -180,6 +180,10 @@ test("no public page or schema publishes the street address", () => {
     const src = read(f).replace(/<!--[\s\S]*?-->/g, " ").replace(/^\s*\/\/.*$/gm, " ");
     assert.ok(!/120 Industrial/.test(src), `${f} publishes the street address`);
     assert.ok(!/"streetAddress"/.test(src), `${f} emits a streetAddress field`);
+    // Coordinates at seven decimal places pinpoint the building, so publishing them would put the
+    // same information back in machine-readable form.
+    assert.ok(!/GeoCoordinates/.test(src), `${f} emits GeoCoordinates`);
+    assert.ok(!/40\.846|-?74\.032/.test(src), `${f} publishes the premises' coordinates`);
   }
 
   // The locality-level address IS still there — removing it entirely would cost local relevance.
@@ -188,6 +192,7 @@ test("no public page or schema publishes the street address", () => {
   assert.match(home, /"addressRegion":"NJ"/);
   assert.match(home, /"postalCode":"07643"/);
   assert.match(home, /"areaServed":/, "areaServed is what describes where we actually work");
+  assert.ok(!/"geo":/.test(home), "no geo block — locality and areaServed carry the local signal");
 
   // And the fact store itself withholds it, so nothing can reintroduce it from the canonical source.
   const schema = read("lib/seo/schema.js");

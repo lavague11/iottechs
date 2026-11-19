@@ -573,8 +573,8 @@ surface carrying it (`120 Industrial Ave #4`); the service and location pages ne
 
 ### Published as a service-area business
 
-`streetAddress` is gone. **`addressLocality` / `addressRegion` / `postalCode` / `addressCountry`
-stay**, and so do `geo`, `sameAs` and `areaServed`.
+`streetAddress` **and `geo` are both gone**. **`addressLocality` / `addressRegion` / `postalCode` /
+`addressCountry` stay**, and so do `sameAs` and `areaServed`.
 
 Dropping the whole address block would have thrown away the locality signal Google matches against
 the Business Profile — the corroboration between site and listing is the thing that makes local
@@ -592,15 +592,19 @@ reverting them on the next boot.
 
 ### Two things to be clear about
 
-1. **`geo` was deliberately kept.** It resolves to the premises, but it is a machine signal rather
-   than a displayed address and it is a real local-ranking input. One line to remove if wanted.
+1. **`geo` was removed as well** (owner's decision, same day). `GeoCoordinates` at seven decimal
+   places pinpoint the building, so keeping them while dropping `streetAddress` would have published
+   the same information in machine-readable form. Locality, postcode and `areaServed` still give
+   Google the local signal; precise coordinates were never required for it.
 2. **The full address remains public on the Google Business Profile.** This changes what the *site*
    publishes, not what is discoverable. If the goal is that the address not be findable at all, that
    is a GBP change (switching the listing to a service-area business and hiding the address), not a
    code change — and hiding it there has its own ranking consequences.
 
-Verified: the JSON-LD still parses and the graph contains no `streetAddress`. Guard in
+Verified: the JSON-LD still parses and the graph contains no `streetAddress`, no `geo` and no
+coordinates — the remaining `LocalBusiness` fields are name, image, url, telephone, email,
+description, address (locality level), openingHoursSpecification, sameAs and areaServed. Guard in
 `tests/public-seo-meta.test.mjs` scans every public file and every content module for
-`120 Industrial` or a `streetAddress` field, asserts the locality survives, and asserts the one-time
-correction cannot clobber an owner edit. The two tests that encoded the old policy were updated
+`120 Industrial`, a `streetAddress` field, `GeoCoordinates` or the premises' latitude/longitude,
+asserts the locality survives, and asserts the one-time correction cannot clobber an owner edit. The two tests that encoded the old policy were updated
 rather than deleted.
