@@ -289,12 +289,14 @@ Ordered by expected return.
 1. ~~**Location pages**~~ and 2. ~~**Service pages**~~ — **APPROVED AND SHIPPED 2026-11-19.**
    See §9 below.
 3. ~~**Per-vertical builder landing pages**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §10.
-   Items 4-6 are still open.
 4. ~~**The street address in LocalBusiness schema**~~ — **DECIDED AND SHIPPED 2026-11-19.** See §12.
 5. ~~**Font loading / render-blocking**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §11.
-6. **The SEO engine is built but empty.** `/dev/seo` and the `seo_pages` table exist with a
-   publish gate and quality threshold; **zero pages are published**, which is why the sitemap
-   carries only hand-built routes. Items 1 and 2 above are exactly what it was built to produce.
+6. **The SEO engine is still empty — the one item left.** `/dev/seo` and the `seo_pages` table
+   exist with a publish gate and quality threshold, and **zero pages are published**. Items 1-2 did
+   NOT go through it, deliberately: `seo_pages` is per-environment, so a page authored there on a
+   laptop never reaches production (see §9). The engine's remaining value is AI-drafted pages that
+   an editor reviews and publishes *in production* — it is not needed for anything shipped above,
+   and it stays blocked on the four owner facts in the Phase B list either way.
 
 ---
 
