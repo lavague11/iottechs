@@ -496,10 +496,12 @@ service page (`/commercial-sound-systems` → `/build/audio`, `/restaurant-techn
 
 ### One for you
 
-**`/build/pos` is not linked from `/systems`.** It has a complete, working spec, but the picker lists
-only cameras, ADT, audio and Toast. I gave it correct metadata and a self-canonical but left it out of
-the sitemap, matching that choice. If POS is ready, add it to the picker and I'll add it to the
-sitemap; if it isn't, it is harmless where it is.
+**`/build/pos` is dormant and now noindexed.** It has a complete, working spec, but it was
+deliberately swapped out of the picker because Toast covers restaurant POS. Left indexable it would
+have competed with `/build/toast` for the same query, so it serves `robots: noindex,follow` and stays
+out of the sitemap while continuing to work for anyone holding the link. If you ever want POS back,
+add it to `/systems` and flip `listed: true` in `lib/bys-verticals.js` — the sitemap and the noindex
+both follow from that one flag.
 
 ### Tests
 

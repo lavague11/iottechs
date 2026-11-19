@@ -18,9 +18,11 @@ export const SITE_ORIGIN = "https://iot-techs.com";
 
 // `h1` is taken verbatim from each spec's brand.title in public/widgets/bys/<id>-spec.js, so the
 // heading matches what the top bar actually renders. A test asserts they stay in sync.
-// `listed` = linked from /systems and carried in the sitemap. POS has a working spec but is not linked
-// from the picker (owner's choice — cameras shipped first, POS is still being finished), so it serves
-// correctly with its own canonical but is not promoted.
+// `listed` = linked from /systems and carried in the sitemap. POS is DORMANT: it has a complete spec
+// and still works at /build/pos, but it was deliberately swapped out of the picker because Toast
+// covers restaurant POS (see the bys-white-label notes). An unlisted vertical is served with
+// robots noindex, so a retired builder can never compete with the one that replaced it — "POS System
+// Builder" and "Toast POS System Builder" would otherwise be two pages chasing one query.
 export const BYS_VERTICALS = [
   {
     id: "cameras",
@@ -104,6 +106,9 @@ export function applyVerticalSeo(html, vertical) {
   if (SHELL_MARKERS.canonical.test(out)) {
     applied.canonical = true;
     const og = [
+      // A dormant vertical stays reachable and usable, but out of the index so it cannot compete
+      // with the builder that replaced it. "follow" so its outbound links still carry.
+      ...(v.listed ? [] : [`<meta name="robots" content="noindex,follow">`]),
       `<meta property="og:type" content="website">`,
       `<meta property="og:url" content="${esc(canonical)}">`,
       `<meta property="og:title" content="${esc(v.title)}">`,

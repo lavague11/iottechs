@@ -89,6 +89,19 @@ test("applying a vertical rewrites the head and injects the heading", () => {
   }
 });
 
+test("a dormant vertical is noindexed so it cannot compete with the one that replaced it", () => {
+  // /build/pos still works, but Toast took its place in the picker. Two pages titled "POS System
+  // Builder" and "Toast POS System Builder" would otherwise chase the same query.
+  const pos = applyVerticalSeo(SHELL, getVertical("pos")).html;
+  assert.ok(pos.includes('<meta name="robots" content="noindex,follow">'), "the dormant vertical is noindexed");
+  for (const v of listedVerticals()) {
+    const html = applyVerticalSeo(SHELL, v).html;
+    assert.ok(!html.includes('name="robots"'), `${v.id} is listed and must NOT be noindexed`);
+  }
+  // A noindexed URL in the sitemap is a Search Console error, so it must stay out of both.
+  assert.ok(!listedVerticals().some((v) => v.id === "pos"));
+});
+
 test("a non-camera vertical keeps none of the camera metadata", () => {
   const adt = applyVerticalSeo(SHELL, getVertical("adt")).html;
   assert.ok(!adt.includes('href="https://iot-techs.com/build"'), "the canonical no longer points at /build");
