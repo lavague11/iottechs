@@ -61,8 +61,14 @@ export const WFD_CSS = `
 .wcl-done{padding:8px 11px;border-radius:8px;background:#e9f3ed;border:1px solid #cfe6d8;color:var(--dv-green,#2E7D5B);font-size:.78rem;font-weight:600}
 @media (max-width:600px){
   .wcl-row{flex-direction:column;align-items:stretch}
+  /* In a column flex these would GROW to fill the box, leaving a tall gap above the buttons. */
+  .wcl-t,.wcl-closed span,.woc2-ask-t{flex:0 0 auto}
   .wcl-cta,.wcl-ghost{width:100%}
   .wcl-log{grid-template-columns:1fr auto;row-gap:2px}
+  .wcl-closed{flex-direction:column;align-items:stretch}
+  .woc2-ask{flex-direction:column;align-items:stretch}
+  .woc2-ask-b{margin-left:0}
+  .woc2-no,.woc2-rej,.woc2-yes{flex:1 1 0}
 }
 .wfd-err{margin-bottom:10px;padding:8px 11px;border-radius:8px;background:#fbe9e6;border:1px solid #e3b4ab;color:var(--dv-red,#C4553D);font-size:.78rem;font-weight:600}
 

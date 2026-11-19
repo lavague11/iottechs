@@ -8,6 +8,7 @@
 // the mark is taken. The PIN is handed straight to the action, checked against that account, and
 // never stored — not here, not in the row, not in the log.
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
 // `serverError` is the refusal that came back from the action — a wrong PIN, a scope that moved under
 // them. It belongs HERE, next to the button they pressed, not at the top of a page they have scrolled
@@ -55,7 +56,10 @@ export default function SignPad({
     onConfirm({ name: name.trim(), ...(requirePin ? { pin } : null), signatureData: drawn.current ? padRef.current.toDataURL("image/png") : null });
   }
 
-  return (
+  // Portalled to <body>. The portal's own z-index is useless inside the project page's overlay, which
+  // is its own stacking context at a LOWER layer than the floating assistant dock — so the sheet's
+  // footer (Cancel / Sign) ended up underneath the orb on a phone. At the top level it wins.
+  const sheet = (
     <div className="wof-ov" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel?.(); }}>
       <div className="wof-modal sign" role="dialog" aria-modal="true" aria-label={heading}>
         <div className="wof-mh">
@@ -89,4 +93,5 @@ export default function SignPad({
       </div>
     </div>
   );
+  return typeof document === "undefined" ? sheet : createPortal(sheet, document.body);
 }

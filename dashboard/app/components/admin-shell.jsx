@@ -931,6 +931,11 @@ const CSS = `
 .apx .notif-badge{position:absolute;top:-3px;right:-3px;min-width:17px;height:17px;border-radius:50%;background:var(--red);color:#fff;font-size:.62rem;font-weight:700;display:grid;place-items:center;border:2px solid var(--bg-soft)}
 .apx .notif-panel{position:absolute;right:0;top:calc(100% + 10px);width:310px;background:#fff;border:1px solid var(--line);border-radius:16px;box-shadow:0 24px 50px -18px rgba(14,19,32,.3);padding:6px;opacity:0;visibility:hidden;transform:translateY(-6px);transition:.18s;z-index:80}
 .apx .notif-wrap.open .notif-panel{opacity:1;visibility:visible;transform:translateY(0)}
+/* On a phone a fixed 310px panel anchored to the bell hangs off the left edge, so the first word of
+   every notification is cut in half. Pin it to the viewport instead, with a gutter each side. */
+@media (max-width:600px){
+  .apx .notif-panel{position:fixed;right:12px;left:12px;width:auto;top:64px;max-height:70vh;overflow-y:auto}
+}
 .apx .np-head{font-weight:700;font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:10px 12px 8px}
 .apx .np-item{display:flex;align-items:flex-start;gap:11px;padding:11px 12px;border-radius:10px;cursor:pointer;transition:.15s}
 .apx .np-item:hover{background:var(--bg-soft)}

@@ -269,6 +269,10 @@ test("the Portal V2 customer sees the sign-off card — and still nothing else o
   assert.ok(portalLib.includes('signoff: ctx.woSignoff?.signed ? "signed" : "awaiting"'), "the card's state");
   assert.ok(/PORTAL_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib) && /OVERLAY_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib), "and it is a real, deep-linkable overlay");
   assert.ok(portal.includes('signoff:    { title: "Sign Off"'), "card copy");
+  // The state arrives client-side, so a ?view=signoff link (or a refresh with the overlay open) must
+  // not be stripped before the answer lands. Caught live 2026-11-19.
+  assert.ok(portal.includes('const settling = requestedView === "signoff" && ctx.woSignoff === null;'), "a deep link waits for the state");
+  assert.ok(/if \(requestedView && !activeView && !settling\)/.test(portal), "and is not stripped while it waits");
   // The portal is handed the six-field read, never the work order.
   assert.ok(gateway.includes("const refreshWoSignoff = () =>") && gateway.includes("getWorkOrderSignoffAction(project.access_id)"), "the narrow read feeds it");
   assert.ok(/woSignoff,\s*\n\s*\};/.test(gateway), "and that is what portalCtx carries");
@@ -389,4 +393,12 @@ test("one signature pad serves both parties", () => {
   assert.ok(!/function SignSheet/.test(footer), "the duplicate pad is gone");
   assert.ok(pad.includes("requirePin") && pad.includes("...(requirePin ? { pin } : null)"), "the PIN step is the technician's half only");
   assert.ok(!/localStorage|pin_custom/.test(pad), "the pad never stores a PIN");
+  // Both overlays portal to <body>. Inside the project page's own overlay they are a nested stacking
+  // context BELOW the floating assistant dock, which covered their footers on a phone — a signature
+  // you cannot press Sign on. Caught on the iPhone pass, 2026-11-19.
+  const fieldSrc = read("../app/project/[accessId]/work-order-field.jsx");
+  for (const [name, src] of [["the signature pad", pad], ["the line popup", fieldSrc]]) {
+    assert.ok(src.includes('import { createPortal } from "react-dom"'), `${name} imports createPortal`);
+    assert.ok(/return typeof document === "undefined" \? \w+ : createPortal\(\w+, document\.body\);/.test(src), `${name} renders into <body>`);
+  }
 });

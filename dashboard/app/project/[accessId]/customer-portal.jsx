@@ -83,7 +83,12 @@ export default function CustomerPortal({
   // The URL selects a view; it NEVER overrides availability. A ?view the project can't meaningfully show
   // (payment with nothing due, survey with no survey, completion before eligibility, phone — a link not an
   // overlay) is treated as closed, and the effect below returns the customer to the portal home.
-  const activeView = requestedView && overlayAvailable(requestedView, ctx, finance) ? requestedView : null;
+  // The sign-off state is fetched client-side (its own narrow, capability-gated read), so on the very
+  // first render ctx.woSignoff is still null. Without this, a direct ?view=signoff link — or simply
+  // refreshing with the overlay open — would be judged "unavailable" and stripped before the answer
+  // arrived, bouncing the customer back to the card list.
+  const settling = requestedView === "signoff" && ctx.woSignoff === null;
+  const activeView = requestedView && !settling && overlayAvailable(requestedView, ctx, finance) ? requestedView : null;
 
   // Preserve every other query param (session/preview token, etc.) — only the overlay keys change, so a
   // refresh inside an overlay stays authorized and deep links keep working.
@@ -106,13 +111,13 @@ export default function CustomerPortal({
   // A direct link to an unavailable/unknown/non-overlay view (incl. ?view=phone) → strip it and land on the
   // portal home. Never a blank overlay. Runs only when a view was requested but resolved unavailable.
   useEffect(() => {
-    if (requestedView && !activeView) {
+    if (requestedView && !activeView && !settling) {
       const sp = new URLSearchParams(params.toString());
       ["view", "open", "sign"].forEach((k) => sp.delete(k));
       const qs = sp.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname);
     }
-  }, [requestedView, activeView, params, pathname, router]);
+  }, [requestedView, activeView, settling, params, pathname, router]);
   // Lock body scroll under an overlay.
   const scrollRef = useRef(0);
   useEffect(() => {

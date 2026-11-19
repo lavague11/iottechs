@@ -173,7 +173,9 @@ const CSS = `
 .pr-total b{color:var(--dv-gold,#C9A96E);font-size:1.25rem;font-variant-numeric:tabular-nums}
 .pr-techs{display:flex;flex-direction:column;gap:9px}
 .pr-tech{border:1px solid var(--dv-line,#E4E4DF);border-radius:12px;background:#fff;overflow:hidden}
-.pr-tech-hd{width:100%;display:grid;grid-template-columns:32px 1fr auto auto 16px;gap:11px;align-items:center;padding:13px 15px;border:0;background:none;font:inherit;text-align:left;cursor:pointer}
+/* Six children — avatar, name, meta, Paid/Unpaid, amount, chevron — so six columns. With five the
+   amount wrapped into the chevron's cell and was clipped at the right edge. */
+.pr-tech-hd{width:100%;display:grid;grid-template-columns:32px 1fr auto auto auto 16px;gap:11px;align-items:center;padding:13px 15px;border:0;background:none;font:inherit;text-align:left;cursor:pointer}
 .pr-tech-hd:hover{background:var(--dv-raise,#FBFBFA)}
 .pr-av{width:32px;height:32px;border-radius:50%;background:var(--dv-ink,#101418);color:#fff;display:grid;place-items:center;font-size:.82rem;font-weight:700}
 .pr-nm{font-size:.94rem;font-weight:700;color:var(--dv-ink,#101418);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -212,8 +214,13 @@ const CSS = `
 .pr-confirm{height:34px;padding:0 15px;border:0;border-radius:8px;background:var(--dv-green,#2E7D5B);color:#fff;font:700 .8rem/1 inherit;cursor:pointer}
 .pr-confirm:disabled,.pr-pay:disabled{opacity:.5;cursor:default}
 @media (max-width:600px){
+  /* Two rows on a phone: name + state on top, meta + amount beneath. Every child is placed, because
+     auto-placement dropped the amount into column 1 on top of the meta line. */
   .pr-tech-hd{grid-template-columns:30px 1fr auto;row-gap:2px}
+  .pr-nm{grid-column:2/3;grid-row:1}
+  .pr-state{grid-column:3/4;grid-row:1}
   .pr-meta{grid-column:2/3;grid-row:2}
+  .pr-amt{grid-column:3/4;grid-row:2;justify-self:end}
   .pr-chev{display:none}
   .pr-day{grid-template-columns:1fr auto}
   .pr-ln{display:none}

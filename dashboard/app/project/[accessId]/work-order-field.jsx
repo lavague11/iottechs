@@ -7,6 +7,7 @@
 // Owner's decision A (2026-11-19): the three-state popup keeps the install checklist's STEP path inside
 // it. Complete fills the path; Incomplete can still say how far the crew got, so partial work pays.
 import { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import MicButton from "../../components/mic-button";
 import { LINE_STATUS, lineStatusGate, lineSteps } from "../../../lib/work-order-field";
 import { checkInAction, setLineStatusAction, addLinePhotoAction, syncFieldQueueAction } from "./work-order-actions";
@@ -185,7 +186,9 @@ function LinePopup({ line, checkedInToday, busy, onClose, onMark, onPhoto }) {
   // The SAME gate the server runs, so a disabled button and a refused save always agree.
   const gate = lineStatusGate({ status, checkedInToday, line, photos, note });
 
-  return (
+  // Portalled to <body> for the same reason as the signature sheet: inside the project page's overlay
+  // this is a nested stacking context below the floating assistant dock, which would cover Save.
+  const pop = (
     <div className="wfd-ov" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="wfd-pop" role="dialog" aria-modal="true" aria-label={line.name}>
         <div className="wfd-ph">
@@ -245,4 +248,5 @@ function LinePopup({ line, checkedInToday, busy, onClose, onMark, onPhoto }) {
       </div>
     </div>
   );
+  return typeof document === "undefined" ? pop : createPortal(pop, document.body);
 }
