@@ -124,6 +124,12 @@ export function viewAvailability(ctx = {}, finance = null) {
     // one awaiting their signature, or an already-signed one they may re-read. `addendumCount`
     // excludes add-ons still awaiting office pricing, so they never see an unpriced one.
     addendum:   !!ctx.addendumAwaiting || (+ctx.addendumCount || 0) > 0,
+    // The work order's sign-off (docs/WORK_ORDERS.md req. 24). Available the moment every line of the
+    // work is complete — it follows the WORK, not the project stage, so a customer is asked while the
+    // crew is still packing up. It stays available after they sign so they can see that they did.
+    // The card and its overlay carry only that fact and the pad: never the scope, payouts, crew or
+    // daily logs, which is why the portal is handed `woSignoff`, not the work order.
+    signoff:    !!(ctx.woSignoff?.allDone || ctx.woSignoff?.signed),
   };
 }
 
@@ -135,22 +141,25 @@ export function viewAvailability(ctx = {}, finance = null) {
 // is no longer its own card.
 // B13: the change order sits after Installation — it is raised when something on site differs from the
 // proposal, so that is where the customer expects to find it.
-const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "closeout", "completion"];
+// `signoff` sits immediately after Installation: the work is done, and the next thing asked of the
+// customer is to say so. It precedes closeout, which is the project's own walkthrough.
+const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "signoff", "closeout", "completion"];
 export function portalCards(ctx = {}, finance = null) {
   const avail = viewAvailability(ctx, finance);
   const pState = proposalCardState(ctx);
   const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
   const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available",
-    addendum: ctx.addendumAwaiting ? "awaiting" : "signed" };
+    addendum: ctx.addendumAwaiting ? "awaiting" : "signed",
+    signoff: ctx.woSignoff?.signed ? "signed" : "awaiting" };
   return CARD_ORDER.filter((k) => avail[k]).map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
 }
 
 // The overlay keys the portal understands (URL ?view=<key>). Used to validate an incoming ?view / legacy
 // ?open mapping so a hand-typed value can't open something unexpected. `phone` is a link-out (a guide), not
 // an in-portal overlay, so it is deliberately absent from OVERLAY_VIEWS below.
-export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone", "addendum"]);
+export const PORTAL_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "phone", "addendum", "signoff"]);
 // The views that render as an in-portal overlay (phone is excluded — it navigates to a support guide).
-export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "addendum"]);
+export const OVERLAY_VIEWS = Object.freeze(["proposal", "survey", "mockup", "payment", "closeout", "completion", "install", "addendum", "signoff"]);
 // Is `view` both a renderable overlay AND currently available? One check for direct-URL + card clicks.
 export function overlayAvailable(view, ctx = {}, finance = null) {
   return OVERLAY_VIEWS.includes(view) && !!viewAvailability(ctx, finance)[view];

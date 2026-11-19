@@ -351,7 +351,7 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
 
       <WorkOrderFooter
         doc={doc} canEdit={canEdit} canSend={canSend} canSign={canSign} canVoid={canVoidSig}
-        showMoney={showMoney} busy={busy} signerName={currentUser?.name || currentUser?.email || ""}
+        showMoney={showMoney} busy={busy} signerName={currentUser?.name || currentUser?.email || ""} signError={err}
         onSend={send} onCancelRevision={cancelRevision} onSign={sign} onVoidSignature={voidSig}
       />
     </div>

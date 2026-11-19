@@ -39,6 +39,7 @@ export const WFD_CSS = `
 .wcl-t{flex:1 1 220px;min-width:0;font-size:.84rem;color:var(--dv-ink,#101418)}
 .wcl-t b{font-weight:700}
 .wcl-wait{font-size:.8rem;color:var(--dv-meta,#787D84)}
+.wcl-when{font-style:normal;font-size:.76rem;color:var(--dv-meta,#787D84)}
 .wcl-cta{height:40px;padding:0 18px;border:0;border-radius:9px;background:var(--dv-ink,#101418);color:#fff;font:700 .84rem/1 inherit;cursor:pointer;white-space:nowrap}
 .wcl-cta.sign{background:var(--dv-green,#2E7D5B)}
 .wcl-cta:disabled{opacity:.5;cursor:default}

@@ -348,6 +348,16 @@ function init() {
     )
   `);
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_project ON wo(project_access_id)");
+  // The customer's sign-off is a REQUEST, not a gate: it is asked for when the work finishes, chased
+  // once a day later, and the office can close the job without it. These stamps are what the ask, the
+  // chase and the "awaiting" state read from — all three must be idempotent, so each is a timestamp
+  // rather than a counter.
+  {
+    const woCols = db.prepare("PRAGMA table_info(wo)").all().map((c) => c.name);
+    if (!woCols.includes("signoff_requested_at")) db.exec("ALTER TABLE wo ADD COLUMN signoff_requested_at TEXT");
+    if (!woCols.includes("signoff_requested_by")) db.exec("ALTER TABLE wo ADD COLUMN signoff_requested_by TEXT");
+    if (!woCols.includes("signoff_reminded_at"))  db.exec("ALTER TABLE wo ADD COLUMN signoff_reminded_at TEXT");
+  }
 
   // Immutable sent versions. A row here is what a technician signed; nothing ever updates its payload.
   db.exec(`
@@ -458,6 +468,9 @@ function init() {
     if (!ciCols.includes("decided_by")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_by TEXT");
     if (!ciCols.includes("decided_at")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_at TEXT");
     if (!ciCols.includes("device"))     db.exec("ALTER TABLE wo_checkins ADD COLUMN device TEXT");
+    // The end-of-day nudge is tied to THIS arrival, 12 hours after it, once. Stamping the check-in row
+    // is what makes "one reminder per check-in, no repeats" true by construction.
+    if (!ciCols.includes("eod_reminded_at")) db.exec("ALTER TABLE wo_checkins ADD COLUMN eod_reminded_at TEXT");
   }
 
   // Append-only action trail: who did what, to which line, when. `client_at` is the device clock, kept
@@ -510,9 +523,23 @@ function init() {
       note            TEXT,
       locked_at       TEXT DEFAULT (datetime('now','localtime')),
       locked_by       TEXT,
+      paid_at         TEXT,
+      paid_by         TEXT,
+      paid_method     TEXT,
+      paid_note       TEXT,
+      pay_batch       TEXT,
       UNIQUE(wo_id, user_id, day)
     )
   `);
+  // PAID is the second, final lock. A locked day is frozen money; a PAID day is money that has left the
+  // business, so nothing may touch it again — not a reassign, not a split, not a second payment.
+  // `pay_batch` groups the days paid together so a period can be shown and audited as one act.
+  {
+    const dlCols = db.prepare("PRAGMA table_info(wo_day_logs)").all().map((c) => c.name);
+    for (const [c, t] of [["paid_at", "TEXT"], ["paid_by", "TEXT"], ["paid_method", "TEXT"], ["paid_note", "TEXT"], ["pay_batch", "TEXT"]]) {
+      if (!dlCols.includes(c)) db.exec(`ALTER TABLE wo_day_logs ADD COLUMN ${c} ${t}`);
+    }
+  }
 
   // Who is paid for a line, and in what share. `share` sums to 1 across a line's credits; `amount` is
   // the dollar figure at lock time, so a later payout edit never silently restates a paid day.
@@ -2323,8 +2350,29 @@ export function findInternalUserByPin(entered) {
 }
 
 // An internal user's effective project PIN: their custom PIN if set, else last-4-of-phone.
+// CAREFUL: this needs a row that actually CARRIES pin_custom. getUserById / getUserByEmail project a
+// safe column list that deliberately leaves the PIN out, so passing one of those rows here silently
+// falls through to the phone digits — which would ignore an office-set PIN and accept the phone
+// instead. To CHECK someone's PIN, use userPinMatches below; it reads the column itself.
 export function userEffectivePin(user) {
   return user?.pin_custom ? String(user.pin_custom).trim() : phonePin(user?.phone);
+}
+// Does `entered` match this staff member's own effective PIN? The PIN is read, compared and discarded
+// here — it is never returned, so no caller can hold it, log it or send it anywhere. A disabled
+// account, an account with no PIN at all, or anything that isn't 4 digits is a plain `false`.
+export function userPinMatches(userId, entered) {
+  const pin = String(entered || "").replace(/\D/g, "");
+  if (pin.length !== 4 || userId == null) return false;
+  const u = db.prepare("SELECT pin_custom, phone, disabled FROM users WHERE id = ?").get(Number(userId));
+  if (!u || u.disabled) return false;
+  const expected = userEffectivePin(u);
+  return !!expected && String(expected) === pin;
+}
+// Whether they have one at all — so the UI can say "ask the office to set one" instead of "wrong PIN".
+export function userHasPin(userId) {
+  if (userId == null) return false;
+  const u = db.prepare("SELECT pin_custom, phone FROM users WHERE id = ?").get(Number(userId));
+  return !!(u && userEffectivePin(u));
 }
 
 // The primary admin account (lowest id) — who the master admin PIN logs in AS, so that override
@@ -8936,6 +8984,11 @@ export function getWorkOrderDoc(accessId, { actorId = null, actorName = null } =
     // Spread, always: a node:sqlite row has a NULL PROTOTYPE, and React refuses to pass one from a
     // server component to a client one ("Classes or null prototypes are not supported"). Every other
     // read here does `{ ...r }` for the same reason.
+    // The sign-off ask: when it went out, when it was chased. Drives "Awaiting customer sign-off"
+    // and the office's Resend.
+    signoffRequestedAt: row.signoff_requested_at || null,
+    signoffRequestedBy: row.signoff_requested_by || null,
+    signoffRemindedAt: row.signoff_reminded_at || null,
     customerSignature: (() => {
       const s = db.prepare("SELECT * FROM wo_signatures WHERE wo_id=? AND party='customer' AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1").get(row.id);
       return s ? { ...s } : null;
@@ -9408,8 +9461,8 @@ export function woDayLogsFor(woId) {
   return db.prepare("SELECT * FROM wo_day_logs WHERE wo_id=? ORDER BY day DESC, name").all(woId).map((r) => ({ ...r }));
 }
 
-// Requirement 23's data half: everyone who checked in on `day` and has not closed it. Cross-project,
-// because the 8 PM sweep runs once for the whole company, not once per job.
+// Everyone who checked in on `day` and has not closed it. Used by the office's "hasn't ended their
+// day" prompt on the work order.
 export function woUnclosedDays(day = null) {
   const d = day || localDay();
   return db.prepare(`
@@ -9420,26 +9473,58 @@ export function woUnclosedDays(day = null) {
       AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
   `).all(d).map((r) => ({ ...r }));
 }
-// Claim-once, so the 8 PM reminder fires exactly one time per person per day however often the
-// hourly sweep runs.
-//
-// It does NOT lean on wo_events' UNIQUE constraint, and that is deliberate: SQLite treats NULLs as
-// DISTINCT in a unique index, so two rows whose `line_key` is NULL never collide and an INSERT OR
-// IGNORE would happily insert the same reminder every hour. (The line-level events are safe — they
-// always carry a line_key.) An explicit check inside a transaction is correct here because node:sqlite
-// is synchronous and the sweep runs in one process, so no second reader can slip between the two
-// statements.
-export function claimWoDayReminder(woId, name, day) {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const seen = db.prepare("SELECT 1 FROM wo_events WHERE wo_id=? AND action='eod_reminder' AND actor_name=? COLLATE NOCASE AND client_at=?")
-      .get(woId, String(name), String(day));
-    if (seen) { db.exec("COMMIT"); return false; }
-    db.prepare("INSERT INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
-      .run(woId, null, "eod_reminder", String(name), day, day);
-    db.exec("COMMIT");
-    return true;
-  } catch (e) { db.exec("ROLLBACK"); return false; }
+
+// The end-of-day nudge is tied to the ARRIVAL, not to a clock: a check-in older than `hours` whose day
+// is still open and which has not already been reminded. A crew starting at 7am is nudged at 7pm; one
+// starting at 2pm at 2am — which is why the office is told too, and can close it for them.
+export function woCheckinsNeedingEodReminder(hours = 12, now = new Date()) {
+  const cutoff = new Date(now.getTime() - hours * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  return db.prepare(`
+    SELECT c.id, c.wo_id, c.user_id, c.name, c.day, c.in_at,
+           w.project_access_id, p.company_name, p.customer, u.phone
+    FROM wo_checkins c
+    JOIN wo w ON w.id = c.wo_id
+    LEFT JOIN projects p ON p.access_id = w.project_access_id
+    LEFT JOIN users u ON u.id = c.user_id
+    WHERE c.eod_reminded_at IS NULL
+      AND c.in_at <= ?
+      AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
+  `).all(cutoff).map((r) => ({ ...r }));
+}
+// Claim-once per check-in. The stamp is taken BEFORE the send, inside a conditional UPDATE, so two
+// overlapping sweeps cannot both win: whichever updates the row first is the only one that sends.
+export function stampWoCheckinReminded(checkinId) {
+  return db.prepare("UPDATE wo_checkins SET eod_reminded_at=datetime('now','localtime') WHERE id=? AND eod_reminded_at IS NULL").run(checkinId).changes > 0;
+}
+
+// The customer was asked to sign off more than `hours` ago, hasn't, hasn't been chased, and the job is
+// still open. One chase per work order.
+export function woNeedingSignoffReminder(hours = 24, now = new Date()) {
+  const cutoff = new Date(now.getTime() - hours * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  return db.prepare(`
+    SELECT w.id, w.project_access_id
+    FROM wo w
+    WHERE w.signoff_requested_at IS NOT NULL
+      AND w.signoff_requested_at <= ?
+      AND w.signoff_reminded_at IS NULL
+      AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_signatures s WHERE s.wo_id = w.id AND s.party='customer' AND s.voided_at IS NULL)
+  `).all(cutoff).map((r) => ({ ...r }));
+}
+export function stampWoSignoffReminded(woId) {
+  return db.prepare("UPDATE wo SET signoff_reminded_at=datetime('now','localtime') WHERE id=? AND signoff_reminded_at IS NULL").run(woId).changes > 0;
+}
+// Record that the ask went out. `again` is the office pressing Resend, which clears the chase stamp so
+// the 24-hour clock starts over rather than the customer being chased twice for one ask.
+export function markWoSignoffRequested(accessId, byName = null, { again = false } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET signoff_requested_at=datetime('now','localtime'), signoff_requested_by=?, signoff_reminded_at=NULL WHERE id=?")
+    .run(byName || null, row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+    .run(row.id, again ? "signoff_resent" : "signoff_requested", byName, null, new Date().toISOString());
+  return { ok: true, first: !row.signoff_requested_at };
 }
 
 // Requirement 26 — the admin's override on top of the step credits: give a line to someone else, or
@@ -9450,6 +9535,9 @@ export function reassignWoLineCredit(accessId, lineKey, splits, byName = null) {
   if (!doc) return { error: "No work order yet." };
   const line = doc.lines.find((l) => l.key === String(lineKey));
   if (!line) return { error: "That line isn't on this work order." };
+  // Paid money is gone. Even the unlocked remainder of a line is left alone once any of it has been
+  // paid out, because re-cutting the shares would no longer add up to what was actually handed over.
+  if (woLinePaid(doc.id, line.key)) return { error: "This line has already been paid — it can't be reassigned." };
   const list = (splits || []).filter((s) => s && String(s.name || "").trim());
   if (!list.length) return { error: "Name at least one person." };
   const sum = list.reduce((s, x) => s + (+x.share || 0), 0);
@@ -9509,15 +9597,35 @@ export function signWorkOrderCustomer(accessId, { name, signatureData = null, de
 export function woCanAutoClose(doc) {
   return !!doc && doc.status !== "closed" && !!doc.progress?.allDone && !!doc.customerSignature;
 }
+// Closing WITHOUT the customer's signature is allowed — sign-off is a request, not a gate — but the
+// evidence has to be there instead. Every line that demands photos must have its AFTER shot: that is
+// the proof the work was finished, and it is what stands in for the signature if one never comes.
+// Returns the names of the lines that are missing one.
+export function woMissingAfterPhotos(doc) {
+  if (!doc) return [];
+  return doc.lines
+    .filter((l) => l.needsPhotos && !(l.photos || []).some((p) => p.slot === "after"))
+    .map((l) => l.name);
+}
 export function closeWorkOrder(accessId, byName = null, { auto = false } = {}) {
   const doc = getWorkOrderDoc(accessId);
   if (!doc) return { error: "No work order yet." };
   if (doc.status === "closed") return { ok: true, closed: true, already: true };
   if (auto && !woCanAutoClose(doc)) return { ok: true, closed: false };
+  const signed = !!doc.customerSignature;
+  if (!auto && !signed) {
+    const missing = woMissingAfterPhotos(doc);
+    if (missing.length) {
+      return { error: `No customer signature, so every line needs its after photo. Missing: ${missing.slice(0, 4).join(", ")}${missing.length > 4 ? `, +${missing.length - 4} more` : ""}.` };
+    }
+  }
+  // The log says exactly how this job ended, because "closed" alone cannot be audited later.
+  const how = auto ? "auto · customer signed" : signed ? `Closed by ${byName || "office"} — customer signed` : `Closed by ${byName || "office"} — no customer signature`;
   db.prepare("UPDATE wo SET status='closed', closed_at=datetime('now','localtime'), closed_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName, doc.id);
-  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
-    .run(doc.id, "closed", byName, auto ? "auto" : "manual", new Date().toISOString());
-  return { ok: true, closed: true };
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+    .run(doc.id, "closed", byName, how, JSON.stringify({ auto, signed }), new Date().toISOString());
+  try { logProjectEvent(accessId, { kind: auto ? "done" : "override", label: how.slice(0, 300), actor: byName || "System" }); } catch { /* the work order log already has it */ }
+  return { ok: true, closed: true, signed };
 }
 export function reopenWorkOrder(accessId, byName = null) {
   const row = woRow(accessId);
@@ -9537,6 +9645,7 @@ export function payrollForPeriod({ from, to } = {}) {
   const a = String(from || "0000-01-01"), b = String(to || "9999-12-31");
   const rows = db.prepare(`
     SELECT l.id, l.day, l.name, l.user_id, l.lines_completed, l.payout_total, l.locked_at, l.locked_by, l.note,
+           l.paid_at, l.paid_by, l.paid_method, l.paid_note, l.pay_batch,
            w.project_access_id, p.company_name, p.customer
     FROM wo_day_logs l
     JOIN wo w ON w.id = l.wo_id
@@ -9547,15 +9656,71 @@ export function payrollForPeriod({ from, to } = {}) {
   const byTech = new Map();
   for (const r of rows) {
     const k = r.user_id != null ? `u${r.user_id}` : `n${String(r.name).toLowerCase()}`;
-    const t = byTech.get(k) || { userId: r.user_id ?? null, name: r.name, days: 0, lines: 0, total: 0, logs: [] };
+    const t = byTech.get(k) || { userId: r.user_id ?? null, name: r.name, days: 0, lines: 0, total: 0, paid: 0, unpaid: 0, batches: new Set(), logs: [] };
     t.days += 1; t.lines += r.lines_completed || 0;
-    t.total = Math.round((t.total + (+r.payout_total || 0)) * 100) / 100;
+    const amt = +r.payout_total || 0;
+    t.total = Math.round((t.total + amt) * 100) / 100;
+    if (r.paid_at) { t.paid = Math.round((t.paid + amt) * 100) / 100; if (r.pay_batch) t.batches.add(r.pay_batch); }
+    else t.unpaid = Math.round((t.unpaid + amt) * 100) / 100;
     t.logs.push(r);
     byTech.set(k, t);
   }
-  const techs = [...byTech.values()].sort((x, y) => y.total - x.total);
-  return { from: a, to: b, techs, total: Math.round(techs.reduce((s, t) => s + t.total, 0) * 100) / 100, logs: rows };
+  // `state` is what the period reads as for this person: every day paid, none, or a mix (a day closed
+  // after the last payment run). Sets don't serialize to a client component, so batches go out as an array.
+  const techs = [...byTech.values()].map((t) => ({
+    ...t,
+    batches: [...t.batches],
+    state: t.unpaid <= 0.004 ? "paid" : t.paid > 0.004 ? "part" : "unpaid",
+  })).sort((x, y) => y.total - x.total);
+  return {
+    from: a, to: b, techs, logs: rows,
+    total: Math.round(techs.reduce((s, t) => s + t.total, 0) * 100) / 100,
+    unpaid: Math.round(techs.reduce((s, t) => s + t.unpaid, 0) * 100) / 100,
+  };
 }
+// ---- Mark as paid -----------------------------------------------------------------------------
+// The second and final lock. A LOCKED day is frozen money; a PAID day is money that has left the
+// business. Nothing may touch it again — not a reassign, not a split, not a second payment — and the
+// payment itself is one auditable act with a date, a method and a batch id.
+export function payrollMarkPaid({ userId = null, name, from, to, method = null, note = null, byName = null } = {}) {
+  const who = String(name || "").trim();
+  if (!who) return { error: "Whose pay is this?" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ""))) return { error: "Bad period." };
+  const where = userId != null ? "l.user_id = ?" : "l.name = ? COLLATE NOCASE";
+  const arg = userId != null ? userId : who;
+  const rows = db.prepare(`SELECT l.id, l.payout_total, l.paid_at FROM wo_day_logs l WHERE ${where} AND l.day BETWEEN ? AND ?`).all(arg, from, to);
+  if (!rows.length) return { error: "No closed days in that period." };
+  const unpaid = rows.filter((r) => !r.paid_at);
+  if (!unpaid.length) return { error: "That period is already paid." };
+  const batch = `pay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const total = Math.round(unpaid.reduce((s, r) => s + (+r.payout_total || 0), 0) * 100) / 100;
+  db.exec("BEGIN");
+  try {
+    // `paid_at IS NULL` in the UPDATE is the guard: a day already paid can never be paid a second time,
+    // even if two people press the button at once.
+    const mark = db.prepare("UPDATE wo_day_logs SET paid_at=datetime('now','localtime'), paid_by=?, paid_method=?, paid_note=?, pay_batch=? WHERE id=? AND paid_at IS NULL");
+    let n = 0;
+    for (const r of unpaid) n += mark.run(byName || null, method || null, note || null, batch, r.id).changes;
+    db.exec("COMMIT");
+    return { ok: true, batch, days: n, total };
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record that payment." }; }
+}
+// Undo a payment batch — a mistake, not a refund. Only the whole batch, and only while it is the
+// batch that was made: a day paid in a different batch is untouched.
+export function payrollUnmarkPaid(batch, byName = null) {
+  const b = String(batch || "");
+  if (!b) return { error: "Which payment?" };
+  const r = db.prepare("UPDATE wo_day_logs SET paid_at=NULL, paid_by=NULL, paid_method=NULL, paid_note=NULL, pay_batch=NULL WHERE pay_batch=?").run(b);
+  return r.changes ? { ok: true, days: r.changes } : { error: "That payment is already undone." };
+}
+// Is any of this line's money already paid out? Used to refuse a reassign or a split.
+export function woLinePaid(woId, lineKey) {
+  return !!db.prepare(`
+    SELECT 1 FROM wo_line_credits c JOIN wo_day_logs l ON l.id = c.day_log_id
+    WHERE c.wo_id=? AND c.line_key=? AND l.paid_at IS NOT NULL
+  `).get(woId, String(lineKey));
+}
+
 // Money earned but NOT yet in payroll, so the office can see what is still open: unlocked credits,
 // split into payable and the pending ones waiting on an unassigned-technician decision.
 export function woUnlockedTotals(woId, name = null) {

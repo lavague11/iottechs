@@ -9,7 +9,7 @@
 //   • Sign-off and close — once every line is complete the customer signs, which closes the work
 //     order. The office can also close it by hand, because a job can end without a signature.
 import { useState } from "react";
-import { endDayAction, signWorkOrderCustomerAction, closeWorkOrderAction } from "./work-order-actions";
+import { endDayAction, signWorkOrderCustomerAction, closeWorkOrderAction, requestSignoffAction } from "./work-order-actions";
 import SignPad from "./work-order-signpad";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -53,6 +53,12 @@ export default function WorkOrderCloseout({ accessId, doc, role, showMoney, canS
   const sign = (s) => run(() => signWorkOrderCustomerAction(accessId, s), () => setSignOpen(false));
   const close = () => run(() => closeWorkOrderAction(accessId, false), () => setAskClose(false));
   const reopen = () => run(() => closeWorkOrderAction(accessId, true));
+  // Resend the ask. The reply says which channels actually carried it — a dormant key must never read
+  // as a sent text.
+  const resend = () => run(() => requestSignoffAction(accessId, { again: true }), (r) => {
+    const went = [r.sent?.email && "email", r.sent?.sms && "text"].filter(Boolean);
+    setDone(went.length ? `Sign-off request sent by ${went.join(" and ")}.` : "Sign-off request posted to their portal — email and text aren't switched on.");
+  });
 
   if (!doc.version) return null;
 
@@ -61,16 +67,19 @@ export default function WorkOrderCloseout({ accessId, doc, role, showMoney, canS
       {err && <div className="wcl-err">{err}</div>}
       {done && <div className="wcl-done">{done}</div>}
 
-      {/* The technician's own End of day. Only while they are on site with work not yet banked. */}
-      {doc.myDayOpen && !closed && (
+      {/* The technician's own End of day. It stays available after the job is CLOSED: closing the work
+          order does not bank anybody's day, and hiding this would strand their pay as credits that
+          never reach payroll. (closeWoDay has no status check for the same reason.) */}
+      {doc.myDayOpen && (
         <div className="wcl-row">
           <span className="wcl-t">Your work today isn't banked yet.{showMoney && mine.payable > 0 ? ` ${money(mine.payable)} ready.` : ""}</span>
           <button type="button" className="wcl-cta" disabled={busy} onClick={endMyDay}>End of day</button>
         </div>
       )}
 
-      {/* Requirement 23 — the office can close a day for someone who has gone home. */}
-      {canClose && !closed && openDays.filter((c) => !doc.myDayOpen || String(c.name).toLowerCase() !== String(doc.myCheckin?.name || "").toLowerCase()).map((c) => (
+      {/* Requirement 23 — the office can close a day for someone who has gone home. Also survives the
+          job closing, for the same reason: unbanked pay must always have a way to reach payroll. */}
+      {canClose && openDays.filter((c) => !doc.myDayOpen || String(c.name).toLowerCase() !== String(doc.myCheckin?.name || "").toLowerCase()).map((c) => (
         <div key={c.id} className="wcl-row quiet">
           <span className="wcl-t"><b>{c.name}</b> hasn't ended their day ({dayText(c.day)}).</span>
           <button type="button" className="wcl-ghost" disabled={busy} onClick={() => endFor(c)}>End it for them</button>
@@ -105,11 +114,16 @@ export default function WorkOrderCloseout({ accessId, doc, role, showMoney, canS
         <div className="wcl-row"><span className="wcl-t">Signed off by <b>{doc.customerSignature.name}</b>.</span></div>
       ) : allDone ? (
         <div className="wcl-row done">
-          <span className="wcl-t">Every line is complete.</span>
-          <span className="wcl-wait">Awaiting the customer's sign-off.</span>
+          <span className="wcl-t">
+            Awaiting customer sign-off.
+            {doc.signoffRequestedAt && <i className="wcl-when"> Asked {dayText(doc.signoffRequestedAt)}{doc.signoffRemindedAt ? ` · chased ${dayText(doc.signoffRemindedAt)}` : ""}</i>}
+          </span>
+          {canClose && <button type="button" className="wcl-ghost" disabled={busy} onClick={resend}>{doc.signoffRequestedAt ? "Resend" : "Ask"}</button>}
           {canSignoff && <button type="button" className="wcl-cta sign" disabled={busy} onClick={() => setSignOpen(true)}>Sign off</button>}
           {canClose && (askClose ? (
-            <span className="wcl-confirm">Close without a signature?
+            // Closing unsigned is allowed, but the after photos stand in for the signature — the server
+            // refuses and names the lines that are missing one.
+            <span className="wcl-confirm">Close without their signature?
               <button type="button" className="wcl-keep" onClick={() => setAskClose(false)}>Keep open</button>
               <button type="button" className="wcl-danger" disabled={busy} onClick={close}>Close</button>
             </span>
@@ -123,6 +137,7 @@ export default function WorkOrderCloseout({ accessId, doc, role, showMoney, canS
           subheading="Confirming the work on this order is complete."
           agree="I confirm the work described has been completed to my satisfaction."
           busy={busy}
+          serverError={err}
           onCancel={() => setSignOpen(false)}
           onConfirm={sign}
         />

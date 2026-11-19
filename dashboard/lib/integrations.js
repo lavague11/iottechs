@@ -50,6 +50,13 @@ export const INTEGRATIONS = [
     clientExposed: false,
   },
   {
+    key: "TWILIO_SMS_FROM",
+    name: "Twilio SMS From Number",
+    powers: "The number outbound texts are sent FROM (e.g. a work order sign-off link). Verify codes don't need it; plain messages do. E.164, like +15551234567.",
+    docs: "https://console.twilio.com/us1/develop/phone-numbers/manage/incoming",
+    clientExposed: false,
+  },
+  {
     key: "TELNYX_API_KEY",
     name: "Telnyx API Key",
     powers: "Alternative SMS 2FA provider (Telnyx Verify) — cheaper per message",

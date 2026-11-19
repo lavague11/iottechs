@@ -10,14 +10,16 @@ import {
   getWorkOrderDoc, createWorkOrderDoc, saveWorkOrderDraft, setWorkOrderNotesDoc,
   setWorkOrderShowPayouts, reseedWorkOrderPayouts, sanitizeWorkOrderDoc,
   sendWorkOrderVersion, cancelWorkOrderRevision, signWorkOrder, voidWorkOrderSignature,
-  syncWorkOrderFromProposal, getUserById, userEffectivePin,
+  syncWorkOrderFromProposal, getUserById, userPinMatches, userHasPin,
   woCheckIn, setWoLineStatus, addWoLineMedia, removeWoLineMedia, applyWoFieldQueue,
   woEventsFor, woRow, notifyRoles, woIsAssigned, woDecideCheckin,
   getProjectAssignments, addProjectAssignment,
   closeWoDay, reassignWoLineCredit, signWorkOrderCustomer, closeWorkOrder, reopenWorkOrder,
+  markWoSignoffRequested,
   getEffectiveRates, actorName,
 } from "../../../lib/db";
 import { can } from "../../../lib/roles";
+import { sendSignoffRequest } from "../../../lib/wo-notify";
 
 // Same resolution as proposal-actions.js: a staff session cookie first (with a fresh DB role so a role
 // change takes effect without re-login), then a project-scoped PIN grant.
@@ -164,10 +166,12 @@ export async function signWorkOrderAction(accessId, { name, signatureData = null
   if (g.error) return g;
   const me = g.tok.id != null ? getUserById(g.tok.id) : null;
   if (!me) return { error: "Sign in with your own account to sign a work order." };
-  const expected = userEffectivePin(me);
-  const entered = String(pin || "").replace(/\D/g, "");
-  if (!expected) return { error: "Your account has no PIN yet — ask the office to set one." };
-  if (entered.length !== 4 || entered !== String(expected)) return { error: "That PIN doesn't match your account." };
+  // The comparison happens in the data layer: userPinMatches reads the PIN column, compares and
+  // discards it. It is never fetched up here, so it cannot be held, logged or returned by mistake.
+  // (getUserById's row deliberately has no pin_custom — using it here would quietly accept the
+  // technician's phone digits instead of the PIN the office set.)
+  if (!userHasPin(me.id)) return { error: "Your account has no PIN yet — ask the office to set one." };
+  if (!userPinMatches(me.id, pin)) return { error: "That PIN doesn't match your account." };
 
   const hdrs = await headers();
   const { parseUserAgent } = await import("../../../lib/device");
@@ -269,6 +273,14 @@ export async function setLineStatusAction(accessId, { lineKey, status, pickStep 
   if (anon) return { error: anon };
   const r = setWoLineStatus(accessId, { lineKey, status, pickStep, note, clientAt, ...who(g.tok) });
   if (r.error) return r;
+  // The moment the LAST line goes complete, ask the customer to sign the work off — once. Sign-off is
+  // a request, not a gate, so this never blocks anything: if the ask fails to send, the job can still
+  // be closed, and the office can resend by hand.
+  const after = getWorkOrderDoc(accessId, who(g.tok));
+  if (after?.progress?.allDone && !after.signoffRequestedAt && after.status !== "closed") {
+    markWoSignoffRequested(accessId, actorName(g.tok));
+    await sendSignoffRequest(accessId).catch(() => {});
+  }
   // Requirement 18: a flagged line notifies the OFFICE only. The customer is never told a line is in
   // trouble — that is the office's call to make, with the facts in front of them.
   if (status === "attention" && !r.replayed) {
@@ -394,14 +406,33 @@ export async function getWorkOrderSignoffAction(accessId) {
 }
 
 // Requirement 25 — the office can close (or reopen) a work order by hand. A job can end without a
-// customer signature; that is the office's call, and it is logged either way.
+// customer signature; that is the office's call. Closing unsigned requires the after photos instead
+// (closeWorkOrder enforces it), and the log records exactly which of the two happened.
 export async function closeWorkOrderAction(accessId, open = false) {
   const g = await gate(accessId, "wo.close");
   if (g.error) return g;
   const r = open ? reopenWorkOrder(accessId, actorName(g.tok)) : closeWorkOrder(accessId, actorName(g.tok));
   if (r.error) return r;
   await revalidate(accessId);
-  return { ok: true, doc: freshDoc(accessId, g.tok) };
+  return { ok: true, signed: !!r.signed, doc: freshDoc(accessId, g.tok) };
+}
+
+// Ask the customer to sign off — or ask again. The office presses this; the first ask is automatic
+// when the last line completes.
+export async function requestSignoffAction(accessId, { again = false } = {}) {
+  const g = await gate(accessId, "wo.close");
+  if (g.error) return g;
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc?.progress?.allDone) return { error: "Every line has to be complete first." };
+  if (doc.customerSignature) return { error: "They've already signed off." };
+  markWoSignoffRequested(accessId, actorName(g.tok), { again });
+  const sent = await sendSignoffRequest(accessId, { reminder: again }).catch(() => ({ ok: false }));
+  return {
+    ok: true,
+    // Say plainly which channels actually carried it — a dormant key must never look like a sent text.
+    sent: { email: !!sent?.email?.ok, sms: !!sent?.sms?.ok },
+    doc: freshDoc(accessId, g.tok),
+  };
 }
 
 // Requirement 14: pull a signed proposal revision / addendum into the work order as an UNSENT revision.

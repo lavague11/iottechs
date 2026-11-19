@@ -29,6 +29,7 @@ import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
 import WorkOrderEditor  from "./work-order-editor";
 import WorkOrderSignoff from "./work-order-signoff";
+import { getWorkOrderSignoffAction } from "./work-order-actions";
 import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -1577,6 +1578,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (r?.error) window.alert(r.error);
   }
   const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) { setCustFin(r.finance); setCustPays(r.payments || []); } }).catch(() => {}); };
+  // The work order's sign-off state, for the portal's Sign Off card. Deliberately its OWN narrow read
+  // (wo.signoff): it returns whether the work is finished and whether it has been signed, and nothing
+  // else — the customer never receives the work order's scope, payouts, crew or daily logs.
+  const [woSignoff, setWoSignoff] = useState(null);
+  const refreshWoSignoff = () => { getWorkOrderSignoffAction(project.access_id).then((r) => { if (r?.ok) setWoSignoff(r.state); }).catch(() => {}); };
+  useEffect(() => { refreshWoSignoff(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [project.access_id]);
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
@@ -3018,6 +3025,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const padOvl = { padding: "16px 18px", maxWidth: 760, margin: "0 auto" };
       const renderPortalOverlay = (key, o = {}) => {
         switch (key) {
+          // The work order's customer sign-off, on Portal V2 (docs/WORK_ORDERS.md req. 24). The same
+          // narrow component the V1 deck uses: it fetches only "is the work finished, and is it
+          // signed", and shows the pad. Scope, payouts, crew and daily logs never reach it.
+          case "signoff":
+            return (
+              <div style={padOvl}>
+                <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+                  defaultName={lp.contact_name || lp.customer || ""} />
+              </div>
+            );
           case "proposal":
             return (
               <AccordionProvider><div style={{ maxWidth: 820, margin: "0 auto" }}>
@@ -3126,6 +3143,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
         paidInFull: !!custFin?.paidInFull,
         hasAppt: !!portalAppt,
+        // Six fields, not the work order: { allDone, lines, complete, closed, signed, signedBy, signedAt }.
+        woSignoff,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
       // --- Price-lock window (Portal V2) ---------------------------------------------------------------

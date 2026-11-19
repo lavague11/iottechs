@@ -7,7 +7,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
-import { isEodWindow, EOD_HOUR } from "../lib/wo-day-reminders.js";
+// lib/wo-notify.js is NOT imported: it pulls in lib/email.js, which uses extensionless imports that
+// Next's bundler resolves and plain `node --test` does not. Its two constants are read from the source
+// instead, so a change to either still breaks this test.
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
 const db = read("../lib/db.js");
@@ -15,7 +17,15 @@ const actions = read("../app/project/[accessId]/work-order-actions.js");
 const closeout = read("../app/project/[accessId]/work-order-closeout.jsx");
 const payroll = read("../app/payroll/payroll-client.jsx");
 const payrollPage = read("../app/payroll/page.jsx");
-const reminders = read("../lib/wo-day-reminders.js");
+const reminders = read("../lib/wo-notify.js");
+const gateway = read("../app/project/[accessId]/gateway-client.jsx");
+const constOf = (name) => {
+  const m = new RegExp(`export const ${name} = (\\d+)`).exec(reminders);
+  assert.ok(m, `${name} exported`);
+  return Number(m[1]);
+};
+const EOD_AFTER_HOURS = constOf("EOD_AFTER_HOURS");
+const SIGNOFF_CHASE_HOURS = constOf("SIGNOFF_CHASE_HOURS");
 const instrumentation = read("../instrumentation.js");
 const shell = read("../app/components/admin-shell.jsx");
 
@@ -30,9 +40,20 @@ function fnBody(name) {
   const j = db.indexOf("\nexport ", i + 10);
   return db.slice(i, j < 0 ? undefined : j);
 }
+// Columns added to a table AFTER its CREATE, via db.js's ensure-column pattern. A real database has
+// them; a table built from the bare DDL does not — so they are lifted the same way the DDL is, and a
+// renamed column breaks this test instead of silently passing.
+function ensureCols(d, table) {
+  for (const m of db.matchAll(new RegExp(`ALTER TABLE ${table} ADD COLUMN (\\w+) ([A-Z ]+(?:NOT NULL DEFAULT \\S+)?)`, "g"))) {
+    try { d.exec(`ALTER TABLE ${table} ADD COLUMN ${m[1]} ${m[2].trim()}`); } catch { /* already in the DDL */ }
+  }
+  // The loop form: `for (const [c, t] of [["paid_at", "TEXT"], …]) … ALTER TABLE x ADD COLUMN ${c} ${t}`
+  const loop = new RegExp(`for \\(const \\[c, t\\] of (\\[\\[[\\s\\S]*?\\]\\])\\)[\\s\\S]{0,160}ALTER TABLE ${table} ADD COLUMN`).exec(db);
+  if (loop) for (const [c, t] of JSON.parse(loop[1])) { try { d.exec(`ALTER TABLE ${table} ADD COLUMN ${c} ${t}`); } catch {} }
+}
 function fresh() {
   const d = new DatabaseSync(":memory:");
-  for (const t of ["wo", "wo_lines", "wo_checkins", "wo_events", "wo_day_logs", "wo_line_credits", "wo_signatures"]) d.exec(ddl(t));
+  for (const t of ["wo", "wo_lines", "wo_checkins", "wo_events", "wo_day_logs", "wo_line_credits", "wo_signatures"]) { d.exec(ddl(t)); ensureCols(d, t); }
   // A stub for payroll's LEFT JOIN only — `company_name` is an ensure-column on the real table, so
   // lifting that DDL would give a projects table without it.
   d.exec("CREATE TABLE projects (access_id TEXT PRIMARY KEY, company_name TEXT, customer TEXT)");
@@ -113,43 +134,149 @@ test("requirement 26: a line can be reassigned or split, and the parts add up ex
   assert.equal(Math.round(parts.reduce((a, b) => a + b, 0) * 100) / 100, earned);
 });
 
-test("requirement 23: the 8 PM sweep finds open days, reminds once, and is hour-gated", () => {
+test("the end-of-day nudge follows the ARRIVAL, 12 hours later, once per check-in", () => {
   const { d, id } = fresh();
-  d.prepare("INSERT INTO wo_checkins (wo_id, user_id, name, day) VALUES (?,?,?,?)").run(id, 5, "Tech A", "2026-03-01");
-  d.prepare("INSERT INTO wo_checkins (wo_id, user_id, name, day) VALUES (?,?,?,?)").run(id, 6, "Tech B", "2026-03-01");
-  d.prepare("INSERT INTO wo_day_logs (wo_id, user_id, name, day, lines_completed, payout_total) VALUES (?,?,?,?,?,?)").run(id, 6, "Tech B", "2026-03-01", 1, 10);
-  // The query lifted from woUnclosedDays.
-  const open = d.prepare(`
-    SELECT c.name FROM wo_checkins c JOIN wo w ON w.id = c.wo_id
-    WHERE c.day = ? AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
-  `).all("2026-03-01");
-  assert.deepEqual(open.map((r) => r.name), ["Tech A"], "only the person who hasn't closed");
+  d.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, phone TEXT)");
+  const now = new Date("2026-03-01T20:00:00Z");
+  const ago = (h) => new Date(now.getTime() - h * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  const ci = d.prepare("INSERT INTO wo_checkins (wo_id, user_id, name, day, in_at) VALUES (?,?,?,?,?)");
+  ci.run(id, 5, "Early Tech", "2026-03-01", ago(13));   // 13h ago, day open      → due
+  ci.run(id, 6, "Recent Tech", "2026-03-01", ago(3));   // 3h ago                 → not yet
+  ci.run(id, 7, "Done Tech", "2026-03-01", ago(14));    // 14h ago but day closed → never
+  d.prepare("INSERT INTO wo_day_logs (wo_id, user_id, name, day, lines_completed, payout_total) VALUES (?,?,?,?,?,?)").run(id, 7, "Done Tech", "2026-03-01", 1, 10);
 
-  // Claim-once. It must NOT rely on wo_events' UNIQUE constraint: SQLite treats NULLs as distinct, so
-  // an INSERT OR IGNORE on a row whose line_key is NULL inserts every time. claimWoDayReminder checks
-  // first, inside a transaction — these are its statements.
-  const claim = () => {
-    const seen = d.prepare("SELECT 1 FROM wo_events WHERE wo_id=? AND action='eod_reminder' AND actor_name=? COLLATE NOCASE AND client_at=?").get(id, "Tech A", "2026-03-01");
-    if (seen) return false;
-    d.prepare("INSERT INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)").run(id, null, "eod_reminder", "Tech A", "2026-03-01", "2026-03-01");
-    return true;
-  };
-  assert.equal(claim(), true);
-  assert.equal(claim(), false, "a second sweep in the same hour reminds nobody twice");
-  // The hole itself, pinned so nobody "simplifies" the helper back to an INSERT OR IGNORE.
-  const naive = () => d.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)").run(id, null, "eod_reminder", "Tech C", "2026-03-01", "2026-03-01").changes > 0;
-  assert.equal(naive(), true);
-  assert.equal(naive(), true, "NULL line_key does NOT collide in a SQLite unique index — this is why the helper checks");
-  assert.ok(fnBody("claimWoDayReminder").includes('db.exec("BEGIN IMMEDIATE")'), "and it does the check atomically");
-  assert.ok(!/INSERT OR IGNORE/.test(fnBody("claimWoDayReminder")), "never an INSERT OR IGNORE here");
+  // woCheckinsNeedingEodReminder's query, lifted.
+  const cutoff = ago(EOD_AFTER_HOURS);
+  const due = () => d.prepare(`
+    SELECT c.id, c.name FROM wo_checkins c JOIN wo w ON w.id = c.wo_id
+    WHERE c.eod_reminded_at IS NULL AND c.in_at <= ? AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
+  `).all(cutoff);
+  assert.equal(EOD_AFTER_HOURS, 12, "12 hours after they arrived, not 8 PM");
+  assert.deepEqual(due().map((r) => r.name), ["Early Tech"], "only the one who is overdue and still open");
 
-  assert.equal(EOD_HOUR, 20);
-  assert.equal(isEodWindow(new Date("2026-03-01T20:15:00")), true);
-  assert.equal(isEodWindow(new Date("2026-03-01T19:59:00")), false);
-  assert.equal(isEodWindow(new Date("2026-03-01T21:00:00")), false);
+  // Claim-once per CHECK-IN: the stamp is a conditional UPDATE taken before the send, so two
+  // overlapping sweeps cannot both win. This is also why it no longer leans on wo_events' UNIQUE
+  // constraint, where a NULL line_key never collides.
+  const stamp = (cid) => d.prepare("UPDATE wo_checkins SET eod_reminded_at=datetime('now','localtime') WHERE id=? AND eod_reminded_at IS NULL").run(cid).changes > 0;
+  const first = due()[0].id;
+  assert.equal(stamp(first), true);
+  assert.equal(stamp(first), false, "the second sweep sends nothing");
+  assert.equal(due().length, 0, "and it drops out of the query");
+  assert.ok(fnBody("stampWoCheckinReminded").includes("AND eod_reminded_at IS NULL"), "the claim is the UPDATE itself");
   // Both the technician and the office are told; the office can close it for them.
   assert.ok(reminders.includes("createNotification({") && reminders.includes('notifyRoles(["admin", "manager"]'), "both are notified");
-  assert.ok(instrumentation.includes("sendDueDayReminders") && instrumentation.includes("60 * 60 * 1000"), "hourly, on the existing boot scheduler");
+  assert.ok(instrumentation.includes("sweepEndOfDayReminders") && instrumentation.includes("60 * 60 * 1000"), "hourly, on the existing boot scheduler");
+  assert.ok(!/8 PM|EOD_HOUR|isEodWindow/.test(instrumentation), "the fixed-hour sweep is gone");
+});
+
+test("the customer is ASKED to sign off, chased once a day later, and never blocked on", () => {
+  const { d, id } = fresh();
+  const now = new Date("2026-03-02T12:00:00Z");
+  const ago = (h) => new Date(now.getTime() - h * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  d.prepare("UPDATE wo SET signoff_requested_at=? WHERE id=?").run(ago(26), id);
+  const chase = () => d.prepare(`
+    SELECT w.id FROM wo w
+    WHERE w.signoff_requested_at IS NOT NULL AND w.signoff_requested_at <= ? AND w.signoff_reminded_at IS NULL
+      AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_signatures s WHERE s.wo_id = w.id AND s.party='customer' AND s.voided_at IS NULL)
+  `).all(ago(SIGNOFF_CHASE_HOURS));
+  assert.equal(SIGNOFF_CHASE_HOURS, 24);
+  assert.equal(chase().length, 1, "asked 26 hours ago, not signed, not chased");
+  assert.equal(d.prepare("UPDATE wo SET signoff_reminded_at=datetime('now','localtime') WHERE id=? AND signoff_reminded_at IS NULL").run(id).changes, 1);
+  assert.equal(chase().length, 0, "chased once, never again");
+  // A signature stops the chase even if the stamp was never taken.
+  d.prepare("UPDATE wo SET signoff_reminded_at=NULL WHERE id=?").run(id);
+  d.prepare("INSERT INTO wo_signatures (wo_id, version, name, party) VALUES (?,1,'Customer','customer')").run(id);
+  assert.equal(chase().length, 0, "someone who has signed is never chased");
+
+  // Resending restarts the clock rather than chasing twice for one ask.
+  const mark = fnBody("markWoSignoffRequested");
+  assert.ok(mark.includes("signoff_reminded_at=NULL"), "a resend clears the chase stamp");
+  assert.ok(mark.includes('again ? "signoff_resent" : "signoff_requested"'), "and the log says which it was");
+  // The first ask is automatic: the moment the last line completes.
+  assert.ok(/after\?\.progress\?\.allDone && !after\.signoffRequestedAt/.test(actions), "asked once, when the work finishes");
+  assert.ok(/await sendSignoffRequest\(accessId\)\.catch\(\(\) => \{\}\)/.test(actions), "and a failed send never breaks marking a line");
+});
+
+test("email and text are honest about whether they actually went", () => {
+  const sms = read("../lib/sms.js");
+  assert.ok(sms.includes("export function smsEnabled()") && sms.includes("TWILIO_SMS_FROM"), "SMS needs a from-number the vault can hold");
+  assert.ok(sms.includes('return { ok: false, reason: "not-configured" }'), "and says so when it hasn't got one");
+  assert.ok(!/throw/.test(sms.replace(/^\s*\/\/.*$/gm, "")), "a failed text never throws into the action that asked for it");
+  assert.ok(reminders.includes('out.email = { ok: false, reason: "email-not-configured" }'), "same for email");
+  // The office is told which channels carried it, so a dormant key never reads as a sent text.
+  assert.ok(actions.includes("sent: { email: !!sent?.email?.ok, sms: !!sent?.sms?.ok }"), "the action reports per channel");
+  assert.ok(closeout.includes("email and text aren't switched on"), "and the UI says so plainly");
+  // The portal notification always goes — it needs no key.
+  assert.ok(reminders.includes("createNotification({") && reminders.includes("getCustomerUserForProject"), "the in-app ask always lands");
+});
+
+test("closing WITHOUT a signature needs the after photos instead, and says so in the log", () => {
+  const body = fnBody("closeWorkOrder");
+  assert.ok(body.includes("if (!auto && !signed)"), "the check is only for an unsigned manual close");
+  assert.ok(body.includes("woMissingAfterPhotos(doc)"), "every photo-required line must have its after shot");
+  assert.ok(/No customer signature, so every line needs its after photo/.test(body), "and the refusal names them");
+  const miss = fnBody("woMissingAfterPhotos");
+  assert.ok(miss.includes("l.needsPhotos && !(l.photos || []).some((p) => p.slot === \"after\")"), "after, specifically — a before shot is not proof it was finished");
+  // The log distinguishes the three ways a job ends.
+  assert.ok(body.includes('`Closed by ${byName || "office"} — no customer signature`'), "the owner's wording");
+  assert.ok(body.includes('`Closed by ${byName || "office"} — customer signed`') && body.includes('"auto · customer signed"'), "and the other two");
+  assert.ok(body.includes("logProjectEvent(accessId,"), "it reaches the project's activity log too");
+});
+
+test("a paid period is final: no reassign, no second payment, no edit", () => {
+  const { d, id } = fresh();
+  d.prepare("INSERT INTO wo_day_logs (wo_id, user_id, name, day, lines_completed, payout_total) VALUES (?,?,?,?,?,?)").run(id, 5, "Tech A", "2026-03-01", 2, 28);
+  const logId = Number(d.prepare("SELECT id FROM wo_day_logs").get().id);
+  d.prepare("INSERT INTO wo_line_credits (wo_id, line_key, name, share, amount, day_log_id) VALUES (?,?,?,?,?,?)").run(id, "c1", "Tech A", 0, 28, logId);
+
+  // Paying is a conditional UPDATE, so a second press changes nothing.
+  const pay = () => d.prepare("UPDATE wo_day_logs SET paid_at=datetime('now','localtime'), pay_batch='b1' WHERE id=? AND paid_at IS NULL").run(logId).changes;
+  assert.equal(pay(), 1);
+  assert.equal(pay(), 0, "a day can never be paid twice");
+  assert.ok(fnBody("payrollMarkPaid").includes("AND paid_at IS NULL"), "the guard is in the UPDATE, not the UI");
+  assert.ok(fnBody("payrollMarkPaid").includes('if (!unpaid.length) return { error: "That period is already paid." }'), "and the period refuses up front");
+
+  // And the line can no longer be reassigned.
+  const paidLine = d.prepare("SELECT 1 FROM wo_line_credits c JOIN wo_day_logs l ON l.id = c.day_log_id WHERE c.wo_id=? AND c.line_key=? AND l.paid_at IS NOT NULL").get(id, "c1");
+  assert.ok(paidLine, "woLinePaid sees it");
+  assert.ok(fnBody("reassignWoLineCredit").includes("if (woLinePaid(doc.id, line.key)) return"), "a reassign refuses");
+  // Undo exists for a mistake, and only for a whole batch.
+  assert.ok(fnBody("payrollUnmarkPaid").includes("WHERE pay_batch=?"), "undo is per batch");
+});
+
+test("payroll shows Paid / Unpaid per period and records who paid, when and how", () => {
+  const body = fnBody("payrollForPeriod");
+  assert.ok(body.includes("if (r.paid_at)") && body.includes("t.unpaid"), "paid and unpaid are split per technician");
+  // …which needs those columns to actually be SELECTED. They were not, so every period read as unpaid
+  // however many had been paid. Caught live 2026-11-19.
+  assert.ok(/l\.paid_at, l\.paid_by, l\.paid_method, l\.paid_note, l\.pay_batch/.test(body), "the payment columns are in the projection");
+  assert.ok(body.includes('state: t.unpaid <= 0.004 ? "paid" : t.paid > 0.004 ? "part" : "unpaid"'), "three states — a mixed period is not 'paid'");
+  assert.ok(body.includes("batches: [...t.batches]"), "a Set never crosses to a client component");
+  assert.ok(payroll.includes("Mark {money(t.unpaid)} paid") && payroll.includes("function PayForm"), "date, method and note");
+  assert.ok(payroll.includes('rows.push([t.name, l.day, l.project, l.lines_completed, (+l.payout_total || 0).toFixed(2), l.locked_at, l.locked_by, l.paid_at || "", l.paid_method || "", l.note])'), "the export carries the payment too");
+  const payActions = read("../app/payroll/actions.js");
+  assert.ok(payActions.includes('can(tok.role, "payroll.export")'), "only an admin records a payment");
+  assert.ok(payActions.includes('recordEvent("payroll_paid"'), "and it is logged as a money event");
+});
+
+test("the Portal V2 customer sees the sign-off card — and still nothing else of the work order", () => {
+  const portalLib = read("../lib/customer-portal.js");
+  const portal = read("../app/project/[accessId]/customer-portal.jsx");
+  assert.ok(/signoff:\s+!!\(ctx\.woSignoff\?\.allDone \|\| ctx\.woSignoff\?\.signed\)/.test(portalLib), "available when the work is done, or once signed");
+  assert.ok(portalLib.includes('"addendum", "signoff", "closeout"'), "ordered after Installation, before the walkthrough");
+  assert.ok(portalLib.includes('signoff: ctx.woSignoff?.signed ? "signed" : "awaiting"'), "the card's state");
+  assert.ok(/PORTAL_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib) && /OVERLAY_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib), "and it is a real, deep-linkable overlay");
+  assert.ok(portal.includes('signoff:    { title: "Sign Off"'), "card copy");
+  // The portal is handed the six-field read, never the work order.
+  assert.ok(gateway.includes("const refreshWoSignoff = () =>") && gateway.includes("getWorkOrderSignoffAction(project.access_id)"), "the narrow read feeds it");
+  assert.ok(/woSignoff,\s*\n\s*\};/.test(gateway), "and that is what portalCtx carries");
+  assert.ok(!/portalCtx[\s\S]{0,400}(payout|dayLogs|checkins)/.test(gateway), "no work-order internals reach the portal context");
+  // Both portals mount the SAME narrow component, so V1 and V2 cannot drift.
+  const v2 = gateway.slice(gateway.indexOf("const renderPortalOverlay"), gateway.indexOf("const renderPortalOverlay") + 900);
+  assert.ok(v2.includes('case "signoff":') && v2.includes("<WorkOrderSignoff"), "V2 overlay");
+  assert.ok(gateway.includes("<WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}"), "V1 deck mount is unchanged");
 });
 
 test("the office can end a day for someone else; a technician can only end their own", () => {
@@ -179,7 +306,7 @@ test("requirement 25: auto-close needs all lines complete AND the signature; an 
   assert.ok(auto.includes('doc.status !== "closed"'), "and it is not already closed");
   const close = fnBody("closeWorkOrder");
   assert.ok(close.includes("if (auto && !woCanAutoClose(doc)) return { ok: true, closed: false }"), "an auto-close that isn't earned is a no-op, not an error");
-  assert.ok(close.includes("auto ? \"auto\" : \"manual\""), "the log says which it was");
+  assert.ok(close.includes('JSON.stringify({ auto, signed })'), "the log says which it was");
   assert.ok(fnBody("reopenWorkOrder").includes('row.version ? "sent" : "draft"'), "reopening returns it to the state it came from");
   // Closing by hand is gated on wo.close, which is office-only.
   const roles = read("../lib/roles.js");
@@ -201,14 +328,19 @@ test("requirement 27: payroll is a read over the locked logs, admin-only, export
 
 test("the close-out strip shows only what is real, and money only to those allowed it", () => {
   assert.ok(closeout.includes("if (!doc.version) return null;"), "nothing before the work order has been sent");
-  assert.ok(closeout.includes("{doc.myDayOpen && !closed &&"), "End of day only while a day is open");
+  assert.ok(closeout.includes("{doc.myDayOpen && ("), "End of day only while a day is open");
+  // …but NOT gated on the work order being open: closing a job banks nobody's day, and hiding the
+  // button would strand that pay as credits that never reach payroll. Caught live 2026-11-19.
+  assert.ok(!/doc\.myDayOpen && !closed/.test(closeout), "a closed job still lets its days be banked");
+  assert.ok(!/canClose && !closed && openDays/.test(closeout), "and the office can still close one for them");
+  assert.ok(!/status === .closed./.test(fnBody("closeWoDay")), "the data layer agrees");
   assert.ok(closeout.includes("{logs.length > 0 &&"), "no empty daily-log shell");
   assert.ok(/\{showMoney && <span className="wcl-amt">/.test(closeout), "the payout column is gated");
   // A technician's own prompt shows THEIR unbanked money, not the whole crew's.
   assert.ok(closeout.includes("const mine = doc.myUnlocked") && /Your work today isn't banked yet\.\{showMoney && mine\.payable/.test(closeout), "the figure is the person's own");
   assert.ok(fnBody("woUnlockedTotals").includes("AND name=? COLLATE NOCASE"), "which the query scopes by name");
-  assert.ok(closeout.includes("Awaiting the customer's sign-off.") && closeout.includes("canSignoff &&"), "the office waits, or takes the signature in person");
-  assert.ok(closeout.includes("Close without a signature?"), "closing by hand is a two-step confirm");
+  assert.ok(closeout.includes("Awaiting customer sign-off.") && closeout.includes("canSignoff &&"), "the office waits, or takes the signature in person");
+  assert.ok(closeout.includes("Close without their signature?"), "closing by hand is a two-step confirm");
   assert.ok(!/\bconfirm\(/.test(closeout), "never a native dialog");
 });
 

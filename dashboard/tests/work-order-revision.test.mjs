@@ -121,8 +121,19 @@ test("the action checks the signer's OWN pin, records device + IP, and never sto
   const i = actions.indexOf("export async function signWorkOrderAction");
   const body = actions.slice(i, actions.indexOf("\nexport ", i + 10));
   assert.ok(body.includes('const g = await gate(accessId, "wo.sign")'), "capability-gated");
-  assert.ok(body.includes("userEffectivePin(me)"), "compared against THIS account's own effective PIN");
-  assert.ok(/entered\.length !== 4 \|\| entered !== String\(expected\)/.test(body), "a wrong PIN refuses the signature");
+  // The PIN is compared in the DATA layer and discarded there. It is never fetched into the action,
+  // so it cannot be held, logged or returned by mistake.
+  assert.ok(body.includes("userPinMatches(me.id, pin)"), "compared against THIS account's own PIN");
+  assert.ok(body.includes("userHasPin(me.id)"), "and says plainly when there is no PIN to compare");
+  assert.ok(!/userEffectivePin/.test(body), "never reads the expected PIN up here");
+  // getUserById projects a SAFE column list with no pin_custom, so using it for the comparison would
+  // silently fall through to the technician's phone digits and ignore an office-set PIN. Caught live.
+  const dbSrc = read("../lib/db.js");
+  assert.ok(!/SELECT id, name, username, email, phone, role, disabled, tech_cert, session_epoch[^"]*pin_custom/.test(dbSrc), "getUserById still omits the PIN");
+  const matches = dbSrc.slice(dbSrc.indexOf("export function userPinMatches"), dbSrc.indexOf("export function userHasPin"));
+  assert.ok(matches.includes("SELECT pin_custom, phone, disabled FROM users"), "it reads the column itself");
+  assert.ok(matches.includes("if (!u || u.disabled) return false"), "a disabled account can't sign");
+  assert.ok(/return !!expected && String\(expected\) === pin/.test(matches), "an account with no PIN never matches");
   assert.ok(body.includes("parseUserAgent(hdrs.get(\"user-agent\"))") && body.includes("trustedClientIp"), "device + IP captured from the request, not the client");
   assert.ok(body.includes("pinVerified: true"), "only a verified PIN reaches the db layer");
   assert.ok(!/signWorkOrder\([^)]*pin[,)\s]/.test(body.replace("pinVerified: true", "")), "the PIN is not forwarded");
@@ -177,6 +188,9 @@ test("the revision bar is the proposal's, in payout dollars", () => {
   assert.ok(!/proposalDiff|optionTotals/.test(footer), "no retail formula reaches the work order footer");
   // Cancel Revision is a two-step confirm, never a native confirm().
   assert.ok(footer.includes("Discard changes?") && !/\bconfirm\(/.test(footer), "two-step in-page confirm");
+  // A refused signature leaves the pad open WITH the reason on it; only success closes it.
+  assert.ok(/onConfirm=\{async \(s\) => \{ const r = await onSign\(s\); if \(r\?\.ok\) setSignOpen\(false\); \}\}/.test(footer), "the pad closes only on success");
+  assert.ok(footer.includes("serverError={signError}"), "and the refusal is shown on the pad, not up the page");
   // Sent versions are listed with their state.
   assert.ok(footer.includes("Superseded") && footer.includes("Current"), "the sent-versions list");
 });

@@ -23,7 +23,7 @@ const stamp = (s) => {
 };
 
 export default function WorkOrderFooter({
-  doc, canEdit, canSend, canSign, canVoid, showMoney, busy, signerName,
+  doc, canEdit, canSend, canSign, canVoid, showMoney, busy, signerName, signError = null,
   onSend, onCancelRevision, onSign, onVoidSignature,
 }) {
   const [changesOpen, setChangesOpen] = useState(false);
@@ -131,8 +131,11 @@ export default function WorkOrderFooter({
           defaultName={signerName}
           requirePin
           busy={busy}
+          serverError={signError}
           onCancel={() => setSignOpen(false)}
-          onConfirm={onSign}
+          /* Close only on success — a refused PIN must leave the pad open with the reason on it,
+             rather than dumping the technician back to the list with nothing signed. */
+          onConfirm={async (s) => { const r = await onSign(s); if (r?.ok) setSignOpen(false); }}
         />
       )}
     </div>

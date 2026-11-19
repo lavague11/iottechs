@@ -66,6 +66,7 @@ export default function WorkOrderSignoff({ accessId, defaultName = "", preview =
           agree="I confirm the work described has been completed to my satisfaction."
           defaultName={defaultName}
           busy={busy}
+          serverError={err}
           onCancel={() => setOpen(false)}
           onConfirm={sign}
         />

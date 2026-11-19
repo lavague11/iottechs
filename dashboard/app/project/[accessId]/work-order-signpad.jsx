@@ -9,8 +9,11 @@
 // never stored — not here, not in the row, not in the log.
 import { useState, useEffect, useRef } from "react";
 
+// `serverError` is the refusal that came back from the action — a wrong PIN, a scope that moved under
+// them. It belongs HERE, next to the button they pressed, not at the top of a page they have scrolled
+// away from.
 export default function SignPad({
-  heading, subheading = null, agree, defaultName = "", requirePin = false, busy = false, onCancel, onConfirm,
+  heading, subheading = null, agree, defaultName = "", requirePin = false, busy = false, serverError = null, onCancel, onConfirm,
 }) {
   const [name, setName] = useState(defaultName || "");
   const [pin, setPin] = useState("");
@@ -77,7 +80,7 @@ export default function SignPad({
             <input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} />
             <span>{agree}</span>
           </label>
-          {err && <div className="wof-err">{err}</div>}
+          {(err || serverError) && <div className="wof-err">{err || serverError}</div>}
         </div>
         <div className="wof-mf">
           <button type="button" className="wof-ghost" disabled={busy} onClick={onCancel}>Cancel</button>
