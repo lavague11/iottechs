@@ -65,7 +65,7 @@ export default function GuidesClient({ sops = [], staff = false, canBuild = fals
             // cannot be nested inside another anchor. The whole card stays clickable via .supl-open.
             <div className="supl-card" key={s.slug}>
               <Link className="supl-open" href={`/guides/${s.slug}`}>
-                <div className="supl-thumb">{s.thumb ? <img src={s.thumb} alt="" /> : <span className="supl-ph"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-9 9" /></svg></span>}
+                <div className="supl-thumb">{s.thumb ? <img src={s.thumb} alt={s.title || "Guide"} /> :<span className="supl-ph"><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="9" cy="10" r="1.5" /><path d="M21 16l-5-5-9 9" /></svg></span>}
                   {staff && s.visibility === "internal" && <span className="supl-badge">Internal</span>}</div>
                 <div className="supl-meta">
                   <div className="supl-title">{s.title}</div>

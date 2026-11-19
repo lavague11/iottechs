@@ -725,13 +725,19 @@
         <ul>
           <li><a href="tel:9177270081">917-727-0081</a></li>
           <li><a href="mailto:support@iot-techs.com">support@iot-techs.com</a></li>
-          <li><a href="https://www.iot-techs.com">www.iot-techs.com</a></li>
+          <!-- Apex, not www: www 301s to the apex, so linking it spent a redirect hop for nothing. -->
+          <li><a href="https://iot-techs.com">iot-techs.com</a></li>
           <li>NY / NJ Metro Area</li>
         </ul>
       </div>
       <div>
         <h5>Company</h5>
         <ul>
+          <!-- /report-issue had NO inbound internal link anywhere on the site and was the one
+               sitemap URL Google refused to index; /guides was reachable only from the guide
+               beneath it. Both now have a real, descriptive link from the home page. -->
+          <li><a href="/report-issue">Camera Repair</a></li>
+          <li><a href="/guides">Guides</a></li>
           <li><a href="/apply">Careers</a></li>
           <li><a href="/login">Internal</a></li>
         </ul>

@@ -1,0 +1,311 @@
+# iot-techs.com — SEO audit
+
+Audited 2026-11-19 against the live site (commit `3348f51`) and the verified Search Console
+property `https://iot-techs.com/`. Everything below was measured, not assumed; each finding
+names how it was checked.
+
+---
+
+## 0. The headline
+
+The technical SEO is in good shape. Titles, descriptions, canonicals, robots, HTTPS
+redirects, structured data and Lighthouse SEO scores are all correct or near-correct — this
+is not a site with a crawling problem.
+
+**The problem is that there is almost nothing to rank.** Six pages are indexed, and five of
+them are tools or utilities (`/`, `/systems`, `/build`, `/apply`, `/guides`). The site has:
+
+- **no service pages** — access control, alarms, networking, Toast/POS and commercial audio
+  are sold by the business but have no page of their own;
+- **no location pages** — Union NJ, Queens, Brooklyn and the rest of NJ/NYC have no page;
+- **one piece of content** — a single guide.
+
+Search Console confirms the consequence exactly. All six queries the site has ever appeared
+for are variations of the brand name. There is not one non-brand commercial query:
+
+| Query | Clicks | Impr. | Position |
+|---|---|---|---|
+| iot techs | 2 | 6 | 1.5 |
+| cameras iot services | 0 | 3 | 71.3 |
+| iot 'nj | 0 | 1 | 1.0 |
+| iot security jobs | 0 | 1 | 1.0 |
+| iot company nyc | 0 | 1 | 14.0 |
+| iot security cameras services | 0 | 1 | 26.0 |
+
+Totals: **4 clicks, 21 impressions, average position 16.8.** The site ranks for its own name
+and nothing else, because nothing else exists on it.
+
+So the small fixes in §6 are worth doing — one of them is a confirmed Search Console error —
+but none of them will move non-brand traffic. The items in §7 are the actual growth work.
+
+---
+
+## 1. Search Console
+
+Property `https://iot-techs.com/` (a second property for `www` also exists; harmless, since
+www 301s to the apex).
+
+**Performance data begins 2026-11-15** — three days at the time of audit. The property is new,
+so there is no history to compare against and no trend to read yet. Judgements below about
+rankings are therefore about *presence*, not movement.
+
+### Indexing — 6 indexed, 0 "not indexed"
+
+| URL | Last crawled |
+|---|---|
+| /apply | Nov 16, 2026 |
+| / | Nov 15, 2026 |
+| /build | Nov 15, 2026 |
+| /guides | Nov 15, 2026 |
+| /guides/install-security-cameras-side-yard-driveway-and-pool-d3wh | Nov 15, 2026 |
+| /systems | Nov 15, 2026 |
+
+Google reports **zero** URLs in "Discovered – not indexed" or "Crawled – not indexed", which
+is unusually clean. But the sitemap submits 8 URLs and only 6 are indexed:
+
+- **`/report-issue` is missing from the index.** It is also a complete orphan — see §3. A page
+  with no internal links is a page Google has little reason to fetch or keep.
+- **`/terms` is missing.** Expected and harmless; boilerplate legal pages are often skipped.
+
+### Sitemap — submitted, read, **1 error**
+
+Submitted Nov 15, last read Nov 18, 8 pages discovered. Google reports:
+
+> Sitemap can be read, but has errors — **Invalid date**, 1 instance.
+
+**Root cause found.** `app/sitemap.js` passes the raw SQLite timestamp straight through:
+
+```xml
+<lastmod>2026-11-14 18:41:09</lastmod>
+```
+
+The sitemap protocol requires W3C Datetime (`2026-11-14T18:41:09-05:00`). A space instead of
+`T` and no timezone makes it invalid, so Google discards the `lastmod` for that URL. Only the
+guide entry carries a `lastmod` today, so it is the only instance — but every future SEO page
+and guide would inherit the same bug. Fixed in §6.
+
+### Other checks
+
+- **Manual actions: none.** No security issues, no penalties.
+- **Links report:** still "processing data" on this new property — no backlink data available
+  yet. Re-check in a few days; §8 lists where to build links in the meantime.
+- **Redirects / canonicalisation — correct.** `http://iot-techs.com/` → 301 → https, and
+  `https://www.iot-techs.com/` → 301 → apex. No redirect chains.
+- **404s — correct.** `/no-such-page-xyz`, `/index.html` and `/home` all return a clean 404,
+  not a soft 200.
+
+---
+
+## 2. On-page
+
+Measured by fetching each live public URL and parsing the served HTML.
+
+| URL | Title (len) | Desc (len) | Canonical | H1 |
+|---|---|---|---|---|
+| / | 53 | 163 | ✓ self | 1 |
+| /systems | 58 | 146 | ✓ self | 1 |
+| /build | 58 | 157 | ✓ self | 1 |
+| /apply | 65 | 113 | ✓ self | 1 |
+| /report-issue | 66 | 162 | ✓ self | 1 |
+| /terms | 34 | 61 | ✓ self | 1 |
+| /guides | 59 | 139 | ✓ self | 1 |
+| /guides/\<slug\> | 76 | 163 | ✓ self | **0** |
+| /adt | 30 | 53 | — | 0 (noindex, correct) |
+
+**What is right:** every title and description is unique, hand-written, leads with the service
+and geography rather than the brand, and sits in range (titles 34–76 chars, descriptions
+61–163). Canonicals are self-referential and absolute. `/adt` is correctly `noindex, nofollow`.
+No duplicate titles among indexed pages.
+
+### Defects found
+
+1. **The guide page has no H1.** `/guides/<slug>` renders the guide title inside a `<b>` in its
+   header bar and the first step's name as `<h2>`. The site's only content page gives Google no
+   top-level heading. Fixed in §6.
+
+2. **The guide's photo has `alt=""`.** It is a real content photo of the installed camera, not
+   decoration, so an empty alt throws away both the accessibility and the image-search value.
+   Fixed in §6. (The `/guides` index thumbnail is also `alt=""` — same fix.)
+
+3. **Only one step of each guide is in the HTML.** The guide is a stepped player: step 1 renders,
+   steps 2–4 appear only on click. Roughly three-quarters of the content is invisible to a
+   crawler. Rather than change the UX, §6 adds `HowTo` structured data carrying every step and
+   image — the standard way to expose this content.
+
+4. **`/build/<vertical>` pages are invisible.** `/build/adt`, `/build/audio`, `/build/toast` and
+   `/build/pos` each serve the *camera* title, the *camera* description, and
+   `<link rel="canonical" href="https://iot-techs.com/build">`. The canonical is at least
+   honest — these really are one shell — but it means the audio, Toast and ADT builders can
+   never rank for anything. Listed as a Big item in §7.
+
+5. **No `og:title` on `/systems` and `/build`**, and `/report-issue`, `/terms`, `/guides` and the
+   guide page all fall back to the generic portal OG image. Cosmetic for ranking, but it means a
+   shared guide link previews as "IOT TECHS" with the portal card.
+
+**Not a defect (checked and cleared):** a naïve scan flags three `<h1>`s on `/build`. Two of
+them sit inside a `<script>` block as template literals (`<h1>${st.title}</h1>`) and never reach
+the DOM. `/build` has exactly one real H1.
+
+---
+
+## 3. Internal links — the biggest structural problem
+
+Built by parsing every indexable page with `<script>`/`<style>` stripped, so only real DOM
+links count.
+
+| Page | Linked from |
+|---|---|
+| / | /systems, /build, /report-issue, /terms |
+| /systems | / |
+| /build | /systems |
+| /apply | / |
+| /terms | / |
+| /guides | *only its own child page* |
+| /guides/\<slug\> | /guides |
+| **/report-issue** | **nothing — true orphan** |
+
+Two findings:
+
+- **`/report-issue` has zero inbound internal links.** It is reachable only from the sitemap.
+  This is the site's highest-commercial-intent page — someone whose cameras are down — and it is
+  also the one sitemap URL Google has not indexed. Those two facts are almost certainly the same
+  fact.
+- **`/guides` is effectively orphaned too.** Nothing on the main site links to it; its only
+  inbound link comes from the guide beneath it, which is a closed loop. The entire content hub
+  receives no internal authority.
+
+The home page links to only three public pages (`/systems`, `/apply`, `/terms`) — the rest of
+its links go to app routes (`/go`, `/login`, `/dashboard`, `/forgot`, `/api/logout`). It is not
+passing authority to the content.
+
+Fixed in §6.
+
+---
+
+## 4. Local SEO
+
+**Structured data is present and correct.** The home page carries an `Organization` +
+`LocalBusiness` `@graph`:
+
+- Name **IOT TECHS** (legal name La Vague Inc.) ✓
+- Telephone **(917) 727-0081** ✓ — this is the canonical NAP number, and correctly *not* the
+  646 number, which is the Zelle token and must never be published as a contact number.
+- Locality **Little Ferry, NJ 07643** ✓, with geo coordinates
+- `areaServed`: New Jersey, New York City, Westchester, Long Island ✓
+- Open 7 days ✓, `sameAs` → the Google Business Profile map listing ✓
+
+Two things to settle:
+
+1. **The schema publishes the street address.** It is in the live `PostalAddress` today. You've
+   asked for the street address not to be shown, so this needs your call — it is a trade-off, not
+   a clear win: a street address that matches the Google Business Profile is one of the stronger
+   local-ranking signals, and removing it may cost local visibility. Options are to keep it, drop
+   `streetAddress` and keep locality/region/postcode, or switch the markup to a service-area
+   business. **I have not changed it.** See §7.
+
+2. **No location pages exist.** `areaServed` claims four regions; the site has not one page about
+   any of them. Union NJ, Queens, Brooklyn and the wider NJ/NYC area each have zero content. This
+   is the single biggest reason there are no non-brand impressions. See §7.
+
+Still outstanding from the earlier local-SEO pass: the **Google Business Profile is categorised
+as "Corporate office"** rather than a security-system installer category. That is owner-side work
+in the GBP dashboard and cannot be fixed from the codebase.
+
+---
+
+## 5. Speed and mobile
+
+Lighthouse 12.8.2, mobile preset, against the live site.
+
+| Page | Perf | A11y | Best prac. | SEO | LCP | CLS | TBT |
+|---|---|---|---|---|---|---|---|
+| / | 84 | 94 | 96 | **100** | 3.1 s | 0.058 | 200 ms |
+| /systems | **100** | 100 | 96 | **100** | 0.8 s | 0 | 10 ms |
+| /build | 99 | 100 | 100 | **100** | 1.1 s | 0 | 120 ms |
+| /report-issue | 83 | 95 | 100 | **100** | 3.8 s | 0 | 90 ms |
+
+**SEO scores 100 on every page.** Nothing to fix there.
+
+The two slow pages share one cause: **render-blocking resources — 2,150 ms on the home page and
+1,699 ms on `/report-issue`**, dominated by the synchronous Google Fonts stylesheet. Both LCPs
+(3.1 s and 3.8 s) are above Google's 2.5 s "good" threshold, and on the home page the LCP element
+is the hero paragraph, i.e. it is waiting on the font. The two static pages that do not block on
+fonts score 99–100.
+
+Fixing this means changing how fonts load, which risks a flash of unstyled text — a visual
+change, not a meta change — so it is listed in §7 rather than applied. Minor: one low-contrast
+element per slow page (`.pill` on home, `.ri-tag` on report-issue) and a heading-order skip
+(`h3 → h4 → h5`) on home.
+
+---
+
+## 6. Fixed, deployed and verified
+
+Confined to the lane you set — meta, alt text, internal links, sitemap.
+
+1. **Sitemap `lastmod` is now valid W3C Datetime** — resolves the confirmed Search Console
+   "Invalid date" error.
+2. **Home and the static pages now carry a `lastmod`** — they had none at all, so Google had no
+   freshness signal for the most important URLs.
+3. **`/report-issue` and `/guides` are now linked from the home page** — de-orphaning the
+   highest-intent page and the content hub.
+4. **The guide page has a real `<h1>`** (the guide's title), styled identically.
+5. **Guide photos carry real alt text** from the step they illustrate.
+6. **`HowTo` and `BreadcrumbList` structured data on guide pages** — exposes every step and photo
+   to Google without changing the player UX.
+
+Verification and live confirmation are recorded in the closing report.
+
+---
+
+## 7. Needs your approval (Big)
+
+Ordered by expected return.
+
+1. **Location pages — the highest-value item.** One genuinely unique page each for Union NJ,
+   Queens, Brooklyn and the wider NJ/NYC area: real local detail, jobs done in that area, the
+   boroughs/townships covered, local schema. Thin duplicated "we serve X" pages actively hurt;
+   these have to be real. This is what makes "security camera installation union nj" possible at
+   all.
+2. **Service pages.** Access control, alarms, networking, commercial audio, Toast/POS — each sold
+   today with no page. Currently the home page is the only service content on the site.
+3. **Per-vertical builder landing pages** so `/build/audio`, `/build/toast` and `/build/adt` get
+   their own title, description, H1 and self-canonical instead of inheriting the camera page's.
+   Requires a route change.
+4. **The street address in LocalBusiness schema** — your call, per §4.
+5. **Font loading / render-blocking** — worth ~2.1 s on the home page's LCP, but it is a visual
+   change (possible FOUT), so I would want your sign-off.
+6. **The SEO engine is built but empty.** `/dev/seo` and the `seo_pages` table exist with a
+   publish gate and quality threshold; **zero pages are published**, which is why the sitemap
+   carries only hand-built routes. Items 1 and 2 above are exactly what it was built to produce.
+
+---
+
+## 8. Backlink targets
+
+No backlink data yet (the Links report is still processing), so this is a build list, not a gap
+analysis. Use the canonical NAP everywhere — **IOT TECHS · (917) 727-0081 · Little Ferry, NJ** —
+and keep it character-identical across every listing, since inconsistency is what breaks local
+ranking.
+
+**Core local citations (do these first):**
+Google Business Profile (and fix the "Corporate office" category), Apple Business Connect, Bing
+Places, Yelp, Facebook, Nextdoor, Angi, Thumbtack, HomeAdvisor, Houzz, Better Business Bureau,
+Yellow Pages, Manta, Foursquare.
+
+**Industry and dealer listings — the strongest links available to you:**
+ADT and SafeStreets authorised-dealer directories (you are a dealer; this is a high-authority
+link most competitors cannot get), Toast partner/installer directory, and the manufacturer
+"where to buy / find an installer" pages for the camera and access-control lines you carry —
+Hikvision, Dahua, Alarm.com, Honeywell, Axis, Ubiquiti. Also ESA (Electronic Security
+Association) and NJESA membership listings, and Security Systems News / SDM vendor directories.
+
+**Chambers of commerce and local business groups:**
+Little Ferry / Bergen County Chamber, Union Township Chamber, Queens Chamber of Commerce,
+Brooklyn Chamber of Commerce, Hudson County Chamber, plus the local BNI chapter. Chamber
+memberships are paid but give a genuine local `.org` link and real referrals.
+
+**Content-earned links (once §7 exists):**
+The guides library is the natural asset here — local news and trade press will link to a
+practical "how to position cameras on a commercial property" piece far sooner than to a services
+page.

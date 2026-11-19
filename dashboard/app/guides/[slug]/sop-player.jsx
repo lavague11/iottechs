@@ -26,11 +26,14 @@ export default function SopPlayer({ sop }) {
       <style>{CSS}</style>
       <div className="ph">
         <Link className="ib" href="/guides" aria-label="Back to guides" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></Link>
-        <div><b>{sop.title}</b><span>{n ? `Step ${i + 1} of ${n}` : "No steps"}</span></div>
+        {/* The guide's title is the page's H1. It was a <b>, which left the site's only content
+            page with no top-level heading at all. Styled to match exactly — nothing moves. */}
+        <div><h1>{sop.title}</h1><span>{n ? `Step ${i + 1} of ${n}` : "No steps"}</span></div>
       </div>
       <div className="bars">{steps.map((_, k) => <i className={k <= i ? "on" : ""} key={k} />)}</div>
       <div className="mid">
-        {st.video ? <video src={st.video} poster={st.img || undefined} controls playsInline preload="metadata" /> : (st.img && <img src={st.img} alt="" />)}
+        {/* A real alt: these are photographs of the work being described, not decoration. */}
+        {st.video ? <video src={st.video} poster={st.img || undefined} controls playsInline preload="metadata" /> : (st.img && <img src={st.img} alt={st.title ? `${sop.title} — ${st.title}` : sop.title} />)}
         <h2>{st.title}</h2>
         <p>{st.instruction}</p>
       </div>
@@ -49,7 +52,7 @@ const CSS = `
 .sopv .ib{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:#fff;display:inline-flex;align-items:center;justify-content:center;text-decoration:none;font-size:16px;flex:none}
 .sopv .ph{padding:max(10px,env(safe-area-inset-top)) 12px 6px;display:flex;align-items:center;gap:10px}
 .sopv .ph div{flex:1;min-width:0}
-.sopv .ph b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:17px}
+.sopv .ph h1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:17px;font-weight:700;margin:0;line-height:1.45}
 .sopv .ph span{font-size:13px;color:var(--mut);font-weight:600}
 .sopv .bars{display:flex;gap:3px;padding:0 12px}
 .sopv .bars i{flex:1;height:3px;border-radius:2px;background:#333}
