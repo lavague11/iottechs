@@ -291,8 +291,7 @@ Ordered by expected return.
 3. ~~**Per-vertical builder landing pages**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §10.
    Items 4-6 are still open.
 4. **The street address in LocalBusiness schema** — your call, per §4.
-5. **Font loading / render-blocking** — worth ~2.1 s on the home page's LCP, but it is a visual
-   change (possible FOUT), so I would want your sign-off.
+5. ~~**Font loading / render-blocking**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §11.
 6. **The SEO engine is built but empty.** `/dev/seo` and the `seo_pages` table exist with a
    publish gate and quality threshold; **zero pages are published**, which is why the sitemap
    carries only hand-built routes. Items 1 and 2 above are exactly what it was built to produce.
@@ -508,3 +507,57 @@ both follow from that one flag.
 `tests/bys-verticals.test.mjs`, 12 tests. The load-bearing ones: the three head markers still match the
 real shell (a silent no-op would revert every vertical to the camera metadata), the rewrites stay out
 of `next.config.js`, and `applySpecBranding` does not overwrite the server-set title again.
+
+---
+
+## 11. Fonts — shipped 2026-11-19
+
+Item 5 of §7. **Measured result on production, Lighthouse 12.8.2, mobile:**
+
+| Page | Before (audit) | After | Render-blocking |
+|---|---|---|---|
+| `/` | LCP **3.1 s** | LCP **1.6 s**, perf **96**, CLS **0** | was the Google stylesheet → **none** |
+| `/report-issue` | ~1.7 s of font cost | LCP **2.0 s**, perf **99**, CLS **0** | down to 60 ms est. savings |
+
+Single runs either side, so treat the exact seconds as indicative — but "render-blocking resources:
+none" is structural, not noise.
+
+### What was actually wrong
+
+Two different mechanisms, and the second was worse than the audit first reported.
+
+1. **`public/home.html`** loaded both families with a render-**blocking**
+   `<link rel="stylesheet">` to `fonts.googleapis.com`. Nothing painted until that third-party CSS
+   returned, and only then could the woff2 be requested from a *second* third-party host
+   (`fonts.gstatic.com`) — two DNS lookups and two TLS handshakes on the critical path.
+2. **Five app components** (`admin-shell`, `my-projects`, `gateway-client`, `report-issue`,
+   `welcome`) pulled the same two families with a CSS `@import` inside their style string. That is
+   the worst case: the browser cannot *discover* an `@import` until the stylesheet containing it has
+   been fetched and parsed, so the chain was our CSS → Google CSS → gstatic woff2.
+
+`public/widgets/adt-calculator.html` did the same thing.
+
+### What changed
+
+Both families turned out to be **variable fonts**, so one file per subset spans weight 400–800 and
+replaces the four to nine static weights those URLs requested. Four files in `public/fonts/`,
+**162 KB total** — and `unicode-range` subsetting means a page with no accented characters fetches
+only the two latin files (**112 KB**). Verified: the `latin-ext` faces stay `unloaded` on the home page.
+
+- Declared once in `app/globals.css`, which `app/layout.jsx` imports, so it reaches every app route.
+- The two static pages outside the Next CSS pipeline carry their own `@font-face` copies.
+- The home page **preloads** the two faces the hero needs, with `crossorigin` — a font preload
+  without it makes the browser fetch the file twice, which would have quietly eaten the gain.
+- `font-display: swap` is unchanged (Google's CSS set it too), so the fallback-flash behaviour is
+  exactly as before. **CLS is 0 on both pages**, so the swap is not shifting layout.
+
+### Notes
+
+- The fonts are **OFL 1.1**, which requires the copyright notice to travel with redistributed files.
+  `public/fonts/LICENSE.txt` carries both.
+- **`lib/email.js` still links Google fonts, deliberately** — it is an HTML email template, not a
+  page, and mail clients mostly ignore webfont links.
+- The only third-party main-thread cost left on the home page is **Google Maps (~210 ms)**, which is
+  unrelated to fonts and was not touched.
+- Guard: `tests/fonts-selfhosted.test.mjs` scans every shipped file for a third-party font fetch and
+  fails a static page that uses a family it never declares.
