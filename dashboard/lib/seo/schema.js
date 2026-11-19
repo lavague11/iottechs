@@ -167,7 +167,11 @@ function seedFacts(db) {
   // NAP must match the Google Business Profile exactly or the listing and the site don't corroborate
   // each other (the single biggest local-SEO own-goal). Source of truth = the GBP, confirmed by the owner.
   F("company.phone", "Phone", "(917) 727-0081", "identity", 1, 1, "Matches the Google Business Profile (owner-confirmed 2026-11-15). The old (646) 396-0775 is still the Zelle payment token — do not reuse it as the public line.");
-  F("company.address", "Business address", "120 Industrial Ave #4, Little Ferry, NJ 07643", "identity", 1, 1, "As listed on the Google Business Profile.");
+  // VERIFIED but NOT cleared for public use (owner's decision, 2026-11-19): the street address is
+  // not to be published on the site. It stays recorded because it is the real, GBP-matching address
+  // and internal surfaces need it; publicFacts() withholds it, so no page or schema can cite it.
+  // The locality ("Little Ferry, NJ") is fine to publish and is written where it is needed.
+  F("company.address", "Business address", "120 Industrial Ave #4, Little Ferry, NJ 07643", "identity", 1, 0, "As listed on the Google Business Profile. NOT for public use — the owner asked that the street address not appear on the site. Publish the locality (Little Ferry, NJ) instead.");
   F("company.gbp", "Google Business Profile", "https://maps.google.com/?cid=15380872044622826314", "identity", 1, 1, "Used as sameAs so the site and the listing corroborate each other.");
   F("company.email", "Support email", "support@iot-techs.com", "identity", 1, 1);
   F("company.tagline", "Tagline", "Make Tomorrow Safer Today", "identity", 1, 1);
@@ -190,6 +194,21 @@ function seedFacts(db) {
   F("company.warranty_months", "Standard warranty (months)", "", "warranty", 0, 0, "NEEDS INPUT.");
   correctNapFacts(db);
   confirmLicensingFact(db);
+  withholdStreetAddress(db);
+}
+
+// Owner's decision 2026-11-19: the street address must not be published on the site. The seed above
+// now inserts company.address with public_use_allowed = 0, but seeding is INSERT OR IGNORE, so an
+// EXISTING store (production's) keeps the old row that was cleared for public use. Flip it once.
+//
+// The guard is `updated_by`: this only touches a row no human has edited (still 'seed', or set by one
+// of the other one-time corrections). If the owner later decides to publish the address again from
+// /dev/seo, upsertFact stamps their id into updated_by and this becomes a permanent no-op instead of
+// silently reverting them on the next boot.
+function withholdStreetAddress(db) {
+  db.prepare(`UPDATE seo_facts SET public_use_allowed=0, notes=?, updated_by='owner-privacy'
+              WHERE key='company.address' AND public_use_allowed=1 AND updated_by IN ('seed','nap-fix')`)
+    .run("As listed on the Google Business Profile. NOT for public use — the owner asked that the street address not appear on the site (2026-11-19). Publish the locality (Little Ferry, NJ) instead.");
 }
 
 // Owner-confirmed 2026-11-19: IOT TECHS is licensed and insured. The home page has shown a

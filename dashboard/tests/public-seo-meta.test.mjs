@@ -156,3 +156,45 @@ test("the Licensed & Insured badge is backed by a verified fact", () => {
   // A licence NUMBER is still not recorded anywhere, so the page must not cite one.
   assert.ok(!/licen[cs]e *#|lic\. *#/i.test(home), "no licence number is recorded — the page must not cite one");
 });
+
+// ---------------------------------------------------------------------------
+test("no public page or schema publishes the street address", () => {
+  // Owner's decision (2026-11-19). The business is published as a service-area business: locality,
+  // region, postcode and country stay, because dropping those too would throw away the local signal
+  // Google matches against the Business Profile — but the street line does not appear anywhere a
+  // visitor or a crawler can read it.
+  const publicFiles = [];
+  const walk = (dir) => {
+    for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) { if (e.name !== "fonts") walk(rel); continue; }
+      if (/\.(html|jsx?|mjs)$/.test(e.name)) publicFiles.push(rel);
+    }
+  };
+  walk("public");
+  for (const p of ["app/[...seoSlug]/page.jsx", "lib/seo/ld.js", "lib/seo/content.js",
+                   "lib/seo/content/services.js", "lib/seo/content/locations.js", "lib/seo/content/hubs.js"]) {
+    publicFiles.push(p);
+  }
+  for (const f of publicFiles) {
+    const src = read(f).replace(/<!--[\s\S]*?-->/g, " ").replace(/^\s*\/\/.*$/gm, " ");
+    assert.ok(!/120 Industrial/.test(src), `${f} publishes the street address`);
+    assert.ok(!/"streetAddress"/.test(src), `${f} emits a streetAddress field`);
+  }
+
+  // The locality-level address IS still there — removing it entirely would cost local relevance.
+  const home = read("public/home.html");
+  assert.match(home, /"addressLocality":"Little Ferry"/, "locality kept: it is the local signal");
+  assert.match(home, /"addressRegion":"NJ"/);
+  assert.match(home, /"postalCode":"07643"/);
+  assert.match(home, /"areaServed":/, "areaServed is what describes where we actually work");
+
+  // And the fact store itself withholds it, so nothing can reintroduce it from the canonical source.
+  const schema = read("lib/seo/schema.js");
+  assert.match(schema, /withholdStreetAddress/, "existing stores get the flag flipped once");
+  assert.match(schema, /public_use_allowed=0[\s\S]{0,200}key='company\.address'/,
+    "the one-time correction targets company.address");
+  // It must not clobber a later owner edit.
+  assert.match(schema, /updated_by IN \('seed','nap-fix'\)/,
+    "the correction only touches a row no human has edited");
+});

@@ -39,7 +39,10 @@ test("fact store seeds safe identity facts and withholds unverified claims", () 
   // listing is the local-search own-goal this fact exists to prevent.
   assert.equal(pub["company.phone"], "(917) 727-0081");
   assert.ok(!JSON.stringify(pub).includes("396-0775"), "the Zelle token is never published as the public line");
-  assert.equal(pub["company.address"], "120 Industrial Ave #4, Little Ferry, NJ 07643");
+  // The street address is VERIFIED but deliberately NOT cleared for public use (owner, 2026-11-19),
+  // so it must never reach a page or schema through publicFacts().
+  assert.ok(!("company.address" in pub), "the street address is withheld from public facts");
+  assert.ok(!JSON.stringify(pub).includes("120 Industrial"), "…and cannot leak through any other fact");
   assert.ok(!("claim.locations" in pub), "unverified claim never appears in publicFacts()");
   assert.ok(!("claim.port_authority" in pub), "Port Authority reference withheld until verified");
 });

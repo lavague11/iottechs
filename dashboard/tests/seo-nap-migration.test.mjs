@@ -63,7 +63,11 @@ test("the new identity facts land in a store that predates them", () => {
   assert.ok(addr && gbp, "both inserted on the next boot");
   assert.equal(addr.value, "120 Industrial Ave #4, Little Ferry, NJ 07643");
   assert.match(gbp.value, /^https:\/\/maps\.google\.com\/\?cid=\d+$/, "a resolvable listing URL");
-  for (const f of [addr, gbp]) { assert.equal(f.verified, 1); assert.equal(f.public_use_allowed, 1); }
+  // Both are verified. The GBP link is publishable; the street address is NOT — the owner asked
+  // (2026-11-19) that it stay off the site, so it is recorded for internal use only.
+  for (const f of [addr, gbp]) assert.equal(f.verified, 1);
+  assert.equal(gbp.public_use_allowed, 1, "the listing URL is published as sameAs");
+  assert.equal(addr.public_use_allowed, 0, "the street address is withheld from public use");
 });
 
 test("the Zelle token is never what the fact store publishes as the phone", () => {
