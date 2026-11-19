@@ -290,7 +290,7 @@ Ordered by expected return.
    See §9 below.
 3. ~~**Per-vertical builder landing pages**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §10.
    Items 4-6 are still open.
-4. **The street address in LocalBusiness schema** — your call, per §4.
+4. ~~**The street address in LocalBusiness schema**~~ — **DECIDED AND SHIPPED 2026-11-19.** See §12.
 5. ~~**Font loading / render-blocking**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §11.
 6. **The SEO engine is built but empty.** `/dev/seo` and the `seo_pages` table exist with a
    publish gate and quality threshold; **zero pages are published**, which is why the sitemap
@@ -561,3 +561,44 @@ only the two latin files (**112 KB**). Verified: the `latin-ext` faces stay `unl
   unrelated to fonts and was not touched.
 - Guard: `tests/fonts-selfhosted.test.mjs` scans every shipped file for a third-party font fetch and
   fails a static page that uses a family it never declares.
+
+---
+
+## 12. Street address — removed 2026-11-19
+
+Item 4 of §7, decided by the owner. The home page's `LocalBusiness` JSON-LD was the **only** public
+surface carrying it (`120 Industrial Ave #4`); the service and location pages never rendered it.
+
+### Published as a service-area business
+
+`streetAddress` is gone. **`addressLocality` / `addressRegion` / `postalCode` / `addressCountry`
+stay**, and so do `geo`, `sameAs` and `areaServed`.
+
+Dropping the whole address block would have thrown away the locality signal Google matches against
+the Business Profile — the corroboration between site and listing is the thing that makes local
+search work, and it is the cost that was flagged before making this change. `areaServed` (New Jersey,
+New York City, Westchester, Long Island) is what actually describes where the business works.
+
+### The fact store is the real fix
+
+`company.address` is now **verified but NOT cleared for public use**, so `publicFacts()` withholds it
+and no page or schema can cite it again. Because seeding is `INSERT OR IGNORE`, an existing store
+(production's) keeps the old row, so `withholdStreetAddress()` flips it once on boot — guarded on
+`updated_by IN ('seed','nap-fix')`, so if the owner ever republishes the address from `/dev/seo`
+their edit stamps their own id and the correction becomes a permanent no-op rather than silently
+reverting them on the next boot.
+
+### Two things to be clear about
+
+1. **`geo` was deliberately kept.** It resolves to the premises, but it is a machine signal rather
+   than a displayed address and it is a real local-ranking input. One line to remove if wanted.
+2. **The full address remains public on the Google Business Profile.** This changes what the *site*
+   publishes, not what is discoverable. If the goal is that the address not be findable at all, that
+   is a GBP change (switching the listing to a service-area business and hiding the address), not a
+   code change — and hiding it there has its own ranking consequences.
+
+Verified: the JSON-LD still parses and the graph contains no `streetAddress`. Guard in
+`tests/public-seo-meta.test.mjs` scans every public file and every content module for
+`120 Industrial` or a `streetAddress` field, asserts the locality survives, and asserts the one-time
+correction cannot clobber an owner edit. The two tests that encoded the old policy were updated
+rather than deleted.
