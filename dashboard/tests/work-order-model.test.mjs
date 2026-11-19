@@ -154,7 +154,9 @@ test("a draft is validated at the boundary", () => {
 
 test("ONE renderer: the work order uses ProposalItemsEditor in payout mode, not a fork", () => {
   assert.ok(woEditor.includes('import ProposalItemsEditor from "./proposal-items-editor"'), "same component");
-  assert.ok(/<ProposalItemsEditor[\s\S]{0,200}?\n\s+payout\n/.test(woEditor), "mounted with the payout flag");
+  // \s, not \n: this repo checks out with CRLF on Windows, so a newline-anchored regex passes on one
+  // machine and fails on another.
+  assert.ok(/<ProposalItemsEditor[\s\S]{0,200}?\spayout\s/.test(woEditor), "mounted with the payout flag");
   // Payout mode swaps the column it edits and the total formula; it never computes a retail figure.
   assert.ok(editor.includes('const AMT = payout ? "techPrice" : "price";'), "the money column is the payout");
   assert.ok(editor.includes("const sumOf = payout ? techItemTotal : itemTotal;"));
