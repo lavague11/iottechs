@@ -14,6 +14,7 @@ import {
   woCheckIn, setWoLineStatus, addWoLineMedia, removeWoLineMedia, applyWoFieldQueue,
   woEventsFor, woRow, notifyRoles, woIsAssigned, woDecideCheckin,
   getProjectAssignments, addProjectAssignment,
+  closeWoDay, reassignWoLineCredit, signWorkOrderCustomer, closeWorkOrder, reopenWorkOrder,
   getEffectiveRates, actorName,
 } from "../../../lib/db";
 import { can } from "../../../lib/roles";
@@ -319,6 +320,88 @@ export async function getWorkOrderEventsAction(accessId, limit = 200) {
   const row = woRow(accessId);
   if (!row) return { ok: true, events: [] };
   return { ok: true, events: woEventsFor(row.id, Math.min(500, Math.max(1, +limit || 200))) };
+}
+
+// ---- Stage 4: end of day, close-out, payroll -------------------------------------------------
+
+// Requirement 22 — End of day. A technician closes their OWN day; an admin may close it for someone
+// else (requirement 23's other half), which is why `forName` is only honoured for the office.
+export async function endDayAction(accessId, { forName = null, forUserId = null, note = null } = {}) {
+  const g = await gate(accessId, "wo.day.close");
+  if (g.error) return g;
+  const anon = identified(g.tok);
+  if (anon) return { error: anon };
+  const me = who(g.tok);
+  const office = can(g.tok.role, "wo.edit");
+  const name = office && forName ? String(forName) : me.actorName;
+  const userId = office && forName ? (forUserId ?? null) : me.actorId;
+  const r = closeWoDay(accessId, { userId, name, byName: me.actorName, note });
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, day: r.day, lines: r.lines, total: r.total, doc: freshDoc(accessId, g.tok) };
+}
+
+// Requirement 26 — reassign or split a line's payout. Office only; everything already locked into a
+// closed day is out of reach, which the data layer enforces rather than the UI.
+export async function reassignLineCreditAction(accessId, lineKey, splits) {
+  const g = await gate(accessId, "wo.payout.edit");
+  if (g.error) return g;
+  const r = reassignWoLineCredit(accessId, lineKey, splits, actorName(g.tok));
+  if (r.error) return r;
+  return { ok: true, doc: freshDoc(accessId, g.tok) };
+}
+
+// Requirement 24 — the customer signs the finished work off, which (25) closes the work order.
+// Available only once every line is complete; the data layer re-checks that.
+export async function signWorkOrderCustomerAction(accessId, { name, signatureData = null } = {}) {
+  const g = await gate(accessId, "wo.signoff");
+  if (g.error) return g;
+  const hdrs = await headers();
+  const { parseUserAgent } = await import("../../../lib/device");
+  const { trustedClientIp } = await import("../../../lib/esign/client-ip");
+  const r = signWorkOrderCustomer(accessId, {
+    name: String(name || "").trim(),
+    signatureData,
+    device: parseUserAgent(hdrs.get("user-agent"))?.label || null,
+    ip: trustedClientIp((h) => hdrs.get(h)),
+  });
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, closed: !!r.closed, doc: freshDoc(accessId, g.tok) };
+}
+
+// What the CUSTOMER is allowed to know about the work order: whether the work is finished, and
+// whether they have signed it off. Not the scope, not the payouts, not the crew, not the daily logs —
+// which is why this is a separate read and not a sanitized `getWorkOrderAction`.
+export async function getWorkOrderSignoffAction(accessId) {
+  const g = await gate(accessId, "wo.signoff");
+  if (g.error) return g;
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc || !doc.version) return { ok: true, state: null };
+  const sig = doc.customerSignature;
+  return {
+    ok: true,
+    state: {
+      allDone: !!doc.progress?.allDone,
+      lines: doc.progress?.lines || 0,
+      complete: doc.progress?.complete || 0,
+      closed: doc.status === "closed",
+      signed: !!sig,
+      signedBy: sig?.name || null,
+      signedAt: sig?.signed_at || null,
+    },
+  };
+}
+
+// Requirement 25 — the office can close (or reopen) a work order by hand. A job can end without a
+// customer signature; that is the office's call, and it is logged either way.
+export async function closeWorkOrderAction(accessId, open = false) {
+  const g = await gate(accessId, "wo.close");
+  if (g.error) return g;
+  const r = open ? reopenWorkOrder(accessId, actorName(g.tok)) : closeWorkOrder(accessId, actorName(g.tok));
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, doc: freshDoc(accessId, g.tok) };
 }
 
 // Requirement 14: pull a signed proposal revision / addendum into the work order as an UNSENT revision.

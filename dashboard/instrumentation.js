@@ -72,4 +72,18 @@ export async function register() {
   };
   setTimeout(sweepInvoiceEmails, 130_000);             // ~2 min after boot
   setInterval(sweepInvoiceEmails, 60 * 60 * 1000);     // then hourly (reminders are day-grained)
+
+  // Work order end-of-day (docs/WORK_ORDERS.md, requirement 23): at 8 PM Eastern, nudge any technician
+  // who checked in on site and never closed their day, and tell the office so they can close it for
+  // them. Hourly; the sweep itself checks the hour, and each reminder is claimed once per person per
+  // day in the DB, so repeats and overlapping runs are harmless.
+  const sweepWorkOrderDays = async () => {
+    try {
+      const { sendDueDayReminders } = await import("./lib/wo-day-reminders.js");
+      const r = await sendDueDayReminders();
+      if (r?.sent) console.log(`[workorder] reminded ${r.sent} technician(s) to end their day`);
+    } catch (e) { console.error("[workorder] end-of-day sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepWorkOrderDays, 140_000);             // ~2.5 min after boot
+  setInterval(sweepWorkOrderDays, 60 * 60 * 1000);     // then hourly; the 8 PM window is checked inside
 }

@@ -8,7 +8,8 @@
 //   • Unsent changes      — Unsubmitted · N unsent changes · ±$ → [ Cancel Revision ] [ Send Revision ]
 //   • Signed              — the signature record, voidable by the office
 // Pure presentation plus the sign sheet; every handler is passed in from work-order-editor.jsx.
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import SignPad from "./work-order-signpad";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const signed$ = (n) => `${n > 0 ? "+" : "−"}${money(Math.abs(n))}`;
@@ -121,7 +122,19 @@ export default function WorkOrderFooter({
       )}
 
       {changesOpen && hasUnsent && <ChangesModal cs={cs} showMoney={showMoney} onClose={() => setChangesOpen(false)} />}
-      {signOpen && <SignSheet doc={doc} busy={busy} defaultName={signerName} onCancel={() => setSignOpen(false)} onConfirm={onSign} showMoney={showMoney} />}
+      {/* The technician's acceptance — the shared pad, with the PIN step the owner asked for. */}
+      {signOpen && (
+        <SignPad
+          heading="Accept work order"
+          subheading={`v${doc.version}${showMoney && doc.total != null ? ` · ${money(doc.total)}` : ""}`}
+          agree="I accept this work order, can perform the scope described, and agree to be assigned this job."
+          defaultName={signerName}
+          requirePin
+          busy={busy}
+          onCancel={() => setSignOpen(false)}
+          onConfirm={onSign}
+        />
+      )}
     </div>
   );
 }
@@ -154,77 +167,6 @@ function ChangesModal({ cs, showMoney, onClose }) {
               {c.from.name !== c.to.name && <i>Renamed from {c.from.name}</i>}
             </div>
           ))}</>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Accept the work order. Owner's rule (2026-11-19): the technician re-enters THEIR OWN PIN before the
-// signature is taken, and the record keeps the account, device, IP and time. The PIN is sent once to be
-// checked against this account and is never stored.
-function SignSheet({ doc, busy, defaultName, onCancel, onConfirm, showMoney }) {
-  const [name, setName] = useState(defaultName || "");
-  const [pin, setPin] = useState("");
-  const [agree, setAgree] = useState(false);
-  const [err, setErr] = useState(null);
-  const padRef = useRef(null);
-  const drawn = useRef(false);
-
-  // Signature pad — pointer events so it works with a finger, a stylus or a mouse.
-  useEffect(() => {
-    const c = padRef.current; if (!c) return;
-    const dpr = window.devicePixelRatio || 1;
-    c.width = c.clientWidth * dpr; c.height = c.clientHeight * dpr;
-    const ctx = c.getContext("2d");
-    ctx.scale(dpr, dpr); ctx.lineWidth = 2.2; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#101418";
-    let down = false;
-    const at = (e) => { const r = c.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-    const start = (e) => { down = true; drawn.current = true; c.setPointerCapture?.(e.pointerId); ctx.beginPath(); ctx.moveTo(...at(e)); };
-    const move = (e) => { if (!down) return; e.preventDefault(); ctx.lineTo(...at(e)); ctx.stroke(); };
-    const end = () => { down = false; };
-    c.addEventListener("pointerdown", start); c.addEventListener("pointermove", move);
-    c.addEventListener("pointerup", end); c.addEventListener("pointerleave", end);
-    return () => { c.removeEventListener("pointerdown", start); c.removeEventListener("pointermove", move); c.removeEventListener("pointerup", end); c.removeEventListener("pointerleave", end); };
-  }, []);
-  const clear = () => { const c = padRef.current; if (!c) return; c.getContext("2d").clearRect(0, 0, c.width, c.height); drawn.current = false; };
-
-  function submit() {
-    setErr(null);
-    if (!name.trim()) return setErr("Enter your name.");
-    if (!/^\d{4}$/.test(pin)) return setErr("Enter your 4-digit PIN.");
-    if (!agree) return setErr("Confirm you accept this work order.");
-    onConfirm({ name: name.trim(), pin, signatureData: drawn.current ? padRef.current.toDataURL("image/png") : null });
-  }
-
-  return (
-    <div className="wof-ov" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
-      <div className="wof-modal sign" role="dialog" aria-modal="true" aria-label="Accept work order">
-        <div className="wof-mh">
-          <span>Accept work order</span>
-          <span className="wof-sub">v{doc.version}{showMoney && doc.total != null ? ` · ${money(doc.total)}` : ""}</span>
-          <button type="button" className="wof-x" aria-label="Close" onClick={onCancel}>×</button>
-        </div>
-        <div className="wof-mb">
-          <label className="wof-f"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>
-          <label className="wof-f">
-            <span>Your PIN</span>
-            <input value={pin} inputMode="numeric" autoComplete="off" maxLength={4} placeholder="••••" type="password"
-                   onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} />
-          </label>
-          <div className="wof-pad">
-            <canvas ref={padRef} aria-label="Signature pad" />
-            <button type="button" className="wof-clear" onClick={clear} title="Clear" aria-label="Clear">Clear</button>
-          </div>
-          <label className="wof-agree">
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span>I accept this work order, can perform the scope described, and agree to be assigned this job.</span>
-          </label>
-          {err && <div className="wof-err">{err}</div>}
-        </div>
-        <div className="wof-mf">
-          <button type="button" className="wof-ghost" disabled={busy} onClick={onCancel}>Cancel</button>
-          <button type="button" className="wof-cta sign" disabled={busy} onClick={submit}>{busy ? "Signing…" : "Sign"}</button>
         </div>
       </div>
     </div>

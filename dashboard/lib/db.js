@@ -408,7 +408,8 @@ function init() {
       voided_by      TEXT,
       pin_verified_at TEXT,
       device         TEXT,
-      ip             TEXT
+      ip             TEXT,
+      party          TEXT NOT NULL DEFAULT 'tech'
     )
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_wo_sig ON wo_signatures(wo_id, version)");
@@ -420,6 +421,9 @@ function init() {
     if (!sigCols.includes("pin_verified_at")) db.exec("ALTER TABLE wo_signatures ADD COLUMN pin_verified_at TEXT");
     if (!sigCols.includes("device"))          db.exec("ALTER TABLE wo_signatures ADD COLUMN device TEXT");
     if (!sigCols.includes("ip"))              db.exec("ALTER TABLE wo_signatures ADD COLUMN ip TEXT");
+    // 'tech' accepts the job; 'customer' signs the finished work off (requirement 24). One table, so
+    // the two signatures on a work order are read, voided and audited the same way.
+    if (!sigCols.includes("party"))           db.exec("ALTER TABLE wo_signatures ADD COLUMN party TEXT NOT NULL DEFAULT 'tech'");
   }
 
   // On-site check-in. No line may be marked until the acting technician has a check-in for TODAY.
@@ -8915,12 +8919,33 @@ export function getWorkOrderDoc(accessId, { actorId = null, actorName = null } =
       (!!actorName && String(c.name || "").toLowerCase() === String(actorName).toLowerCase())) || null,
     // Undecided arrivals by people who were not on the crew — the admin prompt's queue.
     pendingCheckins: woCheckinsFor(row.id).filter((c) => !c.assigned && !c.decision),
+    // Stage 4. `dayLogs` is the locked record; `unlocked` is what today's work has earned but not yet
+    // banked; `myDayOpen` is whether THIS person still owes an End of day.
+    dayLogs: woDayLogsFor(row.id),
+    unlocked: woUnlockedTotals(row.id),
+    // What THIS person has earned today and not yet banked. The whole job's figure would tell a
+    // technician they are owed their crewmate's money too.
+    myUnlocked: actorName ? woUnlockedTotals(row.id, actorName) : { payable: 0, pending: 0 },
+    myDayOpen: (() => {
+      if (!actorName) return false;
+      const d = localDay();
+      const inToday = woCheckedInToday(row.id, actorId, actorName, d);
+      if (!inToday) return false;
+      return !db.prepare("SELECT 1 FROM wo_day_logs WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(row.id, actorName, d);
+    })(),
+    // Spread, always: a node:sqlite row has a NULL PROTOTYPE, and React refuses to pass one from a
+    // server component to a client one ("Classes or null prototypes are not supported"). Every other
+    // read here does `{ ...r }` for the same reason.
+    customerSignature: (() => {
+      const s = db.prepare("SELECT * FROM wo_signatures WHERE wo_id=? AND party='customer' AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1").get(row.id);
+      return s ? { ...s } : null;
+    })(),
     versions: woVersionList(row.id),
     changeState: workOrderChangeState(sent, { payload }),
     fingerprint: workOrderFingerprint(payload),
     // Signatures on the CURRENT version only — an earlier version's are voided the moment a revision is
     // sent, and are history, not consent.
-    signatures: row.version ? woSignaturesFor(row.id, row.version).filter((s) => !s.voided_at) : [],
+    signatures: row.version ? woSignaturesFor(row.id, row.version).filter((s) => !s.voided_at && s.party !== "customer") : [],
     // Requirement 14's trigger: the customer has signed a proposal revision, or an add-on was approved,
     // since this work order was copied. It is a flag for the office to pull the change in — never an
     // automatic rewrite of a document a technician may already have signed.
@@ -9342,6 +9367,205 @@ export function woCreditsFor(woId, { lineKey = null, unlockedOnly = false } = {}
   if (lineKey) { sql += " AND line_key=?"; args.push(lineKey); }
   if (unlockedOnly) sql += " AND day_log_id IS NULL";
   return db.prepare(sql + " ORDER BY set_at").all(...args).map((r) => ({ ...r }));
+}
+
+// ---- Stage 4: end of day, close-out, payroll -------------------------------------------------
+
+// Requirement 22 — End of day. It LOCKS the day: every credit this person earned today that is not
+// already locked, not pending an admin decision and not voided is attached to a wo_day_logs row and
+// becomes payroll. It does NOT close the work order — installs run over several days.
+//
+// A locked credit is never recomputed. If the office changes a payout tomorrow, yesterday's pay is
+// what it was; that is the whole point of locking it rather than deriving payroll on the fly.
+export function closeWoDay(accessId, { userId = null, name, day = null, byName = null, note = null } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "Whose day is this?" };
+  const d = day || localDay();
+  if (db.prepare("SELECT 1 FROM wo_day_logs WHERE wo_id=? AND user_id IS ? AND day=?").get(row.id, userId, d)) {
+    return { error: "That day is already closed." };
+  }
+  const credits = db.prepare(
+    "SELECT id, line_key, amount FROM wo_line_credits WHERE wo_id=? AND name=? COLLATE NOCASE AND day_log_id IS NULL AND pending=0 AND voided_at IS NULL AND date(set_at)=?"
+  ).all(row.id, who, d);
+  const total = Math.round(credits.reduce((s, c) => s + (+c.amount || 0), 0) * 100) / 100;
+  const lines = new Set(credits.map((c) => c.line_key)).size;
+  db.exec("BEGIN");
+  try {
+    const r = db.prepare("INSERT INTO wo_day_logs (wo_id, user_id, name, day, lines_completed, payout_total, note, locked_by) VALUES (?,?,?,?,?,?,?,?)")
+      .run(row.id, userId, who, d, lines, total, note || null, byName || who);
+    const logId = Number(r.lastInsertRowid);
+    const lock = db.prepare("UPDATE wo_line_credits SET day_log_id=? WHERE id=?");
+    for (const c of credits) lock.run(logId, c.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+      .run(row.id, "day_closed", userId, byName || who, d, JSON.stringify({ for: who, lines, total }), new Date().toISOString());
+    db.exec("COMMIT");
+    return { ok: true, day: d, lines, total, id: logId };
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not close the day." }; }
+}
+export function woDayLogsFor(woId) {
+  return db.prepare("SELECT * FROM wo_day_logs WHERE wo_id=? ORDER BY day DESC, name").all(woId).map((r) => ({ ...r }));
+}
+
+// Requirement 23's data half: everyone who checked in on `day` and has not closed it. Cross-project,
+// because the 8 PM sweep runs once for the whole company, not once per job.
+export function woUnclosedDays(day = null) {
+  const d = day || localDay();
+  return db.prepare(`
+    SELECT c.wo_id, c.user_id, c.name, c.day, w.project_access_id
+    FROM wo_checkins c
+    JOIN wo w ON w.id = c.wo_id
+    WHERE c.day = ?
+      AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
+  `).all(d).map((r) => ({ ...r }));
+}
+// Claim-once, so the 8 PM reminder fires exactly one time per person per day however often the
+// hourly sweep runs.
+//
+// It does NOT lean on wo_events' UNIQUE constraint, and that is deliberate: SQLite treats NULLs as
+// DISTINCT in a unique index, so two rows whose `line_key` is NULL never collide and an INSERT OR
+// IGNORE would happily insert the same reminder every hour. (The line-level events are safe — they
+// always carry a line_key.) An explicit check inside a transaction is correct here because node:sqlite
+// is synchronous and the sweep runs in one process, so no second reader can slip between the two
+// statements.
+export function claimWoDayReminder(woId, name, day) {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const seen = db.prepare("SELECT 1 FROM wo_events WHERE wo_id=? AND action='eod_reminder' AND actor_name=? COLLATE NOCASE AND client_at=?")
+      .get(woId, String(name), String(day));
+    if (seen) { db.exec("COMMIT"); return false; }
+    db.prepare("INSERT INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
+      .run(woId, null, "eod_reminder", String(name), day, day);
+    db.exec("COMMIT");
+    return true;
+  } catch (e) { db.exec("ROLLBACK"); return false; }
+}
+
+// Requirement 26 — the admin's override on top of the step credits: give a line to someone else, or
+// split it. The splits replace every UNLOCKED credit on that line; anything already locked into a paid
+// day is untouchable. Shares must add up, so a split can never invent or lose money.
+export function reassignWoLineCredit(accessId, lineKey, splits, byName = null) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  const line = doc.lines.find((l) => l.key === String(lineKey));
+  if (!line) return { error: "That line isn't on this work order." };
+  const list = (splits || []).filter((s) => s && String(s.name || "").trim());
+  if (!list.length) return { error: "Name at least one person." };
+  const sum = list.reduce((s, x) => s + (+x.share || 0), 0);
+  if (Math.abs(sum - 1) > 0.001) return { error: "The shares have to add up to 100%." };
+  const locked = db.prepare("SELECT ROUND(SUM(amount),2) s FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NOT NULL").get(doc.id, line.key).s || 0;
+  const earned = Math.round((line.total - locked) * 100) / 100;
+  if (earned <= 0) return { error: "Everything on this line is already in a closed day." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NULL").run(doc.id, line.key);
+    const ins = db.prepare("INSERT INTO wo_line_credits (wo_id, line_key, user_id, name, share, amount, set_by) VALUES (?,?,?,?,?,?,?)");
+    // The last share absorbs the rounding, so the parts always sum to the money exactly.
+    let left = earned;
+    list.forEach((s, i) => {
+      const amt = i === list.length - 1 ? Math.round(left * 100) / 100 : Math.round(earned * (+s.share || 0) * 100) / 100;
+      left = Math.round((left - amt) * 100) / 100;
+      ins.run(doc.id, line.key, s.userId ?? null, String(s.name).trim(), +s.share || 0, amt, byName);
+    });
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+      .run(doc.id, line.key, "credit_reassigned", byName, list.map((s) => s.name).join(" / "), JSON.stringify({ splits: list, earned }), new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not reassign that line." }; }
+  return { ok: true };
+}
+
+// Requirement 24 — the customer signs the finished work off. Same machinery as every other customer
+// acceptance: a row in stage_acceptances bound to a content fingerprint (here the work order's), so
+// a later revision makes the old sign-off visibly stale exactly as it does elsewhere. The drawn mark
+// is kept beside the technician's, in wo_signatures, as party 'customer'.
+export function signWorkOrderCustomer(accessId, { name, signatureData = null, device = null, ip = null } = {}) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (!doc.progress?.allDone) return { error: "Every line has to be complete before sign-off." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "A name is required." };
+  if (db.prepare("SELECT 1 FROM wo_signatures WHERE wo_id=? AND party='customer' AND voided_at IS NULL").get(doc.id)) {
+    return { error: "This work order is already signed off." };
+  }
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO wo_signatures (wo_id, version, name, signature_data, fingerprint, device, ip, party) VALUES (?,?,?,?,?,?,?, 'customer')")
+      .run(doc.id, doc.version || 0, who, signatureData || null, doc.fingerprint, device, ip);
+    acceptStage(accessId, "wo_customer", who, doc.fingerprint);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+      .run(doc.id, "customer_signoff", who, `v${doc.version || 0}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record the sign-off." }; }
+  // Requirement 25 — every line complete AND the customer signed closes it, with no further click.
+  return { ...closeWorkOrder(accessId, "System", { auto: true }), signed: true };
+}
+
+// Requirement 25. Auto-close needs every line complete and the customer's sign-off; an admin can close
+// it by hand at any point (a job can end without a signature — the office decides).
+// `doc.signatures` is the TECHNICIANS' acceptance of the current version — the customer's sign-off is
+// deliberately not in that list (it binds to the work, not to a version), so this reads the one field
+// that holds it. Reading `signatures` here meant auto-close could never fire; caught live 2026-11-19.
+export function woCanAutoClose(doc) {
+  return !!doc && doc.status !== "closed" && !!doc.progress?.allDone && !!doc.customerSignature;
+}
+export function closeWorkOrder(accessId, byName = null, { auto = false } = {}) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (doc.status === "closed") return { ok: true, closed: true, already: true };
+  if (auto && !woCanAutoClose(doc)) return { ok: true, closed: false };
+  db.prepare("UPDATE wo SET status='closed', closed_at=datetime('now','localtime'), closed_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName, doc.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+    .run(doc.id, "closed", byName, auto ? "auto" : "manual", new Date().toISOString());
+  return { ok: true, closed: true };
+}
+export function reopenWorkOrder(accessId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status !== "closed") return { ok: true };
+  db.prepare("UPDATE wo SET status=?, closed_at=NULL, closed_by=NULL, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(row.version ? "sent" : "draft", row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, client_at) VALUES (?,?,?,?)")
+    .run(row.id, "reopened", byName, new Date().toISOString());
+  return { ok: true };
+}
+
+// Requirement 27 — payroll. A read over the LOCKED day logs, grouped by technician across every job in
+// the period. Nothing is recomputed here: a day log holds the figure that was true when it was locked,
+// which is why a payout edited later cannot restate a week somebody has already been paid for.
+export function payrollForPeriod({ from, to } = {}) {
+  const a = String(from || "0000-01-01"), b = String(to || "9999-12-31");
+  const rows = db.prepare(`
+    SELECT l.id, l.day, l.name, l.user_id, l.lines_completed, l.payout_total, l.locked_at, l.locked_by, l.note,
+           w.project_access_id, p.company_name, p.customer
+    FROM wo_day_logs l
+    JOIN wo w ON w.id = l.wo_id
+    LEFT JOIN projects p ON p.access_id = w.project_access_id
+    WHERE l.day BETWEEN ? AND ?
+    ORDER BY l.name, l.day
+  `).all(a, b).map((r) => ({ ...r, project: r.company_name || r.customer || r.project_access_id }));
+  const byTech = new Map();
+  for (const r of rows) {
+    const k = r.user_id != null ? `u${r.user_id}` : `n${String(r.name).toLowerCase()}`;
+    const t = byTech.get(k) || { userId: r.user_id ?? null, name: r.name, days: 0, lines: 0, total: 0, logs: [] };
+    t.days += 1; t.lines += r.lines_completed || 0;
+    t.total = Math.round((t.total + (+r.payout_total || 0)) * 100) / 100;
+    t.logs.push(r);
+    byTech.set(k, t);
+  }
+  const techs = [...byTech.values()].sort((x, y) => y.total - x.total);
+  return { from: a, to: b, techs, total: Math.round(techs.reduce((s, t) => s + t.total, 0) * 100) / 100, logs: rows };
+}
+// Money earned but NOT yet in payroll, so the office can see what is still open: unlocked credits,
+// split into payable and the pending ones waiting on an unassigned-technician decision.
+export function woUnlockedTotals(woId, name = null) {
+  const where = name ? " AND name=? COLLATE NOCASE" : "";
+  const sql = `
+    SELECT ROUND(SUM(CASE WHEN pending=0 THEN amount ELSE 0 END),2) payable,
+           ROUND(SUM(CASE WHEN pending=1 THEN amount ELSE 0 END),2) pending
+    FROM wo_line_credits WHERE wo_id=? AND day_log_id IS NULL AND voided_at IS NULL${where}`;
+  const r = name ? db.prepare(sql).get(woId, String(name)) : db.prepare(sql).get(woId);
+  return { payable: r?.payable || 0, pending: r?.pending || 0 };
 }
 
 // A technician must never receive a payout figure when the office has hidden them (requirement 7), and

@@ -36,6 +36,11 @@ const CAPS = {
   "wo.send":             ["admin", "manager"],                              // send a version for signature
   "wo.sign":             ["tech"],                                          // accept = assignment
   "wo.sign.void":        ["admin", "manager"],
+  // The CUSTOMER's sign-off on the finished work (requirement 24). Deliberately its own capability,
+  // not `wo.view`: a customer signs off the work, they never see the work order — no scope document,
+  // no payout, no crew. The office is included because a walkthrough sign-off is often taken in
+  // person on the technician's phone.
+  "wo.signoff":          ["customer", "admin", "manager"],
   "wo.checkin":          ["admin", "manager", "tech"],                      // "I'm on site"
   "wo.line.status":      ["admin", "manager", "tech"],                      // Complete / Needs attention / Incomplete
   "wo.day.close":        ["admin", "manager", "tech"],                      // End of day (admin may close for a tech)

@@ -174,10 +174,16 @@ test("requirement 7: a tech with payouts hidden receives no payout figure", () =
 });
 
 test("the work order capabilities exist and keep the customer out", () => {
-  const caps = ["wo.view", "wo.edit", "wo.payout.view", "wo.payout.edit", "wo.send", "wo.sign", "wo.checkin", "wo.line.status", "wo.day.close", "wo.close", "payroll.view", "payroll.export"];
+  const caps = ["wo.view", "wo.edit", "wo.payout.view", "wo.payout.edit", "wo.send", "wo.sign", "wo.signoff", "wo.checkin", "wo.line.status", "wo.day.close", "wo.close", "payroll.view", "payroll.export"];
   for (const c of caps) assert.ok(roles.includes(`"${c}"`), `${c} is defined`);
+  // A customer has exactly ONE work-order capability: signing the finished work off. They never see
+  // the document — no scope, no payout, no crew — which is why wo.signoff is separate from wo.view.
   const block = roles.slice(roles.indexOf('"wo.view"'), roles.indexOf('"payroll.export"') + 60);
-  assert.ok(!/customer/.test(block), "a customer has no work-order capability at all");
+  for (const line of block.split("\n").filter((l) => /customer/.test(l) && /^\s*"/.test(l))) {
+    assert.match(line, /^\s*"wo\.signoff"/, `only wo.signoff admits a customer, not: ${line.trim()}`);
+  }
+  assert.ok(/"wo\.signoff":\s*\["customer", "admin", "manager"\]/.test(roles), "and the office can take it in person");
+  assert.ok(!/"wo\.view":[^\]]*customer/.test(roles), "a customer never reads the work order itself");
   assert.ok(/"wo\.edit":\s*\["admin", "manager"\]/.test(roles), "only the office writes the document");
   assert.ok(/"wo\.sign":\s*\["tech"\]/.test(roles), "signing it is the technician's act");
 });

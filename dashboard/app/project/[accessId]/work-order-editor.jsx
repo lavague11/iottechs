@@ -14,6 +14,7 @@ import { can } from "../../../lib/roles";
 import WorkOrderFooter from "./work-order-footer";
 import WorkOrderField from "./work-order-field";
 import WorkOrderCrew from "./work-order-crew";
+import WorkOrderCloseout from "./work-order-closeout";
 import { WFD_CSS } from "./work-order-field-css";
 import {
   getWorkOrderAction, createWorkOrderDocAction, saveWorkOrderDraftAction,
@@ -342,6 +343,11 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
             canAct={!preview} onDoc={(d) => setDoc(d)} />
         </>
       )}
+
+      {/* Stage 4 — banking the day, the customer's sign-off, and closing. Renders nothing until the
+          work order has been sent, and each part appears only once it is real. */}
+      <WorkOrderCloseout accessId={accessId} doc={doc} role={role} showMoney={showMoney}
+        canSignoff={can(role, "wo.signoff") && !preview} canClose={can(role, "wo.close") && !preview} onDoc={(d) => setDoc(d)} />
 
       <WorkOrderFooter
         doc={doc} canEdit={canEdit} canSend={canSend} canSign={canSign} canVoid={canVoidSig}

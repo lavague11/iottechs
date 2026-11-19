@@ -28,6 +28,7 @@ import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
 import WorkOrderEditor  from "./work-order-editor";
+import WorkOrderSignoff from "./work-order-signoff";
 import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -2601,8 +2602,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const prDate = iAppt ? new Date(iAppt.date + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : null;
           const prWindow = iAppt ? (iAppt.endTime ? `${fmtT(iAppt.time)} – ${fmtT(iAppt.endTime)}` : (iAppt.time ? `Arriving ${fmtT(iAppt.time)}` : null)) : null;
           tools.push({ name: "Project Ready", label: "Project",
-            node: <div style={pad}><ProjectReady facts={prFacts} stage={prStage} installDateStr={prDate} installWindowStr={prWindow}
-              onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} /></div> });
+            node: (
+              <div style={pad}>
+                {/* The work order's customer sign-off follows the WORK, not the project stage: it appears
+                    the moment every line is complete, which can be before the job has moved to closeout.
+                    The card hides itself until then, and shows the customer nothing but that fact. */}
+                <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+                  defaultName={lp.contact_name || lp.customer || ""} />
+                <ProjectReady facts={prFacts} stage={prStage} installDateStr={prDate} installWindowStr={prWindow}
+                  onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} />
+              </div>
+            ) });
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in. Only when the job ACTUALLY has
@@ -2673,8 +2683,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Quality control is internal (the customer's phone-setup guide now lives in Install).
         // Sign-off control shared by the internal checklist footer and the customer's walkthrough card.
         const qcSignoff = (
-          <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
-            onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+          <>
+            {/* The work order's own customer sign-off (requirement 24) sits with the walkthrough, which
+                is where the customer is asked to confirm the work. It renders only once every line is
+                complete, and it never shows them the work order itself — scope, payouts and crew stay
+                internal; see work-order-signoff.jsx. */}
+            <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+              defaultName={lp.contact_name || lp.customer || ""} />
+            <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+              onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+          </>
         );
         if (sees(cView, "ph_wrap", "Quality Control")) {
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
