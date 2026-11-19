@@ -18,6 +18,8 @@ import { installProgress, qcProgress, qcItemStates } from "./install-checklist-m
 import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
+import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, workOrderDiff, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
+import { lineStatusGate, stepsAfterStatus, stepCount, creditsForAdvance, normalizeOp, sortQueue, opKey, fieldProgress } from "./work-order-field.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
@@ -303,6 +305,8 @@ function init() {
   if (!cols.includes("sandbox_by"))         db.exec("ALTER TABLE projects ADD COLUMN sandbox_by TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS idx_projects_sandbox ON projects(sandbox_of)");
 
+  // The technician's COMPLETION SUBMISSION — "I'm done, please review" — not the work order document.
+  // Named `work_orders` historically; the document itself lives in `wo` / `wo_versions` below.
   db.exec(`
     CREATE TABLE IF NOT EXISTS work_orders (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -318,6 +322,252 @@ function init() {
       review_notes TEXT
     )
   `);
+
+  // ---- THE WORK ORDER DOCUMENT (docs/WORK_ORDERS.md) ------------------------------------------
+  // One live work order per project, copied from a published proposal option and valued at technician
+  // payout. `payload` is the WORKING draft in proposal shape (`options:[one]`, `techPrice` per line) so
+  // ProposalItemsEditor renders it unchanged; `wo_versions` keeps every sent version immutably. Editing
+  // a work order NEVER writes the proposal row — that independence is the whole point of the table.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      source_proposal_id INTEGER,
+      source_version    INTEGER,
+      source_option     TEXT,
+      payload           TEXT NOT NULL DEFAULT '{}',
+      notes             TEXT,
+      show_payouts      INTEGER NOT NULL DEFAULT 1,
+      status            TEXT NOT NULL DEFAULT 'draft',
+      version           INTEGER NOT NULL DEFAULT 0,
+      created_by        TEXT,
+      closed_at         TEXT,
+      closed_by         TEXT,
+      created_at        TEXT DEFAULT (datetime('now','localtime')),
+      updated_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_wo_project ON wo(project_access_id)");
+  // The customer's sign-off is a REQUEST, not a gate: it is asked for when the work finishes, chased
+  // once a day later, and the office can close the job without it. These stamps are what the ask, the
+  // chase and the "awaiting" state read from — all three must be idempotent, so each is a timestamp
+  // rather than a counter.
+  {
+    const woCols = db.prepare("PRAGMA table_info(wo)").all().map((c) => c.name);
+    if (!woCols.includes("signoff_requested_at")) db.exec("ALTER TABLE wo ADD COLUMN signoff_requested_at TEXT");
+    if (!woCols.includes("signoff_requested_by")) db.exec("ALTER TABLE wo ADD COLUMN signoff_requested_by TEXT");
+    if (!woCols.includes("signoff_reminded_at"))  db.exec("ALTER TABLE wo ADD COLUMN signoff_reminded_at TEXT");
+  }
+
+  // Immutable sent versions. A row here is what a technician signed; nothing ever updates its payload.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_versions (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id        INTEGER NOT NULL,
+      version      INTEGER NOT NULL,
+      payload      TEXT NOT NULL,
+      fingerprint  TEXT,
+      sent_at      TEXT DEFAULT (datetime('now','localtime')),
+      sent_by      TEXT,
+      superseded_at TEXT,
+      UNIQUE(wo_id, version)
+    )
+  `);
+
+  // Live per-line FIELD state. Relational, not part of the payload, so one technician's tap is one
+  // UPDATE — which is what makes several phones on one job, and an offline replay, safe.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_lines (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id         INTEGER NOT NULL,
+      line_key      TEXT NOT NULL,
+      parent_key    TEXT,
+      status        TEXT NOT NULL DEFAULT 'incomplete',
+      status_by_id  INTEGER,
+      status_by     TEXT,
+      status_at     TEXT,
+      owner_id      INTEGER,
+      owner_name    TEXT,
+      needs_photos  INTEGER NOT NULL DEFAULT 0,
+      steps_done    INTEGER NOT NULL DEFAULT 0,
+      removed_at    TEXT,
+      UNIQUE(wo_id, line_key)
+    )
+  `);
+  // Decision A (owner, 2026-11-19): the three-state line keeps the install checklist's STEP path inside
+  // it, so partial work still pays. `steps_done` is how far along a line's path the crew has got;
+  // `status` is the three-state the popup sets. Ensure-column for a database created before this.
+  {
+    const lineCols = db.prepare("PRAGMA table_info(wo_lines)").all().map((c) => c.name);
+    if (!lineCols.includes("steps_done")) db.exec("ALTER TABLE wo_lines ADD COLUMN steps_done INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Per technician, per version signature — a work order can be accepted by more than one tech, and a
+  // sent revision voids them all (requirement 13). Bound to workOrderFingerprint, like a proposal.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_signatures (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id          INTEGER NOT NULL,
+      version        INTEGER NOT NULL,
+      user_id        INTEGER,
+      name           TEXT NOT NULL,
+      signature_data TEXT,
+      fingerprint    TEXT,
+      signed_at      TEXT DEFAULT (datetime('now','localtime')),
+      voided_at      TEXT,
+      voided_by      TEXT,
+      pin_verified_at TEXT,
+      device         TEXT,
+      ip             TEXT,
+      party          TEXT NOT NULL DEFAULT 'tech'
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_sig ON wo_signatures(wo_id, version)");
+  // Owner's rule (2026-11-19): a technician re-enters their OWN PIN immediately before signing, and the
+  // event records who, on what device, from where and when. The PIN is never stored — only the fact that
+  // it was verified, and the moment it was. Ensure-columns so a database created before this still gains them.
+  {
+    const sigCols = db.prepare("PRAGMA table_info(wo_signatures)").all().map((c) => c.name);
+    if (!sigCols.includes("pin_verified_at")) db.exec("ALTER TABLE wo_signatures ADD COLUMN pin_verified_at TEXT");
+    if (!sigCols.includes("device"))          db.exec("ALTER TABLE wo_signatures ADD COLUMN device TEXT");
+    if (!sigCols.includes("ip"))              db.exec("ALTER TABLE wo_signatures ADD COLUMN ip TEXT");
+    // 'tech' accepts the job; 'customer' signs the finished work off (requirement 24). One table, so
+    // the two signatures on a work order are read, voided and audited the same way.
+    if (!sigCols.includes("party"))           db.exec("ALTER TABLE wo_signatures ADD COLUMN party TEXT NOT NULL DEFAULT 'tech'");
+  }
+
+  // On-site check-in. No line may be marked until the acting technician has a check-in for TODAY.
+  //
+  // `assigned` records whether this person was on the job's crew AT THE MOMENT they arrived — a
+  // technician can open a project link, PIN in as themselves and start work without ever having been
+  // assigned. That is allowed (the work is real), but it is flagged: their credits are held pending
+  // until an admin decides, and `decision` is that decision — NULL while nobody has made one.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_checkins (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id    INTEGER NOT NULL,
+      user_id  INTEGER,
+      name     TEXT NOT NULL,
+      day      TEXT NOT NULL,
+      in_at    TEXT DEFAULT (datetime('now','localtime')),
+      out_at   TEXT,
+      lat      REAL,
+      lng      REAL,
+      assigned INTEGER NOT NULL DEFAULT 1,
+      decision TEXT,
+      decided_by TEXT,
+      decided_at TEXT,
+      device   TEXT,
+      UNIQUE(wo_id, user_id, day)
+    )
+  `);
+  {
+    const ciCols = db.prepare("PRAGMA table_info(wo_checkins)").all().map((c) => c.name);
+    if (!ciCols.includes("assigned"))   db.exec("ALTER TABLE wo_checkins ADD COLUMN assigned INTEGER NOT NULL DEFAULT 1");
+    if (!ciCols.includes("decision"))   db.exec("ALTER TABLE wo_checkins ADD COLUMN decision TEXT");
+    if (!ciCols.includes("decided_by")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_by TEXT");
+    if (!ciCols.includes("decided_at")) db.exec("ALTER TABLE wo_checkins ADD COLUMN decided_at TEXT");
+    if (!ciCols.includes("device"))     db.exec("ALTER TABLE wo_checkins ADD COLUMN device TEXT");
+    // The end-of-day nudge is tied to THIS arrival, 12 hours after it, once. Stamping the check-in row
+    // is what makes "one reminder per check-in, no repeats" true by construction.
+    if (!ciCols.includes("eod_reminded_at")) db.exec("ALTER TABLE wo_checkins ADD COLUMN eod_reminded_at TEXT");
+  }
+
+  // Append-only action trail: who did what, to which line, when. `client_at` is the device clock, kept
+  // so an offline replay can be de-duplicated and reported in the order it actually happened.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_events (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id        INTEGER NOT NULL,
+      line_key     TEXT,
+      action       TEXT NOT NULL,
+      from_status  TEXT,
+      to_status    TEXT,
+      actor_id     INTEGER,
+      actor_name   TEXT,
+      note         TEXT,
+      meta         TEXT,
+      client_at    TEXT,
+      at           TEXT DEFAULT (datetime('now','localtime')),
+      UNIQUE(wo_id, line_key, action, actor_name, client_at)
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_events ON wo_events(wo_id, at)");
+
+  // Before / after / issue photos per line. The image itself goes through /api/media — a data: URL must
+  // never reach one of these rows (the same rule the install checklist learned the hard way).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_line_media (
+      id        INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id     INTEGER NOT NULL,
+      line_key  TEXT NOT NULL,
+      slot      TEXT NOT NULL,
+      media_url TEXT NOT NULL,
+      by_name   TEXT,
+      at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_media ON wo_line_media(wo_id, line_key)");
+
+  // End of day: a LOCKED daily log per technician. Locking a day does not close the work order —
+  // installs run over several days (requirement 22).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_day_logs (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id           INTEGER NOT NULL,
+      user_id         INTEGER,
+      name            TEXT NOT NULL,
+      day             TEXT NOT NULL,
+      lines_completed INTEGER NOT NULL DEFAULT 0,
+      payout_total    REAL NOT NULL DEFAULT 0,
+      note            TEXT,
+      locked_at       TEXT DEFAULT (datetime('now','localtime')),
+      locked_by       TEXT,
+      paid_at         TEXT,
+      paid_by         TEXT,
+      paid_method     TEXT,
+      paid_note       TEXT,
+      pay_batch       TEXT,
+      UNIQUE(wo_id, user_id, day)
+    )
+  `);
+  // PAID is the second, final lock. A locked day is frozen money; a PAID day is money that has left the
+  // business, so nothing may touch it again — not a reassign, not a split, not a second payment.
+  // `pay_batch` groups the days paid together so a period can be shown and audited as one act.
+  {
+    const dlCols = db.prepare("PRAGMA table_info(wo_day_logs)").all().map((c) => c.name);
+    for (const [c, t] of [["paid_at", "TEXT"], ["paid_by", "TEXT"], ["paid_method", "TEXT"], ["paid_note", "TEXT"], ["pay_batch", "TEXT"]]) {
+      if (!dlCols.includes(c)) db.exec(`ALTER TABLE wo_day_logs ADD COLUMN ${c} ${t}`);
+    }
+  }
+
+  // Who is paid for a line, and in what share. `share` sums to 1 across a line's credits; `amount` is
+  // the dollar figure at lock time, so a later payout edit never silently restates a paid day.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wo_line_credits (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_id      INTEGER NOT NULL,
+      line_key   TEXT NOT NULL,
+      user_id    INTEGER,
+      name       TEXT NOT NULL,
+      share      REAL NOT NULL DEFAULT 1,
+      amount     REAL NOT NULL DEFAULT 0,
+      day_log_id INTEGER,
+      set_by     TEXT,
+      set_at     TEXT DEFAULT (datetime('now','localtime')),
+      pending    INTEGER NOT NULL DEFAULT 0,
+      voided_at  TEXT
+    )
+  `);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_wo_credits ON wo_line_credits(wo_id, line_key)");
+  // `pending` = earned by a technician who was not on this job's crew when they did it. Real work, and
+  // it stays in the record either way — but it does not reach payroll until an admin assigns them.
+  // `voided_at` is the Reject decision: the credit is cancelled, the log keeps every trace of it.
+  {
+    const crCols = db.prepare("PRAGMA table_info(wo_line_credits)").all().map((c) => c.name);
+    if (!crCols.includes("pending"))   db.exec("ALTER TABLE wo_line_credits ADD COLUMN pending INTEGER NOT NULL DEFAULT 0");
+    if (!crCols.includes("voided_at")) db.exec("ALTER TABLE wo_line_credits ADD COLUMN voided_at TEXT");
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS project_assignments (
@@ -2100,8 +2350,29 @@ export function findInternalUserByPin(entered) {
 }
 
 // An internal user's effective project PIN: their custom PIN if set, else last-4-of-phone.
+// CAREFUL: this needs a row that actually CARRIES pin_custom. getUserById / getUserByEmail project a
+// safe column list that deliberately leaves the PIN out, so passing one of those rows here silently
+// falls through to the phone digits — which would ignore an office-set PIN and accept the phone
+// instead. To CHECK someone's PIN, use userPinMatches below; it reads the column itself.
 export function userEffectivePin(user) {
   return user?.pin_custom ? String(user.pin_custom).trim() : phonePin(user?.phone);
+}
+// Does `entered` match this staff member's own effective PIN? The PIN is read, compared and discarded
+// here — it is never returned, so no caller can hold it, log it or send it anywhere. A disabled
+// account, an account with no PIN at all, or anything that isn't 4 digits is a plain `false`.
+export function userPinMatches(userId, entered) {
+  const pin = String(entered || "").replace(/\D/g, "");
+  if (pin.length !== 4 || userId == null) return false;
+  const u = db.prepare("SELECT pin_custom, phone, disabled FROM users WHERE id = ?").get(Number(userId));
+  if (!u || u.disabled) return false;
+  const expected = userEffectivePin(u);
+  return !!expected && String(expected) === pin;
+}
+// Whether they have one at all — so the UI can say "ask the office to set one" instead of "wrong PIN".
+export function userHasPin(userId) {
+  if (userId == null) return false;
+  const u = db.prepare("SELECT pin_custom, phone FROM users WHERE id = ?").get(Number(userId));
+  return !!(u && userEffectivePin(u));
 }
 
 // The primary admin account (lowest id) — who the master admin PIN logs in AS, so that override
@@ -8625,6 +8896,857 @@ export function approveWorkOrder(id, {reviewedById, reviewedByName}) {
 }
 export function rejectWorkOrder(id, {reviewedById, reviewedByName, reviewNotes}) {
   db.prepare("UPDATE work_orders SET status='rejected',reviewed_by_id=?,reviewed_by_name=?,reviewed_at=datetime('now','localtime'),review_notes=? WHERE id=?").run(reviewedById??null, reviewedByName??null, reviewNotes??null, id);
+}
+
+// ---- THE WORK ORDER DOCUMENT (docs/WORK_ORDERS.md) -------------------------------------------
+// A copy of ONE published proposal option, valued at technician payout, with its own versions. Every
+// function here reads and writes `wo*` tables ONLY — none of them touches `proposals`, which is what
+// makes requirement 9 ("editing the work order never changes the signed proposal") structural rather
+// than a promise. The scope is copied from the PUBLISHED proposal, because that is what the customer
+// actually received; an unsent draft is not a job anyone can be dispatched to.
+
+// Keep wo_lines in step with the payload: insert a row for each new line (so a tap has something to
+// update), and tombstone rows whose line left the draft. A line that comes BACK keeps its old status —
+// that is the whole reason for the tombstone instead of a delete.
+function woSyncLines(woId, payload) {
+  const lines = woLines(payload);
+  const keys = new Set(lines.map((l) => l.key));
+  const ins = db.prepare("INSERT INTO wo_lines (wo_id, line_key, parent_key, needs_photos) VALUES (?,?,?,?) ON CONFLICT(wo_id, line_key) DO UPDATE SET parent_key=excluded.parent_key, needs_photos=excluded.needs_photos, removed_at=NULL");
+  for (const l of lines) ins.run(woId, l.key, l.parentKey, l.needsPhotos ? 1 : 0);
+  for (const r of db.prepare("SELECT line_key FROM wo_lines WHERE wo_id=? AND removed_at IS NULL").all(woId)) {
+    if (!keys.has(String(r.line_key))) db.prepare("UPDATE wo_lines SET removed_at=datetime('now','localtime') WHERE wo_id=? AND line_key=?").run(woId, r.line_key);
+  }
+}
+
+export function woRow(accessId) {
+  const r = db.prepare("SELECT * FROM wo WHERE project_access_id=?").get(String(accessId));
+  return r ? { ...r } : null;
+}
+export function woLatestSentVersion(woId) {
+  const r = db.prepare("SELECT * FROM wo_versions WHERE wo_id=? ORDER BY version DESC LIMIT 1").get(woId);
+  return r ? { ...r, payload: JSON.parse(r.payload) } : null;
+}
+export function woVersionList(woId) {
+  return db.prepare("SELECT id, version, fingerprint, sent_at, sent_by, superseded_at FROM wo_versions WHERE wo_id=? ORDER BY version DESC").all(woId).map((r) => ({ ...r }));
+}
+
+// The one read every work-order surface uses. Returns null when there is nothing to show yet (no sent
+// proposal, or no work order created), so a caller renders an empty state instead of a $0 sheet.
+export function getWorkOrderDoc(accessId, { actorId = null, actorName = null } = {}) {
+  const row = woRow(accessId);
+  if (!row) return null;
+  let payload = {};
+  try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
+  const sent = woLatestSentVersion(row.id);
+  const state = db.prepare("SELECT * FROM wo_lines WHERE wo_id=? AND removed_at IS NULL").all(row.id).map((r) => ({ ...r }));
+  const lineState = {};
+  for (const s of state) lineState[s.line_key] = s;
+  // Field data (Stage 3). Photos are grouped per line so the popup can tell before from after without
+  // a second round trip, and `checkedInToday` is the gate the popup greys its buttons on.
+  const media = woLineMediaFor(row.id);
+  const photos = {};
+  for (const m of media) (photos[m.line_key] ||= []).push({ id: m.id, slot: m.slot, url: m.media_url, by: m.by_name, at: m.at });
+  const liveLines = woLines(payload).map((l) => ({ ...l, state: lineState[l.key] || null, photos: photos[l.key] || [], steps: stepCount(l.kind) }));
+  return {
+    id: row.id, accessId: row.project_access_id,
+    sourceProposalId: row.source_proposal_id, sourceVersion: row.source_version, sourceOption: row.source_option,
+    payload, notes: row.notes || "", showPayouts: !!row.show_payouts,
+    status: row.status, version: row.version,
+    closedAt: row.closed_at, closedBy: row.closed_by, updatedAt: row.updated_at,
+    total: woTotal(payload),
+    lines: liveLines,
+    lineState,
+    progress: fieldProgress(liveLines),
+    checkedInToday: woCheckedInToday(row.id, actorId, actorName),
+    // Requirement 4 of the unassigned-check-in addendum: who is on site right now, assigned or not,
+    // with the time they arrived. The office sees the whole list; it is also what drives the prompt.
+    checkins: woCheckinsFor(row.id, localDay()),
+    // This caller's own arrival, so the technician's banner can say they are not on the crew yet.
+    myCheckin: woCheckinsFor(row.id, localDay()).find((c) =>
+      (actorId != null && String(c.user_id) === String(actorId)) ||
+      (!!actorName && String(c.name || "").toLowerCase() === String(actorName).toLowerCase())) || null,
+    // Undecided arrivals by people who were not on the crew — the admin prompt's queue.
+    pendingCheckins: woCheckinsFor(row.id).filter((c) => !c.assigned && !c.decision),
+    // Stage 4. `dayLogs` is the locked record; `unlocked` is what today's work has earned but not yet
+    // banked; `myDayOpen` is whether THIS person still owes an End of day.
+    dayLogs: woDayLogsFor(row.id),
+    unlocked: woUnlockedTotals(row.id),
+    // What THIS person has earned today and not yet banked. The whole job's figure would tell a
+    // technician they are owed their crewmate's money too.
+    myUnlocked: actorName ? woUnlockedTotals(row.id, actorName) : { payable: 0, pending: 0 },
+    myDayOpen: (() => {
+      if (!actorName) return false;
+      const d = localDay();
+      const inToday = woCheckedInToday(row.id, actorId, actorName, d);
+      if (!inToday) return false;
+      return !db.prepare("SELECT 1 FROM wo_day_logs WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(row.id, actorName, d);
+    })(),
+    // Spread, always: a node:sqlite row has a NULL PROTOTYPE, and React refuses to pass one from a
+    // server component to a client one ("Classes or null prototypes are not supported"). Every other
+    // read here does `{ ...r }` for the same reason.
+    // The sign-off ask: when it went out, when it was chased. Drives "Awaiting customer sign-off"
+    // and the office's Resend.
+    signoffRequestedAt: row.signoff_requested_at || null,
+    signoffRequestedBy: row.signoff_requested_by || null,
+    signoffRemindedAt: row.signoff_reminded_at || null,
+    customerSignature: (() => {
+      const s = db.prepare("SELECT * FROM wo_signatures WHERE wo_id=? AND party='customer' AND voided_at IS NULL ORDER BY signed_at DESC LIMIT 1").get(row.id);
+      return s ? { ...s } : null;
+    })(),
+    versions: woVersionList(row.id),
+    changeState: workOrderChangeState(sent, { payload }),
+    fingerprint: workOrderFingerprint(payload),
+    // Signatures on the CURRENT version only — an earlier version's are voided the moment a revision is
+    // sent, and are history, not consent.
+    signatures: row.version ? woSignaturesFor(row.id, row.version).filter((s) => !s.voided_at && s.party !== "customer") : [],
+    // Requirement 14's trigger: the customer has signed a proposal revision, or an add-on was approved,
+    // since this work order was copied. It is a flag for the office to pull the change in — never an
+    // automatic rewrite of a document a technician may already have signed.
+    proposalDrift: woProposalDrift(accessId, row),
+  };
+}
+// The approved add-ons as RAW records — getApprovedAddons returns the customer money view, which drops
+// the item id and the technician payout (`techPay`). The work order needs both: the id gives a line a
+// stable key across revisions, and techPay is what the office already decided this work pays.
+// `addendumSignatureCurrent` is the same filter, so an edited add-on drops out until it is re-signed.
+function approvedAddonRecords(accessId) {
+  const rec = getToolData(accessId, "addendum");
+  try { return (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && addendumSignatureCurrent(a)); }
+  catch { return []; }
+}
+// True when the published proposal has moved past the version this work order was copied from, or an
+// approved add-on isn't on it yet. Cheap: ids and keys, no payload comparison.
+function woProposalDrift(accessId, row) {
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return false;
+  if (Number(pub.id) !== Number(row.source_proposal_id)) return true;
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { return false; }
+  const have = new Set(woLines(live).map((l) => l.key));
+  for (const a of approvedAddonRecords(accessId)) {
+    for (const it of (a.items || [])) if (it?.id && !have.has(`addon:${a.id}:${it.id}:0`)) return true;
+  }
+  return false;
+}
+
+// Create the work order from the published proposal. Idempotent: if one exists it is returned as-is,
+// never re-snapshotted, because a re-snapshot would silently discard the office's payout edits.
+export function createWorkOrderDoc(accessId, { byName = null, optionId = null } = {}) {
+  const existing = woRow(accessId);
+  if (existing) return { ok: true, id: existing.id, existed: true };
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return { error: "Send the proposal first — the work order is copied from the version the customer received." };
+  const rates = getEffectiveRates(null);
+  const payload = workOrderPayloadFrom(pub, { optionId: optionId ?? pub.selected_option, rates });
+  if (!payload) return { error: "That proposal has no priced option to copy." };
+  const r = db.prepare("INSERT INTO wo (project_access_id, source_proposal_id, source_version, source_option, payload, created_by) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), pub.id, pub.version ?? null, String(payload.options[0].id), JSON.stringify(payload), byName || null);
+  const id = Number(r.lastInsertRowid);
+  woSyncLines(id, payload);
+  return { ok: true, id, existed: false };
+}
+
+// Save the working draft. Validated at this boundary; a bad payload is never written.
+export function saveWorkOrderDraft(accessId, payload, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  const err = validateWorkOrderPayload(payload);
+  if (err) return { error: err };
+  const json = JSON.stringify(typeof payload === "string" ? JSON.parse(payload) : payload);
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo SET payload=?, updated_at=datetime('now','localtime') WHERE id=?").run(json, row.id);
+    woSyncLines(row.id, JSON.parse(json));
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not save the work order." }; }
+  return { ok: true };
+}
+
+export function setWorkOrderNotesDoc(accessId, notes) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET notes=?, updated_at=datetime('now','localtime') WHERE id=?").run(String(notes ?? "").slice(0, 8000), row.id);
+  return { ok: true };
+}
+// Requirement 7: payouts hidden from the technician. Payroll still tracks them — this flag is a
+// display rule on the tech's copy, never a change to what is owed.
+export function setWorkOrderShowPayouts(accessId, on) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET show_payouts=?, updated_at=datetime('now','localtime') WHERE id=?").run(on ? 1 : 0, row.id);
+  return { ok: true };
+}
+// Re-pull the standard rates onto every line of the draft (the office can then tweak and save).
+export function reseedWorkOrderPayouts(accessId, techName = null) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  return saveWorkOrderDraft(accessId, reseedPayouts(doc.payload, getEffectiveRates(techName)));
+}
+
+// ---- Versions, revisions and signatures (Stage 2) --------------------------------------------
+// The work order versions exactly like the proposal: a sent version is an immutable row, the live
+// `wo.payload` is the working draft over it, and workOrderChangeState() compares the two. Nothing here
+// re-derives that comparison — it is the same pure function the editor's footer renders from.
+
+// Send the working draft as the next version. Every signature on an EARLIER version is voided, because
+// a technician agreed to a scope and a payout that no longer exist (requirement 13). Field state is
+// untouched: a completed line stays completed across a revision.
+export function sendWorkOrderVersion(accessId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  let payload = {};
+  try { payload = JSON.parse(row.payload || "{}"); } catch { return { error: "The draft could not be read." }; }
+  if (validateWorkOrderPayload(payload)) return { error: validateWorkOrderPayload(payload) };
+  if (!woLines(payload).length) return { error: "Add at least one line before sending it." };
+  const next = (row.version || 0) + 1;
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_versions SET superseded_at=datetime('now','localtime') WHERE wo_id=? AND superseded_at IS NULL").run(row.id);
+    db.prepare("INSERT INTO wo_versions (wo_id, version, payload, fingerprint, sent_by) VALUES (?,?,?,?,?)")
+      .run(row.id, next, JSON.stringify(payload), workOrderFingerprint(payload), byName || null);
+    db.prepare("UPDATE wo_signatures SET voided_at=datetime('now','localtime'), voided_by=? WHERE wo_id=? AND version<? AND voided_at IS NULL")
+      .run(byName || "Revision", row.id, next);
+    db.prepare("UPDATE wo SET version=?, status='sent', updated_at=datetime('now','localtime') WHERE id=?").run(next, row.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+      .run(row.id, "sent", byName || null, `v${next}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not send the work order." }; }
+  return { ok: true, version: next };
+}
+
+// Cancel Revision — discard the unsent draft and restore the version the technician last received.
+export function cancelWorkOrderRevision(accessId) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const sent = woLatestSentVersion(row.id);
+  if (!sent) return { error: "Nothing has been sent yet — there is no version to go back to." };
+  const payload = JSON.stringify(sent.payload);
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo SET payload=?, updated_at=datetime('now','localtime') WHERE id=?").run(payload, row.id);
+    woSyncLines(row.id, sent.payload);
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not cancel the revision." }; }
+  return { ok: true };
+}
+
+export function woSignaturesFor(woId, version = null) {
+  const sql = version == null
+    ? "SELECT * FROM wo_signatures WHERE wo_id=? ORDER BY signed_at DESC"
+    : "SELECT * FROM wo_signatures WHERE wo_id=? AND version=? ORDER BY signed_at DESC";
+  return (version == null ? db.prepare(sql).all(woId) : db.prepare(sql).all(woId, version)).map((r) => ({ ...r }));
+}
+
+// A technician accepts the CURRENT sent version. Bound to that version's fingerprint, so if the scope or
+// a payout moved since, the signature is refused rather than silently attached to different work.
+// `pinVerified` is asserted by the action (it checked the signer's own PIN); the PIN never reaches here.
+export function signWorkOrder(accessId, { userId = null, name, signatureData = null, device = null, ip = null, pinVerified = false }) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!row.version) return { error: "This work order hasn't been sent for signature yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  if (!pinVerified) return { error: "Confirm your PIN to sign." };
+  const sent = woLatestSentVersion(row.id);
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { live = {}; }
+  const fp = workOrderFingerprint(sent.payload);
+  if (fp !== workOrderFingerprint(live)) return { error: "This work order changed — ask the office to send the revision, then sign." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "A name is required." };
+  const dup = db.prepare("SELECT 1 FROM wo_signatures WHERE wo_id=? AND version=? AND name=? COLLATE NOCASE AND voided_at IS NULL").get(row.id, row.version, who);
+  if (dup) return { error: "You've already signed this version." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO wo_signatures (wo_id, version, user_id, name, signature_data, fingerprint, pin_verified_at, device, ip) VALUES (?,?,?,?,?,?,datetime('now','localtime'),?,?)")
+      .run(row.id, row.version, userId, who, signatureData || null, fp, device || null, ip || null);
+    db.prepare("UPDATE wo SET status='signed', updated_at=datetime('now','localtime') WHERE id=?").run(row.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "signed", userId, who, `v${row.version}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record the signature." }; }
+  return { ok: true };
+}
+
+// Admin correction: void one signature so it can be re-signed. The row is kept (voided_at), never deleted.
+export function voidWorkOrderSignature(accessId, sigId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const r = db.prepare("UPDATE wo_signatures SET voided_at=datetime('now','localtime'), voided_by=? WHERE id=? AND wo_id=? AND voided_at IS NULL").run(byName || null, sigId, row.id);
+  if (!r.changes) return { error: "That signature is already void." };
+  const left = db.prepare("SELECT COUNT(*) n FROM wo_signatures WHERE wo_id=? AND version=? AND voided_at IS NULL").get(row.id, row.version).n;
+  if (!left) db.prepare("UPDATE wo SET status='sent', updated_at=datetime('now','localtime') WHERE id=?").run(row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+    .run(row.id, "signature_voided", byName || null, String(sigId), new Date().toISOString());
+  return { ok: true };
+}
+
+// Requirement 14: a signed proposal revision or addendum lands in the work order as an UNSENT revision
+// for the office to price and send — it never reaches a technician on its own. Lines are matched by the
+// proposal line id, so an existing line keeps its payout and its field state; only genuinely new lines
+// arrive, seeded from the rate book at 0 where the book has no answer.
+export function syncWorkOrderFromProposal(accessId) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return { error: "No published proposal to sync from." };
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { return { error: "The draft could not be read." }; }
+  const fresh = workOrderPayloadFrom(pub, { optionId: row.source_option, rates: getEffectiveRates(null) });
+  if (!fresh) return { error: "That proposal has no priced option." };
+  // Approved addendums are work too — the same expansion the install checklist does: one line per unit,
+  // carrying the office-set payout from the addendum (`techPay`). They land in their own service block
+  // so the crew can see at a glance what was added after the original scope.
+  const addonLines = [];
+  for (const a of approvedAddonRecords(accessId)) {
+    for (const it of (a.items || [])) {
+      if (!it?.id) continue;                       // an add-on item with no id has no stable line key
+      const qty = Math.max(1, +it.qty || 1);
+      for (let n = 0; n < qty; n++) {
+        addonLines.push({ id: `addon:${a.id}:${it.id}:${n}`, name: qty > 1 ? `${it.name} #${n + 1}` : it.name, qty: 1, techPrice: Math.round((+it.techPay || 0) * 100) / 100 });
+      }
+    }
+  }
+  if (addonLines.length) fresh.options[0].services.push({ key: "addon", label: "Approved Add-ons", items: addonLines });
+  // Carry every payout the office already set; anything new keeps its seed.
+  const paid = new Map(woLines(live).map((l) => [l.key, l.payout]));
+  const carry = (it) => {
+    if (paid.has(String(it.id))) it.techPrice = paid.get(String(it.id));
+    (it.sub || []).forEach(carry);
+  };
+  (fresh.options[0].services || []).forEach((s) => (s.items || []).forEach(carry));
+  const diff = workOrderDiff(live, fresh);
+  if (!diff.any) return { ok: true, changed: 0 };
+  const saved = saveWorkOrderDraft(accessId, fresh);
+  if (saved.error) return saved;
+  db.prepare("UPDATE wo SET source_proposal_id=?, source_version=? WHERE id=?").run(pub.id, pub.version ?? null, row.id);
+  return { ok: true, changed: diff.added.length + diff.removed.length + diff.changed.length, diff };
+}
+
+// ---- Stage 3: the field (check-in, line status, photos, the log, offline replay) --------------
+// Every write here is idempotent on (wo_id, line_key, action, actor, client_at) via the UNIQUE index on
+// wo_events, which is what makes an offline replay safe: the same tap arriving twice is one act, and a
+// retry can never double-pay. The DEVICE clock is the key, because it is the only value stable across
+// a retry — the server clock moves between them.
+
+export const localDay = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+// Is this person on the job's crew? Admin and manager always are — they run it. A technician is only
+// on it if someone put them there (project_assignments), which is exactly the fact the unassigned
+// check-in flow turns on.
+export function woIsAssigned(accessId, { userId = null, name = null, role = null } = {}) {
+  if (["admin", "manager"].includes(role)) return true;
+  if (userId == null && !name) return false;
+  const rows = getProjectAssignments(accessId);
+  return rows.some((a) => a.role === "tech" && (
+    (userId != null && String(a.user_id) === String(userId)) ||
+    (!!name && String(a.user_name || "").toLowerCase() === String(name).toLowerCase())
+  ));
+}
+// Whether this person's work TODAY counts toward payroll yet. Assigned → yes. Unassigned → only once
+// an admin has pressed Assign; "Not now" and an undecided check-in both leave it pending.
+export function woWorkIsPending(woId, { userId = null, name = null, day = null } = {}) {
+  const d = day || localDay();
+  const c = userId != null
+    ? db.prepare("SELECT assigned, decision FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(woId, userId, d)
+    : db.prepare("SELECT assigned, decision FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(woId, String(name || ""), d);
+  if (!c) return false;                                  // no check-in → the gate refuses anyway
+  return !c.assigned && c.decision !== "assigned";
+}
+
+// Requirement 16 — "I'm on site". One row per technician per day; a second tap is not an error, it is
+// the same arrival. A technician who is NOT on the crew may still check in — the work is real and we
+// want it recorded — but the row is flagged `assigned = 0` and waits for an admin decision.
+export function woCheckIn(accessId, { userId = null, name, lat = null, lng = null, day = null, assigned = true, device = null } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const d = day || localDay();
+  const who = String(name || "").trim();
+  if (!who) return { error: "Who is checking in?" };
+  const existing = userId != null
+    ? db.prepare("SELECT * FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(row.id, userId, d)
+    : db.prepare("SELECT * FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(row.id, who, d);
+  if (existing) return { ok: true, day: d, first: false, assigned: !!existing.assigned, decision: existing.decision || null };
+  db.prepare("INSERT INTO wo_checkins (wo_id, user_id, name, day, lat, lng, assigned, device) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(wo_id, user_id, day) DO NOTHING")
+    .run(row.id, userId, who, d, lat, lng, assigned ? 1 : 0, device);
+  // Requirement 5 of the addendum: the log says who, when, on what device, and whether they were on
+  // the crew — so a later payroll question can be answered from the record alone.
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+    .run(row.id, "checkin", userId, who, d, JSON.stringify({ assigned: !!assigned, device: device || null }), new Date().toISOString());
+  return { ok: true, day: d, first: true, assigned: !!assigned, decision: null };
+}
+
+// The admin's answer to "<Tech> just checked in — assign them?".
+//   assign    → they join the crew (and so the installation event, which invites from assignments),
+//               and everything they have already done stops being pending.
+//   reject    → their credits are voided. The work stays in the log; the money does not count.
+//   not_now   → nothing changes; the prompt stays on the work order.
+export function woDecideCheckin(accessId, checkinId, decision, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!["assign", "reject", "not_now"].includes(decision)) return { error: "Unknown decision." };
+  const c = db.prepare("SELECT * FROM wo_checkins WHERE id=? AND wo_id=?").get(checkinId, row.id);
+  if (!c) return { error: "That check-in is gone." };
+  if (decision === "not_now") {
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "checkin_decision", byName, c.name, JSON.stringify({ decision: "not_now", checkinId }), new Date().toISOString());
+    return { ok: true, decision: "not_now" };
+  }
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_checkins SET decision=?, decided_by=?, decided_at=datetime('now','localtime') WHERE id=?")
+      .run(decision === "assign" ? "assigned" : "rejected", byName, c.id);
+    if (decision === "assign") {
+      db.prepare("UPDATE wo_line_credits SET pending=0 WHERE wo_id=? AND name=? COLLATE NOCASE AND pending=1 AND voided_at IS NULL").run(row.id, c.name);
+    } else {
+      db.prepare("UPDATE wo_line_credits SET voided_at=datetime('now','localtime') WHERE wo_id=? AND name=? COLLATE NOCASE AND voided_at IS NULL AND day_log_id IS NULL").run(row.id, c.name);
+    }
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "checkin_decision", byName, c.name, JSON.stringify({ decision, checkinId: c.id }), new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record that decision." }; }
+  return { ok: true, decision, techName: c.name, techId: c.user_id ?? null };
+}
+export function woCheckedInToday(woId, userId, name, day = null) {
+  const d = day || localDay();
+  const r = userId != null
+    ? db.prepare("SELECT 1 FROM wo_checkins WHERE wo_id=? AND user_id=? AND day=?").get(woId, userId, d)
+    : db.prepare("SELECT 1 FROM wo_checkins WHERE wo_id=? AND name=? COLLATE NOCASE AND day=?").get(woId, String(name || ""), d);
+  return !!r;
+}
+export function woCheckinsFor(woId, day = null) {
+  const sql = day ? "SELECT * FROM wo_checkins WHERE wo_id=? AND day=? ORDER BY in_at" : "SELECT * FROM wo_checkins WHERE wo_id=? ORDER BY day DESC, in_at";
+  return (day ? db.prepare(sql).all(woId, day) : db.prepare(sql).all(woId)).map((r) => ({ ...r }));
+}
+
+export function woLineMediaFor(woId, lineKey = null) {
+  const sql = lineKey ? "SELECT * FROM wo_line_media WHERE wo_id=? AND line_key=? ORDER BY at" : "SELECT * FROM wo_line_media WHERE wo_id=? ORDER BY at";
+  return (lineKey ? db.prepare(sql).all(woId, lineKey) : db.prepare(sql).all(woId)).map((r) => ({ ...r }));
+}
+// A photo arrives as a /api/media URL. A data: URL must never land in a row — that lesson is already
+// written into the install checklist, and the rule is the same here.
+export function addWoLineMedia(accessId, { lineKey, slot, mediaUrl, byName = null }) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!["before", "after", "issue"].includes(String(slot))) return { error: "Unknown photo slot." };
+  const url = String(mediaUrl || "");
+  if (!url || /^data:/i.test(url)) return { error: "Upload the photo first." };
+  db.prepare("INSERT INTO wo_line_media (wo_id, line_key, slot, media_url, by_name) VALUES (?,?,?,?,?)").run(row.id, String(lineKey), String(slot), url, byName);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
+    .run(row.id, String(lineKey), "photo", byName, String(slot), new Date().toISOString());
+  return { ok: true };
+}
+export function removeWoLineMedia(accessId, id) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const r = db.prepare("DELETE FROM wo_line_media WHERE id=? AND wo_id=?").run(id, row.id);
+  return r.changes ? { ok: true } : { error: "That photo is already gone." };
+}
+
+// Requirements 17–20. The three-state line, with the step path inside it (decision A) and the step
+// credits that follow (decision B). Refuses rather than half-applies: the gate runs first, and the
+// write is one transaction.
+export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, note = "", actorId = null, actorName = null, clientAt = null }) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (doc.status === "closed") return { error: "This work order is closed." };
+  const line = doc.lines.find((l) => l.key === String(lineKey));
+  if (!line) return { error: "That line isn't on this work order." };
+  const who = String(actorName || "").trim();
+  if (!who) return { error: "Who is marking it?" };
+  const day = localDay();
+  const photos = woLineMediaFor(doc.id, line.key);
+  const gate = lineStatusGate({ status, checkedInToday: woCheckedInToday(doc.id, actorId, who, day), line, photos, note });
+  if (gate) return { error: gate };
+
+  const prev = line.state || {};
+  const from = Math.min(+prev.steps_done || 0, stepCount(line.kind));
+  const to = stepsAfterStatus(line.kind, status, { stepsDone: from, pickStep });
+  const stamp = clientAt || new Date().toISOString();
+  // Idempotence: this exact tap, from this person, at this device clock reading, already landed.
+  const seen = db.prepare("SELECT 1 FROM wo_events WHERE wo_id=? AND line_key=? AND action='status' AND actor_name=? AND client_at=?").get(doc.id, line.key, who, stamp);
+  if (seen) return { ok: true, replayed: true };
+
+  const rates = getEffectiveRates(who);
+  // Unassigned work is still work: it is saved, logged and shown, but its money waits for an admin.
+  const pending = woWorkIsPending(doc.id, { userId: actorId, name: who, day });
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_lines SET status=?, steps_done=?, status_by_id=?, status_by=?, status_at=datetime('now','localtime'), owner_id=COALESCE(owner_id,?), owner_name=COALESCE(owner_name,?) WHERE wo_id=? AND line_key=?")
+      .run(status, to, actorId, who, actorId, who, doc.id, line.key);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, from_status, to_status, actor_id, actor_name, note, meta, client_at) VALUES (?,?,'status',?,?,?,?,?,?,?)")
+      .run(doc.id, line.key, prev.status || "incomplete", status, actorId, who, String(note || "").slice(0, 2000) || null, JSON.stringify({ assigned: !pending }), stamp);
+    // Decision B — each NEWLY crossed step credits the person who crossed it. Rewinding a line removes
+    // the credits for the steps that were undone, so pay never outruns the work.
+    if (to > from) {
+      const ins = db.prepare("INSERT INTO wo_line_credits (wo_id, line_key, user_id, name, share, amount, set_by, pending) VALUES (?,?,?,?,?,?,?,?)");
+      // `line.total` (qty × payout), NOT `line.payout` (the per-unit figure). A six-camera line pays
+      // its whole total across its steps; crediting the unit figure would pay a sixth of the work.
+      // `pending` holds the money when the person doing the work is not on this job's crew.
+      for (const c of creditsForAdvance(line.kind, from, to, line.total, rates)) {
+        ins.run(doc.id, line.key, actorId, who, 0, c.amount, who, pending ? 1 : 0);
+      }
+    } else if (to < from) {
+      db.prepare("DELETE FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NULL").run(doc.id, line.key);
+    }
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not save that." }; }
+  return { ok: true, status, stepsDone: to };
+}
+
+// Requirement 21 — replay a device's queue, oldest first, each op idempotent. One op failing does not
+// abandon the rest: the result says what landed and what didn't, so the phone can keep what it must
+// retry and drop what it must not.
+export function applyWoFieldQueue(accessId, ops, { actorId = null, actorName = null } = {}) {
+  const out = [];
+  for (const raw of sortQueue(ops || []).slice(0, 500)) {
+    const { op, error } = normalizeOp(raw);
+    if (error) { out.push({ key: opKey(raw), error }); continue; }
+    const r = op.action === "checkin"
+      ? woCheckIn(accessId, { userId: actorId, name: actorName })
+      : setWoLineStatus(accessId, { lineKey: op.lineKey, status: op.status, pickStep: op.pickStep, note: op.note, actorId, actorName, clientAt: op.clientAt });
+    out.push({ key: opKey(op), ...(r.error ? { error: r.error } : { ok: true, replayed: !!r.replayed }) });
+  }
+  return { ok: true, results: out };
+}
+
+export function woEventsFor(woId, limit = 300) {
+  return db.prepare("SELECT * FROM wo_events WHERE wo_id=? ORDER BY at DESC, id DESC LIMIT ?").all(woId, limit).map((r) => ({ ...r }));
+}
+export function woCreditsFor(woId, { lineKey = null, unlockedOnly = false } = {}) {
+  let sql = "SELECT * FROM wo_line_credits WHERE wo_id=?";
+  const args = [woId];
+  if (lineKey) { sql += " AND line_key=?"; args.push(lineKey); }
+  if (unlockedOnly) sql += " AND day_log_id IS NULL";
+  return db.prepare(sql + " ORDER BY set_at").all(...args).map((r) => ({ ...r }));
+}
+
+// ---- Stage 4: end of day, close-out, payroll -------------------------------------------------
+
+// Requirement 22 — End of day. It LOCKS the day: every credit this person earned today that is not
+// already locked, not pending an admin decision and not voided is attached to a wo_day_logs row and
+// becomes payroll. It does NOT close the work order — installs run over several days.
+//
+// A locked credit is never recomputed. If the office changes a payout tomorrow, yesterday's pay is
+// what it was; that is the whole point of locking it rather than deriving payroll on the fly.
+export function closeWoDay(accessId, { userId = null, name, day = null, byName = null, note = null } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "Whose day is this?" };
+  const d = day || localDay();
+  if (db.prepare("SELECT 1 FROM wo_day_logs WHERE wo_id=? AND user_id IS ? AND day=?").get(row.id, userId, d)) {
+    return { error: "That day is already closed." };
+  }
+  const credits = db.prepare(
+    "SELECT id, line_key, amount FROM wo_line_credits WHERE wo_id=? AND name=? COLLATE NOCASE AND day_log_id IS NULL AND pending=0 AND voided_at IS NULL AND date(set_at)=?"
+  ).all(row.id, who, d);
+  const total = Math.round(credits.reduce((s, c) => s + (+c.amount || 0), 0) * 100) / 100;
+  const lines = new Set(credits.map((c) => c.line_key)).size;
+  db.exec("BEGIN");
+  try {
+    const r = db.prepare("INSERT INTO wo_day_logs (wo_id, user_id, name, day, lines_completed, payout_total, note, locked_by) VALUES (?,?,?,?,?,?,?,?)")
+      .run(row.id, userId, who, d, lines, total, note || null, byName || who);
+    const logId = Number(r.lastInsertRowid);
+    const lock = db.prepare("UPDATE wo_line_credits SET day_log_id=? WHERE id=?");
+    for (const c of credits) lock.run(logId, c.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+      .run(row.id, "day_closed", userId, byName || who, d, JSON.stringify({ for: who, lines, total }), new Date().toISOString());
+    db.exec("COMMIT");
+    return { ok: true, day: d, lines, total, id: logId };
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not close the day." }; }
+}
+export function woDayLogsFor(woId) {
+  return db.prepare("SELECT * FROM wo_day_logs WHERE wo_id=? ORDER BY day DESC, name").all(woId).map((r) => ({ ...r }));
+}
+
+// Everyone who checked in on `day` and has not closed it. Used by the office's "hasn't ended their
+// day" prompt on the work order.
+export function woUnclosedDays(day = null) {
+  const d = day || localDay();
+  return db.prepare(`
+    SELECT c.wo_id, c.user_id, c.name, c.day, w.project_access_id
+    FROM wo_checkins c
+    JOIN wo w ON w.id = c.wo_id
+    WHERE c.day = ?
+      AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
+  `).all(d).map((r) => ({ ...r }));
+}
+
+// The end-of-day nudge is tied to the ARRIVAL, not to a clock: a check-in older than `hours` whose day
+// is still open and which has not already been reminded. A crew starting at 7am is nudged at 7pm; one
+// starting at 2pm at 2am — which is why the office is told too, and can close it for them.
+export function woCheckinsNeedingEodReminder(hours = 12, now = new Date()) {
+  const cutoff = new Date(now.getTime() - hours * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  return db.prepare(`
+    SELECT c.id, c.wo_id, c.user_id, c.name, c.day, c.in_at,
+           w.project_access_id, p.company_name, p.customer, u.phone
+    FROM wo_checkins c
+    JOIN wo w ON w.id = c.wo_id
+    LEFT JOIN projects p ON p.access_id = w.project_access_id
+    LEFT JOIN users u ON u.id = c.user_id
+    WHERE c.eod_reminded_at IS NULL
+      AND c.in_at <= ?
+      AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_day_logs l WHERE l.wo_id = c.wo_id AND l.user_id IS c.user_id AND l.day = c.day)
+  `).all(cutoff).map((r) => ({ ...r }));
+}
+// Claim-once per check-in. The stamp is taken BEFORE the send, inside a conditional UPDATE, so two
+// overlapping sweeps cannot both win: whichever updates the row first is the only one that sends.
+export function stampWoCheckinReminded(checkinId) {
+  return db.prepare("UPDATE wo_checkins SET eod_reminded_at=datetime('now','localtime') WHERE id=? AND eod_reminded_at IS NULL").run(checkinId).changes > 0;
+}
+
+// The customer was asked to sign off more than `hours` ago, hasn't, hasn't been chased, and the job is
+// still open. One chase per work order.
+export function woNeedingSignoffReminder(hours = 24, now = new Date()) {
+  const cutoff = new Date(now.getTime() - hours * 3600 * 1000).toISOString().slice(0, 19).replace("T", " ");
+  return db.prepare(`
+    SELECT w.id, w.project_access_id
+    FROM wo w
+    WHERE w.signoff_requested_at IS NOT NULL
+      AND w.signoff_requested_at <= ?
+      AND w.signoff_reminded_at IS NULL
+      AND w.status != 'closed'
+      AND NOT EXISTS (SELECT 1 FROM wo_signatures s WHERE s.wo_id = w.id AND s.party='customer' AND s.voided_at IS NULL)
+  `).all(cutoff).map((r) => ({ ...r }));
+}
+export function stampWoSignoffReminded(woId) {
+  return db.prepare("UPDATE wo SET signoff_reminded_at=datetime('now','localtime') WHERE id=? AND signoff_reminded_at IS NULL").run(woId).changes > 0;
+}
+// Record that the ask went out. `again` is the office pressing Resend, which clears the chase stamp so
+// the 24-hour clock starts over rather than the customer being chased twice for one ask.
+export function markWoSignoffRequested(accessId, byName = null, { again = false } = {}) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  db.prepare("UPDATE wo SET signoff_requested_at=datetime('now','localtime'), signoff_requested_by=?, signoff_reminded_at=NULL WHERE id=?")
+    .run(byName || null, row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+    .run(row.id, again ? "signoff_resent" : "signoff_requested", byName, null, new Date().toISOString());
+  return { ok: true, first: !row.signoff_requested_at };
+}
+
+// Requirement 26 — the admin's override on top of the step credits: give a line to someone else, or
+// split it. The splits replace every UNLOCKED credit on that line; anything already locked into a paid
+// day is untouchable. Shares must add up, so a split can never invent or lose money.
+export function reassignWoLineCredit(accessId, lineKey, splits, byName = null) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  const line = doc.lines.find((l) => l.key === String(lineKey));
+  if (!line) return { error: "That line isn't on this work order." };
+  // Paid money is gone. Even the unlocked remainder of a line is left alone once any of it has been
+  // paid out, because re-cutting the shares would no longer add up to what was actually handed over.
+  if (woLinePaid(doc.id, line.key)) return { error: "This line has already been paid — it can't be reassigned." };
+  const list = (splits || []).filter((s) => s && String(s.name || "").trim());
+  if (!list.length) return { error: "Name at least one person." };
+  const sum = list.reduce((s, x) => s + (+x.share || 0), 0);
+  if (Math.abs(sum - 1) > 0.001) return { error: "The shares have to add up to 100%." };
+  const locked = db.prepare("SELECT ROUND(SUM(amount),2) s FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NOT NULL").get(doc.id, line.key).s || 0;
+  const earned = Math.round((line.total - locked) * 100) / 100;
+  if (earned <= 0) return { error: "Everything on this line is already in a closed day." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("DELETE FROM wo_line_credits WHERE wo_id=? AND line_key=? AND day_log_id IS NULL").run(doc.id, line.key);
+    const ins = db.prepare("INSERT INTO wo_line_credits (wo_id, line_key, user_id, name, share, amount, set_by) VALUES (?,?,?,?,?,?,?)");
+    // The last share absorbs the rounding, so the parts always sum to the money exactly.
+    let left = earned;
+    list.forEach((s, i) => {
+      const amt = i === list.length - 1 ? Math.round(left * 100) / 100 : Math.round(earned * (+s.share || 0) * 100) / 100;
+      left = Math.round((left - amt) * 100) / 100;
+      ins.run(doc.id, line.key, s.userId ?? null, String(s.name).trim(), +s.share || 0, amt, byName);
+    });
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?,?)")
+      .run(doc.id, line.key, "credit_reassigned", byName, list.map((s) => s.name).join(" / "), JSON.stringify({ splits: list, earned }), new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not reassign that line." }; }
+  return { ok: true };
+}
+
+// Requirement 24 — the customer signs the finished work off. Same machinery as every other customer
+// acceptance: a row in stage_acceptances bound to a content fingerprint (here the work order's), so
+// a later revision makes the old sign-off visibly stale exactly as it does elsewhere. The drawn mark
+// is kept beside the technician's, in wo_signatures, as party 'customer'.
+export function signWorkOrderCustomer(accessId, { name, signatureData = null, device = null, ip = null } = {}) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (!doc.progress?.allDone) return { error: "Every line has to be complete before sign-off." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "A name is required." };
+  if (db.prepare("SELECT 1 FROM wo_signatures WHERE wo_id=? AND party='customer' AND voided_at IS NULL").get(doc.id)) {
+    return { error: "This work order is already signed off." };
+  }
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO wo_signatures (wo_id, version, name, signature_data, fingerprint, device, ip, party) VALUES (?,?,?,?,?,?,?, 'customer')")
+      .run(doc.id, doc.version || 0, who, signatureData || null, doc.fingerprint, device, ip);
+    acceptStage(accessId, "wo_customer", who, doc.fingerprint);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+      .run(doc.id, "customer_signoff", who, `v${doc.version || 0}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record the sign-off." }; }
+  // Requirement 25 — every line complete AND the customer signed closes it, with no further click.
+  return { ...closeWorkOrder(accessId, "System", { auto: true }), signed: true };
+}
+
+// Requirement 25. Auto-close needs every line complete and the customer's sign-off; an admin can close
+// it by hand at any point (a job can end without a signature — the office decides).
+// `doc.signatures` is the TECHNICIANS' acceptance of the current version — the customer's sign-off is
+// deliberately not in that list (it binds to the work, not to a version), so this reads the one field
+// that holds it. Reading `signatures` here meant auto-close could never fire; caught live 2026-11-19.
+export function woCanAutoClose(doc) {
+  return !!doc && doc.status !== "closed" && !!doc.progress?.allDone && !!doc.customerSignature;
+}
+// Closing WITHOUT the customer's signature is allowed — sign-off is a request, not a gate — but the
+// evidence has to be there instead. Every line that demands photos must have its AFTER shot: that is
+// the proof the work was finished, and it is what stands in for the signature if one never comes.
+// Returns the names of the lines that are missing one.
+export function woMissingAfterPhotos(doc) {
+  if (!doc) return [];
+  return doc.lines
+    .filter((l) => l.needsPhotos && !(l.photos || []).some((p) => p.slot === "after"))
+    .map((l) => l.name);
+}
+export function closeWorkOrder(accessId, byName = null, { auto = false } = {}) {
+  const doc = getWorkOrderDoc(accessId);
+  if (!doc) return { error: "No work order yet." };
+  if (doc.status === "closed") return { ok: true, closed: true, already: true };
+  if (auto && !woCanAutoClose(doc)) return { ok: true, closed: false };
+  const signed = !!doc.customerSignature;
+  if (!auto && !signed) {
+    const missing = woMissingAfterPhotos(doc);
+    if (missing.length) {
+      return { error: `No customer signature, so every line needs its after photo. Missing: ${missing.slice(0, 4).join(", ")}${missing.length > 4 ? `, +${missing.length - 4} more` : ""}.` };
+    }
+  }
+  // The log says exactly how this job ended, because "closed" alone cannot be audited later.
+  const how = auto ? "auto · customer signed" : signed ? `Closed by ${byName || "office"} — customer signed` : `Closed by ${byName || "office"} — no customer signature`;
+  db.prepare("UPDATE wo SET status='closed', closed_at=datetime('now','localtime'), closed_by=?, updated_at=datetime('now','localtime') WHERE id=?").run(byName, doc.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, meta, client_at) VALUES (?,?,?,?,?,?)")
+    .run(doc.id, "closed", byName, how, JSON.stringify({ auto, signed }), new Date().toISOString());
+  try { logProjectEvent(accessId, { kind: auto ? "done" : "override", label: how.slice(0, 300), actor: byName || "System" }); } catch { /* the work order log already has it */ }
+  return { ok: true, closed: true, signed };
+}
+export function reopenWorkOrder(accessId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status !== "closed") return { ok: true };
+  db.prepare("UPDATE wo SET status=?, closed_at=NULL, closed_by=NULL, updated_at=datetime('now','localtime') WHERE id=?")
+    .run(row.version ? "sent" : "draft", row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, client_at) VALUES (?,?,?,?)")
+    .run(row.id, "reopened", byName, new Date().toISOString());
+  return { ok: true };
+}
+
+// Requirement 27 — payroll. A read over the LOCKED day logs, grouped by technician across every job in
+// the period. Nothing is recomputed here: a day log holds the figure that was true when it was locked,
+// which is why a payout edited later cannot restate a week somebody has already been paid for.
+export function payrollForPeriod({ from, to } = {}) {
+  const a = String(from || "0000-01-01"), b = String(to || "9999-12-31");
+  const rows = db.prepare(`
+    SELECT l.id, l.day, l.name, l.user_id, l.lines_completed, l.payout_total, l.locked_at, l.locked_by, l.note,
+           l.paid_at, l.paid_by, l.paid_method, l.paid_note, l.pay_batch,
+           w.project_access_id, p.company_name, p.customer
+    FROM wo_day_logs l
+    JOIN wo w ON w.id = l.wo_id
+    LEFT JOIN projects p ON p.access_id = w.project_access_id
+    WHERE l.day BETWEEN ? AND ?
+    ORDER BY l.name, l.day
+  `).all(a, b).map((r) => ({ ...r, project: r.company_name || r.customer || r.project_access_id }));
+  const byTech = new Map();
+  for (const r of rows) {
+    const k = r.user_id != null ? `u${r.user_id}` : `n${String(r.name).toLowerCase()}`;
+    const t = byTech.get(k) || { userId: r.user_id ?? null, name: r.name, days: 0, lines: 0, total: 0, paid: 0, unpaid: 0, batches: new Set(), logs: [] };
+    t.days += 1; t.lines += r.lines_completed || 0;
+    const amt = +r.payout_total || 0;
+    t.total = Math.round((t.total + amt) * 100) / 100;
+    if (r.paid_at) { t.paid = Math.round((t.paid + amt) * 100) / 100; if (r.pay_batch) t.batches.add(r.pay_batch); }
+    else t.unpaid = Math.round((t.unpaid + amt) * 100) / 100;
+    t.logs.push(r);
+    byTech.set(k, t);
+  }
+  // `state` is what the period reads as for this person: every day paid, none, or a mix (a day closed
+  // after the last payment run). Sets don't serialize to a client component, so batches go out as an array.
+  const techs = [...byTech.values()].map((t) => ({
+    ...t,
+    batches: [...t.batches],
+    state: t.unpaid <= 0.004 ? "paid" : t.paid > 0.004 ? "part" : "unpaid",
+  })).sort((x, y) => y.total - x.total);
+  return {
+    from: a, to: b, techs, logs: rows,
+    total: Math.round(techs.reduce((s, t) => s + t.total, 0) * 100) / 100,
+    unpaid: Math.round(techs.reduce((s, t) => s + t.unpaid, 0) * 100) / 100,
+  };
+}
+// ---- Mark as paid -----------------------------------------------------------------------------
+// The second and final lock. A LOCKED day is frozen money; a PAID day is money that has left the
+// business. Nothing may touch it again — not a reassign, not a split, not a second payment — and the
+// payment itself is one auditable act with a date, a method and a batch id.
+export function payrollMarkPaid({ userId = null, name, from, to, method = null, note = null, byName = null } = {}) {
+  const who = String(name || "").trim();
+  if (!who) return { error: "Whose pay is this?" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(from || "")) || !/^\d{4}-\d{2}-\d{2}$/.test(String(to || ""))) return { error: "Bad period." };
+  const where = userId != null ? "l.user_id = ?" : "l.name = ? COLLATE NOCASE";
+  const arg = userId != null ? userId : who;
+  const rows = db.prepare(`SELECT l.id, l.payout_total, l.paid_at FROM wo_day_logs l WHERE ${where} AND l.day BETWEEN ? AND ?`).all(arg, from, to);
+  if (!rows.length) return { error: "No closed days in that period." };
+  const unpaid = rows.filter((r) => !r.paid_at);
+  if (!unpaid.length) return { error: "That period is already paid." };
+  const batch = `pay_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  const total = Math.round(unpaid.reduce((s, r) => s + (+r.payout_total || 0), 0) * 100) / 100;
+  db.exec("BEGIN");
+  try {
+    // `paid_at IS NULL` in the UPDATE is the guard: a day already paid can never be paid a second time,
+    // even if two people press the button at once.
+    const mark = db.prepare("UPDATE wo_day_logs SET paid_at=datetime('now','localtime'), paid_by=?, paid_method=?, paid_note=?, pay_batch=? WHERE id=? AND paid_at IS NULL");
+    let n = 0;
+    for (const r of unpaid) n += mark.run(byName || null, method || null, note || null, batch, r.id).changes;
+    db.exec("COMMIT");
+    return { ok: true, batch, days: n, total };
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record that payment." }; }
+}
+// Undo a payment batch — a mistake, not a refund. Only the whole batch, and only while it is the
+// batch that was made: a day paid in a different batch is untouched.
+export function payrollUnmarkPaid(batch, byName = null) {
+  const b = String(batch || "");
+  if (!b) return { error: "Which payment?" };
+  const r = db.prepare("UPDATE wo_day_logs SET paid_at=NULL, paid_by=NULL, paid_method=NULL, paid_note=NULL, pay_batch=NULL WHERE pay_batch=?").run(b);
+  return r.changes ? { ok: true, days: r.changes } : { error: "That payment is already undone." };
+}
+// Is any of this line's money already paid out? Used to refuse a reassign or a split.
+export function woLinePaid(woId, lineKey) {
+  return !!db.prepare(`
+    SELECT 1 FROM wo_line_credits c JOIN wo_day_logs l ON l.id = c.day_log_id
+    WHERE c.wo_id=? AND c.line_key=? AND l.paid_at IS NOT NULL
+  `).get(woId, String(lineKey));
+}
+
+// Money earned but NOT yet in payroll, so the office can see what is still open: unlocked credits,
+// split into payable and the pending ones waiting on an unassigned-technician decision.
+export function woUnlockedTotals(woId, name = null) {
+  const where = name ? " AND name=? COLLATE NOCASE" : "";
+  const sql = `
+    SELECT ROUND(SUM(CASE WHEN pending=0 THEN amount ELSE 0 END),2) payable,
+           ROUND(SUM(CASE WHEN pending=1 THEN amount ELSE 0 END),2) pending
+    FROM wo_line_credits WHERE wo_id=? AND day_log_id IS NULL AND voided_at IS NULL${where}`;
+  const r = name ? db.prepare(sql).get(woId, String(name)) : db.prepare(sql).get(woId);
+  return { payable: r?.payable || 0, pending: r?.pending || 0 };
+}
+
+// A technician must never receive a payout figure when the office has hidden them (requirement 7), and
+// must never receive a retail figure at all. The payload carries no retail by construction, so this
+// strips payout only — belt and braces at the serialization boundary, like sanitizeProposal.
+export function sanitizeWorkOrderDoc(doc, role) {
+  if (!doc) return null;
+  const office = role === "admin" || role === "manager" || role === "readonly";
+  if (office || doc.showPayouts) return doc;
+  const blank = (it) => { const { techPrice, ...rest } = it; return { ...rest, ...(it.sub ? { sub: it.sub.map(blank) } : null) }; };
+  const payload = { options: (doc.payload.options || []).map((o) => ({ ...o, services: (o.services || []).map((s) => ({ ...s, items: (s.items || []).map(blank) })) })) };
+  return {
+    ...doc, payload, total: null,
+    lines: doc.lines.map(({ payout, total, ...l }) => l),
+    changeState: doc.changeState?.hasUnsentChanges ? { ...doc.changeState, payoutDelta: null } : doc.changeState,
+  };
 }
 
 export function getProjectAssignments(accessId) {

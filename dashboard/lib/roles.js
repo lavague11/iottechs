@@ -25,6 +25,28 @@ const CAPS = {
   "addendum.payout.view":["admin", "manager", "tech", "readonly"],
   "tracking.view":       ["admin", "manager", "sales", "vendor", "readonly"],
   "tracking.edit":       ["admin", "manager", "vendor"],
+  // Work order document (docs/WORK_ORDERS.md). Distinct from install.* because the work order is a
+  // DOCUMENT with its own scope, payout and signature — only the office writes it; the tech signs it
+  // and marks its lines in the field. `wo.payout.view` is the role gate; the per-work-order
+  // "Show payouts to tech" toggle is a second, narrower gate on top of it (requirement 7).
+  "wo.view":             ["admin", "manager", "sales", "tech", "readonly"],
+  "wo.edit":             ["admin", "manager"],                              // scope, payout, notes, revisions
+  "wo.payout.view":      ["admin", "manager", "tech", "readonly"],
+  "wo.payout.edit":      ["admin", "manager"],
+  "wo.send":             ["admin", "manager"],                              // send a version for signature
+  "wo.sign":             ["tech"],                                          // accept = assignment
+  "wo.sign.void":        ["admin", "manager"],
+  // The CUSTOMER's sign-off on the finished work (requirement 24). Deliberately its own capability,
+  // not `wo.view`: a customer signs off the work, they never see the work order — no scope document,
+  // no payout, no crew. The office is included because a walkthrough sign-off is often taken in
+  // person on the technician's phone.
+  "wo.signoff":          ["customer", "admin", "manager"],
+  "wo.checkin":          ["admin", "manager", "tech"],                      // "I'm on site"
+  "wo.line.status":      ["admin", "manager", "tech"],                      // Complete / Needs attention / Incomplete
+  "wo.day.close":        ["admin", "manager", "tech"],                      // End of day (admin may close for a tech)
+  "wo.close":            ["admin", "manager"],
+  "payroll.view":        ["admin", "manager"],
+  "payroll.export":      ["admin"],
   // QC / closeout
   "qc.edit":             ["admin", "manager", "tech"],
   "qc.sign.manager":     ["admin", "manager"],

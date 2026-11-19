@@ -902,6 +902,11 @@ function _fpHash(str) {
   for (let i = 0; i < str.length; i++) { h = ((h << 5) + h) ^ str.charCodeAt(i); h |= 0; }
   return (h >>> 0).toString(36);
 }
+// The two fingerprint primitives, exported so a SECOND document type (the work order) can bind its own
+// signature with the same stable-key + hash rules instead of inventing a parallel hash. They are pure
+// and carry no proposal meaning; everything proposal-specific stays in proposalFingerprint below.
+export const stableKey = _fpStable;
+export const stableHash = _fpHash;
 const _fpItem = (it) => {
   const base = { n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0, w: !!it?.waived,
     s: (it?.sub || []).map((x) => {

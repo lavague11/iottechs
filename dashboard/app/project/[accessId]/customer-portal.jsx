@@ -52,6 +52,9 @@ const CARD_COPY = {
   closeout:   { title: "Closeout",       sub: "Review and sign off the completed work.", action: "Review" },
   completion: { title: "Completion",     sub: "Your project is complete.",            action: "Certificate" },
   addendum:   { title: "Change Order",   sub: null,                                   action: "Review" },
+  // The work order's sign-off. The copy says what happened and what is being asked — nothing about
+  // the work order itself, which the customer never sees.
+  signoff:    { title: "Sign Off",       sub: "Your installation is finished.",       action: "Sign" },
 };
 
 export default function CustomerPortal({

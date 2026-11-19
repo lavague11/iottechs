@@ -22,6 +22,7 @@ const TAG = "[JOURNEY-TEST]";
 const DEMO_SOURCE = "journey-test";
 const DEMO_DOMAIN = "journey-test.local"; // non-routable; guarantees no real email is ever used
 const ADMIN_EMAIL = `demo-admin@${DEMO_DOMAIN}`;
+const TECH_EMAIL = `demo-tech@${DEMO_DOMAIN}`;   // exercises the work order's field half (Stage 3)
 const ENV_PATH = path.join(__dirname, "..", ".env");
 
 // A minimal but realistic proposal payload (matches lib/proposal-reuse.js's shape).
@@ -102,6 +103,25 @@ function upsertEnv(kv) {
   }
   upsertEnv({ TEST_ADMIN_EMAIL: ADMIN_EMAIL, TEST_ADMIN_PASSWORD: password, EMAIL_DISABLED: "1" });
   console.log(`[seed] wrote TEST_ADMIN_EMAIL + TEST_ADMIN_PASSWORD (hidden) + EMAIL_DISABLED=1 to .env`);
+
+  // 2b) Demo TECHNICIAN account — needed to exercise the work order's field half (check in on site,
+  // mark a line, sign with a PIN). Like the admin above: a random password and a random PIN, written
+  // to .env and never printed. The PIN is set as `pin_custom`, which is what userEffectivePin reads,
+  // so signing a work order works without inventing a phone number for this account.
+  const techPassword = crypto.randomBytes(24).toString("base64url");
+  const techPin = String(crypto.randomInt(1000, 10000));
+  const techFound = m.getUserByEmail(TECH_EMAIL);
+  let techId;
+  if (techFound) {
+    m.resetUserPassword(techFound.id, techPassword);
+    if (techFound.role !== "tech") m.setUserRole(techFound.id, "tech");
+    techId = techFound.id;
+  } else {
+    techId = m.createStaffUser({ name: "Demo Tech", email: TECH_EMAIL, role: "tech", password: techPassword });
+  }
+  m.setUserPin(techId, techPin);
+  upsertEnv({ TEST_TECH_EMAIL: TECH_EMAIL, TEST_TECH_PASSWORD: techPassword, TEST_TECH_PIN: techPin });
+  console.log(`[seed] demo tech ${techFound ? "reset" : "created"} → TEST_TECH_* written to .env (hidden)`);
 
   // 3) The 8 journey projects.
   const made = [];

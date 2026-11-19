@@ -72,4 +72,21 @@ export async function register() {
   };
   setTimeout(sweepInvoiceEmails, 130_000);             // ~2 min after boot
   setInterval(sweepInvoiceEmails, 60 * 60 * 1000);     // then hourly (reminders are day-grained)
+
+  // Work orders (docs/WORK_ORDERS.md, Stage 4): two nudges, both claimed once in the DB so repeats and
+  // overlapping runs are harmless.
+  //   • End of day — 12 hours after a technician's own check-in, not on a clock, so a crew that starts
+  //     at 7am is reminded at 7pm and one that starts at 2pm at 2am. The office is told either way.
+  //   • Sign-off — the customer was asked to sign the finished work off a day ago and hasn't.
+  const sweepWorkOrders = async () => {
+    try {
+      const { sweepEndOfDayReminders, sweepSignoffReminders } = await import("./lib/wo-notify.js");
+      const d = await sweepEndOfDayReminders();
+      if (d?.sent) console.log(`[workorder] reminded ${d.sent} technician(s) to end their day`);
+      const s = await sweepSignoffReminders();
+      if (s?.sent) console.log(`[workorder] chased ${s.sent} customer sign-off(s)`);
+    } catch (e) { console.error("[workorder] sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepWorkOrders, 140_000);             // ~2.5 min after boot
+  setInterval(sweepWorkOrders, 60 * 60 * 1000);     // then hourly; both are time-since, not time-of-day
 }

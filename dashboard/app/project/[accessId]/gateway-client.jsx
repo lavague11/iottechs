@@ -27,7 +27,9 @@ import GlobalCommandBar   from "../../components/global-command-bar";
 import CustomerAssistant  from "./customer-assistant";
 import SystemPlanner     from "./system-planner";
 import WorkOrderCard    from "./work-order-card";
-import WorkOrderSheet   from "./work-order-sheet";
+import WorkOrderEditor  from "./work-order-editor";
+import WorkOrderSignoff from "./work-order-signoff";
+import { getWorkOrderSignoffAction } from "./work-order-actions";
 import RecordPaymentModal from "./record-payment-modal";
 import ApprovalPanel     from "./approval-panel";
 import { AccordionProvider, useAccordionItem } from "./flow-accordion";
@@ -1576,6 +1578,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     if (r?.error) window.alert(r.error);
   }
   const refreshCustFin = () => { if (!customerPortalV2) return; getCustomerFinanceAction(project.access_id).then((r) => { if (r?.ok) { setCustFin(r.finance); setCustPays(r.payments || []); } }).catch(() => {}); };
+  // The work order's sign-off state, for the portal's Sign Off card. Deliberately its OWN narrow read
+  // (wo.signoff): it returns whether the work is finished and whether it has been signed, and nothing
+  // else — the customer never receives the work order's scope, payouts, crew or daily logs.
+  const [woSignoff, setWoSignoff] = useState(null);
+  const refreshWoSignoff = () => { getWorkOrderSignoffAction(project.access_id).then((r) => { if (r?.ok) setWoSignoff(r.state); }).catch(() => {}); };
+  useEffect(() => { refreshWoSignoff(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [project.access_id]);
   // One canonical filename base for every document this project downloads (lib/doc-filename.js).
   const fileBase = projectFileBase(project);
   // A role switch (the pill) opens this tab with ?stage=<the step they were on> so it lands on
@@ -2601,8 +2609,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           const prDate = iAppt ? new Date(iAppt.date + "T00:00:00").toLocaleDateString("en-US", { month: "long", day: "numeric" }) : null;
           const prWindow = iAppt ? (iAppt.endTime ? `${fmtT(iAppt.time)} – ${fmtT(iAppt.endTime)}` : (iAppt.time ? `Arriving ${fmtT(iAppt.time)}` : null)) : null;
           tools.push({ name: "Project Ready", label: "Project",
-            node: <div style={pad}><ProjectReady facts={prFacts} stage={prStage} installDateStr={prDate} installWindowStr={prWindow}
-              onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} /></div> });
+            node: (
+              <div style={pad}>
+                {/* The work order's customer sign-off follows the WORK, not the project stage: it appears
+                    the moment every line is complete, which can be before the job has moved to closeout.
+                    The card hides itself until then, and shows the customer nothing but that fact. */}
+                <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+                  defaultName={lp.contact_name || lp.customer || ""} />
+                <ProjectReady facts={prFacts} stage={prStage} installDateStr={prDate} installWindowStr={prWindow}
+                  onViewProposal={() => browse("proposal")} onPayDeposit={() => browse("approval_deposit")} preview={!!previewRole} />
+              </div>
+            ) });
         }
         // Customer "set up your phone" guide — lives in Install (moved from Closeout) so they can
         // connect the app to their cameras as soon as the system goes in. Only when the job ACTUALLY has
@@ -2673,8 +2690,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Quality control is internal (the customer's phone-setup guide now lives in Install).
         // Sign-off control shared by the internal checklist footer and the customer's walkthrough card.
         const qcSignoff = (
-          <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
-            onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+          <>
+            {/* The work order's own customer sign-off (requirement 24) sits with the walkthrough, which
+                is where the customer is asked to confirm the work. It renders only once every line is
+                complete, and it never shows them the work order itself — scope, payouts and crew stay
+                internal; see work-order-signoff.jsx. */}
+            <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+              defaultName={lp.contact_name || lp.customer || ""} />
+            <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+              onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+          </>
         );
         if (sees(cView, "ph_wrap", "Quality Control")) {
           tools.push({ name: "Quality Control", label: "QC checklist", heavy: true,
@@ -3000,6 +3025,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const padOvl = { padding: "16px 18px", maxWidth: 760, margin: "0 auto" };
       const renderPortalOverlay = (key, o = {}) => {
         switch (key) {
+          // The work order's customer sign-off, on Portal V2 (docs/WORK_ORDERS.md req. 24). The same
+          // narrow component the V1 deck uses: it fetches only "is the work finished, and is it
+          // signed", and shows the pad. Scope, payouts, crew and daily logs never reach it.
+          case "signoff":
+            return (
+              <div style={padOvl}>
+                <WorkOrderSignoff accessId={lp.access_id} preview={!!previewRole}
+                  defaultName={lp.contact_name || lp.customer || ""} />
+              </div>
+            );
           case "proposal":
             return (
               <AccordionProvider><div style={{ maxWidth: 820, margin: "0 auto" }}>
@@ -3108,6 +3143,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
         paidInFull: !!custFin?.paidInFull,
         hasAppt: !!portalAppt,
+        // Six fields, not the work order: { allDone, lines, complete, closed, signed, signedBy, signedAt }.
+        woSignoff,
       };
       const cs = projState ? (CUSTOMER_STATUS[projState] || CUSTOMER_STATUS.INTAKE) : null;
       // --- Price-lock window (Portal V2) ---------------------------------------------------------------
@@ -3342,16 +3379,18 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>);
           case "workorder":
             return (<div style={ovl(820)}>
-              {/* The work order IS the proposal, re-priced at tech payout — editable while creating,
-                  Submit to finalize, then the technician signs to accept. Assign/create controls below. */}
-              <WorkOrderSheet accessId={lp.access_id} proposal={proposalData} role={cView} onProposalChange={setProposalData}
-                preview={!!previewRole} signerName={currentUser?.name || currentUser?.email || ""}
-                assignedTech={lp.tech ? { name: lp.tech } : null} />
-              <WorkOrderCard accessId={lp.access_id} proposal={proposalData} onProposalChange={setProposalData} embedded
+              {/* ONE work order surface (docs/WORK_ORDERS.md): a COPY of the published proposal, valued at
+                  technician payout, built from the same ProposalItemsEditor in payout mode. It replaced
+                  work-order-sheet.jsx, proposal-tech-pricing.jsx and the duplicate "Create Work Order"
+                  card that used to sit right under the editor (requirement 8) — technician assignment
+                  moved into its header (requirement 10). */}
+              <WorkOrderEditor accessId={lp.access_id} role={cView} preview={!!previewRole} currentUser={currentUser}
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
-                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} internalJob={!!lp.internal_job} />
+                /* The work order SHOWS the Installation appointment; "Schedule" jumps to the one
+                   scheduler below rather than opening a second booker (requirement 11). */
+                onSchedule={() => document.getElementById("wo-install-scheduler")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
               {/* Installation scheduling — merged into the Work Order (was its own card). */}
-              <div className="wo-merge-sec"><h3 className="wo-merge-h">Installation</h3>
+              <div className="wo-merge-sec" id="wo-install-scheduler"><h3 className="wo-merge-h">Installation</h3>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
                   currentUser={currentUser} project={lp} view={view} apptKind="install"
                   defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
