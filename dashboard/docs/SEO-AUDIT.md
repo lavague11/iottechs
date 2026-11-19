@@ -60,12 +60,21 @@ rankings are therefore about *presence*, not movement.
 | /guides/install-security-cameras-side-yard-driveway-and-pool-d3wh | Nov 15, 2026 |
 | /systems | Nov 15, 2026 |
 
-Google reports **zero** URLs in "Discovered – not indexed" or "Crawled – not indexed", which
-is unusually clean. But the sitemap submits 8 URLs and only 6 are indexed:
+The Page indexing report also claims **zero** URLs in "Discovered – not indexed". **Both figures
+are stale** — the report's data only runs to Nov 15. Live URL Inspection, which is current, gives
+the real picture for the two sitemap URLs the report omits:
 
-- **`/report-issue` is missing from the index.** It is also a complete orphan — see §3. A page
-  with no internal links is a page Google has little reason to fetch or keep.
-- **`/terms` is missing.** Expected and harmless; boilerplate legal pages are often skipped.
+- **`/report-issue` — "URL is on Google", page is indexed.** The report simply has not caught up.
+  (An earlier draft of this audit read the report literally and tied the omission to the page's
+  orphan status; the inspection disproves that. The orphan finding in §3 stands on its own —
+  internal links drive crawl priority and authority — but it did not cost this page its indexing.)
+- **`/terms` — "URL is not on Google: Discovered – currently not indexed."** Never crawled
+  (last crawl N/A), and Google reports **"Referring page: None detected"**. Low-value boilerplate,
+  so this is not worth chasing — but it is a clean demonstration that a page Google sees no
+  internal link to is a page it does not bother to fetch.
+
+Lesson for future audits: the Page indexing report lags by days on a new property. Confirm any
+"not indexed" claim with URL Inspection before acting on it.
 
 ### Sitemap — submitted, read, **1 error**
 
@@ -167,9 +176,9 @@ links count.
 Two findings:
 
 - **`/report-issue` has zero inbound internal links.** It is reachable only from the sitemap.
-  This is the site's highest-commercial-intent page — someone whose cameras are down — and it is
-  also the one sitemap URL Google has not indexed. Those two facts are almost certainly the same
-  fact.
+  This is the site's highest-commercial-intent page — someone whose cameras are down. It *is*
+  indexed (§1), so this is not costing it indexing; what it costs is crawl priority and every
+  bit of internal authority the home page could be passing it.
 - **`/guides` is effectively orphaned too.** Nothing on the main site links to it; its only
   inbound link comes from the guide beneath it, which is a closed loop. The entire content hub
   receives no internal authority.
@@ -247,14 +256,29 @@ Confined to the lane you set — meta, alt text, internal links, sitemap.
    "Invalid date" error.
 2. **Home and the static pages now carry a `lastmod`** — they had none at all, so Google had no
    freshness signal for the most important URLs.
-3. **`/report-issue` and `/guides` are now linked from the home page** — de-orphaning the
-   highest-intent page and the content hub.
+3. **`/report-issue` and `/guides` are now linked from the home page footer** — de-orphaning the
+   highest-intent page and the content hub. Also dropped a self-link that went through the www
+   redirect.
 4. **The guide page has a real `<h1>`** (the guide's title), styled identically.
 5. **Guide photos carry real alt text** from the step they illustrate.
 6. **`HowTo` and `BreadcrumbList` structured data on guide pages** — exposes every step and photo
    to Google without changing the player UX.
 
-Verification and live confirmation are recorded in the closing report.
+**Shipped as `eb7c453e`** (rollback tag `seo-audit-rollback-2026-11-19` points at the commit
+before it). 1776 tests pass, build clean, and all six were verified against the live site:
+
+- `/sitemap.xml` now emits `2026-11-19T12:13:07.115Z` for the code-driven routes and
+  `2026-11-14T23:41:09.000Z` for the guide — the Eastern 18:41 correctly converted. Zero
+  space-separated dates remain.
+- The guide serves `<h1>Install Security Cameras: Side Yard, Driveway, and Pool</h1>`, its photo
+  carries a real alt, and the page publishes `HowTo` with all 4 steps (3 with images) plus
+  `BreadcrumbList`. Checked at 375 px — the header is pixel-identical to before.
+- The home footer renders *Camera Repair* → `/report-issue` and *Guides* → `/guides`.
+- **Sitemap resubmitted** in Search Console ("Sitemap submitted successfully") so Google re-reads
+  it and clears the Invalid date error on its next pass.
+
+No indexing was requested: `/report-issue` is already indexed, and `/terms` — the only genuinely
+unindexed URL — is boilerplate that cannot rank for anything.
 
 ---
 
