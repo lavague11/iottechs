@@ -2,7 +2,7 @@
 // spec file. Guards the POS spec's contract surface and the shell robustness that made it vertical-agnostic.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 
 const pos = readFileSync(new URL("../public/widgets/bys/pos-spec.js", import.meta.url), "utf8");
 const widget = readFileSync(new URL("../public/widgets/cctv-quote-calculator.html", import.meta.url), "utf8");
@@ -25,7 +25,13 @@ test("pos spec declares the BYS contract: SPEC identity + steps, CONFIG, Engine,
 });
 
 test("the shell is vertical-agnostic: /build/<vertical> route + guarded optional CONFIG.slides + per-vertical draft", () => {
-  assert.ok(nextCfg.includes('source: "/build/:vertical"'), "next.config rewrites /build/<vertical> to the shell");
+  // /build/<vertical> used to be a next.config rewrite straight to the static shell. It is a route
+  // handler now so each vertical can carry its own title/description/canonical (lib/bys-verticals.js);
+  // the rewrite had to go, because afterFiles rewrites are matched before dynamic routes and would
+  // shadow it. Same destination, different mechanism — see tests/bys-verticals.test.mjs.
+  assert.ok(!nextCfg.includes('source: "/build/:vertical"'), "the shadowing rewrite must stay removed");
+  assert.ok(existsSync(new URL("../app/build/[vertical]/route.js", import.meta.url)),
+    "/build/<vertical> is served by a route handler that loads the shell");
   assert.ok(widget.includes("(CONFIG.slides||[]).find"), "slideOf tolerates a spec without the legacy CONFIG.slides");
   assert.ok(widget.includes("(CONFIG.slides||[])[cur]"), "skipSlide tolerates a missing CONFIG.slides");
   assert.ok(widget.includes("STEPS.map((st,i)=>`<button class=\"ix"), "the index drawer iterates STEPS (the real flow), not legacy CONFIG.slides");

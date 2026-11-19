@@ -287,10 +287,9 @@ unindexed URL — is boilerplate that cannot rank for anything.
 Ordered by expected return.
 
 1. ~~**Location pages**~~ and 2. ~~**Service pages**~~ — **APPROVED AND SHIPPED 2026-11-19.**
-   See §9 below. Items 3-6 are still open.
-3. **Per-vertical builder landing pages** so `/build/audio`, `/build/toast` and `/build/adt` get
-   their own title, description, H1 and self-canonical instead of inheriting the camera page's.
-   Requires a route change.
+   See §9 below.
+3. ~~**Per-vertical builder landing pages**~~ — **APPROVED AND SHIPPED 2026-11-19.** See §10.
+   Items 4-6 are still open.
 4. **The street address in LocalBusiness schema** — your call, per §4.
 5. **Font loading / render-blocking** — worth ~2.1 s on the home page's LCP, but it is a visual
    change (possible FOUT), so I would want your sign-off.
@@ -426,3 +425,84 @@ page's claims.
 
 `tests/seo-content.test.mjs`, 25 tests. The two that matter most: location pages may not share a
 paragraph (the doorway-page guard), and no page may contain an unverified claim.
+
+---
+
+## 10. Builder landing pages — shipped 2026-11-19
+
+Item 3 of §7. The five BYS builders now serve their own metadata.
+
+### What was wrong
+
+`/build`, `/build/adt`, `/build/audio`, `/build/toast` and `/build/pos` were all **rewrites to one
+static file**, `public/widgets/cctv-quote-calculator.html`. Every one of them therefore served:
+
+- the **camera** `<title>`,
+- the **camera** meta description, and
+- `<link rel="canonical" href="https://iot-techs.com/build">` — a canonical pointing at a *different*
+  URL, which tells Google "don't index this page, index /build instead".
+
+So four working builders could not appear in search at all, and anything that did get crawled looked
+like a duplicate of the camera page.
+
+Two further defects found while fixing it:
+
+- **`/build/<anything>` returned 200** with the camera builder — a soft 404. Google will happily index
+  unlimited junk URLs under a path that behaves like that.
+- **`applySpecBranding()` overwrote `document.title`** with the spec's short label on every load
+  (`document.title = SPEC.brand.title` → "Build Your ADT System"). Google renders JavaScript, so that
+  would have replaced the new SEO title on the rendered pass and undone the whole fix. It now only
+  applies when the vertical came from `?vertical=`, where the server could not have known which spec
+  would load. The brand and tagline are still spec-driven.
+
+### What changed
+
+| URL | Title | Canonical |
+|---|---|---|
+| `/build` | Security Camera System Builder — Instant Quote | self |
+| `/build/adt` | ADT Alarm System Builder — Instant Quote | self |
+| `/build/audio` | Commercial Sound System Builder — Quote | self |
+| `/build/toast` | Toast POS System Builder — Instant Quote | self |
+| `/build/pos` | POS System Builder — Instant Quote | self |
+
+`/build` and `/build/<vertical>` are now route handlers (`app/build/route.js`,
+`app/build/[vertical]/route.js`) that serve the **same single shell file** with three head
+substitutions plus Open Graph tags and a visually-hidden H1. There is still exactly one copy of the
+197 KB application — nothing was duplicated.
+
+The `/build` and `/build/:vertical` rewrites were **removed** from `next.config.js` and must stay
+removed: rewrites returned as a flat array are `afterFiles`, which Next matches *before* dynamic
+routes, so a `/build/:vertical` rewrite would shadow `app/build/[vertical]` entirely. A test asserts
+they do not come back. `/quote` is still a rewrite — it is the plain shell with its canonical pointing
+at `/build`, so the duplicate is consolidated, and it doubles as the fallback target.
+
+### Safety
+
+This is a lead-capture tool, so it must never 500. If the shell cannot be read, the handler redirects
+to `/quote?vertical=<id>` — still a plain rewrite to the same static file, and the shell's own loader
+honours `?vertical=`, so the visitor still gets the right builder. Responses carry an **ETag** and
+return **304** on revalidation, so browser caching is equivalent to the static file it replaced.
+
+### Verified live
+
+All five load their own spec (`adt-spec.js`, `audio-spec.js`, `toast-spec.js` each 200), render the
+intake form, and keep their own lead endpoint (`/api/leads/toast` etc.). `/build` is unchanged —
+camera spec, five steps. `/build/cameras` and `/build/bogus` now **404** instead of soft-404ing.
+ETags differ per vertical and revalidate to 304.
+
+The three non-camera builders already have an inbound link from both `/systems` and their matching
+service page (`/commercial-sound-systems` → `/build/audio`, `/restaurant-technology-installation` →
+`/build/toast`, `/commercial-alarm-systems` → `/build/adt`), so none is an orphan.
+
+### One for you
+
+**`/build/pos` is not linked from `/systems`.** It has a complete, working spec, but the picker lists
+only cameras, ADT, audio and Toast. I gave it correct metadata and a self-canonical but left it out of
+the sitemap, matching that choice. If POS is ready, add it to the picker and I'll add it to the
+sitemap; if it isn't, it is harmless where it is.
+
+### Tests
+
+`tests/bys-verticals.test.mjs`, 12 tests. The load-bearing ones: the three head markers still match the
+real shell (a silent no-op would revert every vertical to the camera metadata), the rewrites stay out
+of `next.config.js`, and `applySpecBranding` does not overwrite the server-set title again.

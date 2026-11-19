@@ -1,5 +1,6 @@
 import { publishedSlugs, SITE_ORIGIN } from "../lib/seo";
 import { CONTENT_PAGES } from "../lib/seo/content";
+import { listedVerticals } from "../lib/bys-verticals";
 import { listPublishedSops } from "../lib/db";
 
 // XML sitemap — the home page plus every PUBLISHED SEO page. Auto-updates as pages go live, so there's
@@ -10,7 +11,11 @@ export const dynamic = "force-dynamic";
 // the sitemap even though they're linked from the homepage and footer.
 // NOTE: /adt is deliberately NOT here — app/adt/page.jsx sets robots noindex, and listing a noindexed
 // page in the sitemap just earns a "Submitted URL marked noindex" error in Search Console.
-const STATIC_PUBLIC = ["systems", "build", "apply", "report-issue", "terms", "guides"];
+// NOTE: "build" is NOT listed here. Each BYS builder vertical now has its own title, description and
+// self-canonical (lib/bys-verticals.js), so /build, /build/adt, /build/audio and /build/toast each go
+// in on their own — they used to be one URL with four invisible duplicates behind it. /build/pos is
+// excluded because it is not linked from /systems yet.
+const STATIC_PUBLIC = ["systems", "apply", "report-issue", "terms", "guides"];
 
 // The sitemap protocol demands W3C Datetime; SQLite hands us "2026-11-14 18:41:09", which Google
 // rejected outright ("Sitemap can be read, but has errors — Invalid date") and then ignored the
@@ -31,6 +36,8 @@ const BUILT = w3cDate(process.env.BUILT_AT) || new Date();
 export default function sitemap() {
   const home = { url: `${SITE_ORIGIN}/`, lastModified: BUILT, changeFrequency: "weekly", priority: 1 };
   const statics = STATIC_PUBLIC.map((slug) => ({ url: `${SITE_ORIGIN}/${slug}`, lastModified: BUILT, changeFrequency: "monthly", priority: 0.7 }));
+  // The builder verticals that are linked from /systems. Each is its own indexable URL now.
+  const builders = listedVerticals().map((v) => ({ url: `${SITE_ORIGIN}/${v.path}`, lastModified: BUILT, changeFrequency: "monthly", priority: 0.8 }));
   let pages = [];
   try {
     pages = publishedSlugs().map((p) => ({
@@ -60,5 +67,5 @@ export default function sitemap() {
       .filter((s) => s.slug)
       .map((s) => ({ url: `${SITE_ORIGIN}/guides/${s.slug}`, lastModified: w3cDate(s.published_at), changeFrequency: "monthly", priority: 0.6 }));
   } catch { /* DB not ready during build */ }
-  return [home, ...statics, ...content, ...pages, ...guides];
+  return [home, ...statics, ...builders, ...content, ...pages, ...guides];
 }

@@ -1664,10 +1664,15 @@ function bindPhoton(el){
   el.addEventListener('blur', function(){ setTimeout(close, 150); });
 }
 
-// BYS: the vertical spec drives the brand + <title> (swap the spec → rebrand). The static markup is the
+// BYS: the vertical spec drives the brand (swap the spec → rebrand). The static markup is the
 // cameras fallback, so a missing/failed spec never blanks the header.
 (function applySpecBranding(){ try{ if(typeof SPEC==='undefined' || !SPEC.brand) return;
-  if(SPEC.brand.title) document.title = SPEC.brand.title;
+  // The SERVER now sets a per-vertical SEO <title> for /build and /build/<vertical>
+  // (app/build/route.js + lib/bys-verticals.js). This used to overwrite it with the spec's short
+  // label ("Build Your ADT System"), which Google would see on its rendered pass and use instead of
+  // the real title — undoing the fix. Only fall back to the spec's own label when the vertical came
+  // from ?vertical=, where the server could not have known which spec would load.
+  try { if(SPEC.brand.title && new URLSearchParams(location.search).get('vertical')) document.title = SPEC.brand.title; } catch(_){ }
   var b=document.querySelector('.brand b'), s=document.querySelector('.brand span');
   if(b && SPEC.brand.company) b.textContent = SPEC.brand.company;
   if(s && SPEC.brand.tagline) s.textContent = SPEC.brand.tagline;

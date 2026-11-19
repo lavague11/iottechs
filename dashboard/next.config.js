@@ -36,8 +36,16 @@ const nextConfig = {
       { source: "/", destination: "/home.html" },
       // BYS "Build Your System" — one shell, many verticals. /build = cameras (default); /build/<vertical>
       // (e.g. /build/pos) serves the same shell, which loads /widgets/bys/<vertical>-spec.js by the path.
-      { source: "/build", destination: "/widgets/cctv-quote-calculator.html" },
-      { source: "/build/:vertical", destination: "/widgets/cctv-quote-calculator.html" },
+      //
+      // /build and /build/:vertical are NO LONGER rewrites — they are app/build/route.js and
+      // app/build/[vertical]/route.js, so each vertical can serve its own title, description and
+      // self-referential canonical instead of all five sharing the camera page's (see
+      // lib/bys-verticals.js). Do not put those rewrites back: rewrites returned as a flat array are
+      // "afterFiles", which are matched BEFORE dynamic routes, so a /build/:vertical rewrite would
+      // shadow app/build/[vertical] completely.
+      //
+      // /quote stays a rewrite. It is the plain shell (canonical → /build, so the duplicate is
+      // consolidated) and it is the fallback target if the route handler ever cannot read the shell.
       { source: "/quote", destination: "/widgets/cctv-quote-calculator.html" },
       // BYS picker — one page that lists every "Build Your <X> System" builder.
       { source: "/systems", destination: "/bys-index.html" },
