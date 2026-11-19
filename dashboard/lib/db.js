@@ -18,7 +18,7 @@ import { installProgress, qcProgress, qcItemStates } from "./install-checklist-m
 import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
-import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
+import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, workOrderDiff, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
@@ -396,10 +396,22 @@ function init() {
       fingerprint    TEXT,
       signed_at      TEXT DEFAULT (datetime('now','localtime')),
       voided_at      TEXT,
-      voided_by      TEXT
+      voided_by      TEXT,
+      pin_verified_at TEXT,
+      device         TEXT,
+      ip             TEXT
     )
   `);
   db.exec("CREATE INDEX IF NOT EXISTS idx_wo_sig ON wo_signatures(wo_id, version)");
+  // Owner's rule (2026-11-19): a technician re-enters their OWN PIN immediately before signing, and the
+  // event records who, on what device, from where and when. The PIN is never stored — only the fact that
+  // it was verified, and the moment it was. Ensure-columns so a database created before this still gains them.
+  {
+    const sigCols = db.prepare("PRAGMA table_info(wo_signatures)").all().map((c) => c.name);
+    if (!sigCols.includes("pin_verified_at")) db.exec("ALTER TABLE wo_signatures ADD COLUMN pin_verified_at TEXT");
+    if (!sigCols.includes("device"))          db.exec("ALTER TABLE wo_signatures ADD COLUMN device TEXT");
+    if (!sigCols.includes("ip"))              db.exec("ALTER TABLE wo_signatures ADD COLUMN ip TEXT");
+  }
 
   // On-site check-in. No line may be marked until the acting technician has a check-in for TODAY.
   db.exec(`
@@ -8852,7 +8864,37 @@ export function getWorkOrderDoc(accessId) {
     versions: woVersionList(row.id),
     changeState: workOrderChangeState(sent, { payload }),
     fingerprint: workOrderFingerprint(payload),
+    // Signatures on the CURRENT version only — an earlier version's are voided the moment a revision is
+    // sent, and are history, not consent.
+    signatures: row.version ? woSignaturesFor(row.id, row.version).filter((s) => !s.voided_at) : [],
+    // Requirement 14's trigger: the customer has signed a proposal revision, or an add-on was approved,
+    // since this work order was copied. It is a flag for the office to pull the change in — never an
+    // automatic rewrite of a document a technician may already have signed.
+    proposalDrift: woProposalDrift(accessId, row),
   };
+}
+// The approved add-ons as RAW records — getApprovedAddons returns the customer money view, which drops
+// the item id and the technician payout (`techPay`). The work order needs both: the id gives a line a
+// stable key across revisions, and techPay is what the office already decided this work pays.
+// `addendumSignatureCurrent` is the same filter, so an edited add-on drops out until it is re-signed.
+function approvedAddonRecords(accessId) {
+  const rec = getToolData(accessId, "addendum");
+  try { return (JSON.parse(rec?.data || "{}").addendums || []).filter((a) => a && addendumSignatureCurrent(a)); }
+  catch { return []; }
+}
+// True when the published proposal has moved past the version this work order was copied from, or an
+// approved add-on isn't on it yet. Cheap: ids and keys, no payload comparison.
+function woProposalDrift(accessId, row) {
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return false;
+  if (Number(pub.id) !== Number(row.source_proposal_id)) return true;
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { return false; }
+  const have = new Set(woLines(live).map((l) => l.key));
+  for (const a of approvedAddonRecords(accessId)) {
+    for (const it of (a.items || [])) if (it?.id && !have.has(`addon:${a.id}:${it.id}:0`)) return true;
+  }
+  return false;
 }
 
 // Create the work order from the published proposal. Idempotent: if one exists it is returned as-is,
@@ -8908,6 +8950,146 @@ export function reseedWorkOrderPayouts(accessId, techName = null) {
   const doc = getWorkOrderDoc(accessId);
   if (!doc) return { error: "No work order yet." };
   return saveWorkOrderDraft(accessId, reseedPayouts(doc.payload, getEffectiveRates(techName)));
+}
+
+// ---- Versions, revisions and signatures (Stage 2) --------------------------------------------
+// The work order versions exactly like the proposal: a sent version is an immutable row, the live
+// `wo.payload` is the working draft over it, and workOrderChangeState() compares the two. Nothing here
+// re-derives that comparison — it is the same pure function the editor's footer renders from.
+
+// Send the working draft as the next version. Every signature on an EARLIER version is voided, because
+// a technician agreed to a scope and a payout that no longer exist (requirement 13). Field state is
+// untouched: a completed line stays completed across a revision.
+export function sendWorkOrderVersion(accessId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  let payload = {};
+  try { payload = JSON.parse(row.payload || "{}"); } catch { return { error: "The draft could not be read." }; }
+  if (validateWorkOrderPayload(payload)) return { error: validateWorkOrderPayload(payload) };
+  if (!woLines(payload).length) return { error: "Add at least one line before sending it." };
+  const next = (row.version || 0) + 1;
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo_versions SET superseded_at=datetime('now','localtime') WHERE wo_id=? AND superseded_at IS NULL").run(row.id);
+    db.prepare("INSERT INTO wo_versions (wo_id, version, payload, fingerprint, sent_by) VALUES (?,?,?,?,?)")
+      .run(row.id, next, JSON.stringify(payload), workOrderFingerprint(payload), byName || null);
+    db.prepare("UPDATE wo_signatures SET voided_at=datetime('now','localtime'), voided_by=? WHERE wo_id=? AND version<? AND voided_at IS NULL")
+      .run(byName || "Revision", row.id, next);
+    db.prepare("UPDATE wo SET version=?, status='sent', updated_at=datetime('now','localtime') WHERE id=?").run(next, row.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+      .run(row.id, "sent", byName || null, `v${next}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not send the work order." }; }
+  return { ok: true, version: next };
+}
+
+// Cancel Revision — discard the unsent draft and restore the version the technician last received.
+export function cancelWorkOrderRevision(accessId) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const sent = woLatestSentVersion(row.id);
+  if (!sent) return { error: "Nothing has been sent yet — there is no version to go back to." };
+  const payload = JSON.stringify(sent.payload);
+  db.exec("BEGIN");
+  try {
+    db.prepare("UPDATE wo SET payload=?, updated_at=datetime('now','localtime') WHERE id=?").run(payload, row.id);
+    woSyncLines(row.id, sent.payload);
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not cancel the revision." }; }
+  return { ok: true };
+}
+
+export function woSignaturesFor(woId, version = null) {
+  const sql = version == null
+    ? "SELECT * FROM wo_signatures WHERE wo_id=? ORDER BY signed_at DESC"
+    : "SELECT * FROM wo_signatures WHERE wo_id=? AND version=? ORDER BY signed_at DESC";
+  return (version == null ? db.prepare(sql).all(woId) : db.prepare(sql).all(woId, version)).map((r) => ({ ...r }));
+}
+
+// A technician accepts the CURRENT sent version. Bound to that version's fingerprint, so if the scope or
+// a payout moved since, the signature is refused rather than silently attached to different work.
+// `pinVerified` is asserted by the action (it checked the signer's own PIN); the PIN never reaches here.
+export function signWorkOrder(accessId, { userId = null, name, signatureData = null, device = null, ip = null, pinVerified = false }) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  if (!row.version) return { error: "This work order hasn't been sent for signature yet." };
+  if (row.status === "closed") return { error: "This work order is closed." };
+  if (!pinVerified) return { error: "Confirm your PIN to sign." };
+  const sent = woLatestSentVersion(row.id);
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { live = {}; }
+  const fp = workOrderFingerprint(sent.payload);
+  if (fp !== workOrderFingerprint(live)) return { error: "This work order changed — ask the office to send the revision, then sign." };
+  const who = String(name || "").trim();
+  if (!who) return { error: "A name is required." };
+  const dup = db.prepare("SELECT 1 FROM wo_signatures WHERE wo_id=? AND version=? AND name=? COLLATE NOCASE AND voided_at IS NULL").get(row.id, row.version, who);
+  if (dup) return { error: "You've already signed this version." };
+  db.exec("BEGIN");
+  try {
+    db.prepare("INSERT INTO wo_signatures (wo_id, version, user_id, name, signature_data, fingerprint, pin_verified_at, device, ip) VALUES (?,?,?,?,?,?,datetime('now','localtime'),?,?)")
+      .run(row.id, row.version, userId, who, signatureData || null, fp, device || null, ip || null);
+    db.prepare("UPDATE wo SET status='signed', updated_at=datetime('now','localtime') WHERE id=?").run(row.id);
+    db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_id, actor_name, note, client_at) VALUES (?,?,?,?,?,?)")
+      .run(row.id, "signed", userId, who, `v${row.version}`, new Date().toISOString());
+    db.exec("COMMIT");
+  } catch (e) { db.exec("ROLLBACK"); return { error: "Could not record the signature." }; }
+  return { ok: true };
+}
+
+// Admin correction: void one signature so it can be re-signed. The row is kept (voided_at), never deleted.
+export function voidWorkOrderSignature(accessId, sigId, byName = null) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const r = db.prepare("UPDATE wo_signatures SET voided_at=datetime('now','localtime'), voided_by=? WHERE id=? AND wo_id=? AND voided_at IS NULL").run(byName || null, sigId, row.id);
+  if (!r.changes) return { error: "That signature is already void." };
+  const left = db.prepare("SELECT COUNT(*) n FROM wo_signatures WHERE wo_id=? AND version=? AND voided_at IS NULL").get(row.id, row.version).n;
+  if (!left) db.prepare("UPDATE wo SET status='sent', updated_at=datetime('now','localtime') WHERE id=?").run(row.id);
+  db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, action, actor_name, note, client_at) VALUES (?,?,?,?,?)")
+    .run(row.id, "signature_voided", byName || null, String(sigId), new Date().toISOString());
+  return { ok: true };
+}
+
+// Requirement 14: a signed proposal revision or addendum lands in the work order as an UNSENT revision
+// for the office to price and send — it never reaches a technician on its own. Lines are matched by the
+// proposal line id, so an existing line keeps its payout and its field state; only genuinely new lines
+// arrive, seeded from the rate book at 0 where the book has no answer.
+export function syncWorkOrderFromProposal(accessId) {
+  const row = woRow(accessId);
+  if (!row) return { error: "No work order yet." };
+  const pub = getPublishedProposal(accessId);
+  if (!pub) return { error: "No published proposal to sync from." };
+  let live = {};
+  try { live = JSON.parse(row.payload || "{}"); } catch { return { error: "The draft could not be read." }; }
+  const fresh = workOrderPayloadFrom(pub, { optionId: row.source_option, rates: getEffectiveRates(null) });
+  if (!fresh) return { error: "That proposal has no priced option." };
+  // Approved addendums are work too — the same expansion the install checklist does: one line per unit,
+  // carrying the office-set payout from the addendum (`techPay`). They land in their own service block
+  // so the crew can see at a glance what was added after the original scope.
+  const addonLines = [];
+  for (const a of approvedAddonRecords(accessId)) {
+    for (const it of (a.items || [])) {
+      if (!it?.id) continue;                       // an add-on item with no id has no stable line key
+      const qty = Math.max(1, +it.qty || 1);
+      for (let n = 0; n < qty; n++) {
+        addonLines.push({ id: `addon:${a.id}:${it.id}:${n}`, name: qty > 1 ? `${it.name} #${n + 1}` : it.name, qty: 1, techPrice: Math.round((+it.techPay || 0) * 100) / 100 });
+      }
+    }
+  }
+  if (addonLines.length) fresh.options[0].services.push({ key: "addon", label: "Approved Add-ons", items: addonLines });
+  // Carry every payout the office already set; anything new keeps its seed.
+  const paid = new Map(woLines(live).map((l) => [l.key, l.payout]));
+  const carry = (it) => {
+    if (paid.has(String(it.id))) it.techPrice = paid.get(String(it.id));
+    (it.sub || []).forEach(carry);
+  };
+  (fresh.options[0].services || []).forEach((s) => (s.items || []).forEach(carry));
+  const diff = workOrderDiff(live, fresh);
+  if (!diff.any) return { ok: true, changed: 0 };
+  const saved = saveWorkOrderDraft(accessId, fresh);
+  if (saved.error) return saved;
+  db.prepare("UPDATE wo SET source_proposal_id=?, source_version=? WHERE id=?").run(pub.id, pub.version ?? null, row.id);
+  return { ok: true, changed: diff.added.length + diff.removed.length + diff.changed.length, diff };
 }
 
 // A technician must never receive a payout figure when the office has hidden them (requirement 7), and

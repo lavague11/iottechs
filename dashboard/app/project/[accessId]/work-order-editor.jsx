@@ -11,11 +11,15 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ProposalItemsEditor from "./proposal-items-editor";
 import MicButton from "../../components/mic-button";
 import { can } from "../../../lib/roles";
+import WorkOrderFooter from "./work-order-footer";
 import {
   getWorkOrderAction, createWorkOrderDocAction, saveWorkOrderDraftAction,
   setWorkOrderNotesAction, setWorkOrderPayoutVisibilityAction, reseedWorkOrderPayoutsAction,
+  sendWorkOrderVersionAction, cancelWorkOrderRevisionAction, signWorkOrderAction,
+  voidWorkOrderSignatureAction, syncWorkOrderFromProposalAction,
 } from "./work-order-actions";
 import { addAssignmentAction, removeAssignmentAction } from "./actions";
+import { getToolDataAction } from "./proposal-actions";
 import { WOE_CSS } from "./work-order-editor-css";
 // The items editor's own stylesheet lives with the proposal panel. One renderer, one stylesheet — the
 // work order must not carry a second copy of the `prop-*` rules that would then drift from the proposal.
@@ -29,7 +33,27 @@ const Ico = ({ d, s = 16 }) => (
 );
 const RESET_D = "M3 12a9 9 0 1 0 3-6.7M3 4v5h5";
 
-export default function WorkOrderEditor({ accessId, role, assignments = [], staffUsers = [], onAssignmentsChange, preview = false }) {
+// The Installation appointment, read from the ONE scheduler's `schedule` blob — the work order shows
+// it, it never books a second one (requirement 11). Nearest upcoming install first; else the latest.
+function pickInstall(events) {
+  const list = (events || []).filter((e) => e && (e.kind === "install" || /install/i.test(e.title || "")) && e.date);
+  if (!list.length) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const ahead = list.filter((e) => e.date >= today).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+  return ahead[0] || list.sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")))[0];
+}
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function whenText(ev) {
+  if (!ev?.date) return "";
+  const [y, m, d] = ev.date.split("-").map(Number);
+  const day = `${MON[(m || 1) - 1]} ${d}`;
+  if (!ev.time) return day;
+  let [hh, mm] = ev.time.split(":").map(Number);
+  const ap = hh >= 12 ? "PM" : "AM"; hh = hh % 12 || 12;
+  return `${day} · ${hh}:${String(mm).padStart(2, "0")} ${ap}`;
+}
+
+export default function WorkOrderEditor({ accessId, role, assignments = [], staffUsers = [], onAssignmentsChange, preview = false, currentUser = null, onSchedule }) {
   const [doc, setDoc] = useState(undefined);        // undefined = loading, null = not created yet
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -37,13 +61,22 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
   const [notes, setNotes] = useState("");
   const [pick, setPick] = useState("");
   const [askReset, setAskReset] = useState(false);
+  const [install, setInstall] = useState(null);
+  const [sync, setSync] = useState(null);          // "N change(s) pulled in" after a proposal sync
   const saveTimer = useRef(null);
   const notesTimer = useRef(null);
 
   const canEdit = can(role, "wo.edit") && !preview;
   const canPay = can(role, "wo.payout.edit") && !preview;
   const canAssign = can(role, "assignment.edit") && !preview;
+  const canSend = can(role, "wo.send") && !preview;
+  const canVoidSig = can(role, "wo.sign.void") && !preview;
   const showMoney = doc ? (can(role, "wo.payout.view") && (doc.showPayouts || can(role, "wo.edit"))) : false;
+  // A technician signs the CURRENT sent version, and only while it has no unsent changes over it — the
+  // office has to send the revision first, which is the same rule the signature binding enforces.
+  const canSign = doc ? (can(role, "wo.sign") && !preview && (doc.version || 0) > 0
+    && !doc.changeState?.hasUnsentChanges
+    && !(doc.signatures || []).some((s) => String(s.user_id || "") === String(currentUser?.id || "\u0000"))) : false;
 
   useEffect(() => {
     let live = true;
@@ -52,6 +85,16 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
       if (r?.error) { setErr(r.error); setDoc(null); return; }
       setDoc(r.doc || null); setNotes(r.doc?.notes || "");
     }).catch(() => { if (live) setDoc(null); });
+    return () => { live = false; };
+  }, [accessId]);
+
+  // Requirement 11 — the Installation date/time comes from the existing scheduler's blob. Read only.
+  useEffect(() => {
+    let live = true;
+    getToolDataAction(accessId, "schedule").then((r) => {
+      if (!live || !r?.ok || !r.saved?.data) return;
+      try { setInstall(pickInstall(JSON.parse(r.saved.data).events)); } catch { /* bad blob */ }
+    }).catch(() => {});
     return () => { live = false; };
   }, [accessId]);
 
@@ -101,6 +144,24 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
     if (r?.error) { setErr(r.error); return; }
     setDoc(r.doc); setSaveState("saved");
   }
+
+  // ---- Stage 2: send, revise, sign ----
+  async function act(fn, after) {
+    setBusy(true); setErr(null);
+    const r = await fn();
+    setBusy(false);
+    if (r?.error) { setErr(r.error); return r; }
+    if (r?.doc) setDoc(r.doc);
+    after?.(r);
+    return r;
+  }
+  const send = () => act(() => sendWorkOrderVersionAction(accessId), () => setSaveState(""));
+  const cancelRevision = () => act(() => cancelWorkOrderRevisionAction(accessId), () => setSaveState(""));
+  const sign = (s) => act(() => signWorkOrderAction(accessId, s));
+  const voidSig = (id) => act(() => voidWorkOrderSignatureAction(accessId, id));
+  // Requirement 14 — pull a signed proposal revision / addendum in as an UNSENT revision to approve.
+  const pullFromProposal = () => act(() => syncWorkOrderFromProposalAction(accessId),
+    (r) => setSync(r.changed ? `${r.changed} ${r.changed === 1 ? "change" : "changes"} pulled in — review, then send.` : "Already up to date with the proposal."));
 
   const techs = assignments.filter((a) => a.role === "tech");
   const availableTechs = staffUsers.filter((u) => u.role === "tech" && !techs.some((t) => String(t.user_id) === String(u.id)));
@@ -164,6 +225,16 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
       </div>
 
       {err && <div className="woe-err">{err}</div>}
+      {sync && <div className="woe-note">{sync}</div>}
+
+      {/* Requirement 14 — the customer signed a revision or an add-on was approved. The office pulls it
+          in as an UNSENT revision and sends it; nothing reaches a technician on its own. */}
+      {doc.proposalDrift && canEdit && (
+        <div className="woe-drift">
+          <span>The proposal has changed since this work order was made.</span>
+          <button type="button" className="woe-pull" disabled={busy} onClick={pullFromProposal}>Pull in</button>
+        </div>
+      )}
 
       {/* Technicians — assignment lives at the top of the work order (it replaced the separate card). */}
       <div className="woe-row">
@@ -186,6 +257,19 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
             </select>
             <button type="button" className="woe-add" disabled={busy || !pick} onClick={assign}>Assign</button>
           </span>
+        )}
+      </div>
+
+      {/* Requirement 11 — the Installation date/time, read from the one scheduler. No second booker. */}
+      <div className="woe-row">
+        <span className="woe-lbl">Installation</span>
+        {install ? (
+          <span className="woe-when">{whenText(install)}{install.location ? <i>{install.location}</i> : null}</span>
+        ) : (
+          <>
+            <span className="woe-none">Not scheduled</span>
+            {canEdit && onSchedule && <button type="button" className="woe-link" onClick={onSchedule}>Schedule</button>}
+          </>
         )}
       </div>
 
@@ -242,6 +326,12 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
           <span>{money(doc.total)}</span>
         </div>
       )}
+
+      <WorkOrderFooter
+        doc={doc} canEdit={canEdit} canSend={canSend} canSign={canSign} canVoid={canVoidSig}
+        showMoney={showMoney} busy={busy} signerName={currentUser?.name || currentUser?.email || ""}
+        onSend={send} onCancelRevision={cancelRevision} onSign={sign} onVoidSignature={voidSig}
+      />
     </div>
   );
 }

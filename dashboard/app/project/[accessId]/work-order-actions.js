@@ -9,6 +9,8 @@ import {
   getJobByAccessId, customerOwnsProjectAccount,
   getWorkOrderDoc, createWorkOrderDoc, saveWorkOrderDraft, setWorkOrderNotesDoc,
   setWorkOrderShowPayouts, reseedWorkOrderPayouts, sanitizeWorkOrderDoc,
+  sendWorkOrderVersion, cancelWorkOrderRevision, signWorkOrder, voidWorkOrderSignature,
+  syncWorkOrderFromProposal, getUserById, userEffectivePin,
   getEffectiveRates, actorName,
 } from "../../../lib/db";
 import { can } from "../../../lib/roles";
@@ -120,4 +122,74 @@ export async function getWorkOrderRatesAction(accessId, techName = null) {
   const g = await gate(accessId, "wo.payout.view");
   if (g.error) return g;
   return { ok: true, rates: getEffectiveRates(techName) };
+}
+
+// ---- Stage 2: send, revise, sign ------------------------------------------------------------
+
+// Send the draft as the next version. Every earlier signature is voided by sendWorkOrderVersion —
+// a technician agreed to a scope and a payout that no longer exist.
+export async function sendWorkOrderVersionAction(accessId) {
+  const g = await gate(accessId, "wo.send");
+  if (g.error) return g;
+  const r = sendWorkOrderVersion(accessId, actorName(g.tok));
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, version: r.version, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
+}
+
+// Cancel Revision — discard the unsent draft, restore the version the technician last received.
+export async function cancelWorkOrderRevisionAction(accessId) {
+  const g = await gate(accessId, "wo.edit");
+  if (g.error) return g;
+  const r = cancelWorkOrderRevision(accessId);
+  if (r.error) return r;
+  return { ok: true, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
+}
+
+// The technician accepts the current version (owner's rule, 2026-11-19): they re-enter THEIR OWN PIN
+// first, and the event records the account, the device and the IP alongside the timestamp.
+//
+// The PIN is verified here and discarded — it is never passed to the database layer, never logged, and
+// never returned. It is checked against this signed-in user's own effective PIN (`userEffectivePin`:
+// their custom PIN, else the last 4 of their phone), so it confirms the person holding the phone is the
+// account that is signing. It is NOT a login: a wrong PIN refuses the signature and nothing else.
+export async function signWorkOrderAction(accessId, { name, signatureData = null, pin = "" } = {}) {
+  const g = await gate(accessId, "wo.sign");
+  if (g.error) return g;
+  const me = g.tok.id != null ? getUserById(g.tok.id) : null;
+  if (!me) return { error: "Sign in with your own account to sign a work order." };
+  const expected = userEffectivePin(me);
+  const entered = String(pin || "").replace(/\D/g, "");
+  if (!expected) return { error: "Your account has no PIN yet — ask the office to set one." };
+  if (entered.length !== 4 || entered !== String(expected)) return { error: "That PIN doesn't match your account." };
+
+  const hdrs = await headers();
+  const { parseUserAgent } = await import("../../../lib/device");
+  const { trustedClientIp } = await import("../../../lib/esign/client-ip");
+  const device = parseUserAgent(hdrs.get("user-agent"))?.label || null;
+  const ip = trustedClientIp((h) => hdrs.get(h));
+
+  const r = signWorkOrder(accessId, { userId: me.id, name: String(name || me.name || "").trim(), signatureData, device, ip, pinVerified: true });
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
+}
+
+export async function voidWorkOrderSignatureAction(accessId, sigId) {
+  const g = await gate(accessId, "wo.sign.void");
+  if (g.error) return g;
+  const r = voidWorkOrderSignature(accessId, sigId, actorName(g.tok));
+  if (r.error) return r;
+  await revalidate(accessId);
+  return { ok: true, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
+}
+
+// Requirement 14: pull a signed proposal revision / addendum into the work order as an UNSENT revision.
+// Payouts the office already set are carried across; only genuinely new lines arrive seeded.
+export async function syncWorkOrderFromProposalAction(accessId) {
+  const g = await gate(accessId, "wo.edit");
+  if (g.error) return g;
+  const r = syncWorkOrderFromProposal(accessId);
+  if (r.error) return r;
+  return { ok: true, changed: r.changed, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
 }

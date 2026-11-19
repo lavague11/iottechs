@@ -3347,10 +3347,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   work-order-sheet.jsx, proposal-tech-pricing.jsx and the duplicate "Create Work Order"
                   card that used to sit right under the editor (requirement 8) — technician assignment
                   moved into its header (requirement 10). */}
-              <WorkOrderEditor accessId={lp.access_id} role={cView} preview={!!previewRole}
-                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments} />
+              <WorkOrderEditor accessId={lp.access_id} role={cView} preview={!!previewRole} currentUser={currentUser}
+                assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
+                /* The work order SHOWS the Installation appointment; "Schedule" jumps to the one
+                   scheduler below rather than opening a second booker (requirement 11). */
+                onSchedule={() => document.getElementById("wo-install-scheduler")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
               {/* Installation scheduling — merged into the Work Order (was its own card). */}
-              <div className="wo-merge-sec"><h3 className="wo-merge-h">Installation</h3>
+              <div className="wo-merge-sec" id="wo-install-scheduler"><h3 className="wo-merge-h">Installation</h3>
                 <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
                   currentUser={currentUser} project={lp} view={view} apptKind="install"
                   defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />

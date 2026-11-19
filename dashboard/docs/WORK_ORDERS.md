@@ -284,7 +284,17 @@ especially `work-order-state`, `proposal-sanitize`, `proposal-published-resolver
 
 ---
 
-## 5 · Decisions needed (each changes money or signatures — RED lane)
+## 5 · Decisions — SETTLED by the owner, 2026-11-19
+
+| | Decision |
+|---|---|
+| **A** | **Keep the step paths inside the line.** The popup is the line's status control; choosing Incomplete still offers the "how far did you get?" step picker. `Complete` = every step. Partial payout is unchanged. |
+| **B** | **Step credits are the ledger; the line shows their sum.** Each step's slice still credits whoever tapped it. Admin may reassign or split a line on top of that. |
+| **C** | **In-app signature pad with the e-sign guarantees — plus a PIN step.** The technician re-enters **their own PIN** (`userEffectivePin`: custom PIN, else last 4 of their phone) immediately before signing. The signature event and the flattened signed PDF both record the **tech account, device, IP and timestamp**. The PIN itself is never stored — only that it was verified, and when. |
+| **D** | Open until Stage 3 — see below. |
+| **E** | **Screenshots from the local preview per stage; merge and deploy only after the owner has seen that stage.** |
+
+The reasoning that produced A–C is kept below, because it is why the code is shaped this way.
 
 **A · Line status vs the existing step paths.** Production today pays per *step* (camera: dropped $10 ·
 managed $18 · terminated $12 · mounted $12 · online $0, scaled to the line's payout) and credits each
