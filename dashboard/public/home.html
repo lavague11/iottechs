@@ -367,7 +367,12 @@
     <div>
       <span class="pill green"><span class="dot"></span> NYC · NJ · Available 7 Days a Week</span>
       <h1 class="display">Secure tomorrow, <span class="grad">today.</span></h1>
-      <p class="lede">IOT TECHS designs and installs modern security cameras, audio, networking, and access control across the NYC &amp; NJ metro — monitored 24/7/365 and managed from your phone. Ask us how we can save you thousands a year.</p>
+      <!-- This said "monitored 24/7/365", which contradicted our own Terms twice: §8 says monitoring
+           is performed by a THIRD-PARTY provider ("We are not the monitoring provider") and only
+           applies "if your system includes alarm monitoring" — it is an optional add-on, not something
+           every camera/audio/network install comes with. Continuous RECORDING is what we actually
+           provide on every system; ADT monitoring is available on top. -->
+      <p class="lede">IOT TECHS designs and installs modern security cameras, audio, networking, and access control across the NYC &amp; NJ metro — recording around the clock and managed from your phone, with professional ADT monitoring available. Ask us how we can save you thousands a year.</p>
       <!-- Fix #10: ONE dominant primary (the quote funnel / Build Your System) + one quiet secondary.
            Was three competing buttons with the gold weight on a weak "Learn More". -->
       <div class="hero-cta">
@@ -607,7 +612,9 @@
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="13" rx="2"/><path d="M8 6h8M8 9h5"/><path d="M7 15l-1 7h12l-1-7"/></svg></div>
         <h3>Toast &amp; POS Cabling</h3>
-        <p>Clean, dedicated data and power runs for Toast and other POS systems — terminals, KDS, and printers wired right so your registers never drop.</p>
+        <!-- "so your registers never drop" was an absolute guarantee of uptime we do not control
+             (and our Terms disclaim uninterrupted service). Say what we actually do instead. -->
+        <p>Clean, dedicated data and power runs for Toast and other POS systems — terminals, KDS, and printers on their own cabling rather than sharing a line with the guest Wi-Fi.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
@@ -622,7 +629,11 @@
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.5 8 8 10 4.5-2 8-5 8-10V6z"/></svg></div>
         <h3>ADT Monitoring</h3>
-        <p>Professional ADT monitoring that dispatches police, fire, and EMS the moment an alarm triggers — so help is on the way fast.</p>
+        <!-- Terms §8: monitoring is a third-party service, optional, and we are expressly "not
+             responsible for the ... response times of the monitoring provider or of any emergency
+             responder" — so "help is on the way fast" was a promise the Terms disclaim. Attribute the
+             service to ADT and drop the response-time promise. -->
+        <p>Optional professional monitoring through ADT — their central station verifies the alarm and dispatches police, fire, or EMS. Provided by ADT under their own terms.</p>
       </div>
       <div class="feat">
         <div class="ic"><svg viewBox="0 0 24 24"><path d="M2 7h13v8H2z"/><path d="M15 9l6-3v12l-6-3"/><path d="M8 10.5l.5 1.3 1.3.5-1.3.5L8 14l-.5-1.2L6.2 12.3l1.3-.5z"/></svg></div>
@@ -669,16 +680,20 @@
   <div class="wrap">
     <div class="sec-head">
       <span class="pill"><span class="dot"></span> Why IOT TECHS</span>
-      <h2>One standard. The highest in the industry.</h2>
+      <!-- The four cards below each carried an unsubstantiable comparative ("highest in the
+           industry", "most advanced ... in the industry", "fastest turnaround times in the
+           industry"). Comparative superiority claims have to be provable; these replace them with
+           things that are specific and true, and that actually say something a competitor would not. -->
+      <h2>One standard, on every job.</h2>
     </div>
     <div class="steps">
-      <div class="step"><span class="no">★</span><h4>Professional</h4><p>We use the most advanced tools and the latest technology in the industry on every job.</p></div>
-      <div class="step"><span class="no">⚡</span><h4>Fast</h4><p>The fastest turnaround times in the industry — most jobs are completed the first day.</p></div>
+      <div class="step"><span class="no">★</span><h4>Professional</h4><p>Current-generation hardware, proper tools, and cabling run in the building's own pathways.</p></div>
+      <div class="step"><span class="no">⚡</span><h4>Fast</h4><p>Most jobs are finished on the first day on site — and we tell you up front when yours won't be.</p></div>
       <!-- "1500+ locations" removed: the SEO fact store holds that claim as NEEDS-VERIFICATION and the JSON-LD
      below already withholds it, so the body copy was asserting what the structured data refused to. The
      24/7 availability is corroborated by the Google Business Profile ("Open 24 hours"). -->
 <div class="step"><span class="no">⟳</span><h4>Reliable</h4><p>Available 24/7/365 for emergency service across the NJ and NYC metro.</p></div>
-      <div class="step"><span class="no">✓</span><h4>Integrity</h4><p>We hold one standard for our line of work, and it's the highest in the industry.</p></div>
+      <div class="step"><span class="no">✓</span><h4>Integrity</h4><p>The same standard on a one-camera job as on a fifty-camera one.</p></div>
     </div>
   </div>
 </section>

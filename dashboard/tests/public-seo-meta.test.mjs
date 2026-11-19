@@ -94,3 +94,65 @@ test("the sitemap lists only indexable pages", () => {
   assert.ok(!slugs.includes("adt"), "/adt sets robots noindex, so it must stay out of the sitemap");
   assert.ok(slugs.includes("guides"), "/guides is real indexable content and belongs in the sitemap");
 });
+
+// ---------------------------------------------------------------------------
+// Home-page claims. The site must not assert in marketing what its own Terms
+// page or its own fact store contradicts. Each of these was live until 2026-11-19.
+//
+// Claim checks read the COPY A VISITOR SEES, not the raw file: the markup carries HTML comments
+// that quote the old wording to explain why it changed, and those are not claims.
+const homeCopy = () => read("public/home.html")
+  .replace(/<!--[\s\S]*?-->/g, " ")
+  .replace(/<script[\s\S]*?<\/script>/gi, " ")
+  .replace(/<style[\s\S]*?<\/style>/gi, " ");
+
+test("the home page does not claim monitoring the Terms say we do not provide", () => {
+  const home = homeCopy();
+  const terms = read("app/terms/page.jsx");
+  // Terms §8 is the authority: monitoring is third-party, optional, and not ours.
+  assert.match(terms, /We are not the monitoring provider/, "Terms still disclaim being the monitoring provider");
+  assert.match(terms, /third-party monitoring provider/, "Terms still describe monitoring as third-party");
+  // So the hero may not say the systems we install are simply "monitored 24/7/365".
+  assert.ok(!/monitored 24\/7\/365/.test(home),
+    "the hero claims blanket monitoring; Terms §8 says monitoring is a third-party, optional add-on");
+  // Where monitoring IS described, it must be attributed to the provider.
+  const monitoringCopy = home.match(/[^<>]*monitoring[^<>]*/gi) || [];
+  const described = monitoringCopy.filter((t) => /dispatch|central station|police|fire|EMS/i.test(t));
+  assert.ok(described.length > 0, "the monitoring service card should still exist");
+  for (const t of described) {
+    assert.match(t, /ADT/, `monitoring copy must name the provider: "${t.trim().slice(0, 80)}"`);
+  }
+  // And it must not promise a response time the Terms expressly disclaim.
+  assert.match(terms, /response times of the monitoring provider/, "Terms still disclaim response times");
+  assert.ok(!/help is on the way fast/i.test(home), "that is a response-time promise the Terms disclaim");
+});
+
+test("the home page makes no unsubstantiable comparative claim", () => {
+  const home = homeCopy();
+  // Comparative superiority claims have to be provable. Puffery is fine; "fastest in the industry"
+  // is a measurable comparison against every competitor, and nothing backs it.
+  for (const re of [/fastest turnaround times in the industry/i,
+                    /most advanced tools and the latest technology in the industry/i,
+                    /it's the highest in the industry/i,
+                    /\bbest in the industry\b/i,
+                    /\b(cheapest|lowest priced) in the\b/i]) {
+    assert.ok(!re.test(home), `the home page still makes an unprovable comparative claim: ${re}`);
+  }
+  // Absolute uptime guarantees, which the Terms also disclaim.
+  assert.ok(!/registers never drop/i.test(home), "absolute uptime guarantee");
+});
+
+test("the Licensed & Insured badge is backed by a verified fact", () => {
+  // The badge was live while company.licensing sat unverified in the fact store, so the site
+  // asserted publicly what its own store refused to clear. The owner confirmed it on 2026-11-19;
+  // the fact is now verified, which is what permits the badge to stay.
+  const home = homeCopy();
+  const schema = read("lib/seo/schema.js");
+  if (/Licensed &amp; Insured|Licensed & Insured/.test(home)) {
+    assert.match(schema, /confirmLicensingFact/, "the badge is shown, so company.licensing must be confirmed in the fact store");
+    assert.match(schema, /key='company\.licensing'/);
+    assert.match(schema, /verified=1, public_use_allowed=1/);
+  }
+  // A licence NUMBER is still not recorded anywhere, so the page must not cite one.
+  assert.ok(!/licen[cs]e *#|lic\. *#/i.test(home), "no licence number is recorded — the page must not cite one");
+});

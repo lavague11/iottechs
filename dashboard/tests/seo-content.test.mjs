@@ -145,7 +145,10 @@ test("no content page publishes a claim the fact store has not cleared", () => {
     [/1500\+?|1,500/, "the unverified “1500+ locations” claim"],
     [/port authority/i, "the unverified Port Authority reference"],
     [/\bNYPD\b/i, "the unverified NYPD reference"],
-    [/licensed and insured|fully licensed|license #|licence #/i, "a licensing claim (company.licensing is unverified)"],
+    // "Licensed and insured" became an owner-confirmed, public-use fact on 2026-11-19, so the
+    // statement itself is allowed now. Licence NUMBERS are still not recorded anywhere, so citing
+    // one would be inventing it.
+    [/licen[cs]e *#|lic\. *#|licen[cs]e (number|no\.)/i, "a licence number (company.licensing records the statement only, never a number)"],
     [/\bfree (estimate|quote|consultation)\b/i, "a “free” offer nothing verifies"],
     [/\b\d+\+? years\b|years of experience|since \d{4}/i, "a years-in-business claim"],
     [/\b(warranty|guaranteed) for \d+/i, "a warranty length (company.warranty_months is unverified)"],

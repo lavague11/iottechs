@@ -189,6 +189,22 @@ function seedFacts(db) {
   F("pricing.standard_camera", "Standardized camera-install price (if public)", "", "pricing", 0, 0, "NEEDS DECISION — only publish from one canonical source if management approves.");
   F("company.warranty_months", "Standard warranty (months)", "", "warranty", 0, 0, "NEEDS INPUT.");
   correctNapFacts(db);
+  confirmLicensingFact(db);
+}
+
+// Owner-confirmed 2026-11-19: IOT TECHS is licensed and insured. The home page has shown a
+// "Licensed & Insured" badge all along while this fact sat unverified, so the site was publicly
+// asserting something its own fact store refused to clear — which is exactly the inconsistency the
+// store exists to prevent. Confirmed by the owner, so the STATEMENT is now verified and public.
+// Licence NUMBERS and jurisdictions are still NOT recorded: a page may say "licensed and insured",
+// but must never cite a number until one is entered in /dev/seo → Facts.
+// Fires only while the value is still the seeded empty string, so a later owner edit is never
+// clobbered, and it is a no-op on every boot after the first.
+function confirmLicensingFact(db) {
+  db.prepare(`UPDATE seo_facts SET value=?, notes=?, verified=1, public_use_allowed=1, updated_by='owner-confirm'
+              WHERE key='company.licensing' AND (value IS NULL OR value='')`)
+    .run("Licensed and insured",
+      "Owner-confirmed 2026-11-19 (licensed AND insured). Licence numbers and jurisdictions are still NOT recorded — pages may state that the business is licensed and insured, but must never cite a licence number until one is entered here.");
 }
 
 // One-time NAP correction (2026-11-15). The seeds above are INSERT OR IGNORE: new keys (company.address,
