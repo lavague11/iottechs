@@ -43,6 +43,7 @@ import InstallAddendum   from "./install-addendum";
 import SystemQrTool      from "./system-qr-tool";
 import QCChecklist, { QcSignoff } from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
+import CompletionChoice  from "./completion-choice";
 import CustomerTour from "./customer-tour";
 import { SvcDiagnosticPanel, SvcInvoicePanel } from "./svc-gateway-cards";
 import { customerPointer, customerAnnouncement, customerAction } from "../../../lib/customer-action";
@@ -3114,18 +3115,29 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   <div style={{ marginBottom: 14 }}>
                     <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
                       systemQr={lp.system_qr} readOnly />
-                    <a className="cpv-phonelink" href={`/guide/mobile-setup?project=${encodeURIComponent(lp.access_id)}`}>
-                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
-                      Set up my phone
-                    </a>
                   </div>
                 )}
-                {/* The walkthrough acceptance, surfaced here instead of behind a Closeout card. Only
-                    while it is genuinely theirs to give: QC content ready and not yet confirmed. */}
-                {cView === "customer" && !sFacts.qc_customer_signed && (toolMeta?.qc?.allPass || acceptances?.qc_customer) && (
+                {/* The fork, straight after the code: set the app up, or say they're done. "Complete
+                    my project" writes the SAME qc_customer acceptance the closeout walkthrough does,
+                    through the same guarded server action — it is offered only when that gate is
+                    already satisfiable, so it can never fail on a refusal they can't act on.
+                    (<QcSignoff> is deliberately NOT used here: it also renders the Manager row, which
+                    names office staff — internal, per the role-visibility rule.) */}
+                {cView === "customer" && (
                   <div style={{ marginBottom: 14 }}>
-                    <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
-                      onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+                    <CompletionChoice accessId={lp.access_id}
+                      guideHref={`/guide/mobile-setup?project=${encodeURIComponent(lp.access_id)}`}
+                      canComplete={!!(toolMeta?.qc?.allPass)}
+                      signed={!!sFacts.qc_customer_signed}
+                      signedAt={acceptances?.qc_customer?.at || null}
+                      /* Inert unless the viewer really IS the customer. `cView`/`view` only say which
+                         view is rendered — staff looking through the customer view (preview token or
+                         the demo bar's Customer tab) still hold a staff session, and the server rightly
+                         refuses them with "Not your sign-off." A disabled button beats that error.
+                         currentUser.role is the REAL session role; the PIN-gate path sets it to
+                         "customer" (page.jsx), so a customer with no login still gets the button. */
+                      preview={!!previewRole || (!!currentUser?.role && currentUser.role !== "customer")}
+                      onDone={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
                   </div>
                 )}
                 <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={!!previewRole || cView === "tech"}

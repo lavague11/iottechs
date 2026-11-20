@@ -457,9 +457,6 @@ export const PORTAL_CSS = `
 .cpv-ovl-body{flex:1;overflow-y:auto;background:#fff;padding-bottom:var(--dock-lane)}
 /* The proposal reads like a document — give it a touch more size than the dense staff view. */
 .cpv-ovl.v-proposal .cpv-ovl-body{font-size:16.5px;line-height:1.55}
-/* "Set up my phone" — the quiet link under the activation QR inside Completion. */
-.cpv-phonelink{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:9px 15px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:14px;font-weight:600;text-decoration:none}
-.cpv-phonelink:hover{border-color:var(--ink)}
 .cpv-install{padding:22px 18px;max-width:640px;margin:0 auto}
 .cpv-install-when{font-size:1.2rem;font-weight:700;color:var(--gold-text);margin-bottom:12px}
 .cpv-install-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:15px;color:var(--ink-soft)}

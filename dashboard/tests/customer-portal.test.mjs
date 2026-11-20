@@ -257,3 +257,43 @@ test("the 7-day price lock only exists in the V2 branch — so V1 must never be 
   const lockAt = gw.indexOf("const priceExpired = priceActive && expired");
   assert.ok(lockAt > v2At && lockAt < hubAt, "price-lock lives inside the customer V2 block");
 });
+
+test("Completion's fork: QR, then set up the phone or complete — on the guarded primitive", () => {
+  const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
+  const choice = read("../app/project/[accessId]/completion-choice.jsx");
+  const gateway = read("../app/project/[accessId]/gateway-client.jsx");
+
+  // "Complete my project" IS the existing customer walkthrough acceptance — same server action,
+  // never a client-side write or a second completion fact.
+  assert.ok(choice.includes('acceptStageAction(accessId, "qc_customer", true)'), "reuses the canonical primitive");
+  assert.ok(!/portal_version|completed_at\s*=|qc_customer_signed\s*=/.test(choice), "writes no state of its own");
+  // Two actions, and the destructive-feeling one confirms first (DoD #6).
+  assert.ok(choice.includes("Set up my phone") && choice.includes("Complete my project"), "both doors");
+  assert.ok(choice.includes("setAsking(true)") && choice.includes("You&rsquo;re confirming"), "and it says what is being agreed to");
+  // Render only when real: no dead Complete button before the gate is satisfiable.
+  assert.ok(/canComplete && \(/.test(choice), "the complete action is gated");
+  assert.ok(choice.includes("final checks"), "and says why when it is absent");
+
+  // Wired into Completion for the CUSTOMER only, after the QR.
+  // The CUSTOMER overlay's completion case = from `case "completion":` to the next case label.
+  // (Bounding it matters: a fixed-length slice runs into the staff branch, which legitimately does
+  // mount <QcSignoff>.)
+  // (Bounding it matters: an unbounded or fixed-length slice runs into the staff branch, which
+  // legitimately does mount <QcSignoff>. Completion is the last case before `default:`.)
+  const cStart = gateway.indexOf('case "completion":');
+  const cEnd = gateway.indexOf("default:", cStart);
+  assert.ok(cStart > 0 && cEnd > cStart, "located the customer completion case");
+  // Comments stripped: a comment that NAMES a component is not a mount of it, and the code below
+  // explains in prose precisely why QcSignoff is avoided here.
+  const completionCase = gateway.slice(cStart, cEnd).replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.ok(completionCase.indexOf("SystemQrTool") < completionCase.indexOf("CompletionChoice"), "the code comes first");
+  assert.ok(completionCase.includes('cView === "customer" && ('), "customer only");
+  // QcSignoff would leak the Manager row (office names) into the customer's view — it must not be
+  // what Completion mounts. Role-visibility pass, DoD #4.
+  assert.ok(!completionCase.includes("<QcSignoff"), "no staff sign-off rows in the customer ending");
+  // Only a REAL customer may complete. cView/view say which view is rendered, not who is holding
+  // the session — staff previewing as a customer have a staff token and the server refuses them
+  // ("Not your sign-off."), so the button must be inert for them rather than erroring. The PIN-gate
+  // path sets currentUser.role = "customer" (page.jsx), so a login-less customer keeps the button.
+  assert.ok(completionCase.includes('currentUser?.role && currentUser.role !== "customer"'), "gated on the real session role, not the rendered view");
+});
