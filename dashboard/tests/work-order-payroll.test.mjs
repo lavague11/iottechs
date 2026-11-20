@@ -265,7 +265,9 @@ test("the Portal V2 customer sees the sign-off card — and still nothing else o
   const portalLib = read("../lib/customer-portal.js");
   const portal = read("../app/project/[accessId]/customer-portal.jsx");
   assert.ok(/signoff:\s+!!\(ctx\.woSignoff\?\.allDone \|\| ctx\.woSignoff\?\.signed\)/.test(portalLib), "available when the work is done, or once signed");
-  assert.ok(portalLib.includes('"addendum", "signoff", "closeout"'), "ordered after Installation, before the walkthrough");
+  // Ordered after Installation and before the ending. (Closeout lost its card when it was merged
+  // into Completion, so Completion — not closeout — is now what sign-off sits in front of.)
+  assert.ok(portalLib.includes('"addendum", "signoff", "completion"'), "ordered after Installation, before the ending");
   assert.ok(portalLib.includes('signoff: ctx.woSignoff?.signed ? "signed" : "awaiting"'), "the card's state");
   assert.ok(/PORTAL_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib) && /OVERLAY_VIEWS[\s\S]{0,200}"signoff"/.test(portalLib), "and it is a real, deep-linkable overlay");
   assert.ok(portal.includes('signoff:    { title: "Sign Off"'), "card copy");

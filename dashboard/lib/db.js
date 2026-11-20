@@ -2125,6 +2125,11 @@ const MOBILE_SETUP_GUIDE = {
   // step-through — a troubleshooting guide shouldn't demand a System QR before showing anything.
   flow: { askPlatform: true, needsSystem: true, consent: true, addMore: true },
   steps: [
+    // The activation code FIRST. The last step asks them to pick it from their album, so they need
+    // it saved before they start — and it is the one thing they came here for. showQr renders the
+    // live picker (save / text it) off the system resolved by the intro; with no system resolved it
+    // falls back to the animated QR filler, so a public visitor still gets a sane first step.
+    { showQr: true, title: "Your activation code", text: "This is your system's code. Save it to your phone now — you'll pick it from your album at the last step." },
     // store:true makes the mockup + a button link to the right listing for their platform.
     { art: "download", image: "/guides/annke/01.png", title: "Get the app",       text: "Install Annke Vision.", store: true },
     { art: "account",  image: "/guides/annke/02.png", title: "Open it",           text: "Tap Register.",                          tap: { x: 18, y: 44, w: 32, h: 5 } },

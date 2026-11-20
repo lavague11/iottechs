@@ -107,6 +107,12 @@ export function proposalCardState({ proposalPublished, proposalStatus, proposalS
 //                file) — NOT merely that the master stage says QC (that can be empty for the customer)
 //   completion — the project is complete AND paid in full (certificate eligibility)
 //   phone      — signed and install not yet complete (the one real pre-install setup step)
+// CLOSEOUT IS MERGED INTO COMPLETION for the customer. They have one ending, not two: Completion
+// opens as soon as there is closing content (QC ready, or the project is complete) and carries, in
+// order, their activation QR → the walkthrough confirmation if they still owe it → the certificate
+// once it is earned. `closeout` therefore keeps NO card (see CARD_ORDER) but stays available here so
+// a deep link, an old email link, or the staff deck can still open the walkthrough on its own.
+// Availability answers "would opening this show real content?" — it is NOT the card list.
 // ctx carries already-shaped booleans from the portal; finance is the sanitized financeSummary (for payment).
 export function viewAvailability(ctx = {}, finance = null) {
   const pState = proposalCardState(ctx);
@@ -118,7 +124,7 @@ export function viewAvailability(ctx = {}, finance = null) {
     payment:    payable(finance),
     install:    !!ctx.hasAppt || iStatus !== "awaiting",
     closeout:   !!ctx.closeoutReady,
-    completion: !!(ctx.complete && ctx.paidInFull),
+    completion: !!(ctx.closeoutReady || ctx.complete),
     phone:      pState === "signed" && !ctx.installComplete,
     // B13: the change-order overlay is available whenever the customer has an add-on to look at —
     // one awaiting their signature, or an already-signed one they may re-read. `addendumCount`
@@ -143,15 +149,36 @@ export function viewAvailability(ctx = {}, finance = null) {
 // proposal, so that is where the customer expects to find it.
 // `signoff` sits immediately after Installation: the work is done, and the next thing asked of the
 // customer is to say so. It precedes closeout, which is the project's own walkthrough.
-const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "signoff", "closeout", "completion"];
+// `completion` is the customer's ONE ending and sits last. `closeout` deliberately has no card: its
+// only customer-facing job (confirming the walkthrough) now lives inside Completion, so the portal
+// never shows two closing actions. `phone` steps aside for the same reason once Completion is up —
+// the activation QR is in there, which is what the phone setup actually needs.
+const CARD_ORDER = ["survey", "proposal", "phone", "install", "addendum", "signoff", "completion"];
+const SUPERSEDED_BY_COMPLETION = ["phone"];
+// Completion's own state drives its copy and its action:
+//   confirm     — the walkthrough confirmation is READY and still unsigned: the customer's move, so
+//                 the card asks for it. Requires closeoutReady, not merely "unsigned" — otherwise
+//                 the card promises a confirmation the overlay cannot actually offer (caught live:
+//                 a completion-stage project with QC not yet all-pass said "confirm the work" and
+//                 opened on the payment gate).
+//   certificate — complete AND paid in full: the certificate is downloadable
+//   done        — nothing is being asked; the card holds their code and documents
+export function completionCardState(ctx = {}) {
+  if (ctx.closeoutReady && !ctx.closeoutSigned) return "confirm";
+  if (ctx.complete && ctx.paidInFull) return "certificate";
+  return "done";
+}
 export function portalCards(ctx = {}, finance = null) {
   const avail = viewAvailability(ctx, finance);
   const pState = proposalCardState(ctx);
   const iStatus = ctx.installStatus || installStatusOf(ctx.facts || {}, ctx.stage || null);
-  const stateOf = { proposal: pState, install: iStatus, closeout: ctx.closeoutSigned ? "signed" : "available",
+  const stateOf = { proposal: pState, install: iStatus,
     addendum: ctx.addendumAwaiting ? "awaiting" : "signed",
-    signoff: ctx.woSignoff?.signed ? "signed" : "awaiting" };
-  return CARD_ORDER.filter((k) => avail[k]).map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
+    signoff: ctx.woSignoff?.signed ? "signed" : "awaiting",
+    completion: completionCardState(ctx) };
+  return CARD_ORDER
+    .filter((k) => avail[k] && !(avail.completion && SUPERSEDED_BY_COMPLETION.includes(k)))
+    .map((k) => ({ key: k, view: k, state: stateOf[k] || "available" }));
 }
 
 // The overlay keys the portal understands (URL ?view=<key>). Used to validate an incoming ?view / legacy

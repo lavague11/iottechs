@@ -3103,9 +3103,31 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               </div>
             );
           }
+          // COMPLETION — the customer's single ending (Closeout is merged in here; it has no card of
+          // its own). Order is deliberate: the activation QR first, because that is the thing they
+          // came for and the thing the phone setup needs; then the walkthrough confirmation while
+          // they still owe it; then the completion deliverables, which self-gate on paid-in-full.
           case "completion":
             return (
               <div style={padOvl}>
+                {lp.system_qr && (
+                  <div style={{ marginBottom: 14 }}>
+                    <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
+                      systemQr={lp.system_qr} readOnly />
+                    <a className="cpv-phonelink" href={`/guide/mobile-setup?project=${encodeURIComponent(lp.access_id)}`}>
+                      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>
+                      Set up my phone
+                    </a>
+                  </div>
+                )}
+                {/* The walkthrough acceptance, surfaced here instead of behind a Closeout card. Only
+                    while it is genuinely theirs to give: QC content ready and not yet confirmed. */}
+                {cView === "customer" && !sFacts.qc_customer_signed && (toolMeta?.qc?.allPass || acceptances?.qc_customer) && (
+                  <div style={{ marginBottom: 14 }}>
+                    <QcSignoff accessId={lp.access_id} role={cView} meta={toolMeta?.qc} acceptances={acceptances} preview={!!previewRole}
+                      onChange={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }} />
+                  </div>
+                )}
                 <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={!!previewRole || cView === "tech"}
                   onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
                   onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />
@@ -3141,6 +3163,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         closeoutReady: !!(toolMeta?.qc?.allPass || acceptances?.qc_customer),
         closeoutSigned: !!sFacts.qc_customer_signed,
         complete: !!sFacts.completion_docs || projState === "COMPLETE",
+        // Has staff uploaded the activation QR? Completion's copy mentions a code only when one exists.
+        hasSystemQr: !!lp.system_qr,
         paidInFull: !!custFin?.paidInFull,
         hasAppt: !!portalAppt,
         // Six fields, not the work order: { allDone, lines, complete, closed, signed, signedBy, signedAt }.
@@ -3356,11 +3380,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <QCChecklist embedded accessId={lp.access_id} proposal={proposalData} customerName={lp.contact_name || lp.customer}
                 role={cView} signoff={sign} meta={toolMeta?.qc} acceptances={acceptances}
                 onSaved={refreshAcceptances} onSignoff={(a, s) => { setAcceptances(a); refreshAcceptances(); if (s) syncStage(s); }}
-                onStageChange={(s) => { onProjectStage(s); setViewingStage(s); syncStage(s); refreshAcceptances(); }} />
+                /* "QC Passed — Advance" is the END of closeout: the tool has nothing left to say, so it
+                   closes itself and confirms, instead of leaving the finished checklist on screen. */
+                onStageChange={(s) => {
+                  onProjectStage(s); setViewingStage(s); syncStage(s); refreshAcceptances();
+                  showLiveToast("Closeout complete");
+                  onCloseOverlay?.();
+                }} />
             </div>);
           }
           case "completion":
             return (<div style={ovl(820)}>
+              {/* The activation QR rides along on Completion too — it is what the customer sees there,
+                  so staff can check the same code without reopening Closeout. */}
+              {lp.system_qr && (
+                <div style={{ marginBottom: 14 }}>
+                  <SystemQrTool accessId={lp.access_id} customerName={lp.company_name || lp.contact_name || lp.customer}
+                    systemQr={lp.system_qr} readOnly={viewOnly} />
+                </div>
+              )}
               <CompletionPanel project={lp} proposal={proposalData} role={cView} readOnly={cView === "tech"}
                 onStageChange={(s) => { onProjectStage(s); setViewingStage(s); }} onBrowseStage={(s) => browse(s)}
                 onCompletedChange={(ts) => setLocalProj((pp) => ({ ...pp, completed_at: ts }))} />

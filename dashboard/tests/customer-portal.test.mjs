@@ -104,28 +104,57 @@ test("portalCards: only applicable cards, in order, never empty placeholders", (
   assert.ok(signed.map((c) => c.key).includes("install"));
 
   // completed + paid → completion card; no phone card once install complete
-  const complete = portalCards({ proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "completion", facts: { install_done: true }, closeoutReady: true, complete: true, paidInFull: true, installComplete: true });
+  // (closeoutSigned too: an unsigned walkthrough is still the customer's move, so the card would
+  // ask them to confirm before it offers the certificate.)
+  const complete = portalCards({ proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "completion", facts: { install_done: true }, closeoutReady: true, closeoutSigned: true, complete: true, paidInFull: true, installComplete: true });
   assert.ok(complete.map((c) => c.key).includes("completion"));
   assert.ok(!complete.map((c) => c.key).includes("phone"));
 
-  // completed but NOT paid → no completion card
-  const unpaid = portalCards({ proposalPublished: true, proposalSigned: true, stage: "completion", facts: { install_done: true }, complete: true, paidInFull: false });
-  assert.ok(!unpaid.map((c) => c.key).includes("completion"));
+  // completed but NOT paid → the completion card still shows (it is the merged ending, and the
+  // panel inside self-gates the deliverables on paid-in-full) but it is NOT in certificate state.
+  const unpaid = portalCards({ proposalPublished: true, proposalSigned: true, stage: "completion", facts: { install_done: true }, complete: true, paidInFull: false, closeoutSigned: true });
+  const unpaidCompletion = unpaid.find((c) => c.key === "completion");
+  assert.ok(unpaidCompletion, "completion card shows once there is closing content");
+  assert.equal(unpaidCompletion.state, "done");
+  assert.equal(complete.find((c) => c.key === "completion").state, "certificate");
 
   // no data at all → empty list (no placeholders)
   assert.deepEqual(portalCards({ facts: {}, stage: "inquiry" }), []);
 });
 
-test("closeout readiness: card appears only with real customer-closeout content (not merely qc stage)", () => {
-  // qc stage but NO customer-facing closeout content → no closeout card (the empty-state fix)
+test("closeout is merged into completion: one ending, never two cards", () => {
+  // qc stage but NO customer-facing closing content → neither card (the empty-state fix)
   const empty = portalCards({ stage: "qc", facts: { install_done: true }, proposalPublished: true, proposalSigned: true });
   assert.ok(!empty.map((c) => c.key).includes("closeout"));
-  // QC all-pass ready → closeout card appears
+  assert.ok(!empty.map((c) => c.key).includes("completion"));
+  // QC all-pass ready → ONE card, and it is Completion (closeout never gets a card of its own)
   const ready = portalCards({ stage: "qc", facts: { install_done: true }, proposalPublished: true, proposalSigned: true, closeoutReady: true });
-  assert.ok(ready.map((c) => c.key).includes("closeout"));
-  // a customer signoff already on file also counts as ready (don't hide a legitimate required signoff)
+  assert.ok(!ready.map((c) => c.key).includes("closeout"), "closeout has no card — it is merged into completion");
+  assert.ok(ready.map((c) => c.key).includes("completion"));
+  // …and it asks for the confirmation the customer still owes.
+  assert.equal(ready.find((c) => c.key === "completion").state, "confirm");
+  // But it only ASKS when the confirmation is actually offerable. A completion-stage project whose
+  // QC is not yet all-pass has nothing to confirm, so the card must not say "confirm the work" —
+  // it opens on the payment gate. Caught in live preview, not by the earlier version of this test.
+  const notReady = portalCards({ stage: "completion", facts: { install_done: true }, proposalPublished: true, proposalSigned: true, complete: true, paidInFull: false, closeoutReady: false, closeoutSigned: false });
+  assert.equal(notReady.find((c) => c.key === "completion").state, "done");
+  // Once confirmed it stops asking.
+  const confirmed = portalCards({ stage: "qc", facts: { install_done: true }, proposalPublished: true, proposalSigned: true, closeoutReady: true, closeoutSigned: true });
+  assert.equal(confirmed.find((c) => c.key === "completion").state, "done");
+  // The closeout OVERLAY stays available so deep links / the staff deck still open the walkthrough.
   assert.equal(viewAvailability({ stage: "qc", closeoutReady: true }).closeout, true);
   assert.equal(viewAvailability({ stage: "qc", closeoutReady: false }).closeout, false);
+  assert.equal(overlayAvailable("closeout", { closeoutReady: true }), true);
+});
+
+test("completion supersedes the phone card (the activation QR lives inside it)", () => {
+  const base = { proposalPublished: true, proposalStatus: "accepted", proposalSigned: true, stage: "qc", facts: { install_done: true }, installComplete: false };
+  // Before there is any closing content, Phone Setup stands on its own.
+  assert.ok(portalCards(base).map((c) => c.key).includes("phone"));
+  // Once Completion is up it takes over — the customer gets one place to go.
+  const merged = portalCards({ ...base, closeoutReady: true });
+  assert.ok(!merged.map((c) => c.key).includes("phone"));
+  assert.ok(merged.map((c) => c.key).includes("completion"));
 });
 
 test("viewAvailability: one canonical resolver gates every view", () => {
@@ -143,9 +172,12 @@ test("viewAvailability: one canonical resolver gates every view", () => {
   // install with an upcoming appointment or a scheduled+ status
   assert.equal(viewAvailability({ hasAppt: true, facts: {} }).install, true);
   assert.equal(viewAvailability({ facts: {}, stage: "inquiry" }).install, false);
-  // completion only when complete AND paid in full
+  // completion = the merged ending: available once there is closing content at all, not only when
+  // the certificate is earned (CompletionPanel gates the deliverables itself on paid-in-full).
   assert.equal(viewAvailability({ complete: true, paidInFull: true }).completion, true);
-  assert.equal(viewAvailability({ complete: true, paidInFull: false }).completion, false);
+  assert.equal(viewAvailability({ complete: true, paidInFull: false }).completion, true);
+  assert.equal(viewAvailability({ closeoutReady: true }).completion, true);
+  assert.equal(viewAvailability({ facts: {}, stage: "install" }).completion, false);
 });
 
 test("overlayAvailable: direct ?view selects a view but never overrides availability", () => {
@@ -156,7 +188,7 @@ test("overlayAvailable: direct ?view selects a view but never overrides availabi
   assert.equal(overlayAvailable("payment", {}, owing), true);
   // survey/completion routes gated by content/eligibility
   assert.equal(overlayAvailable("survey", { surveyHasData: false }), false);
-  assert.equal(overlayAvailable("completion", { complete: true, paidInFull: false }), false);
+  assert.equal(overlayAvailable("completion", { facts: {}, stage: "install" }), false);
   assert.equal(overlayAvailable("completion", { complete: true, paidInFull: true }), true);
   // phone is a link-out, never an overlay; unknown views are not overlays
   assert.equal(overlayAvailable("phone", { proposalPublished: true, proposalSigned: true }), false);

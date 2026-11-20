@@ -49,8 +49,10 @@ const CARD_COPY = {
   proposal:   { title: "Proposal",       sub: null,                                   action: "Review" },
   phone:      { title: "Phone Setup",    sub: "Set up mobile access before install.", action: "Start" },
   install:    { title: "Installation",   sub: null,                                   action: "View" },
+  // Closeout keeps its copy for the overlay TITLE only — it no longer has a card of its own (merged
+  // into Completion), but deep links and the staff deck still open it.
   closeout:   { title: "Closeout",       sub: "Review and sign off the completed work.", action: "Review" },
-  completion: { title: "Completion",     sub: "Your project is complete.",            action: "Certificate" },
+  completion: { title: "Completion",     sub: null,                                   action: "View" },
   addendum:   { title: "Change Order",   sub: null,                                   action: "Review" },
   // The work order's sign-off. The copy says what happened and what is being asked — nothing about
   // the work order itself, which the customer never sees.
@@ -237,6 +239,7 @@ export default function CustomerPortal({
                 : c.key === "install" ? installSub(c.state, appt)
                 // B13: say which way the ball is pointing, since a change order can sit either way.
                 : c.key === "addendum" ? (c.state === "awaiting" ? "Added work — review and sign." : "Added work on your project.")
+                : c.key === "completion" ? completionSub(c.state, ctx.hasSystemQr)
                 : copy.sub;
               const onClick = c.key === "phone"
                 ? () => { window.location.href = `/guide/mobile-setup?project=${accessId}`; }
@@ -249,6 +252,7 @@ export default function CustomerPortal({
                   </div>
                   <span className="cpv-card-act">{c.key === "proposal" && c.state === "signed" ? "View"
                     : c.key === "addendum" ? (c.state === "awaiting" ? "Sign" : "View")
+                    : c.key === "completion" ? (c.state === "confirm" ? "Confirm" : c.state === "certificate" ? "Certificate" : "View")
                     : copy.action} →</span>
                 </button>
               );
@@ -351,6 +355,13 @@ function proposalSub(state, signedDate) {
   if (state === "awaiting") return "Review and sign your proposal.";
   return "Your proposal is ready.";
 }
+// Completion = the merged ending. The subtitle names what is ACTUALLY waiting inside, so the card
+// never promises a code that staff haven't uploaded or a confirmation that isn't ready to give.
+function completionSub(state, hasQr) {
+  if (state === "confirm") return hasQr ? "Your code is ready — confirm the work." : "Confirm the completed work.";
+  if (state === "certificate") return "Your project is complete.";
+  return hasQr ? "Your activation code and documents." : "Your project documents.";
+}
 function installSub(state, appt) {
   if (state === "complete") return "Installation complete.";
   if (state === "in_progress") return "Installation in progress.";
@@ -446,6 +457,9 @@ export const PORTAL_CSS = `
 .cpv-ovl-body{flex:1;overflow-y:auto;background:#fff;padding-bottom:var(--dock-lane)}
 /* The proposal reads like a document — give it a touch more size than the dense staff view. */
 .cpv-ovl.v-proposal .cpv-ovl-body{font-size:16.5px;line-height:1.55}
+/* "Set up my phone" — the quiet link under the activation QR inside Completion. */
+.cpv-phonelink{display:inline-flex;align-items:center;gap:7px;margin-top:10px;padding:9px 15px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);font-size:14px;font-weight:600;text-decoration:none}
+.cpv-phonelink:hover{border-color:var(--ink)}
 .cpv-install{padding:22px 18px;max-width:640px;margin:0 auto}
 .cpv-install-when{font-size:1.2rem;font-weight:700;color:var(--gold-text);margin-bottom:12px}
 .cpv-install-row{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:15px;color:var(--ink-soft)}
