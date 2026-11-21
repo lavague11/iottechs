@@ -119,6 +119,48 @@ plan picker, custom editor) · `proposal-payment-plan.jsx` (read-only renderer) 
 6. **Minimum payment count.** The stepper enforced a minimum of 2; the spec says "any number". **Decided:**
    minimum 1 (a single installment is just 100% on whatever trigger you pick).
 
+### Stage 2 — Addendums
+
+Owning code: `lib/proposal.js` (addendumTotals, addendumFingerprint, addendumSignatureCurrent) ·
+`lib/addendum-items.js` (proposal-line <-> addendum-item boundary) · `lib/addendum-pdf.js` ·
+`lib/addendum-schema.js` (the parallel sign store) · `app/project/[accessId]/addendum-builder.jsx`,
+`install-addendum.jsx`, `proposal-actions.js` (reconcileAddendumWrite) · `app/api/addendum/route.js`.
+
+1. **The builder already reuses the proposal's.** Spec item 1 reads as new work, but `AddendumBuilder`
+   already mounts `ProposalItemsEditor` — service presets, + Item type-ahead, + Add Service — and already
+   had Discount and Tax. **Missing were PCP Credit and Payment Plan.**
+
+2. **PCP on an add-on contradicted an explicit guard.** `addendumTotals` carried the comment *"PCP is NOT
+   applied here: the credit is a proposal-level figure already subtracted from the proposal total, so
+   applying it again on an add-on would credit it twice"*, pinned by a test named "PCP is deliberately NOT
+   applied to an add-on". The spec puts a PCP Credit control on the builder. **Decided toward the spec,
+   keeping the half of the rule that prevents the double credit:** an add-on may carry a credit *of its
+   own*, and the proposal's `pcp_credit` is still never inherited. The old test was rewritten to assert
+   exactly that, rather than deleted.
+
+3. **Backwards compatibility was the binding constraint, not the arithmetic.** `addendumSignatureCurrent`
+   compares a stored `signedFingerprint` to a recomputed one; a signed add-on that stops matching drops out
+   of `getApprovedAddons` and **silently subtracts itself from a live balance**. So the PCP term enters
+   both `addendumTotals` and `addendumFingerprint` only when a credit is actually set — the same rule tax
+   already followed, and for the same reason. An add-on without a credit computes and hashes byte-for-byte
+   as before. Pinned by `tests/addendum-pcp.test.mjs`.
+
+4. **Payment Plan on an addendum conflicts with items 3 and 4 of the same stage.** Item 1 asks for the
+   control; item 3 says the add-on amount folds into the final balance *by default*; item 4 says the
+   payment breakdown is computed on the *updated total*. A second, competing schedule living on the add-on
+   has no defined composition with the proposal's plan, and inventing one would be inventing money
+   semantics. **Decided:** serve items 3 and 4 literally — the add-on joins the contract total and the
+   proposal's plan re-splits over the updated total (which `planScheduleRows(..., fin.current)` already
+   did). No separate per-addendum schedule. **If you want an add-on payable on its own terms, say how it
+   should compose with the proposal's plan and it becomes a small change.**
+
+5. **Item 4 was half-built.** The totals block showed one merged "Approved addendums" line. It now lists
+   each signed addendum by title and signed date with its own amount, under an unchanged "Original
+   proposal", above an "Updated total".
+
+6. **Role guard.** `reconcileAddendumWrite` resets `discount`/`taxRate` to stored values for a non-pricing
+   role; `pcpCredit` was added to that same reset, so a technician cannot set a credit.
+
 ---
 
 ## Progress

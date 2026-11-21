@@ -1173,9 +1173,19 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             current contract total below it — never silently rewrite the signed proposal. */}
         {fin.hasAddons ? (
           <>
+            {/* Stage 2 item 4 — the signed proposal total never moves. Each signed addendum is named and
+                priced on its own line beneath it, then an Updated Total, and the payment breakdown below
+                already derives from fin.current, so it is the updated total it splits. */}
             <div className="prop-trow"><span>Original proposal</span><b>{money(fin.base)}</b></div>
-            <div className="prop-trow prop-trow-addon"><span>Approved addendums{addons.list?.length > 1 ? ` (${addons.list.length})` : ""}</span><b className="prop-plus">+{money(fin.addons)}</b></div>
-            <div className="prop-total-big"><span>Current total</span><CountMoney value={fin.current} /></div>
+            {(addons.list || []).length > 0 ? addons.list.map((a) => (
+              <div className="prop-trow prop-trow-addon" key={a.id}>
+                <span>{a.title || "Job-site add-on"}{a.signedAt ? ` · signed ${fmtShortDate(a.signedAt)}` : ""}</span>
+                <b className="prop-plus">+{money(a.total)}</b>
+              </div>
+            )) : (
+              <div className="prop-trow prop-trow-addon"><span>Approved addendums</span><b className="prop-plus">+{money(fin.addons)}</b></div>
+            )}
+            <div className="prop-total-big"><span>Updated total</span><CountMoney value={fin.current} /></div>
           </>
         ) : (
           <div className="prop-total-big"><span>Total</span><CountMoney value={totals.grand} /></div>

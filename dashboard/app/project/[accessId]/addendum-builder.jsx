@@ -19,6 +19,11 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
   const [services, setServices] = useState(() => addendumItemsToServices(init?.items));
   const [discount, setDiscount] = useState(init?.discount || "");
   const [taxRate, setTaxRate] = useState(init?.taxRate || 0);   // off unless clicked — never inherited from the proposal
+  // The add-on's own PCP credit, as a percentage. Stored as the proposal's {type,value} shape so one
+  // reader (addendumPcpAmount) serves both; 0 means the record carries no credit at all.
+  const [pcpPct, setPcpPct] = useState(() => { const v = init?.pcpCredit; return v && typeof v === "object" && v.type === "pct" ? (+v.value || 0) : 0; });
+  const setPcp = (v) => setPcpPct(Math.max(0, Math.min(10, +v || 0)));
+  const pcpCredit = pcpPct > 0 ? { type: "pct", value: pcpPct } : undefined;
   const [payOv, setPayOv] = useState({});     // office-typed per-line tech pay, keyed by line id
   const [rates, setRates] = useState(null);   // company rate book -> default tech pay (office only)
 
@@ -33,7 +38,7 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
     () => servicesToAddendumItems(services, { rates, priced: canPrice, payOverrides: payOv, original: init?.items }),
     [services, rates, canPrice, payOv, init],
   );
-  const totals = addendumTotals({ items, discount, taxRate });
+  const totals = addendumTotals({ items, discount, taxRate, pcpCredit });
   const total = totals.total;
 
   const addService = (key, customLabel) => {
@@ -70,6 +75,20 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
               <input type="number" min="0" step="1" inputMode="decimal" placeholder="0" aria-label="Discount" value={discount} onChange={(e) => setDiscount(e.target.value)} /></span>
           </label>
         )}
+        {/* PCP Credit — the add-on's OWN credit, same control as the proposal's. Like tax it starts at 0
+            and is never inherited: the proposal's credit was already taken off the proposal total, so an
+            add-on carries one only when someone sets it here. */}
+        {canPrice && (
+          <div className="adn-b-tax">
+            <span className="adn-flbl">PCP Credit</span>
+            <span className="adn-taxrow">
+              <button type="button" className={`prop-tax-btn${pcpPct === 5 ? " on" : ""}`} onClick={() => setPcp(pcpPct === 5 ? 0 : 5)}>5%</button>
+              <button type="button" className={`prop-tax-btn${pcpPct === 10 ? " on" : ""}`} onClick={() => setPcp(pcpPct === 10 ? 0 : 10)}>10%</button>
+              <input className="adn-tin" type="number" min="0" max="10" step="0.5" inputMode="decimal" aria-label="PCP credit percent"
+                value={pcpPct} onChange={(e) => setPcp(e.target.value)} />
+            </span>
+          </div>
+        )}
         {/* Tax is per add-on and starts at 0 — it applies only when someone clicks it, exactly like the
             proposal's own NJ/NY control. The proposal's rate is never inherited. */}
         {canPrice && (
@@ -103,8 +122,11 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
         {canPrice ? (
           <div className="adn-b-totalblock">
             {/* Subtotal and Tax appear only when tax actually moves the price. */}
+            {totals.pcpCredit > 0 && (
+              <span className="adn-b-sub">PCP credit − {money(totals.pcpCredit)}</span>
+            )}
             {totals.tax > 0 && (
-              <span className="adn-b-sub">{money(totals.sub - totals.discount)} + {money(totals.tax)} tax</span>
+              <span className="adn-b-sub">{money(totals.sub - totals.discount - totals.pcpCredit)} + {money(totals.tax)} tax</span>
             )}
             <span className="adn-flbl">Total</span>
             <b className="adn-b-tval">{money(total)}</b>
@@ -113,7 +135,7 @@ export default function AddendumBuilder({ accessId, canPrice, editing, init, bus
           <div className="adn-b-note">Office will price this.</div>
         )}
         <button type="button" className="adn-b-create" disabled={busy || !items.length}
-          onClick={() => onSubmit({ title: title.trim(), items, discount: +discount || 0, taxRate: +taxRate || 0 })}>{submitLabel}</button>
+          onClick={() => onSubmit({ title: title.trim(), items, discount: +discount || 0, taxRate: +taxRate || 0, pcpCredit })}>{submitLabel}</button>
         <button type="button" className="adn-b-cancel" onClick={onCancel}>Cancel</button>
       </div>
     </div>

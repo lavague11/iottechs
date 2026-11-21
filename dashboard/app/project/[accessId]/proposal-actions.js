@@ -630,6 +630,7 @@ async function reconcileAddendumWrite(accessId, data, tok) {
       a.items = (a.items || []).map((it) => { const p = prevItems.get(it.id); return p ? { ...it, price: p.price, techPay: p.techPay } : { ...it, price: 0, techPay: 0 }; });
       a.discount = prev ? prev.discount : 0;
       a.taxRate = prev ? prev.taxRate : undefined;   // only a pricing role sets tax; undefined drops the key
+      a.pcpCredit = prev ? prev.pcpCredit : undefined;   // …and only a pricing role sets the PCP credit
 
       if (!prev || prev.needsPricing) a.needsPricing = true;
     }

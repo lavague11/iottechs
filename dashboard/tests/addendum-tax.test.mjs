@@ -98,10 +98,15 @@ test("every surface reads the one formula, so a taxed add-on is the same number 
   for (const f of all) assert.ok(!/taxRate\s*\/\s*100/.test(read(f)), `${f} must not re-derive tax — addendumTotals owns it`);
 });
 
-test("PCP is deliberately NOT applied to an add-on", () => {
-  // The PCP credit is a proposal-level figure already subtracted from the proposal total by
-  // optionTotals. Subtracting it again on an add-on would credit the same money twice.
-  const t = addendumTotals({ ...ADDON, pcpCredit: 100, pcp_credit: 100 });
-  assert.equal(t.total, 750, "an add-on ignores a PCP figure handed to it");
-  assert.ok(read("../lib/proposal.js").includes("PCP is NOT applied here"), "and the reason is recorded where the formula lives");
+test("an add-on never INHERITS the proposal's PCP credit, but may carry its own", () => {
+  // Original rule: PCP was not applied to add-ons at all, because the proposal's credit is already
+  // subtracted from the proposal total and applying it again would credit the same money twice.
+  // Stage 2 of docs/customer-flow-v2.md puts a PCP Credit control on the addendum builder, so an add-on
+  // can now carry a credit of ITS OWN. The half of the rule that prevented double-crediting survives
+  // intact: `pcp_credit` — the PROPOSAL's field — is still ignored here, so nothing is inherited.
+  assert.equal(addendumTotals({ ...ADDON, pcp_credit: 100 }).total, 750, "the proposal's credit is never inherited");
+  assert.equal(addendumTotals({ ...ADDON, pcp_credit: { type: "pct", value: 10 } }).total, 750);
+  // A credit set on THIS add-on applies, off the discounted net, before tax.
+  assert.equal(addendumTotals({ ...ADDON, pcpCredit: 100 }).total, 650, "its own flat credit applies");
+  assert.ok(read("../lib/proposal.js").includes("never inherited from the proposal"), "the reason is recorded where the formula lives");
 });

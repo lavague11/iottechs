@@ -1079,9 +1079,25 @@ export function proposalChangeState(published, working) {
 // subtract itself from a live balance. Keys are sorted in _fpStable, so adding one changes nothing else.
 export function addendumFingerprint(a) {
   const rate = +a?.taxRate || 0;
-  const meaning = { t: a?.title || "", d: +a?.discount || 0, ...(rate ? { x: rate } : {}),
+  // The PCP term follows the SAME rule as tax, and for the same reason: an add-on with no credit must hash
+  // exactly as it did before add-ons could carry one, or every already-signed add-on would stop matching
+  // its stored signedFingerprint and silently subtract itself from a live balance.
+  const credit = addendumPcpAmount(a);
+  const meaning = { t: a?.title || "", d: +a?.discount || 0, ...(rate ? { x: rate } : {}), ...(credit ? { c: credit } : {}),
     items: (a?.items || []).map((it) => ({ n: it?.name || "", q: +it?.qty || 0, p: +it?.price || 0 })) };
   return _fpHash(_fpStable(meaning));
+}
+// The add-on's OWN PCP credit in dollars, or 0 when it carries none. Like tax, it exists only when someone
+// set it on THIS add-on — it is never inherited from the proposal, whose credit was already taken off the
+// proposal total. `pcpCredit` takes the proposal's {type:'pct'|'flat', value} shape; a bare number is flat.
+// The percentage applies to the add-on's discounted net, mirroring how the proposal applies its own.
+export function addendumPcpAmount(a) {
+  const v = a?.pcpCredit;
+  if (v == null || v === "") return 0;
+  const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
+  const net = Math.max(0, r2(sub - r2(+a?.discount || 0)));
+  if (v && typeof v === "object") return r2(v.type === "pct" ? net * (+v.value || 0) / 100 : Math.max(0, +v.value || 0));
+  return r2(Math.max(0, +v || 0));
 }
 // THE add-on money formula (one definition: db.getApprovedAddons / getPendingAddons, the add-on card and the
 // version snapshot all call it). Rounded to cents like every other money figure; a missing/non-numeric qty or
@@ -1097,9 +1113,13 @@ export function addendumTotals(a) {
   const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
   const discount = r2(+a?.discount || 0);
   const taxRate = +a?.taxRate || 0;
-  const taxable = Math.max(0, sub - discount);
+  // An add-on may now carry its OWN PCP credit (Stage 2). It is zero unless someone set it on this add-on,
+  // so an add-on without one computes byte-for-byte as it always did. Taken off the net before tax, which
+  // is how the proposal applies its own credit (optionTotals).
+  const pcpCredit = addendumPcpAmount(a);
+  const taxable = Math.max(0, r2(sub - discount - pcpCredit));
   const tax = r2(taxable * taxRate / 100);
-  return { sub, discount, taxRate, tax, total: r2(taxable + tax) };
+  return { sub, discount, pcpCredit, taxRate, tax, total: r2(taxable + tax) };
 }
 // An approved addendum counts only while its content still matches what was signed.
 export const addendumSignatureCurrent = (a) => a?.status === "approved" && (!a.signedFingerprint || a.signedFingerprint === addendumFingerprint(a));
