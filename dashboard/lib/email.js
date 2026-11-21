@@ -378,7 +378,7 @@ export async function onceForProject(accessId, key, send) {
   const ok = !!(r && (r.ok || r.id));
   const skipped = !!(r && r.skipped);
   if (!ok && !skipped) { releaseCustomerEmail(accessId, key); return { ...(r || {}), key, retryable: true }; }
-  noteCustomerEmail(accessId, key, ok ? "sent" : String(r.skipped || "skipped"));
+  noteCustomerEmail(accessId, key, ok ? "sent" : (r.skipped === true ? "not-configured" : String(r.skipped || "skipped")));
   return { ...(r || {}), key };
 }
 
@@ -451,7 +451,6 @@ export async function emailStageAdvance(accessId, stageKey) {
 // price-lock date from priceLockWindow rather than a vague "soon" or a hard-coded seven days.
 export async function emailProposalReadyToSign(accessId) {
   return onceForProject(accessId, "ready_to_sign", async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
     const { getPublishedProposal, getJobByAccessId } = await import("./db.js");
     const { priceLockWindow } = await import("./proposal.js");
     const row = getPublishedProposal(accessId);
@@ -486,7 +485,6 @@ export async function emailInstallBooked(accessId, event = {}) {
   const when = appointmentWhen(event);
   if (!when) return { skipped: "no-event" };
   return onceForProject(accessId, `install_booked:${event.date || ""}:${event.time || ""}`, async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
     return sendCustomerEmail(accessId, {
       subject: "Your installation is booked",
       heading: "Your installation is booked",
@@ -501,7 +499,6 @@ export async function emailInstallBooked(accessId, event = {}) {
 // built into it. This replaces the standalone review-request email, which asked the same thing twice.
 export async function emailPaidInFull(accessId, payment = {}) {
   return onceForProject(accessId, "paid_in_full", async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
     const { getProjectFinancialState, getJobByAccessId } = await import("./db.js");
     const fin = getProjectFinancialState(accessId);
     if (!fin || fin.financialState !== "collected") return { skipped: "balance-due" };
@@ -649,7 +646,6 @@ const PAY_KIND_LABEL = { deposit: "deposit", final: "final balance", partial: "p
 // onceForProject's claim is what makes exactly one payment the first, whatever order the webhooks land in.
 export async function emailFirstPaymentReceived(accessId, payment = {}) {
   const r = await onceForProject(accessId, "first_payment", async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
     const amt = Number(payment.amount || 0);
     if (!(amt > 0)) return { skipped: "no-amount" };
     const money = "$" + amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -931,6 +927,34 @@ export async function emailWorkOrderRemoved(accessId, { to, name } = {}) {
   } catch (e) { console.error(`[email:wo-removed] ${e?.message || e}`); return { ok: false, error: "exception" }; }
 }
 
+// What is owed BEFORE work starts, taken from the PLAN.
+//
+// Both getProjectFinancialState().amountDueNow and amountDueForPayment() compute this from the legacy
+// `proposals.deposit_pct` column, which drifts from the plan — CLAUDE.md says so, and a Stage 6 fixture
+// proved it: a custom plan whose installments are "Halfway through" and a date still carries
+// deposit_pct 50, so the customer was chased for $800 they had never been asked for. planDepositPct is
+// the canonical answer to "due up front" and the Stage 5 emails use it.
+//
+// Those two existing functions are deliberately NOT changed here: they are money paths on live records,
+// and correcting them is a decision with a blast radius, not a side effect of adding an email.
+// The fallback is 0 — a proposal with no recognisable plan claims nothing up front, because chasing
+// someone for a figure we are not sure about is the worse failure.
+export async function upFrontDue(accessId) {
+  try {
+    const { getPublishedProposal, getProjectFinancialState } = await import("./db.js");
+    const { planDepositPct } = await import("./proposal.js");
+    const row = getPublishedProposal(accessId);
+    const fin = getProjectFinancialState(accessId);
+    if (!row || !fin) return { pct: 0, due: 0, total: 0, paid: 0 };
+    let payload = {}; try { payload = JSON.parse(row.payload || "{}"); } catch { payload = {}; }
+    const pct = planDepositPct(payload, 0);
+    const total = +fin.total || 0, paid = +fin.paid || 0;
+    return { pct, total, paid, due: Math.max(0, Math.round((total * pct / 100 - paid) * 100) / 100) };
+  } catch { return { pct: 0, due: 0, total: 0, paid: 0 }; }
+}
+
+export const upFrontDueFor = upFrontDue;
+
 // ---- Stage 5 item 4: the customer's own email when they sign --------------------------------------
 // Until now, signing told the OFFICE (emailContractSigned) and said nothing to the person who just
 // signed. Two branches, decided by the canonical money — never by the stage:
@@ -940,14 +964,7 @@ export async function emailWorkOrderRemoved(accessId, { to, name } = {}) {
 // replayed sweep cannot send it twice; the two branches share one key for the same reason.
 export async function emailProposalSigned(accessId) {
   return onceForProject(accessId, "proposal_signed", async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
-    const { getProjectFinancialState, amountDueForPayment } = await import("./db.js");
-    let due = 0;
-    try {
-      const fin = getProjectFinancialState(accessId);
-      due = Math.max(0, +fin?.amountDueNow || 0);
-      if (!due) { const d = amountDueForPayment(accessId, "deposit"); due = Math.max(0, +d?.due || 0); }
-    } catch { due = 0; }
+    const { due } = await upFrontDue(accessId);
     const att = await signedPdfAttachment(accessId);
     const attachments = att ? [att] : undefined;
     const moneyText = "$" + due.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });

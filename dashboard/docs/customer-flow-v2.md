@@ -397,6 +397,45 @@ needs you, or an explicit go-ahead.
 - *Item 9 replaced the invoice reminders* rather than running beside them: the 3-days-before and
   on-the-due-date pair in `lib/invoice-emails.js` is behind `INVOICE_REMINDERS_ENABLED = false`.
 
+**Stage 6 item 2 — the per-plan-type run, and what it caught.**
+
+Five throwaway projects (prefix `ZZS6`, non-demo so the guard would not suppress them, torn down after),
+one per plan type, each parked where a particular email becomes due. The sweep was run and the dev
+server's `[email:skipped]` lines read against expectation:
+
+| Fixture | Plan | Expected | Fired |
+|---|---|---|---|
+| `ZZS6EXPIRED` | 50/50, sent 9d, unsigned | quote expired | ✅ "Your quote has expired" |
+| `ZZS6EXPIRING` | 50/50, sent 6d, unsigned | 2 days left | ✅ "2 days left before your quote expires" |
+| `ZZS6UPFRONT` | 100 before we begin, signed 3d, unpaid | payment reminder | ✅ "A reminder — payment due to start your project" |
+| `ZZS6ONCOMP` | 100 upon completion, signed 3d | **nothing** | ✅ nothing |
+| `ZZS6CUSTOM` | Custom: Halfway + a past date, signed | the dated installment + its 2-day reminder | ✅ "Payment due — $960.00", "Reminder — $960.00 due" |
+
+The Halfway installment correctly did NOT fire: no work order exists on that fixture, so halfway is
+unreachable. Two consecutive runs produced **5 claims and no sixth** — the dedupe holds.
+
+**First run caught a real bug.** `ZZS6CUSTOM` — a plan whose installments are Halfway and a date, owing
+nothing before work starts — was chased for **$800 it had never been asked for**. Cause: both
+`getProjectFinancialState().amountDueNow` and `amountDueForPayment()` derive "due up front" from the
+legacy `proposals.deposit_pct` column (still 50 on that record), not from the plan. CLAUDE.md warns about
+exactly this drift. **Fixed in the senders, not in those two functions:** a new `upFrontDue()` reads
+`planDepositPct`, and `emailProposalSigned` + the 2-day reminder both use it. Its fallback is 0, because
+chasing someone for a figure we are not sure of is the worse failure.
+
+**Left alone, and worth your decision:** `amountDueForPayment()` still shows the legacy figure on the
+PAYMENT page. On that same custom plan it would offer a $800 "deposit" the plan never asked for. Changing
+it is a money path on live records — out of scope for an email change, and flagged here instead.
+
+**A second fix this forced.** The new senders short-circuited on `emailEnabled()` BEFORE reaching
+`sendEmail`, which is the function that logs `[email:skipped] … → recipient`. That suppressed the very
+line Stage 6 item 2 asks to capture. The guards were removed: behaviour is unchanged (still skipped, the
+claim is still kept) but the local flow is now observable, which is the point of the exercise. The ledger
+also records a reason now ("not-configured") rather than the literal `true`.
+
+**Still not done:** item 3's screenshot set beyond the proposal/work-order shots already taken, and the
+EVENT-driven emails (items 2, 4, 5, 7, 10) have not been driven end to end locally — only the time-based
+sweep has. Those fire from server actions, which this harness cannot invoke directly.
+
 ---
 
 ## Progress
@@ -408,7 +447,7 @@ needs you, or an explicit go-ahead.
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
 | 5 — Customer email map | **done** | (see git log `Stage 5`) | All items. Ledger + onceForProject; event sends for 2, 4, 5, 7, 10; sweep for 3, 4-reminder, 9; removals for 8, 10, 11; gate for 6. Sweep verified 3× on 129 local projects with no re-sends. |
-| 6 — Scheduler, verification, deploy | **partial** | (docs only) | Item 1 answered: Hostinger is a persistent Node process, boot timers run, no cron migration needed; `/api/cron/*` already exists as a fallback. **Items 2 and 3 (per-plan email timing capture + screenshot set) not done.** |
+| 6 — Scheduler, verification, deploy | **done** (item 3 partial) | (see git log `Stage 6`) | Item 1: Hostinger is persistent, boot timers run, no cron migration needed. Item 2: five per-plan fixtures run through the sweep with `[email:skipped]` captured — **caught a false $800 chase, fixed**. Item 3: proposal + work-order shots taken; full set not captured. Item 4: this document + the session report. |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.
 

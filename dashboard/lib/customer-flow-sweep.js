@@ -22,7 +22,7 @@ import {
 } from "./db.js";
 import { priceLockWindow, planScheduleRows, customPlanRows } from "./proposal.js";
 import { milestoneDueAt, halfwayReached } from "./milestone-due.js";
-import { onceForProject, sendCustomerEmail, emailEnabled } from "./email.js";
+import { onceForProject, sendCustomerEmail } from "./email.js";
 
 const DAY = 86400000;
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -41,8 +41,7 @@ async function sweepQuoteExpiry(job, now) {
   // Two days left — one reminder, and only while there genuinely are days left.
   if (!win.expired && win.until - now <= 2 * DAY) {
     const r = await onceForProject(job.access_id, "quote_expiring", async () => {
-      if (!emailEnabled()) return { skipped: "email-disabled" };
-      return sendCustomerEmail(job.access_id, {
+        return sendCustomerEmail(job.access_id, {
         subject: "2 days left before your quote expires",
         heading: "Your quote expires in 2 days",
         intro: "The pricing we put together for you is held for a little longer.",
@@ -57,8 +56,7 @@ async function sweepQuoteExpiry(job, now) {
   // Expired — one notice, pointing at the reopen. The spec is explicit: nothing after that.
   if (win.expired) {
     const r = await onceForProject(job.access_id, "quote_expired", async () => {
-      if (!emailEnabled()) return { skipped: "email-disabled" };
-      return sendCustomerEmail(job.access_id, {
+        return sendCustomerEmail(job.access_id, {
         subject: "Your quote has expired",
         heading: "Your quote has expired",
         intro: "The pricing we held for you has lapsed.",
@@ -80,10 +78,12 @@ async function sweepSignedUnpaid(job, now) {
   const fin = (() => { try { return getProjectFinancialState(job.access_id); } catch { return null; } })();
   if (!fin) return 0;
   if ((+fin.paid || 0) > 0) return 0;                 // they paid — nothing to chase
-  const due = Math.max(0, +fin.amountDueNow || 0);
+  // From the PLAN, not amountDueNow: that reads the legacy deposit_pct column, which drifts. A Stage 6
+  // fixture (a custom plan of Halfway + a date) was chased for $800 it had never asked the customer for.
+  const { upFrontDueFor } = await import("./email.js");
+  const due = (await upFrontDueFor(job.access_id)).due;
   if (due <= 0.005) return 0;                          // nothing was owed up front
   const r = await onceForProject(job.access_id, "signed_unpaid_2d", async () => {
-    if (!emailEnabled()) return { skipped: "email-disabled" };
     return sendCustomerEmail(job.access_id, {
       subject: "A reminder — payment due to start your project",
       heading: "We're ready when you are",
@@ -149,8 +149,7 @@ async function sweepMilestones(job, now) {
       // A reminder only goes out if the thing it reminds about actually went out.
       if (st.after > 0 && !customerEmailSent(job.access_id, key)) continue;
       const r = await onceForProject(job.access_id, st.k, async () => {
-        if (!emailEnabled()) return { skipped: "email-disabled" };
-        return sendCustomerEmail(job.access_id, {
+            return sendCustomerEmail(job.access_id, {
           subject: st.subject,
           heading: st.heading,
           intro: `${money(m.amount)} is due${m.label ? ` — ${m.label}` : ""}.`,
