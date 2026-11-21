@@ -764,6 +764,16 @@ export const PROP_CSS = `
 .pvx .prop-cplan-cadmenu button{text-align:left;height:30px;padding:0 10px;border:none;background:transparent;border-radius:6px;color:var(--dv-ink,#101418);font-size:.76rem;font-weight:500;cursor:pointer;font-family:inherit}
 .pvx .prop-cplan-cadmenu button:hover{background:var(--dv-paper,#F4F4F2)}
 .pvx .prop-cplan-cadmenu button.on{color:var(--dv-gold-text,#8A6A1F);font-weight:700}
+/* Stage 1 — the plan picker is a settings row under Tax, matching Discount / PCP / Tax exactly. */
+.pvx .prop-trow-plan .prop-adj{gap:6px}
+.pvx .prop-trow-sub{min-height:0;padding-bottom:2px}
+.pvx .prop-trow-sub .prop-plan-timing{margin:0}
+/* Spacing toggle for the auto-filled dates — a visible pair, not a gear menu. */
+.pvx .prop-cplan-space{margin-left:auto;display:inline-flex;gap:4px}
+.pvx .prop-cplan-space button{height:26px;padding:0 9px;border:1px solid var(--dv-line,#E4E4DF);border-radius:7px;background:#fff;color:var(--dv-meta,#787D84);font-size:.72rem;font-weight:600;cursor:pointer;font-family:inherit}
+.pvx .prop-cplan-space button.on{border-color:var(--dv-gold,#C9A96E);color:var(--dv-gold-text,#8A6A1F);background:#fdf8ef}
+/* When each installment falls due. */
+.pvx .prop-cplan-when{height:30px;flex:1 1 118px;min-width:108px;border:1px solid var(--dv-line,#E4E4DF);border-radius:8px;background:#fff;color:var(--dv-ink,#101418);font-size:.72rem;font-weight:600;font-family:inherit;padding:0 4px;cursor:pointer}
 .pvx .prop-cplan-row{display:flex;align-items:center;gap:6px}
 /* Live status on a custom installment row — same semantic colours as the plan (green paid, gold due/partial/pending, gray future). */
 .pvx .prop-cplan-st{flex:0 0 auto;font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;margin-left:2px}

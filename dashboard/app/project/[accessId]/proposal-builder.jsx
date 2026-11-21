@@ -6,6 +6,7 @@ import {
   OPTION_LETTERS, PROPOSAL_SERVICES, blankPayload, blankPayloadForService, blankOption,
   optionTotals, itemTotal, surveyToImport, surveyFloorSummary, serviceLabel, savePriceOverrides, savePriceBookCache,
   toastBaselineItems, cameraBaselineItems, loadPriceBook, PAYMENT_PLANS, planScheduleRows, projectFinancials, milestoneProgress, fmtSignStamp, cameraNameOverrides,
+  CUSTOM_WHEN, customWhenOf, splitAmounts,
 } from "../../../lib/proposal";
 import ProposalItemsEditor from "./proposal-items-editor";
 import { ProposalConfig } from "./proposal-pricing";
@@ -718,16 +719,21 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
   // Dates must run in order — a later payment can never fall before an earlier one. A forward pass
   // pushes any date that precedes its predecessor up to match (earlier payments stay fixed).
   const enforceDateOrder = (dates) => { const d = dates.slice(); for (let j = 1; j < d.length; j++) if (d[j] && d[j - 1] && d[j] < d[j - 1]) d[j] = d[j - 1]; return d; };
+  // A new schedule's first payment is due before we begin (the usual deposit) and the rest are dated at
+  // the chosen spacing. Every row's `when` is editable from the dropdown afterwards.
   function buildSchedule(n, cadence, start, pcts) {
     const p = pcts || defaultPcts(n); const dates = dueDatesFor(n, cadence, start);
-    return { rows: p.map((pct, i) => ({ pct, due: dates[i] })), cadence };
+    return { rows: p.map((pct, i) => ({ pct, due: dates[i], when: i === 0 ? "begin" : "date" })), cadence };
   }
-  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "monthly");
+  const custPlan = (payload.custom_plan && Array.isArray(payload.custom_plan.rows) && payload.custom_plan.rows.length) ? payload.custom_plan : buildSchedule(3, "biweekly");
   // Normalize whatever is stored: chronological dates (older plans may have out-of-order dates) and
   // clean 2-decimal percentages (older plans may hold float garbage like 12.959999999999994).
   const custRows = (() => { const rows = custPlan.rows; const ordered = enforceDateOrder(rows.map((r) => r.due)); return rows.map((r, i) => ({ ...r, pct: r2(+r.pct || 0), due: ordered[i] })); })();
-  const custCadence = custPlan.cadence === "biweekly" ? "biweekly" : "monthly";
+  const custCadence = custPlan.cadence === "monthly" ? "monthly" : "biweekly";   // biweekly is the default
   const custSumPct = r2(custRows.reduce((s, r) => s + (+r.pct || 0), 0));
+  // The dollar figure on each row, to the cent, with the last installment absorbing the rounding residual —
+  // the SAME split the schedule, the PDF and the customer view use, so no two surfaces disagree by a cent.
+  const custAmounts = splitAmounts(custRows.map((r) => +r.pct || 0), totals.grand);
   // Canonical payment schedule for DISPLAY (same function + base the customer view uses). The signature is just the
   // schedule's own percentages: "100%" for one milestone, "50 / 50" / "50 / 30 / 20" for several.
   const planSched = planScheduleRows(plan, custRows, fin.current, payload.full_date || null);
@@ -741,8 +747,33 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     patchPayload({ ...payload, payment_plan: "custom", custom_plan: next });
     setDepositPct(+next.rows[0]?.pct || 0); setDirty(true);   // deposit = the first scheduled payment
   }
-  const setCustCount = (n) => { const c = Math.max(2, Math.min(12, n | 0)); commitPlan(buildSchedule(c, custCadence, custRows[0]?.due)); };
-  const setCadence = (cad) => { setCadOpen(false); const dates = dueDatesFor(custRows.length, cad, custRows[0]?.due); commitPlan({ rows: custRows.map((r, i) => ({ ...r, due: dates[i] })), cadence: cad }); };
+  // "Any number of payments" — one is a valid plan (it is just 100% on whatever trigger you pick).
+  const setCustCount = (n) => {
+    const c = Math.max(1, Math.min(12, n | 0));
+    if (c === custRows.length) return;
+    if (c < custRows.length) {   // dropping rows keeps the ones you set up; the last absorbs the freed %
+      const kept = custRows.slice(0, c);
+      const pcts = cascadePct(kept, c - 1, kept[c - 1]?.pct || 0);
+      commitPlan({ rows: kept.map((r, i) => ({ ...r, pct: pcts[i] })), cadence: custCadence });
+      return;
+    }
+    commitPlan(buildSchedule(c, custCadence, custRows[0]?.due));
+  };
+  // Spacing only moves DATED rows — a Halfway or Upon-completion installment has no date to space.
+  const setCadence = (cad) => {
+    setCadOpen(false);
+    const dates = dueDatesFor(custRows.length, cad, custRows[0]?.due);
+    commitPlan({ rows: custRows.map((r, i) => (customWhenOf(r) === "date" ? { ...r, due: dates[i] } : r)), cadence: cad });
+  };
+  const setCustWhen = (i, when) => {
+    const next = custRows.map((r, j) => {
+      if (j !== i) return r;
+      // Switching TO a date gives it one at the current spacing rather than leaving it blank.
+      const due = when === "date" ? (r.due || dueDatesFor(custRows.length, custCadence, custRows[0]?.due)[i]) : r.due;
+      return { ...r, when, due };
+    });
+    commitPlan({ rows: next, cadence: custCadence });
+  };
   const setCustPct = (i, v) => { const pcts = cascadePct(custRows, i, v); commitPlan({ rows: custRows.map((r, j) => ({ ...r, pct: pcts[j] })), cadence: custCadence }); };
   // Editing the dollar amount drives the percentage (amount ÷ grand total), then cascades forward like a % edit.
   const setCustAmt = (i, dollars) => { const g = totals.grand || 0; if (!g) return; setCustPct(i, (Math.max(0, +dollars || 0) / g) * 100); };
@@ -765,7 +796,7 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
     // full_date only applies to the pay-in-full plans (100 / 100_end): a chosen date renders as
     // "by <date>" instead of before/upon. Clear it for every other plan so it never lingers.
     patch.full_date = (key === "100" || key === "100_end") ? (fullDate || null) : null;
-    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "monthly");
+    if (key === "custom" && !(payload.custom_plan && payload.custom_plan.rows?.length)) patch.custom_plan = buildSchedule(3, "biweekly");
     patchPayload(patch);
     if (key === "custom") { setDepositPct(+patch.custom_plan.rows[0]?.pct || 0); setDirty(true); return; }
     const pp = PAYMENT_PLANS[key];
@@ -1070,6 +1101,74 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
           </div>
         )}
 
+        {/* PAYMENT PLAN — a settings row like Discount / PCP / Tax: label left, choices right, sitting
+            directly under Tax and ABOVE the total. The schedule it produces renders below the TOTAL, which
+            is where a reader looks for "what do I pay and when". Read-only shows the signature only; the
+            picker is an edit-mode control. 50 / 30 / 20 is no longer offered (owner's call) but stays
+            renderable in lib/proposal.js, so proposals already signed on it keep their schedule. */}
+        {!readOnly && (
+          <div className="prop-trow prop-trow-plan">
+            <span>Payment Plan</span>
+            <span className="prop-adj">
+              <button type="button" className={`prop-tax-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
+              <button type="button" className={`prop-tax-btn${plan === "100" || plan === "100_end" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
+              <button type="button" className={`prop-tax-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
+            </span>
+          </div>
+        )}
+        {!readOnly && (plan === "100" || plan === "100_end") && (
+          <div className="prop-trow prop-trow-sub">
+            <span />
+            <div className="prop-plan-timing">
+              <button type="button" className={`prop-time-btn${plan === "100" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100")}>Before we begin</button>
+              <button type="button" className={`prop-time-btn${plan === "100_end" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100_end")}>Upon completion</button>
+              <label className={`prop-time-date${payload.full_date ? " on" : ""}`} onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
+                <span>{payload.full_date ? fmtShortDate(payload.full_date) : "By a date"}</span>
+                <input type="date" value={payload.full_date || ""} onChange={(e) => setPlan("100", e.target.value || undefined)} />
+              </label>
+            </div>
+          </div>
+        )}
+        {!readOnly && plan === "custom" && (
+          <div className="prop-cplan">
+            <div className="prop-cplan-head">
+              <span>Payments</span>
+              <div className="prop-cplan-step">
+                <button type="button" onClick={() => setCustCount(custRows.length - 1)} disabled={custRows.length <= 1}>−</button>
+                <b>{custRows.length}</b>
+                <button type="button" onClick={() => setCustCount(custRows.length + 1)} disabled={custRows.length >= 12}>+</button>
+              </div>
+              {/* Spacing for the auto-filled dates. Only dated rows move — a Halfway or Upon-completion
+                  installment has no date to space. */}
+              <div className="prop-cplan-space">
+                <button type="button" className={custCadence === "biweekly" ? "on" : ""} onClick={() => setCadence("biweekly")}>Biweekly</button>
+                <button type="button" className={custCadence === "monthly" ? "on" : ""} onClick={() => setCadence("monthly")}>Monthly</button>
+              </div>
+            </div>
+            {custRows.map((r, i) => {
+              const when = customWhenOf(r);
+              return (
+              <div className="prop-cplan-row" key={i}>
+                <span className="prop-cplan-n">{i + 1}</span>
+                <input className="tin" type="number" min="0" max="100" step="0.01" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
+                {/* Cents everywhere: the field carries the exact 2-dp figure, so $776.70 never reads as $776.7. */}
+                <span className="prop-cplan-amt"><span className="prop-cplan-amt-s">$</span><input className="prop-cplan-amtin" type="number" min="0" step="0.01" value={(custAmounts[i] ?? 0).toFixed(2)} onChange={(e) => setCustAmt(i, e.target.value)} /></span>
+                <select className="prop-cplan-when" value={when} onChange={(e) => setCustWhen(i, e.target.value)} aria-label={`Payment ${i + 1} is due`}>
+                  {Object.entries(CUSTOM_WHEN).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                </select>
+                {when === "date" && (
+                  <label className="prop-cplan-date" onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
+                    <span>{fmtShortDate(r.due) || "Set date"}</span>
+                    <input type="date" value={r.due || ""} onChange={(e) => setCustDue(i, e.target.value)} />
+                  </label>
+                )}
+              </div>
+              );
+            })}
+            <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
+          </div>
+        )}
+
         {/* An approved add-on amends the contract: keep the original proposal total visible and show the
             current contract total below it — never silently rewrite the signed proposal. */}
         {fin.hasAddons ? (
@@ -1095,27 +1194,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             <span className="prop-plan-lbl">Payment plan</span>
             {readOnly && planSched.length > 0 && <span className="prop-plan-sig">{planSig}</span>}
           </div>
-          {!readOnly && (
-            <div className="prop-plan-edit">
-              <div className="prop-plan-opts">
-                <button type="button" className={`prop-plan-btn${plan === "100" || plan === "100_end" ? " on" : ""}`} onClick={() => setPlan("100")}>100</button>
-                <button type="button" className={`prop-plan-btn${plan === "50_50" ? " on" : ""}`} onClick={() => setPlan("50_50")}>50 / 50</button>
-                <button type="button" className={`prop-plan-btn${plan === "50_30_20" ? " on" : ""}`} onClick={() => setPlan("50_30_20")}>50 / 30 / 20</button>
-                <button type="button" className={`prop-plan-btn${plan === "custom" ? " on" : ""}`} onClick={() => setPlan("custom")}>Custom</button>
-              </div>
-              {(plan === "100" || plan === "100_end") && (
-                <div className="prop-plan-timing">
-                  <button type="button" className={`prop-time-btn${plan === "100" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100")}>Before we begin</button>
-                  <button type="button" className={`prop-time-btn${plan === "100_end" && !payload.full_date ? " on" : ""}`} onClick={() => setPlan("100_end")}>Upon completion</button>
-                  <label className={`prop-time-date${payload.full_date ? " on" : ""}`} onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
-                    <span>{payload.full_date ? fmtShortDate(payload.full_date) : "By a date"}</span>
-                    <input type="date" value={payload.full_date || ""} onChange={(e) => setPlan("100", e.target.value || undefined)} />
-                  </label>
-                </div>
-              )}
-            </div>
-          )}
-          {planSched.length > 0 && !(plan === "custom" && !readOnly) && (
+          {/* The picker moved UP into the settings rows (under Tax, above the total). What stays here is
+              the breakdown it produces — in edit mode too, so you see the schedule you just built. */}
+          {planSched.length > 0 && (
             <div className="prop-plan-cols">
               {planProgress.map((m, i) => {
                 const n = planProgress.length;
@@ -1159,53 +1240,9 @@ export default function ProposalBuilder({ fileBase = null, accessId, role, initi
             );
           })()}
         </div>
-        {plan === "custom" && !readOnly && (
-          <div className="prop-cplan">
-            <div className="prop-cplan-head">
-              <span>Payments</span>
-              <div className="prop-cplan-step">
-                <button type="button" onClick={() => setCustCount(custRows.length - 1)} disabled={custRows.length <= 2}>−</button>
-                <b>{custRows.length}</b>
-                <button type="button" onClick={() => setCustCount(custRows.length + 1)} disabled={custRows.length >= 12}>+</button>
-              </div>
-              <div className="prop-cplan-cad">
-                <button type="button" className="prop-cplan-gear" onClick={() => setCadOpen((o) => !o)} title="Payment cadence">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
-                  {custCadence === "monthly" ? "Monthly" : "Biweekly"}
-                </button>
-                {cadOpen && (
-                  <div className="prop-cplan-cadmenu">
-                    <button type="button" className={custCadence === "biweekly" ? "on" : ""} onClick={() => setCadence("biweekly")}>Biweekly</button>
-                    <button type="button" className={custCadence === "monthly" ? "on" : ""} onClick={() => setCadence("monthly")}>Monthly</button>
-                  </div>
-                )}
-              </div>
-            </div>
-            {custRows.map((r, i) => {
-              // Live status for this row: the progress list skips 0% installments (planScheduleRows drops them), so
-              // walk the rows in order and pair each non-zero row with its allocated progress entry.
-              const pIdx = custRows.slice(0, i).filter((x) => (+x.pct || 0) > 0.005).length;
-              const prog = (+r.pct || 0) > 0.005 ? planProgress[pIdx] : null;
-              const stLabel = prog ? ({ paid: "Paid", partial: `Partial · ${money(prog.remaining)} left`, due: "Due", pending: "Pending signature", future: "Not yet due" }[prog.status]) : null;
-              return (
-              <div className="prop-cplan-row" key={i}>
-                <span className="prop-cplan-n">{i + 1}</span>
-                <input className="tin" type="number" min="0" max="100" value={r.pct} onChange={(e) => setCustPct(i, e.target.value)} /><span className="prop-cplan-pc">%</span>
-                <label className="prop-cplan-date" onClick={(e) => { const inp = e.currentTarget.querySelector("input"); try { inp?.showPicker?.(); } catch { } }}>
-                  <span>{fmtShortDate(r.due) || "Set date"}</span>
-                  <input type="date" value={r.due || ""} min={i > 0 ? (custRows[i - 1]?.due || undefined) : undefined} onChange={(e) => setCustDue(i, e.target.value)} />
-                </label>
-                <span className="prop-cplan-amt"><span className="prop-cplan-amt-s">$</span><input className="prop-cplan-amtin" type="number" min="0" step="1" value={Math.round(totals.grand * (+r.pct || 0) / 100)} onChange={(e) => setCustAmt(i, e.target.value)} /></span>
-                {stLabel && <span className={`prop-cplan-st st-${prog.status}`}>{stLabel}</span>}
-              </div>
-              );
-            })}
-            <div className={`prop-cplan-sum${custSumPct === 100 ? "" : " bad"}`}>{custSumPct}%{custSumPct !== 100 ? " — should total 100%" : " scheduled"}</div>
-          </div>
-        )}
         {/* Fallback only: with no renderable schedule, keep the one-line terms + deposit so the plan is never silent.
             When the schedule is showing it already states every milestone — no second "Deposit due" row or terms box. */}
-        {planSched.length === 0 && !(plan === "custom" && !readOnly) && (() => {
+        {planSched.length === 0 && (() => {
           const payFull = plan === "100" || plan === "100_end";
           const whenLabel = payload.full_date ? `by ${fmtShortDate(payload.full_date)}` : plan === "100_end" ? "upon completion" : "before we begin";
           const termsText = payFull ? `Paid in full ${whenLabel}.` : (plan !== "custom" ? PAYMENT_PLANS[plan]?.terms : null);

@@ -520,19 +520,47 @@ const fmtDueShort = (iso) => {
 // zero-value installments are dropped, and amounts derive from the CURRENT contract total (so the
 // schedule reflects an approved addendum). Any rounding residual lands on the last shown installment
 // so the shown percentages total exactly 100%.
+// When a custom installment comes due. A row with no `when` is legacy (date-only), and is read as
+// "date" so every stored plan keeps rendering exactly as it did. `begin` is what the deposit gate counts.
+export const CUSTOM_WHEN = {
+  begin:      { label: "Before we begin", short: "before we begin" },
+  halfway:    { label: "Halfway through", short: "halfway through" },
+  completion: { label: "Upon completion", short: "upon completion" },
+  date:       { label: "Pick a date",     short: "" },
+};
+export const customWhenOf = (r) => (CUSTOM_WHEN[r?.when] ? r.when : "date");
+
+// Spread `total` across `pcts` so the parts sum EXACTLY to it. Rounding each share on its own leaves a
+// residual — 50/50 of $2,649.55 is $1,324.78 twice, a cent over — so the last non-zero share absorbs the
+// difference. This is the only place installment money is turned into dollars.
+export function splitAmounts(pcts, total) {
+  const g = Math.max(0, +total || 0);
+  if (!g) return pcts.map(() => null);
+  const out = pcts.map((p) => r2(g * (+p || 0) / 100));
+  const sum = r2(out.reduce((a, b) => a + b, 0));
+  if (sum !== g) {
+    for (let i = out.length - 1; i >= 0; i--) {
+      if (out[i] != null) { out[i] = r2(out[i] + (g - sum)); break; }
+    }
+  }
+  return out;
+}
+
 export function customPlanRows(rows, currentTotal = 0) {
   if (!Array.isArray(rows)) return [];
   const shown = rows
-    .map((r) => ({ pct: r2(+r.pct || 0), due: r.due }))
+    .map((r) => ({ pct: r2(+r.pct || 0), due: r.due, when: customWhenOf(r) }))
     .filter((r) => r.pct > 0.005);              // omit 0% installments
   if (!shown.length) return [];
   const sum = r2(shown.reduce((s, r) => s + r.pct, 0));
   if (sum !== 100) shown[shown.length - 1].pct = r2(Math.max(0, shown[shown.length - 1].pct + (100 - sum)));  // residual → last row, total = 100
-  const g = Math.max(0, +currentTotal || 0);
-  return shown.map((r) => ({
+  const amounts = splitAmounts(shown.map((r) => r.pct), currentTotal);
+  return shown.map((r, i) => ({
     pct: r.pct, pctLabel: `${fmtPct(r.pct)}%`,
-    amount: g ? r2(g * r.pct / 100) : null,
-    due: r.due, dueLabel: fmtDueShort(r.due),
+    amount: amounts[i],
+    when: r.when,
+    // A dated row reads as its date; a milestone row reads as the milestone.
+    due: r.due, dueLabel: r.when === "date" ? fmtDueShort(r.due) : CUSTOM_WHEN[r.when].short,
   }));
 }
 // One-line human-readable terms (fallback / PDF). Same clean formatting, zero-installments dropped.
@@ -554,10 +582,12 @@ export function planScheduleRows(plan, custRows, currentTotal = 0, fullDate = nu
   }
   const ms = PLAN_MILESTONES[plan];
   if (!ms) return [];
-  const g = Math.max(0, +currentTotal || 0);
   // A pay-in-full plan (100 / 100_end) with a chosen date shows "by <date>" instead of before/upon.
   const byDate = (plan === "100" || plan === "100_end") && fullDate ? ("by " + fmtPlanDate(fullDate)) : null;
-  return ms.filter(([p]) => p > 0).map(([p, when]) => ({ pctLabel: `${fmtPct(p)}%`, amount: g ? r2(g * p / 100) : null, when: byDate || when }));
+  const live = ms.filter(([p]) => p > 0);
+  // splitAmounts, not a per-milestone round: 50/50 of $2,649.55 used to print $1,324.78 twice.
+  const amounts = splitAmounts(live.map(([p]) => p), currentTotal);
+  return live.map(([p, when], i) => ({ pctLabel: `${fmtPct(p)}%`, amount: amounts[i], when: byDate || when }));
 }
 // Live milestone progress — allocate the confirmed PAID total across the plan's milestones IN ORDER
 // (money fills the first milestone, then the next), and derive each one's state. Pure/presentational:
@@ -604,7 +634,18 @@ export function planDepositPct(payload, fallbackPct = 50) {
   const plan = payload && payload.payment_plan;
   const ms = plan && PLAN_MILESTONES[plan];
   if (ms) return r2(ms.filter(([, when]) => /begin/i.test(when)).reduce((s, [p]) => s + (+p || 0), 0));
-  if (plan === "custom") { const rows = customPlanRows(payload.custom_plan && payload.custom_plan.rows, 100); return rows.length ? r2(+rows[0].pct || 0) : 0; }
+  if (plan === "custom") {
+    const raw = (payload.custom_plan && payload.custom_plan.rows) || [];
+    const rows = customPlanRows(raw, 100);
+    if (!rows.length) return 0;
+    // Once installments carry a `when`, "due up front" is every row marked Before we begin — not just the
+    // first one, which could now be a Halfway or Upon-completion payment. A plan whose rows carry NO
+    // explicit `when` is legacy (date-only), where the first installment WAS the deposit: keep that
+    // reading exactly, so no stored or signed proposal changes meaning.
+    const tagged = raw.some((r) => CUSTOM_WHEN[r?.when]);
+    if (!tagged) return r2(+rows[0].pct || 0);
+    return r2(rows.filter((r) => r.when === "begin").reduce((s, r) => s + (+r.pct || 0), 0));
+  }
   return r2(+fallbackPct || 0);
 }
 // Normalize a discount/pcp value ({type:'flat'|'pct', value} or a legacy plain number) to dollars.

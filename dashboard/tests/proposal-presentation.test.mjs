@@ -16,8 +16,12 @@ test("payment plan display derives from planScheduleRows over the current contra
 });
 
 test("the Deposit-due / terms restatement is a fallback only (never beside a rendered schedule)", () => {
-  const i = builder.indexOf("planSched.length === 0 && !(plan === \"custom\" && !readOnly) && (() =>");
+  // Gated purely on "there is no schedule" now. The old gate also excluded custom-in-edit, because the
+  // custom editor used to REPLACE the breakdown; since Stage 1 the picker sits in the settings rows and
+  // the breakdown always renders under the total, so that second clause had nothing left to exclude.
+  const i = builder.indexOf("planSched.length === 0 && (() =>");
   assert.ok(i > 0, "fallback row is gated on there being no schedule");
+  assert.ok(!builder.includes("!(plan === \"custom\" && !readOnly)"), "no leftover custom-edit suppression");
   assert.ok(builder.slice(i).includes("Deposit due"), "the fallback still exists for schedule-less plans");
 });
 
