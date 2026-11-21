@@ -9,12 +9,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import MicButton from "../../components/mic-button";
-import { LINE_STATUS, lineStatusGate, lineSteps } from "../../../lib/work-order-field";
+import { LINE_STATUS, lineStatusGate, lineSteps, lineDisplayName, lineProgressOf, PROGRESS_LABEL, statusForSteps, isFlagged } from "../../../lib/work-order-field";
 import { checkInAction, setLineStatusAction, addLinePhotoAction, syncFieldQueueAction } from "./work-order-actions";
 import { enqueue, readQueue, settle, online, opKeyOf } from "./work-order-queue";
 
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const STATUS_LABEL = { complete: "Complete", attention: "Needs attention", incomplete: "Incomplete" };
+// Stage 3 item 5: "Incomplete" is now "Not started". The three buttons at the foot of the popup are
+// In progress / Needs attention / Complete — attention being a FLAG, not a rival status.
+const PHOTO_TAGS = [["before", "Before"], ["after", "After"], ["detail", "Detail"]];
 
 const Ic = ({ d, s = 16 }) => <svg viewBox="0 0 24 24" width={s} height={s} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={d} /></svg>;
 const CAM_D = "M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8";
@@ -74,8 +76,8 @@ export default function WorkOrderField({ accessId, doc, role, showMoney, onDoc, 
 
   // One field act: write it to the device queue, then try to send. Offline, the send throws and the op
   // simply stays queued — the tap is never lost, which is the whole requirement.
-  async function mark(line, { status, pickStep, note }) {
-    const op = { action: "status", lineKey: line.key, status, pickStep: pickStep ?? null, note: note || "", clientAt: new Date().toISOString() };
+  async function mark(line, { status, pickStep, note, attention }) {
+    const op = { action: "status", lineKey: line.key, status, pickStep: pickStep ?? null, note: note || "", attention: !!attention, clientAt: new Date().toISOString() };
     setQueued(await enqueue(accessId, op));
     setBusy(true); setErr(null);
     try {
@@ -129,30 +131,38 @@ export default function WorkOrderField({ accessId, doc, role, showMoney, onDoc, 
       {!doc.checkedInToday && <div className="wfd-hint">Check in to start marking lines.</div>}
 
       <div className="wfd-lines">
-        {doc.lines.filter((l) => !l.parentKey || l.kind !== "labor").map((l) => {
+        {(() => {
+          const visible = doc.lines.filter((l) => !l.parentKey || l.kind !== "labor");
+          return visible.map((l) => {
           const st = l.state?.status || LINE_STATUS.INCOMPLETE;
           const steps = lineSteps(l.kind).length;
           const done = Math.min(+l.state?.steps_done || 0, steps);
+          const prog = lineProgressOf(l.kind, { status: st, stepsDone: done });
+          const flagged = isFlagged(l);
           return (
-            <button key={l.key} type="button" className={`wfd-line ${st}`} onClick={() => setOpen(l)}>
-              <span className={`wfd-dot ${st}`} aria-hidden="true" />
+            <button key={l.key} type="button" className={`wfd-line ${st}${flagged ? " attention" : ""}`} onClick={() => setOpen(l)}>
+              <span className={`wfd-dot ${flagged ? "attention" : st}`} aria-hidden="true" />
+              {/* Item 8: eight lines called "JBL Speaker Upgrade" are indistinguishable without their
+                  position (and location, where the line carries one). */}
               <span className="wfd-name">
-                {l.name}
+                {lineDisplayName(l, visible)}
                 {l.cpe && <span className="wfd-tag">CPE</span>}
-                {l.needsPhotos && <span className="wfd-tag cam"><Ic d={CAM_D} s={12} /></span>}
+                {flagged && <span className="wfd-tag flag">Flagged</span>}
               </span>
               <span className="wfd-state">
-                {st === LINE_STATUS.COMPLETE ? "Complete" : st === LINE_STATUS.ATTENTION ? "Flagged" : steps > 1 && done > 0 ? `${done} of ${steps}` : "—"}
+                {prog === "complete" ? "Complete" : steps > 1 && done > 0 ? `${done} of ${steps}` : PROGRESS_LABEL[prog]}
               </span>
               {showMoney && <span className="wfd-pay">{money(l.total)}</span>}
             </button>
           );
-        })}
+          });
+        })()}
       </div>
 
       {open && (
         <LinePopup
           line={doc.lines.find((l) => l.key === open.key) || open}
+          allLines={doc.lines.filter((l) => !l.parentKey || l.kind !== "labor")}
           checkedInToday={!!doc.checkedInToday}
           busy={busy}
           onClose={() => setOpen(null)}
@@ -164,16 +174,19 @@ export default function WorkOrderField({ accessId, doc, role, showMoney, onDoc, 
   );
 }
 
-// Requirement 17 — a centered popup, one decision. Incomplete is the default, so nothing is marked
-// done by a stray tap. Needs attention asks for a note or a photo before it will save (18); a key line
-// asks for before AND after before it will go Complete (19).
-function LinePopup({ line, checkedInToday, busy, onClose, onMark, onPhoto }) {
+// Stage 3 of docs/customer-flow-v2.md rebuilt this. Top to bottom: the step path, one camera button,
+// Notes, the status buttons, Save (item 1). The steps ARE the progress bar — tapping step N selects 1..N,
+// tapping a lower one rewinds, tapping the only selected one clears it (item 2) — and the status follows
+// from them: none is Not started, some is In progress, all is Complete (item 3). "Needs attention" is a
+// separate flag that can sit at any level, Complete included, and still reaches the office (item 4).
+function LinePopup({ line, allLines = [], checkedInToday, busy, onClose, onMark, onPhoto }) {
   const steps = lineSteps(line.kind);
-  const [status, setStatus] = useState(line.state?.status || LINE_STATUS.INCOMPLETE);
-  const [pickStep, setPickStep] = useState(Math.min(+line.state?.steps_done || 0, steps.length));
+  const stored = Math.min(+line.state?.steps_done || 0, steps.length);
+  const [pickStep, setPickStep] = useState(line.state?.status === LINE_STATUS.COMPLETE ? steps.length : stored);
+  const [attention, setAttention] = useState(isFlagged(line));
   const [note, setNote] = useState("");
-  const beforeRef = useRef(null);
-  const afterRef = useRef(null);
+  const [pending, setPending] = useState(null);   // a captured file waiting to be tagged (item 6)
+  const camRef = useRef(null);
 
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onClose(); };
@@ -182,68 +195,85 @@ function LinePopup({ line, checkedInToday, busy, onClose, onMark, onPhoto }) {
   }, [onClose]);
 
   const photos = line.photos || [];
-  const shot = (slot) => photos.find((p) => p.slot === slot);
+  // The status is DERIVED, never picked independently of the steps.
+  const status = statusForSteps(line.kind, pickStep);
+  const progress = lineProgressOf(line.kind, { status, stepsDone: pickStep });
   // The SAME gate the server runs, so a disabled button and a refused save always agree.
-  const gate = lineStatusGate({ status, checkedInToday, line, photos, note });
+  const gate = lineStatusGate({ status, checkedInToday, line, photos, note, attention });
 
-  // Portalled to <body> for the same reason as the signature sheet: inside the project page's overlay
-  // this is a nested stacking context below the floating assistant dock, which would cover Save.
+  // Tapping step N fills 1..N; tapping the one that is already the tip clears back past it.
+  const tapStep = (i) => setPickStep(pickStep === i + 1 ? i : i + 1);
+  // The buttons drive the same number the steps do, so the two can never disagree.
+  const setProgress = (p) => {
+    if (p === "complete") { setPickStep(pickStep === steps.length ? 0 : steps.length); return; }
+    // In progress: one step if there is nothing yet, keep the count if there is, clear if it is the state.
+    if (progress === "in_progress") { setPickStep(0); return; }
+    setPickStep(steps.length > 1 ? Math.max(1, Math.min(steps.length - 1, pickStep || 1)) : 0);
+  };
+
   const pop = (
     <div className="wfd-ov" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="wfd-pop" role="dialog" aria-modal="true" aria-label={line.name}>
+      <div className="wfd-pop" role="dialog" aria-modal="true" aria-label={lineDisplayName(line, allLines)}>
         <div className="wfd-ph">
-          <b>{line.name}</b>
+          <b>{lineDisplayName(line, allLines)}</b>
           <button type="button" className="wfd-x" aria-label="Close" onClick={onClose}>×</button>
         </div>
 
-        <div className="wfd-choices">
-          {[LINE_STATUS.COMPLETE, LINE_STATUS.ATTENTION, LINE_STATUS.INCOMPLETE].map((s) => (
-            <button key={s} type="button" className={`wfd-choice ${s}${status === s ? " on" : ""}`} onClick={() => setStatus(s)}>
-              {STATUS_LABEL[s]}
-            </button>
-          ))}
-        </div>
-
-        {/* Decision A — how far did you get? Only where the line has a real path, and only when it
-            isn't being called Complete (Complete fills the path by definition). */}
-        {status !== LINE_STATUS.COMPLETE && steps.length > 1 && (
+        {/* 1 — the step path, as a progress bar. */}
+        {steps.length > 1 && (
           <div className="wfd-steps">
             {steps.map((label, i) => (
-              <button key={label} type="button" className={`wfd-step${pickStep > i ? " on" : ""}`} onClick={() => setPickStep(pickStep === i + 1 ? i : i + 1)}>
+              <button key={label} type="button" className={`wfd-step${pickStep > i ? " on" : ""}`} onClick={() => tapStep(i)}>
                 <span className="wfd-step-n">{i + 1}</span>{label}
               </button>
             ))}
           </div>
         )}
 
-        {/* Requirement 19 — before and after, on the lines where a photo is the only proof. */}
-        {line.needsPhotos && (
-          <div className="wfd-shots">
-            {["before", "after"].map((slot) => (
-              <div key={slot} className={`wfd-shot${shot(slot) ? " has" : ""}`}>
-                <span className="wfd-shot-lbl">{slot === "before" ? "Before" : "After"}</span>
-                {shot(slot)
-                  ? <img src={shot(slot).url} alt={`${slot} photo`} />
-                  : <button type="button" className="wfd-shot-add" disabled={busy} onClick={() => (slot === "before" ? beforeRef : afterRef).current?.click()}><Ic d={CAM_D} s={20} /></button>}
-                <input ref={slot === "before" ? beforeRef : afterRef} type="file" accept="image/*" capture="environment" hidden
-                       onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onPhoto(slot, f); }} />
-              </div>
-            ))}
+        {/* 2 — ONE camera button. The tag is chosen after the shot, and photos are optional. */}
+        <div className="wfd-shots">
+          {photos.map((ph, i) => (
+            <figure className="wfd-thumb" key={ph.id || ph.url || i}>
+              <img src={ph.url} alt={`${ph.slot || "photo"} photo`} />
+              <figcaption>{(PHOTO_TAGS.find(([k]) => k === ph.slot) || [, ph.slot || "Photo"])[1]}</figcaption>
+            </figure>
+          ))}
+          <button type="button" className="wfd-cam" disabled={busy} onClick={() => camRef.current?.click()}>
+            <Ic d={CAM_D} s={22} /><span>Photo</span>
+          </button>
+          <input ref={camRef} type="file" accept="image/*" capture="environment" hidden
+                 onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) setPending(f); }} />
+        </div>
+        {pending && (
+          <div className="wfd-tagger">
+            <span>Tag this photo</span>
+            <div className="wfd-tagrow">
+              {PHOTO_TAGS.map(([slot, label]) => (
+                <button key={slot} type="button" disabled={busy} onClick={() => { const f = pending; setPending(null); onPhoto(slot, f); }}>{label}</button>
+              ))}
+              <button type="button" className="wfd-tagx" disabled={busy} onClick={() => setPending(null)}>Discard</button>
+            </div>
           </div>
         )}
 
-        {/* Requirement 18 — a flag needs evidence. Dictation, because a tech is holding a drill. */}
-        {status === LINE_STATUS.ATTENTION && (
-          <div className="wfd-note">
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="What's wrong?" />
-            <MicButton value={note} onChange={setNote} title="Dictate" />
-          </div>
-        )}
+        {/* 3 — Notes: full width, free text, always available (item 7). */}
+        <div className="wfd-note">
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Notes" />
+          <MicButton value={note} onChange={setNote} title="Dictate" />
+        </div>
+
+        {/* 4 — the status row. Full width, tap again to clear; the flag is independent of the rest. */}
+        <div className="wfd-choices">
+          <button type="button" className={`wfd-choice incomplete${progress === "in_progress" ? " on" : ""}`} onClick={() => setProgress("in_progress")}>In progress</button>
+          <button type="button" className={`wfd-choice attention${attention ? " on" : ""}`} aria-pressed={attention} onClick={() => setAttention((v) => !v)}>Needs attention</button>
+          <button type="button" className={`wfd-choice complete${progress === "complete" ? " on" : ""}`} onClick={() => setProgress("complete")}>Complete</button>
+        </div>
+        <div className="wfd-derived">{PROGRESS_LABEL[progress]}{attention ? " · flagged" : ""}</div>
 
         {gate && <div className="wfd-gate">{gate}</div>}
         <div className="wfd-pf">
           <button type="button" className="wfd-cancel" disabled={busy} onClick={onClose}>Cancel</button>
-          <button type="button" className="wfd-save" disabled={busy || !!gate} onClick={() => onMark({ status, pickStep, note })}>Save</button>
+          <button type="button" className="wfd-save" disabled={busy || !!gate} onClick={() => onMark({ status, pickStep, note, attention })}>Save</button>
         </div>
       </div>
     </div>

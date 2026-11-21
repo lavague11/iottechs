@@ -13,6 +13,50 @@
 import { stepsFor, weightedInc } from "./install-checklist-model.js";
 
 export const LINE_STATUS = { INCOMPLETE: "incomplete", ATTENTION: "attention", COMPLETE: "complete" };
+// Stage 3 of docs/customer-flow-v2.md turns "needs attention" from one of three mutually exclusive
+// statuses into a FLAG that can sit at any progress level, Complete included. The stored `status` column
+// keeps its three values so no history is rewritten: a row written before this change still carries
+// status='attention', and `isFlagged` reads either form. New writes set the flag column and leave the
+// status to describe the WORK.
+export const isFlagged = (line) => !!(line?.state?.attention || line?.state?.status === LINE_STATUS.ATTENTION);
+// What the line's progress is CALLED. Derived from the steps, never stored: no steps is Not started,
+// part of the path is In progress, the whole path is Complete.
+export const LINE_PROGRESS = { NOT_STARTED: "not_started", IN_PROGRESS: "in_progress", COMPLETE: "complete" };
+export const PROGRESS_LABEL = {
+  [LINE_PROGRESS.NOT_STARTED]: "Not started",      // was "Incomplete"
+  [LINE_PROGRESS.IN_PROGRESS]: "In progress",
+  [LINE_PROGRESS.COMPLETE]: "Complete",
+};
+export function lineProgressOf(kind, { status, stepsDone = 0 } = {}) {
+  const total = stepCount(kind);
+  if (status === LINE_STATUS.COMPLETE) return LINE_PROGRESS.COMPLETE;
+  const done = Math.max(0, Math.min(total, +stepsDone || 0));
+  if (total > 0 && done >= total) return LINE_PROGRESS.COMPLETE;
+  return done > 0 ? LINE_PROGRESS.IN_PROGRESS : LINE_PROGRESS.NOT_STARTED;
+}
+// The status a step count implies (spec item 3): no steps = not started, part = in progress, all = complete.
+export function statusForSteps(kind, steps) {
+  const total = stepCount(kind);
+  const done = Math.max(0, Math.min(total, +steps || 0));
+  return total > 0 && done >= total ? LINE_STATUS.COMPLETE : LINE_STATUS.INCOMPLETE;
+}
+
+// Two lines on one work order can carry the same name ("JBL Speaker Upgrade" eight times), and a
+// technician cannot tell which one they are marking. The displayed name gains its position among its
+// namesakes, and its location when the line carries one. Pure, and used by the list, the popup and the
+// closeout screen so all three say the same thing.
+export function lineDisplayName(line, allLines = []) {
+  const name = String(line?.name || "").trim() || "Line";
+  const sameName = (allLines || []).filter((l) => String(l?.name || "").trim() === name);
+  let label = name;
+  if (sameName.length > 1) {
+    const idx = sameName.findIndex((l) => l.key === line.key);
+    // Only number it when the name does not already carry one (installItemsFromProposal appends "#N").
+    if (idx >= 0 && !/[#\d]\s*$/.test(name)) label = `${name} ${idx + 1}`;
+  }
+  const where = String(line?.location || "").trim();
+  return where ? `${label}, ${where}` : label;
+}
 export const LINE_STATUSES = [LINE_STATUS.COMPLETE, LINE_STATUS.ATTENTION, LINE_STATUS.INCOMPLETE];
 export const isLineStatus = (s) => LINE_STATUSES.includes(s);
 
@@ -50,16 +94,16 @@ export function creditsForAdvance(kind, from, to, payout, rates) {
 //   18. "Needs attention" needs a note OR a photo — a flag with no evidence is not a report.
 //   19. A key line (camera / recorder / speaker / display) needs a BEFORE and an AFTER photo before it
 //       can be called Complete. That is the only proof the work was done properly.
-export function lineStatusGate({ status, checkedInToday, line, photos = [], note = "" }) {
+//   Stage 3 changed two of these. Photos are now OPTIONAL on every line — the before/after requirement
+//   for Complete is gone (spec item 6), and so is the install stage's photo requirement (item 9). The
+//   evidence rule for a flag survives, because a flag with nothing attached is not a report; it now reads
+//   the flag rather than the status, since "needs attention" is no longer a status.
+export function lineStatusGate({ status, checkedInToday, line, photos = [], note = "", attention = false }) {
   if (!isLineStatus(status)) return "Unknown status.";
   if (!checkedInToday) return "Check in on site first.";
-  const has = (slot) => photos.some((p) => p.slot === slot);
-  if (status === LINE_STATUS.ATTENTION && !String(note || "").trim() && !photos.length) {
+  const flagged = !!attention || status === LINE_STATUS.ATTENTION;
+  if (flagged && !String(note || "").trim() && !photos.length) {
     return "Add a note or a photo so the office knows what's wrong.";
-  }
-  if (status === LINE_STATUS.COMPLETE && line?.needsPhotos) {
-    if (!has("before")) return "A before photo is required on this line.";
-    if (!has("after")) return "An after photo is required on this line.";
   }
   return null;
 }
@@ -91,6 +135,7 @@ export function normalizeOp(raw) {
     action: String(raw?.action || ""),
     lineKey: raw?.lineKey == null ? null : String(raw.lineKey),
     status: raw?.status == null ? null : String(raw.status),
+    attention: raw?.attention == null ? null : !!raw.attention,
     pickStep: raw?.pickStep == null ? null : +raw.pickStep,
     note: String(raw?.note || "").slice(0, 2000),
     clientAt: String(raw?.clientAt || ""),
@@ -117,7 +162,7 @@ export function fieldProgress(lines) {
     total += n;
     done += Math.min(+l.state?.steps_done || 0, n);
     if (l.state?.status === LINE_STATUS.COMPLETE) complete += 1;
-    if (l.state?.status === LINE_STATUS.ATTENTION) attention += 1;
+    if (isFlagged(l)) attention += 1;   // the flag, or a row written before it existed
   }
   return { total, done, pct: total ? Math.round((done / total) * 100) : 0, complete, attention, lines: (lines || []).length,
     allDone: total > 0 && done === total };

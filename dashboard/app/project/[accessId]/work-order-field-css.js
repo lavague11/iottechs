@@ -102,7 +102,23 @@ export const WFD_CSS = `
 .wfd-step.on{border-color:var(--dv-green,#2E7D5B);background:#f1f8f4;color:var(--dv-ink,#101418)}
 .wfd-step-n{width:22px;height:22px;border-radius:7px;background:var(--dv-line-soft,#EDEDE9);color:var(--dv-meta,#787D84);display:grid;place-items:center;font-size:.72rem;font-weight:700;flex-shrink:0}
 .wfd-step.on .wfd-step-n{background:var(--dv-green,#2E7D5B);color:#fff}
-.wfd-shots{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 12px}
+/* Stage 3 — one camera button, thumbnails tagged after the shot, and photos are optional. */
+.wfd-shots{display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;padding:0 16px 12px}
+.wfd-thumb{margin:0;width:84px}
+.wfd-thumb img{width:84px;height:84px;object-fit:cover;border-radius:9px;border:1px solid var(--dv-line,#E4E4DF);display:block}
+.wfd-thumb figcaption{margin-top:4px;font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84);text-align:center}
+.wfd-cam{width:84px;height:84px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1.5px dashed var(--dv-line,#E4E4DF);border-radius:9px;background:var(--dv-raise,#FBFBFA);color:var(--dv-meta,#787D84);cursor:pointer;font:600 .68rem/1 inherit}
+.wfd-tagger{padding:0 16px 12px;display:flex;flex-direction:column;gap:7px}
+.wfd-tagger>span{font-size:.72rem;font-weight:700;color:var(--dv-meta,#787D84)}
+.wfd-tagrow{display:flex;gap:7px;flex-wrap:wrap}
+.wfd-tagrow button{height:36px;padding:0 14px;border:1.5px solid var(--dv-line,#E4E4DF);border-radius:9px;background:#fff;color:var(--dv-ink,#101418);font:700 .8rem/1 inherit;cursor:pointer}
+.wfd-tagrow button:hover{border-color:var(--dv-gold,#C9A96E)}
+.wfd-tagrow .wfd-tagx{color:var(--dv-meta,#787D84);font-weight:600}
+/* The status the steps imply, stated once so the technician can see what Save will record. */
+.wfd-derived{padding:0 16px 10px;font-size:.74rem;font-weight:700;color:var(--dv-meta,#787D84)}
+.wfd-tag.flag{background:#fbe9e6;color:var(--dv-red,#C4553D)}
+.wfd-line.attention .wfd-dot.attention{background:var(--dv-red,#C4553D)}
+
 .wfd-shot{display:flex;flex-direction:column;gap:5px}
 .wfd-shot-lbl{font-size:.62rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--dv-meta,#787D84)}
 .wfd-shot img{width:100%;height:96px;object-fit:cover;border-radius:9px;border:1px solid var(--dv-line,#E4E4DF);display:block}

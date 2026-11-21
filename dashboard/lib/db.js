@@ -400,6 +400,10 @@ function init() {
   {
     const lineCols = db.prepare("PRAGMA table_info(wo_lines)").all().map((c) => c.name);
     if (!lineCols.includes("steps_done")) db.exec("ALTER TABLE wo_lines ADD COLUMN steps_done INTEGER NOT NULL DEFAULT 0");
+    // Stage 3 of docs/customer-flow-v2.md: "needs attention" became a FLAG that can sit at any progress
+    // level rather than one of three exclusive statuses. Existing rows keep status='attention' and are
+    // still read as flagged (lib/work-order-field.js isFlagged), so no history is rewritten.
+    if (!lineCols.includes("attention")) db.exec("ALTER TABLE wo_lines ADD COLUMN attention INTEGER NOT NULL DEFAULT 0");
   }
 
   // Per technician, per version signature — a work order can be accepted by more than one tech, and a
@@ -9410,7 +9414,7 @@ export function removeWoLineMedia(accessId, id) {
 // Requirements 17–20. The three-state line, with the step path inside it (decision A) and the step
 // credits that follow (decision B). Refuses rather than half-applies: the gate runs first, and the
 // write is one transaction.
-export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, note = "", actorId = null, actorName = null, clientAt = null }) {
+export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, note = "", attention = null, actorId = null, actorName = null, clientAt = null }) {
   const doc = getWorkOrderDoc(accessId);
   if (!doc) return { error: "No work order yet." };
   if (doc.status === "closed") return { error: "This work order is closed." };
@@ -9420,10 +9424,14 @@ export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, no
   if (!who) return { error: "Who is marking it?" };
   const day = localDay();
   const photos = woLineMediaFor(doc.id, line.key);
-  const gate = lineStatusGate({ status, checkedInToday: woCheckedInToday(doc.id, actorId, who, day), line, photos, note });
+  // `attention` is the Stage 3 flag. null means "leave it as it is" (an older client that does not send
+  // one must not silently clear a flag the office is acting on).
+  const flag = attention == null ? !!(line.state?.attention || line.state?.status === "attention") : !!attention;
+  const gate = lineStatusGate({ status, checkedInToday: woCheckedInToday(doc.id, actorId, who, day), line, photos, note, attention: flag });
   if (gate) return { error: gate };
 
   const prev = line.state || {};
+  const wasFlagged = !!(prev.attention || prev.status === "attention");
   const from = Math.min(+prev.steps_done || 0, stepCount(line.kind));
   const to = stepsAfterStatus(line.kind, status, { stepsDone: from, pickStep });
   const stamp = clientAt || new Date().toISOString();
@@ -9436,8 +9444,8 @@ export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, no
   const pending = woWorkIsPending(doc.id, { userId: actorId, name: who, day });
   db.exec("BEGIN");
   try {
-    db.prepare("UPDATE wo_lines SET status=?, steps_done=?, status_by_id=?, status_by=?, status_at=datetime('now','localtime'), owner_id=COALESCE(owner_id,?), owner_name=COALESCE(owner_name,?) WHERE wo_id=? AND line_key=?")
-      .run(status, to, actorId, who, actorId, who, doc.id, line.key);
+    db.prepare("UPDATE wo_lines SET status=?, steps_done=?, attention=?, status_by_id=?, status_by=?, status_at=datetime('now','localtime'), owner_id=COALESCE(owner_id,?), owner_name=COALESCE(owner_name,?) WHERE wo_id=? AND line_key=?")
+      .run(status, to, flag ? 1 : 0, actorId, who, actorId, who, doc.id, line.key);
     db.prepare("INSERT OR IGNORE INTO wo_events (wo_id, line_key, action, from_status, to_status, actor_id, actor_name, note, meta, client_at) VALUES (?,?,'status',?,?,?,?,?,?,?)")
       .run(doc.id, line.key, prev.status || "incomplete", status, actorId, who, String(note || "").slice(0, 2000) || null, JSON.stringify({ assigned: !pending }), stamp);
     // Decision B — each NEWLY crossed step credits the person who crossed it. Rewinding a line removes
@@ -9455,7 +9463,7 @@ export function setWoLineStatus(accessId, { lineKey, status, pickStep = null, no
     }
     db.exec("COMMIT");
   } catch (e) { db.exec("ROLLBACK"); return { error: "Could not save that." }; }
-  return { ok: true, status, stepsDone: to };
+  return { ok: true, status, stepsDone: to, attention: flag, wasFlagged };
 }
 
 // Requirement 21 — replay a device's queue, oldest first, each op idempotent. One op failing does not
@@ -9468,7 +9476,7 @@ export function applyWoFieldQueue(accessId, ops, { actorId = null, actorName = n
     if (error) { out.push({ key: opKey(raw), error }); continue; }
     const r = op.action === "checkin"
       ? woCheckIn(accessId, { userId: actorId, name: actorName })
-      : setWoLineStatus(accessId, { lineKey: op.lineKey, status: op.status, pickStep: op.pickStep, note: op.note, actorId, actorName, clientAt: op.clientAt });
+      : setWoLineStatus(accessId, { lineKey: op.lineKey, status: op.status, pickStep: op.pickStep, note: op.note, attention: op.attention, actorId, actorName, clientAt: op.clientAt });
     out.push({ key: opKey(op), ...(r.error ? { error: r.error } : { ok: true, replayed: !!r.replayed }) });
   }
   return { ok: true, results: out };

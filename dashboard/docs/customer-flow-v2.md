@@ -191,6 +191,46 @@ Owning code: `lib/proposal.js` (addendumTotals, addendumFingerprint, addendumSig
    and shipping half of a contractual signing path is worse than shipping none. **Flagged as the next
    piece of Stage 2.**
 
+### Stage 3 — Work order line popup
+
+Owning code: `lib/work-order-field.js` (the pure field model + the gate) · `app/project/[accessId]/
+work-order-field.jsx` + `work-order-field-css.js` (the technician's list and popup) ·
+`lib/db.js` `setWoLineStatus` · `work-order-actions.js` `setLineStatusAction` · `lib/stage-flow.js`.
+
+1. **Item 2 was already right.** The step picker already filled 1..N and cleared on a second tap of the
+   tip. What changed is that the steps are now always visible (they used to hide whenever the line was
+   being called Complete) and they are the only thing that sets the status.
+
+2. **Item 4 is a model change, not a layout one.** "Needs attention" was one of three mutually exclusive
+   statuses, so "Complete AND flagged" was unrepresentable. It is now a **flag** on its own column
+   (`wo_lines.attention`, added by the ensure-column pattern). **Nothing was rewritten:** rows already
+   carrying `status='attention'` still read as flagged through `isFlagged()`, and `fieldProgress` counts
+   either form. The office alert follows the flag rather than the status — a status check could never see
+   a line that is Complete and flagged, which is now a legal and important state — and it fires only on a
+   NEW flag (`wasFlagged`), so re-saving a flagged line does not re-notify.
+
+3. **Item 6 retired a safety rule, deliberately.** Requirement 19 of `docs/WORK_ORDERS.md` made a BEFORE
+   and an AFTER photo mandatory before a key line could go Complete; the spec says photos are optional.
+   The gate no longer refuses a Complete for want of a picture, and the test that pinned the old rule was
+   rewritten to say it was retired rather than deleted. **What did not change:** a flag still needs a note
+   or a photo — a flag with nothing attached is not a report.
+
+4. **Item 9 drops the lifecycle from 16 steps to 15.** `STAGE_FLOW.install` lost "Install photos
+   uploaded". This had to follow item 6: with photos optional on every line, requiring them to leave
+   Install would hold a finished job over evidence the technician is no longer asked for. `CLAUDE.md`'s
+   "16 requirement-steps" was updated to 15. The `install_photos` FACT still exists and is still computed
+   — it is simply no longer a gate, and the install-photos tool is untouched.
+
+5. **Item 8 is half-served by the data, and says so.** Lines now show their position among their namesakes
+   ("JBL Speaker Upgrade 1, 2, 3…") via one `lineDisplayName()` helper the list, the popup and the
+   closeout all call. **Location is rendered when the line carries one — but nothing populates it yet.**
+   A work-order line has no location field; the survey's device locations would have to be threaded
+   through `woLines()` to fill it. The helper is ready for that; the wiring is a separate piece.
+
+6. **Item 3's "no steps = Not started (default, no button)".** The three buttons are In progress, Needs
+   attention and Complete, as specified — Not started has no button and is reached by clearing, either by
+   tapping the lit step or by tapping the active status again.
+
 ---
 
 ## Progress
@@ -199,12 +239,12 @@ Owning code: `lib/proposal.js` (addendumTotals, addendumFingerprint, addendumSig
 |---|---|---|---|
 | 1 — Payment plan UI | **done** | (see git log `stage 1`) | Verified live: settings row under Tax, 50/50 · 100 · Custom, breakdown under TOTAL, Custom with when-dropdown + biweekly spacing, cents exact. |
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
-| 3 — Work order line popup | — | — | |
+| 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | — | — | |
 | 5 — Customer email map | — | — | |
 | 6 — Scheduler, verification, deploy | — | — | |
 
-**Resume point:** Stage 2 item 2 (PDF-first addendum signing), then Stage 3.
+**Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.
 
 _Old resume note:_ Owning code to read first: `lib/addendum-items.js`, `lib/addendum-pdf.js`,
 `lib/addendum-schema.js`, `lib/addendum-display.js`, `app/project/[accessId]/install-addendum.jsx`,

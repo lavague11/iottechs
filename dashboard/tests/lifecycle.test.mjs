@@ -18,18 +18,22 @@ const proposal = {
 };
 const allFacts = { date: "2026-01-01", survey_accepted: true, proposal_status: "accepted", proposal_signed: true, deposit_submitted: true, deposit_recorded: true, tech_accepted: true, install_confirmed: true, install_done: true, install_photos: true, qc_manager_approved: true, qc_customer_signed: true, final_balance_paid: true, completion_docs: true };
 
-test("lifecycle levels: 5 phases / 9 stages / 16 steps, all check-backed", () => {
+test("lifecycle levels: 5 phases / 9 stages / 15 steps, all check-backed", () => {
   assert.equal(PHASES.length, 5);
   assert.equal(STAGES.length, 9);
   assert.deepEqual(STAGES.map((s) => s.key), MASTER_ORDER);
   const steps = Object.values(STAGE_FLOW).flat();
-  assert.equal(steps.length, 16);
-  assert.equal(steps.filter((r) => r.check).length, 16);
+  // 15 since Stage 3 item 9 of docs/customer-flow-v2.md: "Install photos uploaded" was removed, because
+  // photos became optional on every work-order line in the same change. Requiring them to leave Install
+  // would have held a finished job over evidence the technician is no longer asked for.
+  assert.equal(steps.length, 15);
+  assert.equal(steps.filter((r) => r.check).length, 15);
 });
 
-test("6: install photo fact, 7: appointment RSVP fact, 8: completion doc fact gate their stages", () => {
-  const f = { ...allFacts, install_photos: false };
-  assert.deepEqual(blockingReqs("install", f, []).map((r) => r.label), ["Install photos uploaded"]);
+test("7: appointment RSVP fact, 8: completion doc fact gate their stages (6: install photos no longer does)", () => {
+  // Leaving Install needs the checklist complete, nothing else — no photo requirement to block on.
+  assert.deepEqual(blockingReqs("install", { ...allFacts, install_photos: false }, []).map((r) => r.label), []);
+  assert.deepEqual(blockingReqs("install", { ...allFacts, install_done: false }, []).map((r) => r.label), ["Install checklist completed"]);
   assert.deepEqual(blockingReqs("schedule", { ...allFacts, install_confirmed: false }, []).map((r) => r.label), ["Customer confirmed the install appointment"]);
   assert.deepEqual(blockingReqs("completion", { ...allFacts, completion_docs: false }, []).map((r) => r.label), ["Completion documents generated"]);
   assert.equal(blockingReqs("install", allFacts, []).length, 0);

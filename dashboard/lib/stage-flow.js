@@ -43,9 +43,12 @@ export const STAGE_FLOW = {
   ],
   // Every requirement is check-backed now (2026-09-23): work order + issue flags, install photos
   // (media kind "install"), the QC sign-offs and the completion stamp are all real server facts.
+  // Stage 3 item 9 of docs/customer-flow-v2.md removed the photo requirement: leaving install needs the
+  // checklist complete, nothing else. Photos became optional on every line at the same time (the
+  // before/after gate in lib/work-order-field.js went with it), so requiring them here would have held
+  // a finished job at Install over evidence the technician is no longer asked for.
   install: [
     { label: "Install checklist completed", who: "internal", check: (p) => !!p.install_done },
-    { label: "Install photos uploaded", who: "internal", check: (p) => !!p.install_photos },
   ],
   qc: [
     { label: "Manager QC approved", who: "internal", check: (p) => !!p.qc_manager_approved },

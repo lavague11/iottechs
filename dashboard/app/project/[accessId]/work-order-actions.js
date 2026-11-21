@@ -266,12 +266,12 @@ export async function decideCheckinAction(accessId, checkinId, decision) {
 
 // Requirement 17–20. The gate (checked in today · a note or photo for Needs attention · before+after
 // on a key line) lives in lib/work-order-field.js and runs HERE, not only in the popup.
-export async function setLineStatusAction(accessId, { lineKey, status, pickStep = null, note = "", clientAt = null } = {}) {
+export async function setLineStatusAction(accessId, { lineKey, status, pickStep = null, note = "", attention = null, clientAt = null } = {}) {
   const g = await gate(accessId, "wo.line.status");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };
-  const r = setWoLineStatus(accessId, { lineKey, status, pickStep, note, clientAt, ...who(g.tok) });
+  const r = setWoLineStatus(accessId, { lineKey, status, pickStep, note, attention, clientAt, ...who(g.tok) });
   if (r.error) return r;
   // The moment the LAST line goes complete, ask the customer to sign the work off — once. Sign-off is
   // a request, not a gate, so this never blocks anything: if the ask fails to send, the job can still
@@ -283,7 +283,12 @@ export async function setLineStatusAction(accessId, { lineKey, status, pickStep 
   }
   // Requirement 18: a flagged line notifies the OFFICE only. The customer is never told a line is in
   // trouble — that is the office's call to make, with the facts in front of them.
-  if (status === "attention" && !r.replayed) {
+  // Stage 3: "needs attention" is a FLAG now, settable at any progress level including Complete. The
+  // alert follows the flag rather than the status — a line marked Complete AND flagged must still reach
+  // the office, which a status check could never see.
+  const nowFlagged = attention == null ? status === "attention" : !!attention;
+  const wasFlagged = !!r.wasFlagged;
+  if (nowFlagged && !wasFlagged && !r.replayed) {
     const job = g.job;
     notifyRoles(["admin", "manager"], {
       type: "wo_attention",

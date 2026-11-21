@@ -83,15 +83,18 @@ test("requirement 18: a flag needs a note OR a photo", () => {
   assert.equal(lineStatusGate({ ...base, note: "   " }), "Add a note or a photo so the office knows what's wrong.", "whitespace is not a note");
 });
 
-test("requirement 19: a key line needs BEFORE and AFTER before it can be Complete", () => {
+test("requirement 19 was RETIRED in Stage 3 — photos are optional on every line", () => {
+  // Was: a key line needed a BEFORE and an AFTER before it could be Complete. docs/customer-flow-v2.md
+  // Stage 3 item 6 makes photos optional and replaces the two fixed slots with one camera button the
+  // technician tags afterwards, so the gate no longer refuses a Complete for want of a picture.
   const g = (photos) => lineStatusGate({ status: LINE_STATUS.COMPLETE, checkedInToday: true, line: CAMERA, photos });
-  assert.match(g([]), /before photo/);
-  assert.match(g([{ slot: "before" }]), /after photo/);
-  assert.equal(g([{ slot: "before" }, { slot: "after" }]), null);
-  // A line that isn't a key line needs none.
+  assert.equal(g([]), null, "no photo at all is fine now");
+  assert.equal(g([{ slot: "detail" }]), null, "and a detail shot is a real photo");
   assert.equal(lineStatusGate({ status: LINE_STATUS.COMPLETE, checkedInToday: true, line: { needsPhotos: false }, photos: [] }), null);
-  // …and the photo rule does not block flagging a problem or rewinding.
   assert.equal(lineStatusGate({ status: LINE_STATUS.INCOMPLETE, checkedInToday: true, line: CAMERA, photos: [] }), null);
+  // What did NOT change: a flag still needs evidence. It just reads the flag instead of the status.
+  assert.match(lineStatusGate({ status: LINE_STATUS.COMPLETE, checkedInToday: true, line: CAMERA, photos: [], note: "", attention: true }), /note or a photo/);
+  assert.equal(lineStatusGate({ status: LINE_STATUS.COMPLETE, checkedInToday: true, line: CAMERA, photos: [], note: "cracked lens", attention: true }), null);
 });
 
 test("the gate runs on the SERVER, not only in the popup", () => {
@@ -183,7 +186,10 @@ test("requirement 18: a flag notifies the OFFICE, never the customer", () => {
   // Nothing addresses the customer: no customer role in notifyRoles, no customer email, no portal flag.
   assert.ok(!/notifyRoles\([^)]*customer/.test(body), "the customer is never notified");
   assert.ok(!/email|getCustomerUserForProject|createNotification\(\s*\{\s*user_id/.test(body), "no customer-facing message of any kind");
-  assert.ok(body.includes('if (status === "attention" && !r.replayed)'), "and a replay does not re-notify");
+  // Stage 3: the flag is orthogonal to progress, so the alert follows the FLAG. A status check could
+  // never see a line marked Complete AND flagged, which is now a legal and important state.
+  assert.ok(body.includes("if (nowFlagged && !wasFlagged && !r.replayed)"), "a replay does not re-notify");
+  assert.ok(body.includes("const nowFlagged ="), "and the alert follows the flag, not the status");
 });
 
 test("the actor is always the session, never the client", () => {

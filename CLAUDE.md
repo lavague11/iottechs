@@ -81,7 +81,7 @@ for a project this size the overhead isn't worth it.
 
 ## Lifecycle, roles and deck tools — the single sources
 
-- **Phases / stages / steps:** `dashboard/lib/spec.js` `PHASES` (5) · `dashboard/lib/stage-flow.js` `MASTER_ORDER` (9, asserted equal to `STAGES`) and `STAGE_FLOW` (16 requirement-steps, all `check()`-backed). The gate is `phaseGate()`; facts come from `db.buildStageFacts` / `getToolMeta` and the client must use the same field names. Trace + resolution log: `dashboard/docs/lifecycle-sources.md`.
+- **Phases / stages / steps:** `dashboard/lib/spec.js` `PHASES` (5) · `dashboard/lib/stage-flow.js` `MASTER_ORDER` (9, asserted equal to `STAGES`) and `STAGE_FLOW` (15 requirement-steps, all `check()`-backed). The gate is `phaseGate()`; facts come from `db.buildStageFacts` / `getToolMeta` and the client must use the same field names. Trace + resolution log: `dashboard/docs/lifecycle-sources.md`.
 - **Who may do what:** `dashboard/lib/roles.js` `can(role, cap)` — 7 roles (admin, manager, sales, tech, customer, vendor, readonly). Components read it; server actions enforce it. Don't add `role === "..."` comparisons in JSX.
 - **Which deck card a role sees:** `dashboard/lib/deck-tools.js` `DECK_TOOLS` + `sees(role, phase, name)`. `PHASE_BLOCKS` (role map) IS this object; `deckToolsFor()` gates through `sees()`; `npm test` fails if a card is gated by hand.
 - **Sign-offs and flags:** everything binds to a content fingerprint in `stage_acceptances` (survey, mockup, QC whole-list + per item) or on the row (`proposals.signed_fingerprint`, addendum `signedFingerprint`); install issue flags live in `install_issues` (server-owned state machine, NEEDS_REVIEW → NEEDS_REWORK → RESOLVED | DISMISSED).
@@ -148,3 +148,11 @@ genuinely independent, large enough to justify the overhead, or explicitly reque
 **Stack note for all agents:** this repo is **Next.js (App Router, SWC — no Babel) + node:sqlite**
 (`dashboard/lib/db.js`), **not** Supabase. Access control is **server-side** (role checks, server-action
 guards, `sanitize*` payload stripping), not Postgres RLS.
+
+<!-- vault-pointer -->
+## Project knowledge base (Obsidian Vault)
+Tracked in the central vault: `C:\Users\La Vague\Documents\Vault\Projects\IOT TECHS\`.
+> Main FSM/CCTV platform repo.
+
+- **Session start:** read `C:\Users\La Vague\Documents\Vault\00-Index\Home.md` and this project's `STATUS.md` in that folder. Read `SPEC.md` / `DECISIONS.md` only when the task needs them.
+- **Session end:** update that `STATUS.md` (current state / what's live / broken / next steps), append any notable decision to `DECISIONS.md` (`## YYYY-MM-DD — <title>`), and update `SPEC.md` only if the architecture actually changed.
