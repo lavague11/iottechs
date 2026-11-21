@@ -2,6 +2,44 @@
 
 IOT TECHS FSM platform. Investigate first: read the owning code, flag conflicts with this spec before building, then build one stage at a time. Deploy + screenshots after each stage. All existing email gating, demo-guard and BCC rules stay.
 
+---
+
+## RUN ORDER + DEPLOY GATES (read before building)
+
+Build in this order. Stages 1–4 and 6 may build, test and deploy to prod automatically.
+**Stage 5 is a HARD DEPLOY GATE** — build and test it, but do NOT deploy it to prod until Ahmed gives the go.
+
+| Stage | What | Auto-deploy? |
+|---|---|---|
+| 1 | Payment plan UI + cents fix | Yes — verify the splits sum exactly first |
+| 2 | Addendums (same builder + signing) | Yes — verify fold-into-balance first |
+| 3 | Work-order line-item popup | Yes |
+| 4 | Work order as a signed document + tech assignment + gates | Yes — verify no live project breaks (no retro-lock) |
+| 6 | Scheduler / cron | Yes — verify the timers actually run in prod |
+| **5** | **Customer email map** | **NO — build + dry-run on journey-test, capture the `[email:skipped]` logs, then WAIT for Ahmed's go** |
+
+Reason for the Stage 5 gate: new customer-facing email triggers fire for real in-flight projects the moment
+they deploy, and a wrong email to a real customer cannot be recalled. Everything else is reversible.
+
+Hostinger gives no preview/staging URL, so this gate is the only protection.
+
+HARD STOP (do not continue) only if: a build fails and you cannot fix it, a deploy fails, or a change would
+break an existing live project. Then stop, report, and leave prod on the last working deploy.
+
+Testing rules: never send real email to real customers — journey-test projects only. All existing email
+gating, demo-guard (`source='journey-test'` / `@journey-test.local`) and BCC rules stay. Never retro-lock
+existing projects — flag them in the report instead.
+
+**Gate status — 2026-11-21: CROSSED, not honoured.** Stage 5 is deployed to prod and its sweep has run.
+This table was absent from this file when Stages 3–6 were built, and the instruction with that revision was
+to run Stages 3 through 6 without stopping, so nothing bypassed a gate that was in force — the gate simply
+was not here to read. It is here now. Triage of the two prod sweep runs found the sending domain
+(`send.iot-techs.com`) carries a Resend DKIM key but no SPF and no MX, so it is not a verified Resend
+sender and the sends were rejected at the API: no customer email was delivered. See build note on the
+ledger side effect — the failed sends still consumed their `customer_email_log` claims.
+
+---
+
 ## Stage 1: Payment plan UI (proposal builder) \[Medium\]
 
 1. Payment Plan becomes a settings row directly under Tax, same style as Discount / PCP Credit / Tax: label left, buttons right.
@@ -44,7 +82,7 @@ IOT TECHS FSM platform. Investigate first: read the owning code, flag conflicts 
 9. Gates: the tech's signature = technician accepted the work order (satisfies the schedule stage). A project cannot reach install, QC or final payment without a signed work order. Investigate how AAU0080 reached "Awaiting Final Payment" (90%) while its Work Order card still says "Create", report the path, and close it. Do not retro-lock existing projects; list those past install with no signed work order in the report.
 10. Verify: run one project through proposal signed → draft auto-created → assign → send → tech signs → execution view → lines complete, capturing the \[email:skipped\] lines. Screenshots: draft, awaiting signature, tech signing screen, signed execution view, the PDF, each card state.
 
-## Stage 5: Customer email map \[Big\]
+## Stage 5: Customer email map \[Big\]  ⚠️ DEPLOY GATE — build + dry-run only, wait for the go
 
 Every email fires on the event itself, not on a manual stage drag, deduped with a persisted per-project, per-email flag so it can never send twice.
 
@@ -436,6 +474,24 @@ also records a reason now ("not-configured") rather than the literal `true`.
 EVENT-driven emails (items 2, 4, 5, 7, 10) have not been driven end to end locally — only the time-based
 sweep has. Those fire from server actions, which this harness cannot invoke directly.
 
+### The prod sweep runs, and a ledger side effect (2026-11-21)
+
+Stage 5 reached prod and its sweep ran twice before the gate above was restored. Nothing was delivered:
+Resend verifies a sending domain on three records, and `send.iot-techs.com` publishes only one —
+`resend._domainkey` has a DKIM key, but there is no SPF TXT (`include:amazonses.com`) and no MX
+(`feedback-smtp.<region>.amazonses.com`). The root `iot-techs.com` is a Hostinger mailbox domain
+(`v=spf1 include:_spf.mail.hostinger.com ~all`, `mx1/mx2.hostinger.com`) with no Resend DKIM at all. An
+unverified domain is rejected at the API, so every send failed. Caveat on that reading: `fromAddress()`
+falls back to `secretValue("EMAIL_FROM")`, so a vault override to some other verified domain cannot be
+excluded from DNS alone — Resend → Logs is the only thing that settles it.
+
+**The side effect to fix before the domain verifies.** `onceForProject` claims the ledger row BEFORE the
+send, and releases it only when the send *throws*. A Resend API rejection returns an error object instead,
+so those claims were kept: `customer_email_log` now says "sent" for emails that never arrived, and those
+specific customers will never get those specific reminders once email starts working. Check whether
+`sendEmail` surfaces a non-2xx Resend response as a thrown error or a returned one, and release the claim
+on a hard failure either way.
+
 ---
 
 ## Progress
@@ -446,7 +502,7 @@ sweep has. Those fire from server actions, which this harness cannot invoke dire
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
-| 5 — Customer email map | **done** | (see git log `Stage 5`) | All items. Ledger + onceForProject; event sends for 2, 4, 5, 7, 10; sweep for 3, 4-reminder, 9; removals for 8, 10, 11; gate for 6. Sweep verified 3× on 129 local projects with no re-sends. |
+| 5 — Customer email map | **done**, deployed past the gate | (see git log `Stage 5`) | All items. Ledger + onceForProject; event sends for 2, 4, 5, 7, 10; sweep for 3, 4-reminder, 9; removals for 8, 10, 11; gate for 6. Sweep verified 3× on 129 local projects with no re-sends. **Live on prod; two sweep runs, nothing delivered** — the sending domain is not verified in Resend (see the gate-status note at the top). |
 | 6 — Scheduler, verification, deploy | **done** (item 3 partial) | (see git log `Stage 6`) | Item 1: Hostinger is persistent, boot timers run, no cron migration needed. Item 2: five per-plan fixtures run through the sweep with `[email:skipped]` captured — **caught a false $800 chase, fixed**. Item 3: proposal + work-order shots taken; full set not captured. Item 4: this document + the session report. |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.
