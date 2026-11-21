@@ -22,11 +22,14 @@ test("emailReviewRequest exists and is fully gated", () => {
   assert.ok(fn.includes("markReviewRequested(accessId)"), "stamps the one-time flag on success");
 });
 
-test("review request is triggered on completion and on final payment", () => {
-  assert.ok(actions.includes("if (done) import(") && actions.includes("emailReviewRequest(accessId)"),
-    "completeProjectAction fires it on completion");
-  assert.ok((propActions.match(/emailReviewRequest/g) || []).length >= 2,
-    "both record- and confirm-payment paths try it (covers pay-after-complete)");
+test("the separate review request was RETIRED — the completion report asks instead", () => {
+  // docs/customer-flow-v2.md Stage 5 item 10: one email at paid-in-full carries the receipt and the
+  // completion report, and the report (email + portal Completion card) holds the "Leave us a review"
+  // button. A standalone review email would be a second ask for the same thing.
+  assert.ok(!/emailReviewRequest/.test(actions), "completeProjectAction no longer sends one");
+  assert.ok(!/emailReviewRequest/.test(propActions), "nor do the payment paths");
+  // The sender itself is left in lib/email.js, unused, so re-enabling it is one line rather than a rewrite.
+  assert.ok(/export async function emailReviewRequest/.test(email), "the sender is kept for rollback");
 });
 
 test("db has the review_requested_at column + idempotent marker", () => {

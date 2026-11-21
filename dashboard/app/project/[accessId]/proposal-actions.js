@@ -857,7 +857,8 @@ export async function recordPaymentAction(accessId, payment) {
   }
   // Fix #1: a payment may be the moment a completed job becomes paid-in-full → try the review request
   // (self-guards on complete + paid-in-full + once + never demo, so premature/duplicate sends can't happen).
-  import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
+  // Stage 5 item 10: the separate review-request email is gone — the completion report carries a
+  // "Leave us a review" button instead, so the customer is asked once, in the document they wanted.
   // Payment events are DERIVED from the payment records in the Job Log (so existing deposits show too),
   // not logged here — logging both would double them.
   const stage = maybeAutoAdvance(accessId);
@@ -924,7 +925,8 @@ export async function confirmPaymentAction(accessId, id) {
     }).catch(() => {});
   }
   // Fix #1: confirming the final payment can tip a completed job to paid-in-full → try the review request.
-  import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
+  // Stage 5 item 10: the separate review-request email is gone — the completion report carries a
+  // "Leave us a review" button instead, so the customer is asked once, in the document they wanted.
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);

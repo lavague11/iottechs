@@ -30,11 +30,19 @@ export const STAGE_FLOW = {
     { label: "Proposal submitted to customer", who: "internal", check: (p) => ["sent", "changes_requested", "accepted", "declined"].includes(p.proposal_status) },
     { label: "Customer accepted an option", who: "customer", check: (p) => p.proposal_status === "accepted" },
   ],
+  // Stage 5 item 6 of docs/customer-flow-v2.md: "any first payment unlocks scheduling (replaces 'deposit
+  // confirmed'). If nothing is due upfront, signing alone unlocks scheduling."
+  //
+  // The old pair demanded a deposit from every project, so a plan with nothing due before work starts —
+  // 100% on completion, or a custom schedule whose first installment is Halfway — could never leave this
+  // stage at all. The requirement now asks for a payment only when one is actually owed up front
+  // (`deposit_required`, derived from the plan), and any confirmed money satisfies it, not specifically a
+  // deposit. A project that owes nothing up front passes on the signature alone.
   approval_deposit: [
     { label: "Customer accepted the proposal", who: "customer", check: (p) => p.proposal_status === "accepted" },
     { label: "Customer signed the agreement", who: "customer", check: (p) => !!p.proposal_signed },
-    { label: "Deposit submitted", who: "customer", check: (p) => !!p.deposit_submitted },
-    { label: "Deposit receipt confirmed", who: "internal", check: (p) => !!p.deposit_recorded },
+    { label: "First payment received", who: "customer",
+      check: (p) => p.deposit_required === false || !!p.deposit_recorded || !!p.first_payment_recorded },
   ],
   schedule: [
     // Stage 4 item 9 of docs/customer-flow-v2.md. This used to pass on a mere ASSIGNMENT, which is how a

@@ -18,16 +18,18 @@ const proposal = {
 };
 const allFacts = { date: "2026-01-01", survey_accepted: true, proposal_status: "accepted", proposal_signed: true, deposit_submitted: true, deposit_recorded: true, tech_accepted: true, install_confirmed: true, install_done: true, install_photos: true, qc_manager_approved: true, qc_customer_signed: true, final_balance_paid: true, completion_docs: true };
 
-test("lifecycle levels: 5 phases / 9 stages / 15 steps, all check-backed", () => {
+test("lifecycle levels: 5 phases / 9 stages / 14 steps, all check-backed", () => {
   assert.equal(PHASES.length, 5);
   assert.equal(STAGES.length, 9);
   assert.deepEqual(STAGES.map((s) => s.key), MASTER_ORDER);
   const steps = Object.values(STAGE_FLOW).flat();
-  // 15 since Stage 3 item 9 of docs/customer-flow-v2.md: "Install photos uploaded" was removed, because
-  // photos became optional on every work-order line in the same change. Requiring them to leave Install
-  // would have held a finished job over evidence the technician is no longer asked for.
-  assert.equal(steps.length, 15);
-  assert.equal(steps.filter((r) => r.check).length, 15);
+  // 14 after two changes in docs/customer-flow-v2.md. Stage 3 item 9 removed "Install photos uploaded"
+  // (photos became optional on every work-order line, so requiring them to leave Install would demand
+  // evidence nobody asks the technician for). Stage 5 item 6 merged "Deposit submitted" + "Deposit
+  // receipt confirmed" into one "First payment received", because any first payment now unlocks
+  // scheduling and a plan owing nothing up front unlocks on the signature alone.
+  assert.equal(steps.length, 14);
+  assert.equal(steps.filter((r) => r.check).length, 14);
 });
 
 test("7: appointment RSVP fact, 8: completion doc fact gate their stages (6: install photos no longer does)", () => {

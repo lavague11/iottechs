@@ -15,7 +15,7 @@ import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentCon
 import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
 import { SUPPORT_PHONE } from "./nap.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
-import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState } from "./proposal.js";
+import { optionTotals, proposalFingerprint, proposalChangeState, addendumSignatureCurrent, addendumAwaitingCustomer, addendumTotals, requiredActionsFromState, planDepositPct } from "./proposal.js";
 import { resolveProjectFinancialState, FS } from "./receivables-model.js";
 import { clonePayload, summarizeProposalRow } from "./proposal-reuse.js";
 import { workOrderPayloadFrom, woLines, woTotal, workOrderFingerprint, workOrderChangeState, workOrderDiff, validateWorkOrderPayload, reseedPayouts } from "./work-order.js";
@@ -1700,6 +1700,25 @@ function init() {
     )
   `);
 
+  // ---- Stage 5 of docs/customer-flow-v2.md: the customer email ledger -------------------------------
+  // "Every email fires on the event itself, not on a manual stage drag, deduped with a persisted
+  // per-project, per-email flag so it can never send twice."
+  //
+  // The claim is the PRIMARY KEY, taken BEFORE the send, which is what makes it safe under a retry, a
+  // double-click, two server instances or a replayed sweep. A send that fails releases its claim so the
+  // next sweep can try again; a send that succeeded, or that was deliberately skipped (demo project,
+  // email switched off), keeps it. `key` is the email's own name plus whatever makes one instance of it
+  // distinct — "quote_expiring", "milestone_due:2", "payment_receipt:17".
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS customer_email_log (
+      project_access_id TEXT NOT NULL,
+      key               TEXT NOT NULL,
+      sent_at           TEXT DEFAULT (datetime('now','localtime')),
+      result            TEXT,
+      PRIMARY KEY (project_access_id, key)
+    )
+  `);
+
   // ---- Uploaded photos (HEIC-safe): the /api/media route converts every upload to JPEG
   // server-side (iPhone HEIC → JPEG, since browsers/desktops can't decode HEVC) and stores the
   // bytes here. Tools save the returned /api/media/:id URL instead of multi-MB base64 data-URLs.
@@ -3257,6 +3276,15 @@ export function buildStageFacts(accessId) {
     })(),
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
     deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
+    // Stage 5 item 6 — ANY confirmed payment unlocks scheduling, and a plan that owes nothing before
+    // work starts unlocks on the signature alone. `deposit_required` comes from the PLAN (planDepositPct
+    // is the one source for "due up front"), never from the legacy deposit_pct column, so a 100%-on-
+    // completion or Halfway-first schedule is not asked for money it never asked the customer for.
+    first_payment_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
+    deposit_required: (() => {
+      try { return planDepositPct(prop?.payload ? JSON.parse(prop.payload) : null, +prop?.deposit_pct || 0) > 0; }
+      catch { return (+prop?.deposit_pct || 0) > 0; }
+    })(),
     final_balance_paid: finalBalancePaid,
   };
 }
@@ -8562,6 +8590,35 @@ export function getBugRuns(id, limit = 5) {
 }
 
 // Approved job-site add-ons (addendums) — customer totals fold into the amount owed.
+// ---- The customer email ledger (Stage 5) ---------------------------------------------------------
+// claimCustomerEmail: take the claim, or return false because this email already went. The INSERT is the
+// lock — checking first and inserting after would leave a window two senders can both pass through.
+export function claimCustomerEmail(accessId, key) {
+  try {
+    const r = db.prepare("INSERT OR IGNORE INTO customer_email_log (project_access_id, key) VALUES (?,?)")
+      .run(String(accessId), String(key));
+    return r.changes > 0;
+  } catch { return false; }   // never let a ledger problem send an email twice
+}
+// Release a claim whose send FAILED, so a later attempt may try again. A skip is not a failure: an email
+// suppressed because the project is a demo, or because email is switched off, has had its one chance.
+export function releaseCustomerEmail(accessId, key) {
+  try { db.prepare("DELETE FROM customer_email_log WHERE project_access_id=? AND key=?").run(String(accessId), String(key)); } catch {}
+}
+export function customerEmailSent(accessId, key) {
+  try { return !!db.prepare("SELECT 1 FROM customer_email_log WHERE project_access_id=? AND key=?").get(String(accessId), String(key)); }
+  catch { return false; }
+}
+// Record the outcome against a claim already taken — for the Job Log and for debugging a quiet inbox.
+export function noteCustomerEmail(accessId, key, result) {
+  try { db.prepare("UPDATE customer_email_log SET result=? WHERE project_access_id=? AND key=?").run(String(result || "").slice(0, 120), String(accessId), String(key)); } catch {}
+}
+// Every email this project has been sent, newest first — the office's answer to "did they get it?".
+export function customerEmailsFor(accessId) {
+  try { return db.prepare("SELECT key, sent_at, result FROM customer_email_log WHERE project_access_id=? ORDER BY sent_at DESC").all(String(accessId)); }
+  catch { return []; }
+}
+
 export function getApprovedAddons(accessId) {
   const rec = getToolData(accessId, "addendum");
   let list = [];

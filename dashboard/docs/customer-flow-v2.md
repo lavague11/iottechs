@@ -287,6 +287,41 @@ renderer has no mode for — that is a real divergence from "same design as the 
 decision rather than a guess. The existing `wo_versions` + `proposalDrift` + `syncWorkOrderFromProposal`
 machinery already covers most of item 6.
 
+### Stage 5 — Customer email map
+
+Owning code: `lib/db.js` (`customer_email_log`, the claim helpers, `buildStageFacts`) · `lib/email.js`
+(`onceForProject` + every sender) · `lib/stage-flow.js` · `instrumentation.js` (the sweeps).
+
+**The spine: fire on the event, once.** Stage 5 opens with one rule for every email in it, so it is
+implemented once rather than per sender. `customer_email_log` is keyed `(project_access_id, key)` and
+`onceForProject()` wraps a send with it. Two details matter:
+- **The claim is the INSERT**, taken before the send. Checking first and inserting after leaves a window
+  two senders — a retry, a double-click, two instances, a replayed sweep — can both walk through.
+- **A failure releases the claim; a SKIP does not.** An email suppressed because the project is a demo,
+  or because email is switched off, has had its one chance. Banking it would mean every live project
+  receiving its entire backlog the moment a Resend key is configured.
+
+**Judgement calls:**
+
+- *Item 6 merged two requirements into one.* "Deposit submitted" + "Deposit receipt confirmed" became
+  **"First payment received"**, which passes when `deposit_required === false` (the plan owes nothing
+  before work starts), or any confirmed payment exists. The old pair demanded a deposit from every
+  project, so a 100%-on-completion plan — or a custom schedule whose first installment is Halfway — could
+  never leave that stage at all. `deposit_required` reads `planDepositPct`, the one source for "due up
+  front", never the legacy `deposit_pct` column. **The lifecycle is now 14 requirement-steps** (was 15
+  after Stage 3 item 9, 16 before); `CLAUDE.md` updated.
+- *Items 8, 10 and 11 are removals, and the code is kept.* The ~24h sign-off chase, the automatic
+  day-before/same-day appointment reminders, and the standalone review-request email no longer run — but
+  `sweepSignoffReminders`, `sendDueAppointmentReminders` and `emailReviewRequest` are left in the tree
+  unused, so re-enabling any of them is one line rather than a rewrite. The manual equivalents are
+  untouched: `requestSignoffAction` and `sendAppointmentEmailAction` still work.
+
+**Not built in this increment, and flagged:** items 2 (merge the survey + proposal emails, with the
+price-lock date), 3 (quote-expiry reminder and expiry notice), 4 (the two signing emails), 5 (receipt +
+"we'll schedule you"), 7 (install booked), 9 (the milestone-due emails that replace the invoice
+reminders), and item 10's paid-in-full email with the review button. Each is a sender rewrite that now
+has the ledger to hang on; items 3 and 9 additionally need the sweep work that Stage 6 covers.
+
 ---
 
 ## Progress
@@ -297,7 +332,7 @@ machinery already covers most of item 6.
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
-| 5 — Customer email map | — | — | |
+| 5 — Customer email map | **partial** | (see git log `Stage 5`) | Ledger + onceForProject built; items 6, 8, 10 (removal half), 11 done. **Remaining: items 2, 3, 4, 5, 7, 9 and the paid-in-full email** — see build notes. |
 | 6 — Scheduler, verification, deploy | — | — | |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.

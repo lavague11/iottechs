@@ -14,27 +14,11 @@ export async function register() {
   if (globalThis.__apptReminderStarted) return;   // survive HMR / repeated registration in dev
   globalThis.__apptReminderStarted = true;
 
-  const run = async () => {
-    try {
-      const { sendDueAppointmentReminders } = await import("./lib/appointment-reminders.js");
-      await sendDueAppointmentReminders();
-    } catch (e) { console.error("[reminders] sweep failed:", e?.message || e); }
-  };
+  // Stage 5 item 11 of docs/customer-flow-v2.md removed the AUTOMATIC appointment reminders — the
+  // day-before and the same-day sweep. The manual per-appointment "Remind" button is untouched
+  // (sendAppointmentEmailAction), so the office can still send one deliberately. lib/appointment-
+  // reminders.js and its model are left in the tree: nothing calls the sweep, so nothing fires.
 
-  setTimeout(run, 90_000);                  // first sweep shortly after boot
-  setInterval(run, 30 * 60 * 1000);         // then every 30 minutes
-
-  // Finance sweep: auto-close approved-but-unsigned projects whose 30-day signature deadline has passed
-  // ("Closed — Unsigned"). Server-side so the status is correct even if nobody opens the page. The query
-  // only matches OPEN deals, so it's idempotent — overlapping/repeat runs never double-close or duplicate
-  // the close event. Signed / deposit / completed projects are never touched.
-  const sweepReceivables = async () => {
-    try {
-      const { autoCloseExpiredUnsigned } = await import("./lib/db.js");
-      const r = autoCloseExpiredUnsigned();
-      if (r.closed) console.log(`[receivables] auto-closed ${r.closed} unsigned project(s) past the signature deadline`);
-    } catch (e) { console.error("[receivables] auto-close sweep failed:", e?.message || e); }
-  };
   setTimeout(sweepReceivables, 120_000);              // first sweep ~2 min after boot
   setInterval(sweepReceivables, 6 * 60 * 60 * 1000);  // then every 6 hours (cheap + idempotent)
 
@@ -80,11 +64,13 @@ export async function register() {
   //   • Sign-off — the customer was asked to sign the finished work off a day ago and hasn't.
   const sweepWorkOrders = async () => {
     try {
-      const { sweepEndOfDayReminders, sweepSignoffReminders } = await import("./lib/wo-notify.js");
+      // Stage 5 item 8: the automatic ~24h sign-off chase is gone. The sign-off REQUEST still fires when
+      // the last line completes, and the office can still ask again by hand (requestSignoffAction) — the
+      // customer is simply no longer chased on a timer. sweepSignoffReminders is left unused in
+      // lib/wo-notify.js rather than deleted, so re-enabling it is one line.
+      const { sweepEndOfDayReminders } = await import("./lib/wo-notify.js");
       const d = await sweepEndOfDayReminders();
       if (d?.sent) console.log(`[workorder] reminded ${d.sent} technician(s) to end their day`);
-      const s = await sweepSignoffReminders();
-      if (s?.sent) console.log(`[workorder] chased ${s.sent} customer sign-off(s)`);
     } catch (e) { console.error("[workorder] sweep failed:", e?.message || e); }
   };
   setTimeout(sweepWorkOrders, 140_000);             // ~2.5 min after boot

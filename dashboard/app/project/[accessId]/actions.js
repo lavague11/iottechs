@@ -1051,7 +1051,8 @@ export async function completeProjectAction(accessId, done = true, date = null) 
   if (!row) return { error: "Project not found." };
   // Fix #1: on completion, send the one-time review request. The helper self-guards (email gating,
   // paid-in-full only, never demo/test, once per project), so this is safe fire-and-forget.
-  if (done) import("../../../lib/email").then(({ emailReviewRequest }) => emailReviewRequest(accessId)).catch(() => {});
+  // Stage 5 item 10: the separate review-request email is gone — the completion report carries a
+  // "Leave us a review" button instead, so the customer is asked once, in the document they wanted.
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, completed_at: row.completed_at || null };

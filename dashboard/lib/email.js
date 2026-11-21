@@ -352,6 +352,32 @@ export async function emailPasswordReset({ userId, email, name } = {}) {
   } catch (e) { console.error(`[email:pwreset] ${e?.message || e}`); return { ok: false, error: "exception" }; }
 }
 
+// ---- Stage 5: once, and only once -----------------------------------------------------------------
+// docs/customer-flow-v2.md Stage 5 opens with one rule for every customer email in it: fire on the EVENT,
+// never on a stage drag, and dedupe through a persisted per-project, per-email flag so it can never send
+// twice. `onceForProject` is that rule, in one place, so no individual sender can forget it.
+//
+// The claim is taken BEFORE the send and only given back when the send genuinely FAILED. A skip is not a
+// failure — an email suppressed because the project is a demo, or because email is switched off, has had
+// its one chance and must not fire later when the switch flips, or every live project would receive its
+// whole backlog the moment a key is configured.
+export async function onceForProject(accessId, key, send) {
+  const { claimCustomerEmail, releaseCustomerEmail, noteCustomerEmail } = await import("./db.js");
+  if (!claimCustomerEmail(accessId, key)) return { skipped: "already-sent", key };
+  let r;
+  try { r = await send(); }
+  catch (e) {
+    releaseCustomerEmail(accessId, key);
+    console.error(`[email:once:${key}] ${e?.message || e}`);
+    return { ok: false, error: "exception", key };
+  }
+  const ok = !!(r && (r.ok || r.id));
+  const skipped = !!(r && r.skipped);
+  if (!ok && !skipped) { releaseCustomerEmail(accessId, key); return { ...(r || {}), key, retryable: true }; }
+  noteCustomerEmail(accessId, key, ok ? "sent" : String(r.skipped || "skipped"));
+  return { ...(r || {}), key };
+}
+
 // ---- Event copy -------------------------------------------------------------
 // Customer-facing stages only — internal churn (qc, install scheduling, payout) never emails
 // the customer. Keyed by the master stage key from lib/spec.js.
