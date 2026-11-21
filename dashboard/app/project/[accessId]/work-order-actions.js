@@ -141,6 +141,19 @@ export async function sendWorkOrderVersionAction(accessId) {
   if (g.error) return g;
   const r = sendWorkOrderVersion(accessId, actorName(g.tok));
   if (r.error) return r;
+  // Stage 4 items 2 + 3 — "Send to technician" is the moment the document goes out, so this is where the
+  // assignment email belongs: every assigned technician is told, with a link straight to sign. Nothing is
+  // emailed while it is a draft, which is what keeps the auto-draft (item 1) from ever reaching anyone.
+  // Fire-and-forget: a failed email must not undo a send the office has already made.
+  try {
+    const { getProjectAssignments } = await import("../../../lib/db");
+    const techs = (getProjectAssignments(accessId) || []).filter((a) => a.role === "tech" && a.user_email);
+    if (techs.length) {
+      import("../../../lib/email").then(({ emailWorkOrderAssigned }) => Promise.all(
+        techs.map((t) => emailWorkOrderAssigned(accessId, { to: t.user_email, name: t.user_name }))
+      )).catch(() => {});
+    }
+  } catch { /* the send itself has already succeeded */ }
   await revalidate(accessId);
   return { ok: true, version: r.version, doc: sanitizeWorkOrderDoc(getWorkOrderDoc(accessId), g.tok.role) };
 }

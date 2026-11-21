@@ -201,7 +201,14 @@ test("a technician can only sign a sent version with nothing unsent over it, and
   const expr = editor.slice(i, editor.indexOf(";", i));
   assert.ok(expr.includes("(doc.version || 0) > 0"), "not before it is sent");
   assert.ok(expr.includes("!doc.changeState?.hasUnsentChanges"), "not while the office has unsent changes");
-  assert.ok(expr.includes("s.user_id"), "not twice by the same account");
+  // "not twice by the same account" moved into `iSigned`, which Stage 4 also reuses to decide whether a
+  // technician sees the execution view at all (item 4) — one definition, two uses.
+  assert.ok(expr.includes("!iSigned"), "not twice by the same account");
+  const sig = editor.slice(editor.indexOf("const iSigned"), editor.indexOf(";", editor.indexOf("const iSigned")));
+  assert.ok(sig.includes("s.user_id") && sig.includes("currentUser?.id"), "iSigned is this account's own signature");
+  // Item 4: until that signature exists, a technician gets the document and the Sign button, nothing else.
+  assert.ok(editor.includes('const techAwaitingSignature = role === "tech" && !iSigned;'), "two modes");
+  assert.ok(editor.includes('can(role, "wo.line.status") && !techAwaitingSignature'), "no line marking before signing");
 });
 
 test("requirement 11: the work order SHOWS the install appointment and never books a second one", () => {

@@ -803,6 +803,15 @@ export async function addAssignmentAction(accessId, { userId, userName, userEmai
     }
   }
   const result = db.addProjectAssignment(accessId, { userId, userName, userEmail, role, grantedBy: tok.id ?? null });
+  // Stage 4 items 3 + 7 — a technician assigned to a work order that has already been SENT is told now,
+  // with a link straight to the document. Before it is sent there is nothing for them to sign, so the
+  // email waits for sendWorkOrderVersionAction. Fire-and-forget: a failed email never fails an assignment.
+  if (role === "tech" && userEmail) {
+    try {
+      const sent = (db.getWorkOrderDoc(accessId)?.version || 0) > 0;
+      if (sent) import("../../../lib/email").then(({ emailWorkOrderAssigned }) => emailWorkOrderAssigned(accessId, { to: userEmail, name: userName })).catch(() => {});
+    } catch { /* no work order yet — nothing to be assigned to */ }
+  }
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true, ...result };
@@ -816,8 +825,15 @@ export async function removeAssignmentAction(accessId, assignmentId) {
   const { parseToken } = await import("../../../lib/auth");
   const tok = await parseToken(raw.trim());
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
-  const { removeProjectAssignment } = await import("../../../lib/db");
+  const { removeProjectAssignment, getProjectAssignments } = await import("../../../lib/db");
+  // Read who it was BEFORE removing them — afterwards there is nothing left to address.
+  const going = (getProjectAssignments(accessId) || []).find((a) => String(a.id) === String(assignmentId));
   removeProjectAssignment(assignmentId);
+  // Stage 4 item 7 — the technician losing the job is told, briefly. Only a tech, and only one with an
+  // address; the office roles come and go from a project without needing a letter about it.
+  if (going?.role === "tech" && going.user_email) {
+    import("../../../lib/email").then(({ emailWorkOrderRemoved }) => emailWorkOrderRemoved(accessId, { to: going.user_email, name: going.user_name })).catch(() => {});
+  }
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   return { ok: true };

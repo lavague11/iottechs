@@ -49,13 +49,18 @@ test("the Work Order card combines all three signals, never work_orders alone", 
   for (const signal of ["woSigned", "woSubmitted", "workOrders"]) {
     assert.ok(started[1].includes(signal), `woStarted accounts for ${signal}`);
   }
-  const card = /\{ key: "workorder",[\s\S]{0,420}?ownHeader: true \}/.exec(gw);
+  const card = /\{ key: "workorder",[\s\S]{0,1200}?ownHeader: true \}/.exec(gw);
   assert.ok(card, "the workorder card exists");
   assert.match(card[0], /action: woStarted \? "Edit" : "Create"/, "the verb follows the combined state");
   assert.match(card[0], /done: woStarted/, "so does the done tick");
   assert.doesNotMatch(card[0], /action: workOrders\?\.length/, "the old work_orders-only test is gone");
-  // A submitted-but-unsigned WO says so, instead of claiming it was never created.
-  assert.match(card[0], /woSubmitted \? "Awaiting tech signature\."/);
+  // Stage 4 item 8 — the card walks the real ladder now: a draft waiting on a technician, awaiting
+  // their signature, signed (with how much of the work is done), install complete.
+  assert.match(card[0], /woSubmitted \? "Awaiting technician signature\."/);
+  assert.match(card[0], /woExists \? "Draft ready — assign a technician\."/);
+  assert.match(card[0], /lines complete\./, "progress once it is signed");
+  // And woStarted now also sees the work-order DOCUMENT, which is what left AAU0080 saying "Create".
+  assert.ok(started[1].includes("woExists"), "woStarted accounts for the document itself");
 });
 
 test("System QR is its own internal card, wired to the tool", () => {

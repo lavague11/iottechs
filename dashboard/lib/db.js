@@ -3235,6 +3235,26 @@ export function buildStageFacts(accessId) {
     // earlier version left the Staff Hub card reading "Create" after the office had already submitted it.
     work_order_submitted: !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND wo_finalized_at IS NOT NULL LIMIT 1").get(String(accessId)),
     work_order_accepted: !!db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND tech_signed_name IS NOT NULL LIMIT 1").get(String(accessId)),
+    // ---- Stage 4 of docs/customer-flow-v2.md: the work order as its own signed document ----
+    // Two facts, deliberately separate. `wo_exists` says this project has a work-order DOCUMENT at all;
+    // `wo_signed` says a technician has signed it (party 'tech', not voided, on any version).
+    //
+    // The pair is what lets the schedule gate tighten without retro-locking anything. Until now that gate
+    // accepted a mere ASSIGNMENT as "technician accepted the work order", which is the hole: assign a tech
+    // (or set the legacy projects.tech text field) and the project walks through schedule → install → qc →
+    // payment with no work order in existence. A project that HAS a document is held to its signature; a
+    // project that never had one keeps the old rule, so no live job is frozen by this change.
+    wo_exists: !!db.prepare("SELECT 1 FROM wo WHERE project_access_id=? LIMIT 1").get(String(accessId)),
+    wo_signed: !!db.prepare(`SELECT 1 FROM wo_signatures s JOIN wo w ON w.id = s.wo_id
+                              WHERE w.project_access_id=? AND s.party='tech' AND s.voided_at IS NULL LIMIT 1`).get(String(accessId)),
+    // How much of the work order is done, for the project card's "<x> of <y> lines complete" state.
+    // Counted from the live lines, not from a stored summary, so it cannot drift from the field view.
+    ...(() => {
+      const r = db.prepare(`SELECT COUNT(*) AS total, SUM(CASE WHEN l.status='complete' THEN 1 ELSE 0 END) AS done
+                              FROM wo_lines l JOIN wo w ON w.id = l.wo_id
+                             WHERE w.project_access_id=? AND l.removed_at IS NULL`).get(String(accessId)) || {};
+      return { wo_lines_total: +r.total || 0, wo_lines_done: +r.done || 0 };
+    })(),
     deposit_submitted: pays.some((x) => (+x.amount || 0) > 0),
     deposit_recorded: pays.some((x) => (+x.amount || 0) > 0 && x.status === "confirmed"),
     final_balance_paid: finalBalancePaid,
@@ -7592,6 +7612,16 @@ export function signProposal(accessId, name, signatureData, acks) {
   }
   db.prepare("UPDATE proposals SET signed_name=?, signed_at=datetime('now','localtime'), signature_data=?, signed_fingerprint=?, signed_payload=?, signed_acks=?, updated_at=datetime('now','localtime') WHERE id=?")
     .run(String(name || "").slice(0, 120), signatureData ? String(signatureData).slice(0, 200000) : null, fp, cur.payload || null, acksJson, cur.id);
+  // Stage 4 item 1 of docs/customer-flow-v2.md — the signed proposal auto-DRAFTS the work order. It lives
+  // here rather than in each caller so every signing path gets it: the PDF e-sign (lib/esign/complete.js)
+  // and both action paths. createWorkOrderDoc is idempotent (an existing one is returned untouched, never
+  // re-snapshotted) and creates a DRAFT — status 'draft', version 0 — so nothing can reach a technician
+  // from this call. Sending is a separate, deliberate act (sendWorkOrderVersionAction).
+  //
+  // Wrapped: a signature must never fail because a draft could not be made. A project whose proposal has
+  // no priced option simply gets no draft, exactly as before.
+  try { createWorkOrderDoc(accessId, { byName: "auto · proposal signed" }); }
+  catch (e) { console.error(`[wo:autodraft] ${accessId}: ${e?.message || e}`); }
   return getPublishedProposal(accessId);
 }
 // Internal admin acknowledgment that a SIGNED contract has been reviewed. Separate from customer

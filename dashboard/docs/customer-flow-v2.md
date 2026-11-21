@@ -231,6 +231,62 @@ work-order-field.jsx` + `work-order-field-css.js` (the technician's list and pop
    attention and Complete, as specified — Not started has no button and is reached by clearing, either by
    tapping the lit step or by tapping the active status again.
 
+### Stage 4 — Work order as its own signed document
+
+Owning code: `lib/db.js` (`buildStageFacts`, `signProposal`, `createWorkOrderDoc`, `setWoLineStatus`) ·
+`lib/stage-flow.js` · `app/project/[accessId]/work-order-editor.jsx`, `work-order-actions.js`,
+`actions.js` (assignments), `gateway-client.jsx` (the card) · `lib/email.js`.
+
+**Item 9 — the investigation, answered.** The spec asks how a project reaches "Awaiting Final Payment"
+(90%) with its Work Order card still saying "Create". Two independent causes, both in the code:
+
+1. *The gate accepted an assignment as acceptance.* `STAGE_FLOW.schedule`'s "Technician accepted the work
+   order" checked `p.tech_accepted || p.tech || assignments.some(role === "tech")`. Assigning a technician
+   — or just the legacy `projects.tech` TEXT field — satisfied it. Nothing downstream asks for a work
+   order again, so the project walks schedule → install → qc → payment with none in existence.
+2. *The card read only legacy signals.* `woSigned`/`woSubmitted`/`woStarted` came from
+   `proposals.tech_signed_name`, `proposals.wo_finalized_at` and the old `work_orders` table. A project
+   with a real `wo` DOCUMENT and no legacy stamp showed "Create" however far along it was.
+
+**Closed, without retro-locking anything.** Two new facts: `wo_exists` (this project has a work-order
+document) and `wo_signed` (a technician signature on it — `party='tech'`, not voided). The schedule
+requirement now reads: *a project that HAS a document must have it signed; a project that never had one
+keeps the old rule.* Every new project gets a draft the moment its proposal is signed (item 1), so new
+work is strict while no live job is frozen. The gate also stays on **schedule** rather than install/qc/
+payment, because `gateThroughIndex` never regresses below a project's current stage — tightening the
+later stages would strand jobs sitting in them.
+
+Flagged, from the local database (**run the same query on production**):
+`SELECT p.access_id, p.stage FROM projects p WHERE p.sandbox_of IS NULL AND p.stage IN
+('install','qc','payment','completion') AND NOT EXISTS (SELECT 1 FROM wo_signatures s JOIN wo w ON
+w.id=s.wo_id WHERE w.project_access_id=p.access_id AND s.party='tech' AND s.voided_at IS NULL);`
+Locally: 13 of 14 projects at or past install have no signed work order. **12 have no work-order document
+at all**, so they keep the legacy rule and are untouched. One (ASC0128) has a document and no signature,
+and is already past schedule, so it is not held either.
+
+**Judgement calls, all logged here:**
+
+- *Item 1 did NOT already exist.* The spec says "confirm this already exists in code" — it did not;
+  `createWorkOrderDoc` was only ever reached from the manual Create button. It is now called from
+  `signProposal` itself, so every signing path gets it (the PDF e-sign and both action paths) rather than
+  three callers drifting apart. It is idempotent, creates a DRAFT (status and version take their schema
+  defaults), and is wrapped — a signature must never fail because a draft could not be made.
+- *Item 5, prices.* Read as the technician's LINE LIST carrying no money: `showMoney && role !== "tech"`.
+  The office keeps its figures and the "Visible to the technician" toggle is untouched, so a technician
+  can still be shown payout totals where the office chooses — only the per-line column is gone.
+- *Item 3, timing.* The assignment email fires on **send**, not on assignment, because before a work order
+  is sent there is nothing to sign. Assigning a technician to an ALREADY-SENT work order emails them
+  immediately, which is what item 7's reassignment needs.
+- *Item 4.* Gated on the technician's OWN signature (`iSigned`), reusing the expression `canSign` already
+  had. Office roles are deliberately exempt — they must be able to work a job for a crew in a driveway.
+
+**Not built, and flagged:** item 2's "only then is the PDF generated" and item 6's re-sign-on-new-version.
+A work-order PDF does not exist at all today. Rendering one through the proposal renderer is the technique
+`lib/addendum-source.js` already proves, but item 5 requires it to carry NO prices, which the proposal
+renderer has no mode for — that is a real divergence from "same design as the proposal PDF" and needs a
+decision rather than a guess. The existing `wo_versions` + `proposalDrift` + `syncWorkOrderFromProposal`
+machinery already covers most of item 6.
+
 ---
 
 ## Progress
@@ -240,7 +296,7 @@ work-order-field.jsx` + `work-order-field-css.js` (the technician's list and pop
 | 1 — Payment plan UI | **done** | (see git log `stage 1`) | Verified live: settings row under Tax, 50/50 · 100 · Custom, breakdown under TOTAL, Custom with when-dropdown + biweekly spacing, cents exact. |
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
-| 4 — Work order as a signed document | — | — | |
+| 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
 | 5 — Customer email map | — | — | |
 | 6 — Scheduler, verification, deploy | — | — | |
 

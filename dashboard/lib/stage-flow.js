@@ -37,7 +37,17 @@ export const STAGE_FLOW = {
     { label: "Deposit receipt confirmed", who: "internal", check: (p) => !!p.deposit_recorded },
   ],
   schedule: [
-    { label: "Technician accepted the work order", who: "internal", check: (p, a) => !!(p.tech_accepted || p.tech || (a || []).some((x) => x.role === "tech")) },
+    // Stage 4 item 9 of docs/customer-flow-v2.md. This used to pass on a mere ASSIGNMENT, which is how a
+    // project reached Awaiting Final Payment with its Work Order card still saying "Create": assigning a
+    // technician (or the legacy `projects.tech` text field) satisfied "accepted the work order" and
+    // nothing downstream asked for one again.
+    //
+    // A project that HAS a work-order document is now held to a technician's SIGNATURE on it. A project
+    // that never had one keeps the old rule — that is the no-retro-lock promise: this change cannot
+    // freeze a live job that predates the document, it only closes the door for jobs that have one.
+    // Every new project gets a draft the moment its proposal is signed (item 1), so new work is strict.
+    { label: "Technician accepted the work order", who: "internal",
+      check: (p, a) => (p.wo_exists ? !!p.wo_signed : !!(p.tech_accepted || p.tech || (a || []).some((x) => x.role === "tech"))) },
     // Server-recorded RSVP on the install event (schedule blob confirmations / confirmed_at).
     { label: "Customer confirmed the install appointment", who: "customer", check: (p) => !!p.install_confirmed },
   ],

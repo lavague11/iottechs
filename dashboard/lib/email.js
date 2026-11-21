@@ -724,6 +724,67 @@ export async function emailAddendumSigned(accessId, addendumId) {
   }
 }
 
+// ---- Work order: the technician's own document (Stage 4 of docs/customer-flow-v2.md) ----------------
+// A technician is told the job is theirs and sent straight to the document to sign. Internal mail: no
+// customer BCC, and — per spec item 5 — the customer's phone and email never appear. The job address and
+// the scope do, because that is what a technician needs to decide and to drive to.
+export async function emailWorkOrderAssigned(accessId, { to, name } = {}) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  try {
+    const addr = String(to || "").trim();
+    if (!addr.includes("@")) return { skipped: "no-email" };
+    if (/@journey-test\.local$/i.test(addr)) return { skipped: "demo-project" };
+    const { getJobByAccessId, getWorkOrderDoc } = await import("./db.js");
+    const project = getJobByAccessId(accessId);
+    if (!project) return { skipped: "no-project" };
+    if (isDemoProject(project)) return { skipped: "demo-project" };
+    const doc = getWorkOrderDoc(accessId);
+    const scope = (doc?.lines || []).filter((l) => !l.parentKey).slice(0, 12)
+      .map((l) => `• ${l.name}`);
+    const more = Math.max(0, (doc?.lines || []).filter((l) => !l.parentKey).length - scope.length);
+    const base = appUrl();
+    const first = String(name || "").trim().split(/\s+/)[0] || "there";
+    const payload = {
+      heading: "You've been assigned to a project",
+      intro: `Hi ${first} — a work order is waiting for your signature.`,
+      lines: [
+        project.address ? `Job site: ${project.address}` : null,
+        project.poc_name ? `On-site contact: ${project.poc_name}` : null,
+        scope.length ? "Scope:" : null,
+        ...scope,
+        more ? `…and ${more} more line${more === 1 ? "" : "s"}.` : null,
+        "Open the work order to read it in full and sign.",
+      ].filter(Boolean),
+      ctaLabel: base ? "Open & sign the work order" : null,
+      ctaUrl: base ? `${base}/project/${encodeURIComponent(accessId)}?view=workorder` : null,
+      footNote: "Questions about the job go through the office.",
+    };
+    return await sendEmail({ to: addr, subject: "You've been assigned to a project", html: renderEmail(payload), text: plainText(payload) });
+  } catch (e) { console.error(`[email:wo-assigned] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
+// The other half of a reassignment: short, and it says nothing about who replaced them.
+export async function emailWorkOrderRemoved(accessId, { to, name } = {}) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  try {
+    const addr = String(to || "").trim();
+    if (!addr.includes("@")) return { skipped: "no-email" };
+    if (/@journey-test\.local$/i.test(addr)) return { skipped: "demo-project" };
+    const { getJobByAccessId } = await import("./db.js");
+    const project = getJobByAccessId(accessId);
+    if (!project) return { skipped: "no-project" };
+    if (isDemoProject(project)) return { skipped: "demo-project" };
+    const first = String(name || "").trim().split(/\s+/)[0] || "there";
+    const payload = {
+      heading: "You've been removed from this project",
+      intro: `Hi ${first} — you're no longer assigned to ${project.address || "this job"}.`,
+      lines: ["Any work you already logged is kept and still counts. The office can tell you more."],
+      footNote: "IOT TECHS — Automated Notification.",
+    };
+    return await sendEmail({ to: addr, subject: "You've been removed from a project", html: renderEmail(payload), text: plainText(payload) });
+  } catch (e) { console.error(`[email:wo-removed] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
 export async function emailProposalReady(accessId) {
   try {

@@ -3315,9 +3315,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // the office's Submit freezes the WO (facts.work_order_submitted = proposals.wo_finalized_at), the tech's
       // acceptance stamps tech_accepted, and a tech's own submission lands in the `work_orders` table. The card
       // used to check `work_orders` alone, so a work order the office had submitted still read "Create".
-      const woSigned = !!(sFacts.work_order_accepted || sFacts.tech_accepted);
+      // Stage 4 item 8 of docs/customer-flow-v2.md. These used to read ONLY the legacy signals — a tech
+      // signature stamped on `proposals`, the office's freeze, and rows in the old `work_orders` table —
+      // so a project with a real work-order DOCUMENT and no legacy stamp showed "Create" however far
+      // along it was. That is what AAU0080 was doing at 90%. `wo_exists` / `wo_signed` are the document's
+      // own facts; the legacy ones stay in the OR so older projects read exactly as they did.
+      const woSigned = !!(sFacts.wo_signed || sFacts.work_order_accepted || sFacts.tech_accepted);
       const woSubmitted = !!sFacts.work_order_submitted;
-      const woStarted = woSigned || woSubmitted || !!workOrders?.length;
+      const woExists = !!sFacts.wo_exists;
+      const woLineProgress = (+sFacts.wo_lines_total || 0) > 0 ? { done: +sFacts.wo_lines_done || 0, total: +sFacts.wo_lines_total || 0 } : null;
+      const woStarted = woSigned || woSubmitted || woExists || !!workOrders?.length;
       const simple3 = rail3;   // Simple view = 3 steps: Consulting · Install · Completion (derived from state, see rail3)
 
       const renderStaffOverlay = (key, onCloseOverlay) => {
@@ -3539,7 +3546,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
         { key: "workorder", title: "Work Order", group: "internal",
-          sub: installDone ? "Install complete." : woSigned ? "Accepted by the tech." : woSubmitted ? "Awaiting tech signature."
+          // The ladder the spec asks for: a draft waiting on a technician → awaiting their signature →
+          // signed → how much of the work is done → complete.
+          sub: installDone ? "Install complete."
+            : woSigned ? (woLineProgress ? `${woLineProgress.done} of ${woLineProgress.total} lines complete.` : "Signed by the technician.")
+            : woSubmitted ? "Awaiting technician signature."
+            : woExists ? "Draft ready — assign a technician."
             : workOrders?.length ? (hubAppt ? "Scheduled." : "Created.") : "Create the work order.",
           action: woStarted ? "Edit" : "Create", done: woStarted, ownHeader: true },
         // Activation QR — the code the customer scans to set up the cameras in the app. Staff upload/replace
