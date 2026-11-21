@@ -322,6 +322,25 @@ price-lock date), 3 (quote-expiry reminder and expiry notice), 4 (the two signin
 reminders), and item 10's paid-in-full email with the review button. Each is a sender rewrite that now
 has the ledger to hang on; items 3 and 9 additionally need the sweep work that Stage 6 covers.
 
+**Stage 5, part 2 — items 4 and 5.**
+
+- *Item 4 was missing entirely, not merely wrong.* Signing fired `emailContractSigned` to the OFFICE and
+  said nothing to the person who had just signed. `emailProposalSigned` now sends the customer their own
+  email, branching on the **canonical money** (`amountDueNow`, falling back to the plan's deposit) and
+  never on the stage: something owed before work starts → "signed, payment due" with the amount and how
+  to pay; nothing owed → "signed, we'll schedule you" with the Phone Setup link. Both carry the signed
+  PDF. It fires from BOTH signing paths (`lib/esign/complete.js` and `signProposalAction`) under ONE
+  ledger key, so a document signed in one and completed in the other still sends exactly once.
+- *The Phone Setup link needed a new door.* `sendCustomerEmail` only ever built `?open=<view>` links, and
+  `viewFromParams` has no name for the phone guide — `?open=phone` would have landed on the portal home.
+  `content.ctaUrl` now lets a send point at a non-project URL; the guide is the first user.
+- *Item 5: "first" is decided by the LEDGER, not by counting payment rows.* `emailFirstPaymentReceived`
+  claims `first_payment`; whichever payment wins the claim is the first, whatever order webhooks and
+  staff entries land in. It carries the receipt, "we'll schedule you" and the Phone Setup link; every
+  later payment falls through to the plain receipt. The existing rule that a customer's own unconfirmed
+  submission never emails is untouched.
+- *Not built: the 2-day payment reminder* in item 4, which needs the sweep work Stage 6 covers.
+
 ---
 
 ## Progress
@@ -332,7 +351,7 @@ has the ledger to hang on; items 3 and 9 additionally need the sweep work that S
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
-| 5 — Customer email map | **partial** | (see git log `Stage 5`) | Ledger + onceForProject built; items 6, 8, 10 (removal half), 11 done. **Remaining: items 2, 3, 4, 5, 7, 9 and the paid-in-full email** — see build notes. |
+| 5 — Customer email map | **partial** | (see git log `Stage 5`) | Ledger + onceForProject built; items 6, 8, 10 (removal half), 11 done. **Remaining: items 2, 3, 7, 9, the paid-in-full email and item 4’s 2-day reminder** — see build notes. |
 | 6 — Scheduler, verification, deploy | — | — | |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.

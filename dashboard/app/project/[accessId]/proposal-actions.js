@@ -24,7 +24,7 @@ import { can, ROLE_KEYS } from "../../../lib/roles";
 import { paymentsForViewer } from "../../../lib/customer-portal";
 import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
-import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailPaymentReminder } from "../../../lib/email";
+import { emailProposalReady, emailSignatureRequest, emailPaymentReceived, emailFirstPaymentReceived, emailPaymentReminder } from "../../../lib/email";
 
 const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
@@ -793,6 +793,9 @@ export async function signProposalAction(accessId, name, signatureData) {
   if (!String(name || "").trim()) return { error: "A name is required to sign." };
   const row = signProposal(accessId, name, signatureData);
   if (!row) return { error: "Accept the proposal before signing." };
+  // Stage 5 item 4 — the customer's own signing email, from the OTHER signing path too. It dedupes on
+  // the project, so a document signed here and completed through the PDF flow still sends exactly once.
+  import("../../../lib/email").then(({ emailProposalSigned }) => emailProposalSigned(accessId)).catch(() => {});
   const stage = maybeAutoAdvance(accessId);
   await revalidate(accessId);
   return { ok: true, stage, proposal: sanitizeProposal(row, tok.role) };
@@ -851,7 +854,7 @@ export async function recordPaymentAction(accessId, payment) {
   // A STAFF entry is money in hand (confirmed) → email the customer a "payment recorded" confirmation.
   // A customer submission is still pending until staff confirm it (that email fires in confirmPaymentAction).
   if (!isCustomer) {
-    emailPaymentReceived(accessId, {
+    emailFirstPaymentReceived(accessId, {
       amount: payment.amount, kind: payment.kind, method: payment.method, paidAt: payment.paidAt,
     }).catch(() => {});
   }
@@ -920,7 +923,7 @@ export async function confirmPaymentAction(accessId, id) {
   // Now the money is received → email the customer a "payment recorded" confirmation with the amount.
   const confirmed = (payments || []).find((x) => String(x.id) === String(id));
   if (confirmed) {
-    emailPaymentReceived(accessId, {
+    emailFirstPaymentReceived(accessId, {
       amount: confirmed.amount, kind: confirmed.kind, method: confirmed.method, paidAt: confirmed.paid_at,
     }).catch(() => {});
   }

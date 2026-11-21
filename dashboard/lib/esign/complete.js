@@ -106,6 +106,9 @@ export async function completeSession({ token, accessId, caller, ip = null, ua =
       if (!already) {
         recordSignEvent({ accessId, proposalId: row.id, sessionId: s.id, kind: "admin_notified", actor: "system", detail: { version: row.version } });
         const projectName = project?.business_name || project?.customer || accessId;
+        // Stage 5 item 4 — the CUSTOMER's own email. Separate from the admin alert below and deduped
+        // in its own right, so neither can suppress the other.
+        import("../email.js").then(({ emailProposalSigned }) => emailProposalSigned(accessId)).catch(() => {});
         import("../email.js").then(({ emailContractSigned }) =>
           emailContractSigned(accessId, { signerName: values.name, customerName: project?.contact_name || project?.customer, version: row.version, signedAt: signedRow.signed_at, projectName })
             .then((res) => { try { logProjectEvent(accessId, { kind: "email", label: res?.sent ? `Signed contract — admin notified (${(res.recipients || []).length} recipient${(res.recipients || []).length === 1 ? "" : "s"})` : `Signed contract — admin email not sent (${res?.error || "no recipients"})`, actor: "system" }); } catch { /* log is best-effort */ } })

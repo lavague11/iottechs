@@ -18,13 +18,16 @@ test("lib/email exposes emailPaymentReceived with amount + kind, gated on a posi
   assert.ok(/PAY_KIND_LABEL = \{ deposit: "deposit", final: "final balance", partial: "partial payment", other: "payment" \}/.test(email), "kind labels");
 });
 
+// Stage 5 item 5: the FIRST payment gets a receipt plus "we'll schedule you" and the Phone Setup link;
+// every later one gets the plain receipt. emailFirstPaymentReceived decides which, so both call sites
+// now go through it — the rule that a pending customer submission never emails is unchanged.
 test("proposal-actions fires the email when money is in hand (staff entry + staff confirmation), not on a pending submission", () => {
   assert.ok(actions.includes("emailPaymentReceived") && /import \{ emailProposalReady, emailSignatureRequest, emailPaymentReceived[,} ]/.test(actions), "imported");
   // staff-recorded payment = confirmed → email; guarded so a customer's pending submission does NOT email here
   const rec = actions.slice(actions.indexOf("export async function recordPaymentAction"), actions.indexOf("export async function deletePaymentAction"));
-  assert.ok(/if \(!isCustomer\) \{[\s\S]*emailPaymentReceived\(accessId, \{/.test(rec), "staff entry emails; customer pending does not");
+  assert.ok(/if \(!isCustomer\) \{[\s\S]*emailFirstPaymentReceived\(accessId, \{/.test(rec), "staff entry emails; customer pending does not");
   // staff confirming a customer submission = money received → email with the confirmed payment's amount
   const conf = actions.slice(actions.indexOf("export async function confirmPaymentAction"), actions.indexOf("export async function getPaymentsForLogAction"));
-  assert.ok(conf.includes("confirmProjectPayment(accessId, id)") && conf.includes("emailPaymentReceived(accessId, {"), "confirm path emails");
+  assert.ok(conf.includes("confirmProjectPayment(accessId, id)") && conf.includes("emailFirstPaymentReceived(accessId, {"), "confirm path emails");
   assert.ok(conf.includes("find((x) => String(x.id) === String(id))"), "emails the amount of the payment just confirmed");
 });

@@ -305,7 +305,9 @@ export async function sendCustomerEmail(accessId, content) {
   const c = await customerContact(accessId);
   if (!c || !c.email) return { ok: false, error: "no-customer-email" };
   if (isDemoProject(c.project)) return { skipped: "demo-project" };
-  const ctaUrl = projectLink(accessId, content.open, content.sign);
+  // `content.ctaUrl` wins when a send needs to point somewhere that is not a project view — the Phone
+  // Setup guide, for instance, which `?open=` has no name for (see viewFromParams in lib/customer-portal).
+  const ctaUrl = content.ctaUrl ? `${appUrl()}${content.ctaUrl}` : projectLink(accessId, content.open, content.sign);
   const payload = {
     heading: content.heading,
     intro: content.intro,
@@ -552,6 +554,35 @@ export async function sendOfficeEmail({ subject, heading, lines = [], accessId }
 // never on an unconfirmed customer submission. Amount + kind/method/date; the live balance stays on the
 // portal (we don't recompute it here to avoid drifting from the payment page's math). Never throws.
 const PAY_KIND_LABEL = { deposit: "deposit", final: "final balance", partial: "partial payment", other: "payment" };
+// Stage 5 item 5 — the FIRST payment is a different moment from the ones after it: it is what unlocks
+// scheduling (item 6), so the customer is told that, and handed the Phone Setup link while they wait.
+// Later payments get the plain receipt below. "First" is decided by the ledger, not by counting rows:
+// onceForProject's claim is what makes exactly one payment the first, whatever order the webhooks land in.
+export async function emailFirstPaymentReceived(accessId, payment = {}) {
+  const r = await onceForProject(accessId, "first_payment", async () => {
+    if (!emailEnabled()) return { skipped: "email-disabled" };
+    const amt = Number(payment.amount || 0);
+    if (!(amt > 0)) return { skipped: "no-amount" };
+    const money = "$" + amt.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const att = await receiptPdfAttachment(accessId, payment);
+    return sendCustomerEmail(accessId, {
+      subject: "Payment received — we'll schedule you",
+      heading: "Thank you — payment received",
+      intro: `We've recorded ${money}. Your receipt is attached.`,
+      lines: [
+        "That's everything we need to book your installation — we'll be in touch with a date.",
+        "You can set up the mobile app now so it's ready on the day.",
+      ],
+      ctaLabel: "Set up my phone",
+      ctaUrl: `/guide/mobile-setup?project=${encodeURIComponent(accessId)}`,
+      attachments: att ? [att] : undefined,
+    });
+  });
+  // Already claimed → this is a LATER payment, which gets the plain receipt.
+  if (r?.skipped === "already-sent") return emailPaymentReceived(accessId, payment);
+  return r;
+}
+
 export async function emailPaymentReceived(accessId, { amount, kind, method, paidAt } = {}) {
   try {
     const amt = Number(amount || 0);
@@ -809,6 +840,52 @@ export async function emailWorkOrderRemoved(accessId, { to, name } = {}) {
     };
     return await sendEmail({ to: addr, subject: "You've been removed from a project", html: renderEmail(payload), text: plainText(payload) });
   } catch (e) { console.error(`[email:wo-removed] ${e?.message || e}`); return { ok: false, error: "exception" }; }
+}
+
+// ---- Stage 5 item 4: the customer's own email when they sign --------------------------------------
+// Until now, signing told the OFFICE (emailContractSigned) and said nothing to the person who just
+// signed. Two branches, decided by the canonical money — never by the stage:
+//   something due before work starts → "signed, payment due", with the amount and how to pay
+//   nothing due up front            → "signed, we'll schedule you", with the Phone Setup link
+// Both carry the signed PDF. Deduped per project through onceForProject, so a re-save, a retry or a
+// replayed sweep cannot send it twice; the two branches share one key for the same reason.
+export async function emailProposalSigned(accessId) {
+  return onceForProject(accessId, "proposal_signed", async () => {
+    if (!emailEnabled()) return { skipped: "email-disabled" };
+    const { getProjectFinancialState, amountDueForPayment } = await import("./db.js");
+    let due = 0;
+    try {
+      const fin = getProjectFinancialState(accessId);
+      due = Math.max(0, +fin?.amountDueNow || 0);
+      if (!due) { const d = amountDueForPayment(accessId, "deposit"); due = Math.max(0, +d?.due || 0); }
+    } catch { due = 0; }
+    const att = await signedPdfAttachment(accessId);
+    const attachments = att ? [att] : undefined;
+    const moneyText = "$" + due.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (due > 0.005) {
+      return sendCustomerEmail(accessId, {
+        subject: "Your proposal is signed — payment due",
+        heading: "Your proposal is signed",
+        intro: `Thank you. Your agreement is signed and attached. To get started we need ${moneyText}.`,
+        lines: [
+          `Amount due before we begin: ${moneyText}`,
+          "You can pay online from your project page, or in cash to the office or to your technician on the day.",
+          "We'll schedule your installation as soon as the first payment is in.",
+        ],
+        ctaLabel: "Pay now", open: "payment", attachments,
+      });
+    }
+    return sendCustomerEmail(accessId, {
+      subject: "Your proposal is signed — we'll schedule you",
+      heading: "Your proposal is signed",
+      intro: "Thank you. Your agreement is signed and attached — nothing is due before we begin.",
+      lines: [
+        "We'll be in touch to book your installation date.",
+        "In the meantime you can set up the mobile app so it's ready on the day.",
+      ],
+      ctaLabel: "Set up my phone", ctaUrl: `/guide/mobile-setup?project=${encodeURIComponent(accessId)}`, attachments,
+    });
+  });
 }
 
 // Proposal explicitly sent to the customer (distinct from the stage moving to "proposal").
