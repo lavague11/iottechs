@@ -341,6 +341,34 @@ has the ledger to hang on; items 3 and 9 additionally need the sweep work that S
   submission never emails is untouched.
 - *Not built: the 2-day payment reminder* in item 4, which needs the sweep work Stage 6 covers.
 
+### Stage 6 — Scheduler, verification, deploy
+
+**Item 1, the deploy target — answered, not guessed.** Production is **Hostinger, a persistent Node
+process** (auto-deploying from GitHub; the SQLite file persists via `dbDir()`), **not serverless**. That
+matters because `instrumentation.js` `register()` installs real `setInterval` timers at server start:
+on a serverless host those would die with each invocation and every timed send would silently never
+happen. On a long-lived process they run. **No move to external cron is required.**
+
+Belt and braces is already in place regardless: `/api/cron/*` routes exist for all five sweeps
+(`invoice-emails`, `signature-emails`, `addendum-emails`, `appointment-reminders`, `work-orders`), each
+accepting an admin session **or** a matching `CRON_KEY` header/param and returning 403 otherwise. So an
+external scheduler can drive any sweep without code changes if the boot timers are ever in doubt — set
+`CRON_KEY` in the vault and point the host's cron at the URLs.
+
+After Stage 5 the live sweeps are: addendum approval emails (15 min), signature requests (15 min),
+invoices + reminders (hourly), work-order end-of-day nudges (hourly), and the receivables auto-close
+(6-hourly). The appointment-reminder and sign-off-chase sweeps were removed by Stage 5 items 11 and 8.
+
+**Not done in this run:** item 2 (running one project per plan type locally and capturing the
+`[email:skipped]` lines), item 3's screenshot set, and item 4's report — this document plus the session
+report stand in for the last of those. Item 2 is the real gap and is the first thing to do next: it is
+the only way to prove the *timing* of the new senders rather than their wiring.
+
+**Blocked, and left alone:** probing the live `/api/cron/*` endpoints was refused by this session's
+safety classifier because those routes trigger real sweeps. They are protected and would have returned
+403 unauthenticated, but I did not work around the refusal. Confirming the production cron dashboard
+needs you, or an explicit go-ahead.
+
 ---
 
 ## Progress
@@ -352,7 +380,7 @@ has the ledger to hang on; items 3 and 9 additionally need the sweep work that S
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
 | 5 — Customer email map | **partial** | (see git log `Stage 5`) | Ledger + onceForProject built; items 6, 8, 10 (removal half), 11 done. **Remaining: items 2, 3, 7, 9, the paid-in-full email and item 4’s 2-day reminder** — see build notes. |
-| 6 — Scheduler, verification, deploy | — | — | |
+| 6 — Scheduler, verification, deploy | **partial** | (docs only) | Item 1 answered: Hostinger is a persistent Node process, boot timers run, no cron migration needed; `/api/cron/*` already exists as a fallback. **Items 2 and 3 (per-plan email timing capture + screenshot set) not done.** |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.
 
