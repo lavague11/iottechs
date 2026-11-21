@@ -250,7 +250,9 @@ async function receiptPdfAttachment(accessId, { amount, kind, method, paidAt } =
 async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) {
   try {
     const { getJobByAccessId, getToolData } = await import("./db.js");
-    const { buildAddendumPdfBytes } = await import("./addendum-pdf.js");
+    // Stage 2 item 2 — the change order is rendered through the PROPOSAL's renderer so the two documents
+    // share one design. lib/addendum-pdf.js (the old standalone change-order layout) is kept for rollback.
+    const { buildAddendumProposalPdf } = await import("./addendum-source.js");
     const { addendumLabel } = await import("./addendum-display.js");
     let add = null, addIdx = -1;
     try {
@@ -260,7 +262,7 @@ async function addendumPdfAttachment(accessId, addendumId, { newBalance } = {}) 
     } catch { /* no add-on */ }
     if (!add) return null;
     const p = getJobByAccessId(accessId);
-    const bytes = buildAddendumPdfBytes({ customerName: customerLabelOf(p), projectId: accessId }, add, { newBalance });
+    const { bytes } = buildAddendumProposalPdf(add, { customerName: customerLabelOf(p), projectId: accessId, project: p });
     // The A-number is part of the name (B4): without it a second change order on the same project
     // arrives with a filename identical to the first, and the customer's download folder silently
     // renames or overwrites it. It also matches the "A2" they see in the portal.
@@ -660,6 +662,64 @@ export async function emailContractSigned(accessId, { signerName = null, custome
     return { ok: true, sent, recipients, results };
   } catch (e) {
     console.error(`[email:contract-signed] ${e?.message || e}`);
+    return { ok: false, error: "exception" };
+  }
+}
+
+// A signed CHANGE ORDER, to the admins + Maya, with the signed document attached — the same alert a
+// signed proposal raises (emailContractSigned), because an add-on is a contractual amendment and the
+// office needs the same paper trail. Customer-facing copy is NOT sent here: the customer already has the
+// change order from the approval email. Never throws into the caller; silent for demo/test projects.
+export async function emailAddendumSigned(accessId, addendumId) {
+  if (!emailEnabled()) return { skipped: "email-disabled" };
+  try {
+    const { getJobByAccessId, getToolData, getProjectFinancialState } = await import("./db.js");
+    const { addendumTotals } = await import("./proposal.js");
+    const { addendumLabel } = await import("./addendum-display.js");
+    const { buildAddendumProposalPdf } = await import("./addendum-source.js");
+    const project = getJobByAccessId(accessId);
+    if (!project) return { skipped: "no-project" };
+    if (isDemoProject(project)) return { skipped: "demo-project" };
+    let list = [];
+    try { list = JSON.parse(getToolData(accessId, "addendum")?.data || "{}").addendums || []; } catch { list = []; }
+    const idx = list.findIndex((a) => a && a.id === addendumId);
+    const add = idx >= 0 ? list[idx] : null;
+    if (!add) return { skipped: "no-addendum" };
+    const recipients = [...new Set([...(await adminNotifyRecipients()), MAYA_EMAIL].filter((e) => e && e.includes("@")))];
+    if (!recipients.length) return { ok: false, error: "no-admin-recipient" };
+    const money = "$" + (+addendumTotals(add).total || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const pname = project.business_name || project.customer || accessId;
+    let balance = null;
+    try { const fin = getProjectFinancialState(accessId); if (fin && fin.balance != null) balance = "$" + (+fin.balance).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); } catch { /* best-effort */ }
+    let when = null;
+    try { when = add.signedAt ? new Date(String(add.signedAt).replace(" ", "T")).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : null; } catch { when = add.signedAt || null; }
+    let attachments;
+    try {
+      const { bytes } = buildAddendumProposalPdf(add, { customerName: customerLabelOf(project), projectId: accessId, project });
+      attachments = [{ filename: attachmentName("Change Order", { customer: customerLabelOf(project), docNo: `${accessId} - ${addendumLabel(idx)}` }),
+        content: Buffer.from(bytes).toString("base64"), content_type: "application/pdf" }];
+    } catch (e) { console.error(`[email:addendum-signed-pdf] ${e?.message || e}`); }
+    const base = appUrl();
+    const payload = {
+      heading: "Change Order Signed",
+      intro: `${add.signedName || "The customer"} has signed a change order on ${pname} — ${money}.`,
+      lines: [
+        `Project: ${pname} (${accessId})`,
+        `Document: ${add.title || "Job-site add-on"} · ${addendumLabel(idx)}`,
+        `Amount: ${money}`,
+        balance ? `Balance after this change order: ${balance}` : null,
+        when ? `Signed: ${when}` : null,
+      ].filter(Boolean),
+      ctaLabel: base ? "Open Project" : null,
+      ctaUrl: base ? `${base}/project/${encodeURIComponent(accessId)}` : null,
+      footNote: "The signed change order is attached and saved to the project. IOT TECHS — Automated Notification.",
+    };
+    const subject = `${add.signedName || "Customer"} signed a change order — ${money}`;
+    const results = [];
+    for (const to of recipients) results.push(await sendEmail({ to, subject, html: renderEmail(payload), text: plainText(payload), attachments }));
+    return { ok: true, sent: results.some((r) => r && (r.ok || r.id || r.skipped)), recipients };
+  } catch (e) {
+    console.error(`[email:addendum-signed] ${e?.message || e}`);
     return { ok: false, error: "exception" };
   }
 }

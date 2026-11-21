@@ -598,6 +598,11 @@ export async function signAddendumAction(accessId, addendumId, sign) {
   const total = addendumTotals(a).total;
   logProjectEvent(accessId, { kind: "sign", label: `Add-on ${wasResign ? "re-signed" : "approved"} · ${a.title || "Job-site add-on"} — $${total.toFixed(2)}`, money: true, actor: name });
   try { notifyRoles(["admin", "manager"], { type: "signature", title: `Add-on ${wasResign ? "re-signed" : "signed"}`, body: `${name} signed "${a.title || "Job-site add-on"}" (${accessId}) — $${total.toFixed(2)}.`, link: `/project/${accessId}` }); } catch {}
+  // Stage 2 item 2 — the signed copy and the alert to admins + Maya, the same paper trail a signed
+  // proposal raises. Fire-and-forget: a slow or failed email must never reverse a completed signature.
+  import("../../../lib/email").then(({ emailAddendumSigned }) => emailAddendumSigned(accessId, addendumId)
+    .then((r) => { try { logProjectEvent(accessId, { kind: "email", label: r?.sent ? `Signed change order — admins notified (${(r.recipients || []).length})` : `Signed change order — admin email not sent (${r?.skipped || r?.error || "no recipients"})`, actor: "system" }); } catch { /* log is best-effort */ } })
+  ).catch(() => {});
   await revalidate(accessId);
   return { ok: true, addendums: list };
 }

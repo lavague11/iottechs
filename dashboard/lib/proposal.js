@@ -1090,13 +1090,16 @@ export function addendumFingerprint(a) {
 // The add-on's OWN PCP credit in dollars, or 0 when it carries none. Like tax, it exists only when someone
 // set it on THIS add-on — it is never inherited from the proposal, whose credit was already taken off the
 // proposal total. `pcpCredit` takes the proposal's {type:'pct'|'flat', value} shape; a bare number is flat.
-// The percentage applies to the add-on's discounted net, mirroring how the proposal applies its own.
+//
+// A percentage applies to the SUBTOTAL, which is what optionTotals does (`amountOf(pcpCredit, sub)`) — not
+// to the discounted net. The two have to agree exactly: optionTotals is what the change-order PDF prints
+// and this is what the app charges, so a different base would put a different number on the document the
+// customer signs. Caught by tests/addendum-source.test.mjs, which holds the two formulas together.
 export function addendumPcpAmount(a) {
   const v = a?.pcpCredit;
   if (v == null || v === "") return 0;
   const sub = r2((a?.items || []).reduce((s, it) => s + (+it?.qty || 0) * (+it?.price || 0), 0));
-  const net = Math.max(0, r2(sub - r2(+a?.discount || 0)));
-  if (v && typeof v === "object") return r2(v.type === "pct" ? net * (+v.value || 0) / 100 : Math.max(0, +v.value || 0));
+  if (v && typeof v === "object") return r2(v.type === "pct" ? sub * (+v.value || 0) / 100 : Math.max(0, +v.value || 0));
   return r2(Math.max(0, +v || 0));
 }
 // THE add-on money formula (one definition: db.getApprovedAddons / getPendingAddons, the add-on card and the

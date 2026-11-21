@@ -161,6 +161,36 @@ Owning code: `lib/proposal.js` (addendumTotals, addendumFingerprint, addendumSig
 6. **Role guard.** `reconcileAddendumWrite` resets `discount`/`taxRate` to stored values for a non-pricing
    role; `pcpCredit` was added to that same reset, so a technician cannot set a credit.
 
+7. **Item 2, the PDF.** There were two renderers: `lib/proposal-pdf.js` (page-aware, measured sections)
+   and `lib/addendum-pdf.js` (a standalone change-order layout). "Same design as the proposal PDF" is only
+   true if there is one renderer, so `lib/addendum-source.js` shapes an add-on into the proposal payload
+   the real renderer already speaks — exactly as `lib/esign/proposal-source.js` does for a proposal — and
+   the header band reads CHANGE ORDER via a `__docLabel` override. The old renderer stays in the tree for
+   rollback. `lib/doc-filename.js` is still the only place the file is named (`__docType: DOC.ADDENDUM`).
+
+   **This caught a real money bug before it shipped.** `optionTotals` (what the PDF prints) applies a
+   percentage PCP credit to the **subtotal**; the `addendumPcpAmount` I had just written applied it to the
+   **discounted net**. On a $950 add-on with a $100 discount and a 5% credit the two differed by $5.45 —
+   the signed document would have shown a different number from the one charged. The add-on now follows
+   `optionTotals` exactly, and `addendumPdfTotals()` exists so a test holds the two formulas together over
+   a range of records (`tests/addendum-source.test.mjs`).
+
+8. **Item 2, the signature flow — PARTIAL, and deliberately so.** What now exists: the signature request
+   email (`emailAddendumApproval`), a customer signature bound to the add-on's fingerprint, an in-app
+   alert, and — new — `emailAddendumSigned`, which sends the signed change order to the configured admins
+   **and Maya** with the document attached, mirroring `emailContractSigned`. Signing is fire-and-forget
+   after the write, so a failed email can never reverse a completed signature.
+
+   What is NOT done: **PDF-first signing on the parallel store.** A proposal customer signs the actual
+   stored PDF bytes (`lib/esign/`), which an add-on does not. `lib/addendum-schema.js` records why: a
+   second document kind in `sign_documents` would mean rebuilding the table holding signed contractual
+   PDFs, which the owner's instruction forbids, so a parallel store (`addendum_sign_documents`,
+   `addendum_sign_sessions`, `addendum_versions`) was created and left **write-only — nothing reads it**,
+   pending an owner decision. That decision is now given, but wiring it is the full e-sign subsystem again
+   (unsigned source → immutable store → session token → flatten → certificate → serve gate → signer UI),
+   and shipping half of a contractual signing path is worse than shipping none. **Flagged as the next
+   piece of Stage 2.**
+
 ---
 
 ## Progress
@@ -168,12 +198,14 @@ Owning code: `lib/proposal.js` (addendumTotals, addendumFingerprint, addendumSig
 | Stage | State | Commit | Notes |
 |---|---|---|---|
 | 1 — Payment plan UI | **done** | (see git log `stage 1`) | Verified live: settings row under Tax, 50/50 · 100 · Custom, breakdown under TOTAL, Custom with when-dropdown + biweekly spacing, cents exact. |
-| 2 — Addendums | next | — | |
+| 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | — | — | |
 | 4 — Work order as a signed document | — | — | |
 | 5 — Customer email map | — | — | |
 | 6 — Scheduler, verification, deploy | — | — | |
 
-**Resume point:** Stage 2. Owning code to read first: `lib/addendum-items.js`, `lib/addendum-pdf.js`,
+**Resume point:** Stage 2 item 2 (PDF-first addendum signing), then Stage 3.
+
+_Old resume note:_ Owning code to read first: `lib/addendum-items.js`, `lib/addendum-pdf.js`,
 `lib/addendum-schema.js`, `lib/addendum-display.js`, `app/project/[accessId]/install-addendum.jsx`,
 `app/api/addendum/route.js`, and `lib/esign/` (the proposal signing path Stage 2 item 2 must reuse).

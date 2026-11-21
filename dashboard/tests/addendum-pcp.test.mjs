@@ -30,10 +30,13 @@ test("a credit comes off the net, before tax, like the proposal's own", () => {
   assert.equal(t.total, 911.64);
 });
 
-test("a discount is taken first, then the percentage credit", () => {
+test("a percentage credit is of the SUBTOTAL, the same base optionTotals uses", () => {
+  // Not the discounted net. optionTotals computes `amountOf(pcpCredit, sub)`, and that function is what
+  // the change-order PDF prints — a different base here would print a different total from the one
+  // charged. tests/addendum-source.test.mjs is what holds the two together.
   const t = addendumTotals({ ...base, discount: 150, pcpCredit: { type: "pct", value: 10 } });
-  assert.equal(t.pcpCredit, 80, "10% of 800, not of 950");
-  assert.equal(t.total, 720);
+  assert.equal(t.pcpCredit, 95, "10% of 950, not of 800");
+  assert.equal(t.total, 705);
 });
 
 test("a flat credit, and a bare number, both work", () => {

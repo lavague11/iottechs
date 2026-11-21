@@ -43,15 +43,20 @@ test("signed-contract alert → admin + Maya, with the amount and the signed PDF
 test("receipt + add-on PDFs are generated server-side and attached", async () => {
   assert.ok(email.includes("async function receiptPdfAttachment") && email.includes("buildReceiptPdfBytes"), "receipt attachment builder");
   assert.ok(email.includes("const att = await receiptPdfAttachment(accessId, { amount: amt, kind, method, paidAt })"), "payment-received email attaches the receipt");
-  assert.ok(email.includes("async function addendumPdfAttachment") && email.includes("buildAddendumPdfBytes"), "add-on attachment builder");
+  // Stage 2 item 2: the change order is rendered through the PROPOSAL renderer (lib/addendum-source.js)
+  // so both documents share one design. The old standalone layout stays in the tree for rollback.
+  assert.ok(email.includes("async function addendumPdfAttachment") && email.includes("buildAddendumProposalPdf"), "add-on attachment builder");
   assert.ok(email.includes("const att = await addendumPdfAttachment(accessId, addendumId, { newBalance })"), "add-on approval email attaches the change order");
   // The generators are plain jsPDF (no extensionless imports) — exercise them for real.
   const { buildReceiptPdfBytes } = await import("../lib/receipt-pdf.js");
-  const { buildAddendumPdfBytes } = await import("../lib/addendum-pdf.js");
+  const { buildAddendumProposalPdf, addendumPdfTotals } = await import("../lib/addendum-source.js");
   const rcpt = buildReceiptPdfBytes({ customerName: "Test Co", projectId: "ASC0001" }, { amount: 500, kind: "deposit", method: "Zelle", paidAt: "2026-11-06", balanceAfter: 1900, total: 2400 });
   assert.ok(Buffer.isBuffer(rcpt) && rcpt.slice(0, 5).toString() === "%PDF-" && rcpt.length > 1000, "receipt is a real PDF");
-  const adn = buildAddendumPdfBytes({ customerName: "Test Co", projectId: "ASC0001" }, { title: "Add-on", at: "2026-11-06", items: [{ name: "camera", qty: 2, price: 300, techPay: 120 }], discount: 0 }, { newBalance: 2500 });
+  const add = { title: "Add-on", at: "2026-11-06", items: [{ id: "i1", name: "camera", qty: 2, price: 300, techPay: 120, service: "camera" }], discount: 0 };
+  const { bytes: adn, fileName } = buildAddendumProposalPdf(add, { customerName: "Test Co", projectId: "ASC0001" });
   assert.ok(Buffer.isBuffer(adn) && adn.slice(0, 5).toString() === "%PDF-" && adn.length > 1000, "change order is a real PDF (customer prices only — payout never rendered)");
+  assert.match(fileName, /Addendum/, "and it is named as an addendum, via lib/doc-filename.js");
+  assert.ok(addendumPdfTotals(add).agree, "what the PDF prints is what the app charges");
 });
 
 test("the other customer sends (review, add-on, ADT, appointment) also BCC the office", () => {

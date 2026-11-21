@@ -128,7 +128,7 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // items, totals, payment terms and acceptance — only the level of detail differs.
   const mode = meta.mode === "detailed" ? "detailed" : "standard";
   const detailed = mode === "detailed";
-  if (meta.__trace) meta.__docLabel = detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL";   // header chrome is not traced
+  if (meta.__trace && !meta.__docLabel) meta.__docLabel = detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL";   // header chrome is not traced
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
 
   const W = 612, H = 792;
@@ -232,7 +232,9 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
     doc.text("Assigned Contractor: LA VAGUE INC", 61.2, 90.72);
 
     doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...GOLD);
-    const docLabel = detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL";
+    // The instrument this document IS. A caller may override it — lib/addendum-source.js renders a change
+    // order through this same renderer, so the design is shared and only the band reads differently.
+    const docLabel = meta.__docLabel || (detailed ? "DETAILED PROPOSAL" : "SYSTEM PROPOSAL");
     doc.text(docLabel, W - 28.8, 37.44, { align: "right" });
     doc.setDrawColor(...GOLD); doc.setLineWidth(0.5);
     doc.line(W - 28.8 - doc.getTextWidth(docLabel), 41.04, W - 28.8, 41.04);
@@ -1032,8 +1034,10 @@ export function downloadProposalPdf(p, meta = {}, attachments = {}) {
   // The service word flips to "Low Voltage Systems" when the priced proposal spans several services.
   const svcKeys = [...new Set(renderOptions.flatMap((o) => (o.services || []).filter((s) => (s.items || []).length).map((s) => s.key)))];
   const fb = meta.fileBase || { identity: customerName || "Client", service: svcKeys.length === 1 ? ({ camera: "CCTV", sound: "Sound System", toast: "Toast POS", alarm: "Alarm System", access: "Access Control", wiring: "Low Voltage Wiring" })[svcKeys[0]] || "Custom System" : MULTI_SERVICE_LABEL, last4: meta.projectId ? String(meta.projectId).slice(-4) : "0000" };
+  // `__docType` lets a caller rendering a different instrument through this renderer name the file as
+  // that instrument — lib/doc-filename.js stays the one place a download is named (see CLAUDE.md).
   const fileName = documentFilename(svcKeys.length > 1 ? { ...fb, service: MULTI_SERVICE_LABEL } : fb,
-    { type: detailed ? DOC.DETAILED_PROPOSAL : DOC.PROPOSAL, revision: p.version || 1, draft: p.status === "draft" });
+    { type: meta.__docType || (detailed ? DOC.DETAILED_PROPOSAL : DOC.PROPOSAL), revision: p.version || 1, draft: p.status === "draft" });
   if (meta.__return) { doc.__fileName = fileName; return doc; }
   doc.save(fileName);
 }
