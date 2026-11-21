@@ -3,7 +3,7 @@
 // never overwrite an intentional override.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../lib/proposal-bulk.js";
+import { bulkSubMatches, bulkItemMatches, applyBulkSub, applyBulkTargets, subKey, numEq } from "../lib/proposal-bulk.js";
 
 // A camera block with one "Camera Mounting" sub at a given price (ids are deterministic for assertions).
 let n = 0;
@@ -107,4 +107,52 @@ test("legacy sub-items without baseName still match by display name", () => {
   const edited = blocks[0].sub[1]; edited.price = 25;
   const matches = bulkSubMatches(p, { optionId: "A", serviceKey: "camera", matchKey: "camera mounting", field: "price", oldValue: 20, excludeSubId: edited.id });
   assert.equal(matches.length, 1, "the other $20 (name-matched); the $35 preserved");
+});
+
+// ── Top-level LINE ITEMS ───────────────────────────────────────────────────────────────────────────
+// The work order's shape: a service holding many identical payable lines ("JBL Speaker Upgrade" ×8), each
+// with its own payout. Same rule as sub-items, one level up — plus "a container line is never a target".
+const line = (name, techPrice, id) => ({ id, name, qty: 1, techPrice });
+const woPayload = (items, opt = "A", key = "sound") => ({ options: [{ id: opt, services: [{ key, items }] }] });
+const payoutOf = (p, id) => p.options[0].services[0].items.find((i) => i.id === id)?.techPrice;
+
+test("line items — 8 identical payouts @ 0; set one to 20 → offers the other 7, updating all makes 8", () => {
+  const items = Array.from({ length: 8 }, (_, i) => line("JBL Speaker Upgrade", 0, `L${i}`));
+  items.push(line("Overnight Shipping", 0, "SHIP"));     // a different line, same old value → never matched
+  const p = woPayload(items);
+  items[0].techPrice = 20;                                // the single edit already applied
+  const others = bulkItemMatches(p, { optionId: "A", serviceKey: "sound", matchKey: "jbl speaker upgrade", field: "techPrice", oldValue: 0, excludeItemId: "L0" });
+  assert.equal(others.length, 7, "the 7 other speaker lines, not the shipping line");
+  assert.ok(!others.some((t) => t.itemId === "SHIP"), "a differently-named line is never swept in");
+  const next = applyBulkTargets(p, [...others, { optionId: "A", itemId: "L0" }], "techPrice", 20);
+  for (let i = 0; i < 8; i++) assert.equal(payoutOf(next, `L${i}`), 20, `L${i} is 20`);
+  assert.equal(payoutOf(next, "SHIP"), 0, "shipping untouched");
+});
+
+test("line items — an intentional override keeps its value; a container line is never a target", () => {
+  const items = [
+    line("JBL Speaker Upgrade", 0, "L0"),
+    line("JBL Speaker Upgrade", 0, "L1"),
+    line("JBL Speaker Upgrade", 35, "L2"),               // deliberately priced differently
+    { id: "AMP", name: "JBL Speaker Upgrade", qty: 1, techPrice: 0, sub: [{ id: "s1", name: "Driver", qty: 1, techPrice: 0 }] },
+  ];
+  const p = woPayload(items);
+  items[0].techPrice = 20;
+  const others = bulkItemMatches(p, { optionId: "A", serviceKey: "sound", matchKey: "jbl speaker upgrade", field: "techPrice", oldValue: 0, excludeItemId: "L0" });
+  assert.deepEqual(others.map((t) => t.itemId), ["L1"], "only the still-old atomic line");
+  const next = applyBulkTargets(p, [...others, { optionId: "A", itemId: "L0" }], "techPrice", 20);
+  assert.equal(payoutOf(next, "L2"), 35, "the override survives");
+  assert.equal(payoutOf(next, "AMP"), 0, "a line with sub-items is never written — its figure is a sum");
+});
+
+test("applyBulkTargets drives BOTH levels and is immutable", () => {
+  const p = { options: [{ id: "A", services: [{ key: "sound", items: [
+    { id: "I1", name: "Amp", qty: 1, techPrice: 0, sub: [{ id: "S1", name: "Mount", qty: 1, techPrice: 0 }] },
+    { id: "I2", name: "Amp", qty: 1, techPrice: 0 },
+  ] }] }] };
+  const next = applyBulkTargets(p, [{ optionId: "A", itemId: "I1", subId: "S1" }, { optionId: "A", itemId: "I2" }], "techPrice", 15);
+  assert.equal(next.options[0].services[0].items[0].sub[0].techPrice, 15, "the sub target");
+  assert.equal(next.options[0].services[0].items[1].techPrice, 15, "the item target");
+  assert.equal(next.options[0].services[0].items[0].techPrice, 0, "the container itself is untouched");
+  assert.equal(p.options[0].services[0].items[1].techPrice, 0, "the original payload is unchanged");
 });

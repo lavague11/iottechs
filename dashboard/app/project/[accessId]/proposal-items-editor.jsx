@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { PROPOSAL_CATALOG, newItemId, svcSubtotal, itemTotal, techItemTotal, priceOf, displayNameOf, serviceColor, effectiveCatalog, allCatalogEntries, loadPriceBook, presetsForService, makePresetBlock, lineRole, infraKindOf, nvrSummary, dispSummary, itemTypeOf, ensureNvrSetup, WAIVER_CAUSES, waiverCausesOf, hasWaiverCause, withWaiverCause, isWaived } from "../../../lib/proposal";
 import { skipOutsideClose } from "../../../lib/outside-click";
 import ItemNameField from "./item-name-field";
-import { bulkSubMatches, applyBulkSub, subKey, numEq } from "../../../lib/proposal-bulk";
+import { bulkSubMatches, bulkItemMatches, applyBulkTargets, subKey, numEq } from "../../../lib/proposal-bulk";
 import { LINE_CONDITIONS, LINE_CONDITION, lineConditions, loadConditions, conditionMap, exclusiveWith, conditionWaiveCause } from "../../../lib/proposal-terms";
 
 
@@ -456,13 +456,20 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
   const strikeWaived = !payout;                         // retail comps a waived line; payout does not
   const amtOf = (it) => (+it?.[AMT] || 0);
   const setAmt = (v) => ({ [AMT]: v });
+  // A money field still showing "0" puts the caret AFTER that zero, so typing 20 reads "020". The stored
+  // number was always right (+"020" === 20) but the field looked wrong and read as a typo. Rewrite the raw
+  // text the moment it happens — focus also selects the field, so the common case replaces the 0 outright.
+  const noLeadZero = (e) => { const v = e.target.value; if (/^-?0[0-9]/.test(v)) e.target.value = String(+v); };
   const flags = customerFlags || {};
   const reqFlags = requestFlags || {};
-  // Smart bulk-update: when a repeated SUB-ITEM value (price/qty) is committed, offer to propagate it to the
-  // other matching sub-items that still hold the OLD value. `preEdit` snapshots the value at focus so we can
-  // tell what changed; `bulkPrompt` drives the anchored confirm. Both reset when the prompt closes.
-  const preEdit = useRef({});                 // { [subId_field]: oldValue } captured onFocus
-  const [bulkPrompt, setBulkPrompt] = useState(null);  // { parentId, subId, field, name, oldValue, newValue, cur:[], all:[] }
+  // Smart bulk-update: when a repeated value (price/payout/qty) is committed, offer to propagate it to the
+  // other matching lines that still hold the OLD value. It works at BOTH levels — a repeated SUB-ITEM
+  // (a camera block's "Camera Mounting") and a repeated top-level LINE ITEM (a work order's eight
+  // "JBL Speaker Upgrade" rows), which is the shape payout editing actually produces. `preEdit` snapshots
+  // the value at focus so we can tell what changed; `bulkPrompt` drives the anchored confirm.
+  const preEdit = useRef({});                 // { [id_field]: oldValue } captured onFocus
+  // { level:"sub"|"item", parentId?, subId?, itemId, field, name, oldValue, newValue, cur:[], all:[] }
+  const [bulkPrompt, setBulkPrompt] = useState(null);
   const [waiveBatchOpen, setWaiveBatchOpen] = useState(false);  // the service's "Waive Items…" batch manager
   // Optional customer descriptions are progressive-disclosure: hidden until "+ Description" is clicked (or the
   // item already has one). descOpen = ids whose editor is open; emptying the field just clears it (no confirm).
@@ -486,16 +493,38 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const cur = bulkSubMatches(payload, { ...args, optionId: activeOptId, allOptions: false });
     if (!cur.length) return;                               // unique → save normally, no prompt (#12)
     const all = optionCount > 1 ? bulkSubMatches(payload, { ...args, allOptions: true }) : cur;
-    setBulkPrompt({ parentId: parent.id, subId: sub.id, field, matchKey, name: sub.name || "item", oldValue, newValue, cur, all });
+    setBulkPrompt({ level: "sub", parentId: parent.id, subId: sub.id, itemId: parent.id, field, matchKey, name: sub.name || "item", oldValue, newValue, cur, all });
+  }
+  // The same, one level up: a committed edit on a top-level LINE ITEM's amount. This is the case the work
+  // order produces — eight identical payout rows where typing one figure should offer to fill the rest.
+  // A line with sub-items never reaches here: its amount is the children's sum, not an input.
+  function maybeBulkItem(it, field) {
+    if (readOnly || !payload || !onBulkApply) return;
+    const k = `${it.id}_${field}`;
+    const oldValue = preEdit.current[k];
+    delete preEdit.current[k];
+    if (oldValue == null) return;
+    if (numEq(oldValue, it[field])) return;                // nothing really changed
+    const matchKey = subKey(it);
+    const args = { serviceKey: svc.key, matchKey, field, oldValue, excludeItemId: it.id };
+    const cur = bulkItemMatches(payload, { ...args, optionId: activeOptId, allOptions: false });
+    if (!cur.length) return;                               // unique → save normally, no prompt
+    const all = optionCount > 1 ? bulkItemMatches(payload, { ...args, allOptions: true }) : cur;
+    setBulkPrompt({ level: "item", itemId: it.id, field, matchKey, name: it.name || "item", oldValue, newValue: it[field], cur, all });
   }
   // Apply the propagation at the chosen scope. Matches are RE-COMPUTED against the live payload (conflict
-  // safety: only sub-items that STILL hold the old value are updated — anything changed since the prompt opened
-  // is left alone). Reports the undo set (others + the edited sub) so the whole thing reverses atomically.
+  // safety: only lines that STILL hold the old value are updated — anything changed since the prompt opened
+  // is left alone). Reports the undo set (others + the line you edited) so the whole thing reverses atomically.
   function applyBulk(scope) {
     const b = bulkPrompt; if (!b) return;
-    const others = bulkSubMatches(payload, { serviceKey: svc.key, matchKey: b.matchKey, field: b.field, oldValue: b.oldValue, excludeSubId: b.subId, optionId: activeOptId, allOptions: scope === "all" });
-    const edited = { optionId: activeOptId, itemId: b.parentId, subId: b.subId };
-    const next = applyBulkSub(payload, others, b.field, b.newValue);
+    const common = { serviceKey: svc.key, matchKey: b.matchKey, field: b.field, oldValue: b.oldValue, optionId: activeOptId, allOptions: scope === "all" };
+    const others = b.level === "item"
+      ? bulkItemMatches(payload, { ...common, excludeItemId: b.itemId })
+      : bulkSubMatches(payload, { ...common, excludeSubId: b.subId });
+    const edited = b.level === "item"
+      ? { optionId: activeOptId, itemId: b.itemId }
+      : { optionId: activeOptId, itemId: b.parentId, subId: b.subId };
+    const next = applyBulkTargets(payload, others, b.field, b.newValue);
     onBulkApply(next, { field: b.field, name: b.name, oldValue: b.oldValue, newValue: b.newValue,
       count: others.length + 1, undoTargets: [...others, edited] });
     setBulkPrompt(null);
@@ -983,7 +1012,8 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
     const writeCamName = () => { if (svc.key === "camera" && it.camera_id && onCameraRename) onCameraRename(it.camera_id, it.name); };  // survey write-back on rename
     return (
     <div key={it.id} className={`prop-item${gridClass}${parent ? " sub" : ""}${hasSub ? " prop-parent" : ""}${parent && subIdx % 2 ? " alt" : ""}`}
-         style={parent && bulkPrompt?.subId === it.id ? { position: "relative", zIndex: 5 } : undefined}
+         style={(parent ? bulkPrompt?.level === "sub" && bulkPrompt.subId === it.id : bulkPrompt?.level === "item" && bulkPrompt.itemId === it.id)
+           ? { position: "relative", zIndex: 5 } : undefined}
          /* Right-click (desktop) / long-press (mobile) a line → the SAME ••• action menu; suppress the
             browser's native context menu on a non-editing line. */
          onContextMenu={!readOnly ? (e) => { if (e.target.closest("input,textarea,select")) return; e.preventDefault(); setMenuOpen((m) => (m === it.id ? m : it.id)); } : undefined}
@@ -1093,7 +1123,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
       ) : hidePrices ? <span className="prop-line-total" /> : (
         <input className="num prop-line-amt" type="number" step="0.01" value={(+it.qty || 0) * amtOf(it)} disabled={readOnly}
                title={amtTitle} aria-label={amtTitle}
-               onChange={(e) => { const total = +e.target.value || 0; const q = +it.qty || 1; patchItem(it.id, setAmt(q ? total / q : total)); }} />
+               onFocus={(e) => { preEdit.current[`${it.id}_${AMT}`] = it[AMT]; e.currentTarget.select(); }}
+               onBlur={() => maybeBulkItem(it, AMT)}
+               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }}
+               onChange={(e) => { noLeadZero(e); const total = +e.target.value || 0; const q = +it.qty || 1; patchItem(it.id, setAmt(q ? total / q : total)); }} />
       )}
       {!readOnly ? (
         <div className="prop-im-wrap">
@@ -1157,7 +1190,10 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
           </div>
         ) : null;
       })()}
-      {parent && bulkPrompt?.subId === it.id && (
+      {parent && bulkPrompt?.level === "sub" && bulkPrompt.subId === it.id && (
+        <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
+      )}
+      {!parent && bulkPrompt?.level === "item" && bulkPrompt.itemId === it.id && (
         <BulkPrompt b={bulkPrompt} optionCount={optionCount} onApply={applyBulk} onClose={() => setBulkPrompt(null)} />
       )}
     </div>
@@ -1224,7 +1260,7 @@ export default function ProposalItemsEditor({ svc, showCost, readOnly, onChange,
               <input className="num prop-sub2-amt prop-sub2-amt-edit" type="number" step="0.01" value={amount} disabled={readOnly} title={amtTitle} aria-label={amtTitle}
                 onFocus={(e) => { preEdit.current[`${x.id}_${AMT}`] = x[AMT]; e.currentTarget.select(); }} onBlur={() => maybeBulk(parent, x, AMT)}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); setSubEditId(null); } }}
-                onChange={(e) => { const total = +e.target.value || 0; patchSub(parent.id, x.id, setAmt(q ? total / q : total)); }} />
+                onChange={(e) => { noLeadZero(e); const total = +e.target.value || 0; patchSub(parent.id, x.id, setAmt(q ? total / q : total)); }} />
             )}
             {showCost && <input className="num prop-sub2-cost" type="number" min="0" step="0.01" value={x.cost ?? 0} title="Internal cost — never shown to sales or customers"
               onChange={(e) => patchSub(parent.id, x.id, { cost: e.target.value })} />}

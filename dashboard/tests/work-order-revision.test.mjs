@@ -208,7 +208,11 @@ test("requirement 11: the work order SHOWS the install appointment and never boo
   assert.ok(editor.includes('getToolDataAction(accessId, "schedule")'), "read from the one scheduler's blob");
   assert.ok(!/SchedulingWidget/.test(editor), "the work order does not mount a second scheduler");
   assert.ok(editor.includes("function pickInstall"), "nearest upcoming install event");
-  assert.ok(gateway.includes('id="wo-install-scheduler"'), "the Schedule button jumps to the existing scheduler");
+  // Schedule opens the app's ONE scheduling dialog. It used to scroll to a SchedulingWidget parked at the
+  // bottom of the same overlay; that form is gone, so assert the dialog — the requirement (reuse the one
+  // scheduler, never mount a second) is what matters, not which of the two ways it was reached.
+  assert.ok(/onSchedule=\{\(\) => openSchedule\("install"\)\}/.test(gateway), "the Schedule button opens the one scheduling dialog");
+  assert.ok(!gateway.includes('id="wo-install-scheduler"'), "the inline work-order scheduler form is gone");
   // Assigned techs are auto-invited by that scheduler already, from the assignments it is handed.
   const sched = read("../app/project/[accessId]/scheduling-widget.jsx");
   assert.ok(/assignments\.forEach\(a => \{ const nm = \(a\.user_name \|\| a\.user_email \|\| ""\)\.trim\(\); if \(nm\) autoSet\.add\(nm\); \}\)/.test(sched), "assigned people are auto-invited");

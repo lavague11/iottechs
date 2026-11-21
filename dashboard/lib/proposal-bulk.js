@@ -16,9 +16,10 @@ export function numEq(a, b) {
   return n(a) === n(b);
 }
 
-// Canonical identity for a sub-item: its stable baseName if present, else its (trimmed, lowercased) display
+// Canonical identity for a line: its stable baseName if present, else its (trimmed, lowercased) display
 // name. Matching on this — never on raw display text alone — keeps unrelated items with a similar name apart
-// once they carry baseName, while still working for legacy sub-items that only have a name.
+// once they carry baseName, while still working for legacy sub-items that only have a name. Used at BOTH
+// levels (sub-items and top-level items), which is why the shape it reads is just {baseName?, name}.
 export function subKey(sub) {
   return String(sub?.baseName || sub?.name || "").trim().toLowerCase();
 }
@@ -52,23 +53,57 @@ export function bulkSubMatches(payload, { optionId, serviceKey, matchKey, field,
   return out;
 }
 
-// Apply `field = value` to exactly the targeted sub-items (by {optionId,itemId,subId}). Returns a NEW payload;
-// everything else is untouched. Used for both the bulk apply (→ newValue) and its undo (→ oldValue), so the
-// whole operation reverses atomically with the same primitive.
-export function applyBulkSub(payload, targets, field, value) {
+// The same rule one level up: the OTHER top-level LINE ITEMS the edit should offer to update. A work order's
+// repeated lines ("JBL Speaker Upgrade" ×8) are items, not sub-items, so payout editing needs this twin.
+// Two deliberate differences from the sub-item matcher:
+//   · a line that HAS sub-items is never a target — its figure is a computed sum of its children, not an
+//     editable number, so writing a price onto it would be meaningless.
+//   · `excludeItemId` is the edited line.
+// Everything else is identical: same canonical name, same still-OLD value, same service, chosen scope.
+export function bulkItemMatches(payload, { optionId, serviceKey, matchKey, field, oldValue, excludeItemId, allOptions = false } = {}) {
+  if (!payload || !matchKey) return [];
+  const opts = (payload.options || []).filter((o) => allOptions || o.id === optionId);
+  const out = [];
+  for (const o of opts) {
+    for (const s of (o.services || [])) {
+      if (serviceKey != null && s.key !== serviceKey) continue;
+      for (const it of (s.items || [])) {
+        if (it.id === excludeItemId) continue;
+        if ((it.sub || []).length) continue;             // container line — its amount is a sum, never set
+        if (subKey(it) !== matchKey) continue;
+        if (!numEq(it[field], oldValue)) continue;       // only still-OLD values → intentional overrides survive
+        out.push({ optionId: o.id, itemId: it.id });
+      }
+    }
+  }
+  return out;
+}
+
+// Apply `field = value` to exactly the targeted lines. A target with a `subId` addresses a SUB-ITEM; one
+// without addresses the top-level ITEM itself — so a single primitive drives both levels, and both their
+// undos. Returns a NEW payload; everything else is untouched. Used for the bulk apply (→ newValue) and its
+// undo (→ oldValue), so the whole operation reverses atomically.
+export function applyBulkTargets(payload, targets, field, value) {
   if (!payload || !targets?.length) return payload;
-  const set = new Set(targets.map((t) => `${t.optionId}|${t.itemId}|${t.subId}`));
+  const subs = new Set(targets.filter((t) => t.subId != null).map((t) => `${t.optionId}|${t.itemId}|${t.subId}`));
+  const items = new Set(targets.filter((t) => t.subId == null).map((t) => `${t.optionId}|${t.itemId}`));
   return {
     ...payload,
     options: (payload.options || []).map((o) => ({
       ...o,
       services: (o.services || []).map((s) => ({
         ...s,
-        items: (s.items || []).map((it) => ({
-          ...it,
-          sub: (it.sub || []).map((sub) => (set.has(`${o.id}|${it.id}|${sub.id}`) ? { ...sub, [field]: value } : sub)),
-        })),
+        items: (s.items || []).map((it) => {
+          const next = items.has(`${o.id}|${it.id}`) ? { ...it, [field]: value } : it;
+          if (!(next.sub || []).length) return next;
+          return { ...next, sub: next.sub.map((sub) => (subs.has(`${o.id}|${it.id}|${sub.id}`) ? { ...sub, [field]: value } : sub)) };
+        }),
       })),
     })),
   };
+}
+
+// Sub-item-only alias, kept so existing callers/tests read as before. Targets always carry a subId here.
+export function applyBulkSub(payload, targets, field, value) {
+  return applyBulkTargets(payload, targets, field, value);
 }

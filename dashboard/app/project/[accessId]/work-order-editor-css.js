@@ -55,7 +55,11 @@ export const WOE_CSS = `
 .woe-pull:disabled{opacity:.5;cursor:default}
 
 /* Installation date/time read from the existing Installation event — never a second scheduler. */
+.woe-note.woe-undo{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.woe-note.woe-undo button{border:0;background:none;padding:0;color:inherit;font:700 .78rem/1 inherit;cursor:pointer;text-decoration:underline}
 .woe-when{display:inline-flex;align-items:baseline;gap:8px;font-size:.84rem;color:var(--dv-ink,#101418);font-weight:600}
+.woe-when-btn{border:0;background:none;padding:0;cursor:pointer;text-align:left;font-family:inherit}
+.woe-when-btn:hover{color:var(--dv-gold-text,#8A6A1F)}
 .woe-when i{font-style:normal;font-weight:500;color:var(--dv-meta,#787D84)}
 .woe-link{border:0;background:none;padding:0;color:var(--dv-gold-text,#8A6A1F);font:600 .8rem/1 inherit;cursor:pointer;text-decoration:underline}
 

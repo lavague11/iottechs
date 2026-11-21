@@ -16,6 +16,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(true);   // card body (QR / uploader) collapsible from the header
+  const [err, setErr] = useState(null);     // a REJECTED save — see the listener below
 
   // Removing the card clears it and drops straight into the uploader — the reason to remove one is
   // almost always to put a corrected card in its place.
@@ -28,19 +29,31 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
     });
   }
 
+  // The cleaner posts a finished card; we save it. A REJECTED save used to be swallowed — the card still
+  // appeared, the uploader still closed, and the code only vanished on the next reload, which reads as
+  // "the upload isn't working" with nothing to go on. Now a refusal says so, keeps the uploader open, and
+  // rolls the preview back to whatever is actually stored.
   useEffect(() => {
     function onMsg(e) {
-      if (e?.data?.type === "iotSystemQr" && e.data.dataUrl) {
-        setSaved(e.data.dataUrl);
-        setMode("idle");                       // collapse the uploader once we have a card
-        setSystemQrAction(accessId, e.data.dataUrl).then((r) => {
-          if (r?.ok) { setFlash(true); setTimeout(() => setFlash(false), 2500); }
-        });
-      }
+      if (e?.data?.type !== "iotSystemQr" || !e.data.dataUrl) return;
+      const prev = saved;
+      setErr(null);
+      setSaved(e.data.dataUrl);
+      setMode("idle");
+      setSystemQrAction(accessId, e.data.dataUrl).then((r) => {
+        if (r?.ok) { setFlash(true); setTimeout(() => setFlash(false), 2500); return; }
+        setSaved(prev || null);
+        setMode("upload");
+        setErr(r?.error || "Couldn't save that code. Try again.");
+      }).catch(() => {
+        setSaved(prev || null);
+        setMode("upload");
+        setErr("Couldn't reach the server. Try again.");
+      });
     }
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
-  }, [accessId]);
+  }, [accessId, saved]);
 
   const src = `/widgets/qr-cleaner.html?embed=1&project=${encodeURIComponent(accessId)}${customerName ? `&customer=${encodeURIComponent(customerName)}` : ""}`;
   const accent = saved ? "#2f7d5a" : "#C9A96E";
@@ -87,6 +100,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
 
       {open && !readOnly && mode === "upload" && (
         <div className="sqp-body">
+          {err && <div className="sqp-err">{err}</div>}
           <iframe src={src} title="System QR" className="sqp-frame" allow="camera" />
         </div>
       )}
@@ -121,6 +135,7 @@ export default function SystemQrTool({ accessId, customerName, systemQr, readOnl
         .sqp-remove{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border:1px solid #e3b4ab;border-radius:8px;background:var(--dv-raise,#FBFBFA);color:var(--dv-red,#C4553D);cursor:pointer;line-height:1}
         .sqp-remove:hover{background:#fbe9e6}
         .sqp-body{border-top:1px solid var(--dv-line,#E4E4DF)}
+        .sqp-err{padding:9px 14px;background:#fbe9e6;color:var(--dv-red,#C4553D);font-size:.79rem;font-weight:600;border-bottom:1px solid #e3b4ab}
         .sqp-frame{width:100%;height:640px;border:none;background:#0B0F1A;display:block}
         .sqp-cust{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 16px 20px;background:var(--dv-paper,#F4F4F2)}
         .sqp-cust-img{width:min(240px,70%);max-width:240px;height:auto;border-radius:10px;border:1px solid var(--dv-line,#E4E4DF);background:#fff;cursor:zoom-in;display:block}

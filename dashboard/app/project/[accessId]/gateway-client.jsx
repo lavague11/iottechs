@@ -852,11 +852,60 @@ function ExpenseStatusControl({ accessId, expense, onUpdate }) {
   );
 }
 
-function ExpensePanel({ accessId, expenses: init, view, startOpen }) {
-  const [items, setItems] = useState(init);
-  const [showForm, setShowForm] = useState(!!startOpen);
+// The expense FORM on its own. Submitting files it to the shared `expenses` ledger (submitExpenseAction →
+// submitProjectExpense), which is the very table the /expenses portal reads — so a job-site expense entered
+// here is the same record the office approves and pays there. Rendered either inline by the panel, or inside
+// the "Add expense" dialog where adding is an action rather than a standing block of fields.
+function ExpenseForm({ accessId, onSubmitted, onCancel, autoFocus = false }) {
   const [form, setForm] = useState({ description:"", category:"Gas", customCat:"", amount:"", vendor:"" });
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+  const ready = !!form.description.trim() && !!form.amount;
+
+  async function handleSubmit() {
+    if (!ready || saving) return;
+    const category = form.category === "Other" && form.customCat.trim() ? form.customCat.trim() : form.category;
+    const payload = { description: form.description, category, amount: form.amount, vendor: form.vendor };
+    setSaving(true); setErr(null);
+    const r = await submitExpenseAction(accessId, payload);
+    setSaving(false);
+    // A rejected submit used to fail silently — the form just sat there looking unsubmitted.
+    if (!r?.ok) { setErr(r?.error || "Couldn't submit that expense."); return; }
+    setForm({ description:"", category:"Gas", customCat:"", amount:"", vendor:"" });
+    onSubmitted?.({ id: r.id, ...payload, amount: Number(payload.amount), status: "pending", submitted_by_name: "You", created_at: "just now" });
+  }
+
+  return (
+    <div className="wo-form">
+      <input className="wo-input" placeholder="Description *" autoFocus={autoFocus} value={form.description}
+             onChange={e => setForm(p=>({...p, description:e.target.value}))} />
+      <div className="wo-presets">
+        {EXP_CATS.map(c => (
+          <button key={c} type="button" className={`wo-preset${form.category===c?" on":""}`} onClick={()=>setForm(p=>({...p, category:c}))}>{c}</button>
+        ))}
+      </div>
+      {form.category === "Other" && (
+        <input className="wo-input" placeholder="Custom category" value={form.customCat} onChange={e => setForm(p=>({...p, customCat:e.target.value}))} />
+      )}
+      <input className="wo-input wo-amount" type="number" min="0" placeholder="Amount ($) *" value={form.amount} onChange={e => setForm(p=>({...p, amount:e.target.value}))} />
+      <input className="wo-input" placeholder="Vendor (optional)" value={form.vendor} onChange={e => setForm(p=>({...p, vendor:e.target.value}))} />
+      {err && <div className="wo-form-err">{err}</div>}
+      <div className="wo-form-acts">
+        {onCancel && <button type="button" className="wo-form-cancel" onClick={onCancel}>Cancel</button>}
+        <button className="wo-form-submit" disabled={saving || !ready} onClick={handleSubmit}>{saving ? "Submitting…" : "Submit"}</button>
+      </div>
+    </div>
+  );
+}
+
+// `onAdd` — adding is an ACTION: the panel shows the record plus one Add button, and the caller opens the
+// form in a dialog. Without it the panel keeps its own inline toggle (the other surfaces). `onItems` lets a
+// caller own the list, so an expense added from the dialog appears here without a reload.
+function ExpensePanel({ accessId, expenses: init, view, startOpen, onAdd, onItems }) {
+  const [own, setOwn] = useState(init);
+  const items = onItems ? init : own;
+  const setItems = onItems || setOwn;
+  const [showForm, setShowForm] = useState(!!startOpen && !onAdd);
 
   const canSubmit  = ["tech","admin","manager"].includes(view);
   const canApprove = view === "admin" || view === "manager";
@@ -867,42 +916,21 @@ function ExpensePanel({ accessId, expenses: init, view, startOpen }) {
     setItems(prev => prev.map(e => e.id === id ? { ...e, status, ...fields } : e));
   }
 
-  async function handleSubmit() {
-    if (!form.description.trim() || !form.amount) return;
-    const category = form.category === "Other" && form.customCat.trim() ? form.customCat.trim() : form.category;
-    const payload = { description: form.description, category, amount: form.amount, vendor: form.vendor };
-    setSaving(true);
-    const r = await submitExpenseAction(accessId, payload);
-    if (r.ok) {
-      setItems(prev => [{ id:r.id, ...payload, amount:Number(payload.amount), status:"pending", submitted_by_name:"You", created_at:"just now" }, ...prev]);
-      setForm({ description:"", category:"Gas", customCat:"", amount:"", vendor:"" });
-      setShowForm(false);
-    }
-    setSaving(false);
-  }
+  const addExpense = (e) => setItems(prev => [e, ...prev]);
 
   if (!canSubmit && !canApprove) return null;
   return (
     <div className="wo-panel">
       <div className="wo-panel-head">
         <span className="wo-panel-title">Expenses {pending.length > 0 && <span className="wo-panel-badge">{pending.length} pending</span>}</span>
-        {canSubmit && <button className="wo-submit-btn" onClick={() => setShowForm(v => !v)}>{showForm ? "Cancel" : "+ Submit Expense"}</button>}
+        {canSubmit && (
+          <button className="wo-submit-btn" onClick={() => (onAdd ? onAdd() : setShowForm(v => !v))}>
+            {onAdd ? "+ Add" : showForm ? "Cancel" : "+ Add"}
+          </button>
+        )}
       </div>
-      {canSubmit && showForm && (
-        <div className="wo-form">
-          <input className="wo-input" placeholder="Description *" value={form.description} onChange={e => setForm(p=>({...p, description:e.target.value}))} />
-          <div className="wo-presets">
-            {EXP_CATS.map(c => (
-              <button key={c} type="button" className={`wo-preset${form.category===c?" on":""}`} onClick={()=>setForm(p=>({...p, category:c}))}>{c}</button>
-            ))}
-          </div>
-          {form.category === "Other" && (
-            <input className="wo-input" placeholder="Custom category" value={form.customCat} onChange={e => setForm(p=>({...p, customCat:e.target.value}))} />
-          )}
-          <input className="wo-input wo-amount" type="number" min="0" placeholder="Amount ($) *" value={form.amount} onChange={e => setForm(p=>({...p, amount:e.target.value}))} />
-          <input className="wo-input" placeholder="Vendor (optional)" value={form.vendor} onChange={e => setForm(p=>({...p, vendor:e.target.value}))} />
-          <button className="wo-form-submit" disabled={saving || !form.description.trim() || !form.amount} onClick={handleSubmit}>{saving ? "Submitting…" : "Submit for Approval"}</button>
-        </div>
+      {canSubmit && !onAdd && showForm && (
+        <ExpenseForm accessId={accessId} onSubmitted={(e) => { addExpense(e); setShowForm(false); }} />
       )}
       {pending.length === 0 && resolved.length === 0 && <div className="wo-empty">{canSubmit ? "No expenses submitted yet." : "No expenses for this project."}</div>}
       {[...pending, ...resolved].map(e => (
@@ -1800,7 +1828,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [installEvents, setInstallEvents] = useState(null);  // scheduling widget event count (install phase) — gate "done" on a real booking
   const [schedEvents, setSchedEvents]   = useState([]);      // all booked appointments (survey + install) — drives the header chip's date/time
   const [schedModal, setSchedModal]     = useState(null);    // scheduling overlay: null | "survey" | "install"
-  const [expModal, setExpModal]         = useState(false);   // "Add expense" overlay (contact rail) → ExpensePanel, syncs to /expenses
+  const [expModal, setExpModal]         = useState(false);   // "Add expense" dialog → ExpenseForm, filed to the /expenses ledger
+  const [expList, setExpList]           = useState(expenses); // the live list, so a dialog submit lands in the panel without a reload
   const [shipStatus, setShipStatus]     = useState({ count: 0, delivered: false }); // shipment tracker: hide until a #, auto-complete on delivered
   const [addonCount, setAddonCount]     = useState(0);       // job-site add-ons count — hide the step until one is submitted
   const [surveyHasLocal, setSurveyHasLocal] = useState(false); // survey widget reports live content → enable Submit instantly
@@ -3256,7 +3285,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <button className="pv-modal-x" onClick={() => setExpModal(false)}>✕</button>
           <h2 className="pv-modal-title">Add expense</h2>
           <div className="pv-sched-body">
-            <ExpensePanel accessId={lp.access_id} expenses={expenses} view={cView} startOpen />
+            {/* The FORM only — the dialog's job is to add one. Repeating the whole ledger inside it would
+                just be the list the caller already shows behind the dialog. */}
+            <ExpenseForm accessId={lp.access_id} autoFocus
+              onSubmitted={(e) => { setExpList((prev) => [e, ...prev]); setExpModal(false); }}
+              onCancel={() => setExpModal(false)} />
           </div>
         </div>
       </div>
@@ -3436,18 +3469,16 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
                   moved into its header (requirement 10). */}
               <WorkOrderEditor accessId={lp.access_id} role={cView} preview={!!previewRole} currentUser={currentUser}
                 assignments={localAssignments} staffUsers={staffUsers} onAssignmentsChange={setLocalAssignments}
-                /* The work order SHOWS the Installation appointment; "Schedule" jumps to the one
-                   scheduler below rather than opening a second booker (requirement 11). */
-                onSchedule={() => document.getElementById("wo-install-scheduler")?.scrollIntoView({ behavior: "smooth", block: "start" })} />
-              {/* Installation scheduling — merged into the Work Order (was its own card). */}
-              <div className="wo-merge-sec" id="wo-install-scheduler"><h3 className="wo-merge-h">Installation</h3>
-                <SchedulingWidget accessId={lp.access_id} assignments={localAssignments} staffUsers={staffUsers}
-                  currentUser={currentUser} project={lp} view={view} apptKind="install"
-                  defaultTitle="IOT TECHS — Installation" onEvents={applySchedEvents} onCount={setInstallEvents} />
-              </div>
-              {/* Expenses — merged into the Work Order (was its own card). */}
+                /* The work order SHOWS the Installation appointment; scheduling opens the ONE scheduling
+                   dialog the rest of the app uses (requirement 11 — never a second booker). It used to
+                   scroll to a form parked at the bottom of this overlay, which buried the booking under
+                   the scope and made "Schedule" feel like it had done nothing. */
+                onSchedule={() => openSchedule("install")} />
+              {/* Expenses — merged into the Work Order (was its own card). The form is a dialog, not an
+                  always-open block: the panel is the record, adding one is an action. */}
               <div className="wo-merge-sec"><h3 className="wo-merge-h">Expenses</h3>
-                <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
+                <ExpensePanel accessId={lp.access_id} expenses={expList} onItems={setExpList} view={view}
+                  onAdd={() => setExpModal(true)} />
               </div>
               <style>{`.wo-merge-sec{margin-top:18px;padding-top:16px;border-top:1px solid var(--line,#E4E4DF)}.wo-merge-h{font-size:.8rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted,#787D84);margin:0 0 10px}`}</style>
             </div>);
@@ -3457,7 +3488,8 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             </div>);
           case "expenses":   // kept for the quick-action; Expenses also live inside the Work Order now
             return (<div style={ovl(640)}>
-              <ExpensePanel accessId={lp.access_id} expenses={expenses} view={view} startOpen />
+              <ExpensePanel accessId={lp.access_id} expenses={expList} onItems={setExpList} view={view}
+                onAdd={() => setExpModal(true)} />
             </div>);
           default: return null;
         }
@@ -5340,6 +5372,9 @@ const PV_CSS = `
 .pvx .exp-save-btn:disabled{opacity:.5;cursor:not-allowed}
 .pvx .wo-form-submit{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:.82rem;font-weight:600;font-family:inherit;cursor:pointer}
 .pvx .wo-form-submit:disabled{opacity:.4;cursor:not-allowed}
+.pvx .wo-form-acts{display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:4px}
+.pvx .wo-form-cancel{background:none;border:none;padding:7px 4px;font-size:.82rem;font-weight:600;font-family:inherit;color:var(--meta);cursor:pointer}
+.pvx .wo-form-err{margin:2px 0 6px;font-size:.78rem;font-weight:600;color:var(--red,#C4553D)}
 .pvx .wo-empty{padding:14px 16px;font-size:.84rem;color:var(--muted)}
 .pvx .wo-item{padding:13px 16px;border-bottom:1px solid var(--line)}
 .pvx .wo-item:last-child{border-bottom:none}

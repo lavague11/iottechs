@@ -24,6 +24,7 @@ import {
 } from "./work-order-actions";
 import { addAssignmentAction, removeAssignmentAction } from "./actions";
 import { getToolDataAction } from "./proposal-actions";
+import { applyBulkTargets } from "../../../lib/proposal-bulk";
 import { WOE_CSS } from "./work-order-editor-css";
 // The items editor's own stylesheet lives with the proposal panel. One renderer, one stylesheet — the
 // work order must not carry a second copy of the `prop-*` rules that would then drift from the proposal.
@@ -67,8 +68,13 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
   const [askReset, setAskReset] = useState(false);
   const [install, setInstall] = useState(null);
   const [sync, setSync] = useState(null);          // "N change(s) pulled in" after a proposal sync
+  const [bulk, setBulk] = useState(null);          // { text, info } after a repeated payout was filled across lines
   const saveTimer = useRef(null);
   const notesTimer = useRef(null);
+  const bulkTimer = useRef(null);
+  // The live doc, for an Undo that must read the CURRENT payload rather than the snapshot taken when the
+  // note appeared — any edit made while the note is up is then never discarded.
+  const docRef = useRef(null);
 
   const canEdit = can(role, "wo.edit") && !preview;
   const canPay = can(role, "wo.payout.edit") && !preview;
@@ -112,7 +118,11 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
     setDoc(r.doc); setSaveState("saved");
   }, [accessId]);
   flush.current = saveNow;
-  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); if (notesTimer.current) clearTimeout(notesTimer.current); }, []);
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    if (bulkTimer.current) clearTimeout(bulkTimer.current);
+  }, []);
 
   function patchPayload(next) {
     setDoc((d) => ({ ...d, payload: next }));
@@ -121,6 +131,22 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
   }
   const opt = doc?.payload?.options?.[0] || null;
   const patchServices = (services) => patchPayload({ options: [{ ...opt, services }] });
+
+  // Repeated payouts. The items editor spots a committed figure that other identical lines still don't have
+  // and asks whether to fill them; this commits the answer through the SAME autosave path as any other edit —
+  // no second write path, no new server action — and offers one atomic Undo.
+  function applyBulkPayout(nextPayload, info) {
+    patchPayload(nextPayload);
+    setBulk({ text: `${info.name} · ${money(info.newValue)} on ${info.count} line${info.count === 1 ? "" : "s"}`, info });
+    if (bulkTimer.current) clearTimeout(bulkTimer.current);
+    bulkTimer.current = setTimeout(() => setBulk(null), 10000);
+  }
+  function undoBulk() {
+    const info = bulk?.info; const live = docRef.current?.payload;
+    if (!info || !live) return;
+    patchPayload(applyBulkTargets(live, info.undoTargets, info.field, info.oldValue));
+    setBulk(null);
+  }
 
   function onNotes(v) {
     setNotes(v);
@@ -192,6 +218,7 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
     if (r?.ok) onAssignmentsChange?.((prev) => prev.filter((x) => x.id !== a.id));
   }
 
+  docRef.current = doc;
   if (doc === undefined) return <div className="woe"><style>{WOE_CSS}</style><div className="woe-empty">Loading…</div></div>;
   const css = <style>{PROP_CSS + WOE_CSS + WFD_CSS}</style>;
 
@@ -230,6 +257,7 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
 
       {err && <div className="woe-err">{err}</div>}
       {sync && <div className="woe-note">{sync}</div>}
+      {bulk && <div className="woe-note woe-undo"><span>{bulk.text}</span><button type="button" onClick={undoBulk}>Undo</button></div>}
 
       {/* Requirement 14 — the customer signed a revision or an add-on was approved. The office pulls it
           in as an UNSENT revision and sends it; nothing reaches a technician on its own. */}
@@ -264,16 +292,24 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
         )}
       </div>
 
-      {/* Requirement 11 — the Installation date/time, read from the one scheduler. No second booker. */}
+      {/* Requirement 11 — the Installation date/time, read from the one scheduler. No second booker.
+          Nothing booked is said by the Schedule button itself — a "Not scheduled" label beside it only
+          repeats what the button already implies. Once booked, the date IS the button: tapping it reopens
+          the same scheduler to change it. Both open the one scheduling dialog (onSchedule). */}
       <div className="woe-row">
         <span className="woe-lbl">Installation</span>
         {install ? (
-          <span className="woe-when">{whenText(install)}{install.location ? <i>{install.location}</i> : null}</span>
+          canEdit && onSchedule ? (
+            <button type="button" className="woe-when woe-when-btn" title="Reschedule" onClick={onSchedule}>
+              {whenText(install)}{install.location ? <i>{install.location}</i> : null}
+            </button>
+          ) : (
+            <span className="woe-when">{whenText(install)}{install.location ? <i>{install.location}</i> : null}</span>
+          )
+        ) : canEdit && onSchedule ? (
+          <button type="button" className="woe-link" onClick={onSchedule}>Schedule</button>
         ) : (
-          <>
-            <span className="woe-none">Not scheduled</span>
-            {canEdit && onSchedule && <button type="button" className="woe-link" onClick={onSchedule}>Schedule</button>}
-          </>
+          <span className="woe-none">Not scheduled</span>
         )}
       </div>
 
@@ -311,6 +347,7 @@ export default function WorkOrderEditor({ accessId, role, assignments = [], staf
           payload={doc.payload}
           activeOptId={opt.id}
           optionCount={1}
+          onBulkApply={canPay ? applyBulkPayout : undefined}
         />
       ))}
       {!(opt?.services || []).length && <div className="woe-empty">No lines on this work order.</div>}
