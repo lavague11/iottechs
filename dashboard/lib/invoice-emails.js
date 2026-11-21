@@ -40,7 +40,14 @@ export async function sendDueInvoiceEmails() {
       }
     }
 
-    // 2) Reminders — only once sent, with a due date, and still unpaid.
+    // 2) Reminders — RETIRED by Stage 5 item 9 of docs/customer-flow-v2.md. The plan's own milestone
+    //    notices (lib/customer-flow-sweep.js) replace "3 days before the due date" and "on the due
+    //    date": they chase the installment the customer actually agreed to, at the moment it falls due,
+    //    rather than a generic invoice date. Kept behind a flag rather than deleted so re-enabling is
+    //    one line, and so the remind3SentAt / remindDueSentAt stamps on existing invoices still mean
+    //    what they say.
+    const INVOICE_REMINDERS_ENABLED = false;
+    if (INVOICE_REMINDERS_ENABLED)
     if (inv.sentAt && inv.dueDate) {
       const due = dueMs(inv.dueDate);
       const fin = (() => { try { return getProjectFinancialState(j.access_id); } catch { return null; } })();

@@ -15,7 +15,7 @@ import { secretValue } from "./db";
 import { makeApptToken } from "./auth";
 import { reminderCopy, techRow } from "./appt-reminder-model";
 import { SUPPORT_PHONE, SUPPORT_TEL } from "./nap.js";
-import { addendumTotals } from "./proposal.js";
+import { addendumTotals, fmtPlanDate } from "./proposal.js";
 
 const ENDPOINT = "https://api.resend.com/emails";
 
@@ -307,7 +307,9 @@ export async function sendCustomerEmail(accessId, content) {
   if (isDemoProject(c.project)) return { skipped: "demo-project" };
   // `content.ctaUrl` wins when a send needs to point somewhere that is not a project view — the Phone
   // Setup guide, for instance, which `?open=` has no name for (see viewFromParams in lib/customer-portal).
-  const ctaUrl = content.ctaUrl ? `${appUrl()}${content.ctaUrl}` : projectLink(accessId, content.open, content.sign);
+  const ctaUrl = content.ctaUrl
+    ? (/^https?:\/\//i.test(content.ctaUrl) ? content.ctaUrl : `${appUrl()}${content.ctaUrl}`)
+    : projectLink(accessId, content.open, content.sign);
   const payload = {
     heading: content.heading,
     intro: content.intro,
@@ -384,7 +386,10 @@ export async function onceForProject(accessId, key, send) {
 // Customer-facing stages only — internal churn (qc, install scheduling, payout) never emails
 // the customer. Keyed by the master stage key from lib/spec.js.
 export const STAGE_EMAIL = {
-  site_survey: {
+  // Stage 5 item 2 merged these two into emailProposalReadyToSign: a customer whose survey and proposal
+  // landed together used to get two emails about one moment. They are kept here, unused by the stage
+  // sender below (which no longer fires for either key), so the copy is not lost if the merge is undone.
+  _site_survey_retired: {
     subject: "Your site survey is ready to review",
     heading: "Your site survey is ready",
     intro: "We’ve completed the walkthrough of your property.",
@@ -392,7 +397,7 @@ export const STAGE_EMAIL = {
     ctaLabel: "Review Survey",
     open: "survey",
   },
-  proposal: {
+  _proposal_retired: {
     subject: "Your proposal is ready",
     heading: "Your proposal is ready to review",
     intro: "We’ve put together your system and pricing.",
@@ -436,6 +441,90 @@ export async function emailStageAdvance(accessId, stageKey) {
     console.error(`[email:stage] ${e?.message || e}`);
     return { ok: false, error: "exception" };
   }
+}
+
+// ---- Stage 5 items 2, 7 and 10 --------------------------------------------------------------------
+
+// Item 2 — ONE email where there were two. The survey being ready and the proposal being ready to sign
+// were separate sends (STAGE_EMAIL.site_survey and .proposal), which meant a customer whose survey and
+// proposal landed together got two mails about one moment. This replaces both, and prints the ACTUAL
+// price-lock date from priceLockWindow rather than a vague "soon" or a hard-coded seven days.
+export async function emailProposalReadyToSign(accessId) {
+  return onceForProject(accessId, "ready_to_sign", async () => {
+    if (!emailEnabled()) return { skipped: "email-disabled" };
+    const { getPublishedProposal, getJobByAccessId } = await import("./db.js");
+    const { priceLockWindow } = await import("./proposal.js");
+    const row = getPublishedProposal(accessId);
+    if (!row) return { skipped: "no-proposal" };
+    const project = getJobByAccessId(accessId);
+    const win = priceLockWindow(row, project, {});
+    const until = win.validUntil ? fmtPlanDate(win.validUntil.slice(0, 10)) : null;
+    const { getToolData } = await import("./db.js");
+    const hasSurvey = (() => { try { return !!getToolData(accessId, "survey2")?.data; } catch { return false; } })();
+    const att = await proposalPdfAttachment(accessId, row.selected_option);
+    return sendCustomerEmail(accessId, {
+      subject: "Your proposal is ready to sign",
+      heading: "Your system is designed — here's your proposal",
+      intro: hasSurvey
+        ? "We've finished the walkthrough of your property and put together your system and pricing."
+        : "We've put together your system and pricing.",
+      lines: [
+        "Everything we plan to install is in the proposal, with the placements we surveyed.",
+        until ? `This pricing is held until ${until}.` : null,
+        "Review it and sign whenever you're ready — it takes a minute.",
+      ].filter(Boolean),
+      ctaLabel: "Review & sign", open: "proposal", sign: row.selected_option ?? "",
+      attachments: att ? [att] : undefined,
+    });
+  });
+}
+
+// Item 7 — install booked: the date and the time, and nothing else. The full invite (with the .ics and
+// the team) still goes out through sendAppointmentEmails; this is the plain confirmation the spec asks
+// for. Keyed by the event so a rebooking is a different email, not a suppressed one.
+export async function emailInstallBooked(accessId, event = {}) {
+  const when = appointmentWhen(event);
+  if (!when) return { skipped: "no-event" };
+  return onceForProject(accessId, `install_booked:${event.date || ""}:${event.time || ""}`, async () => {
+    if (!emailEnabled()) return { skipped: "email-disabled" };
+    return sendCustomerEmail(accessId, {
+      subject: "Your installation is booked",
+      heading: "Your installation is booked",
+      intro: when,
+      lines: [],
+      ctaLabel: "View project",
+    });
+  });
+}
+
+// Item 10 — paid in full: ONE email carrying the receipt and the completion report, with the review ask
+// built into it. This replaces the standalone review-request email, which asked the same thing twice.
+export async function emailPaidInFull(accessId, payment = {}) {
+  return onceForProject(accessId, "paid_in_full", async () => {
+    if (!emailEnabled()) return { skipped: "email-disabled" };
+    const { getProjectFinancialState, getJobByAccessId } = await import("./db.js");
+    const fin = getProjectFinancialState(accessId);
+    if (!fin || fin.financialState !== "collected") return { skipped: "balance-due" };
+    const project = getJobByAccessId(accessId);
+    const first = String(project?.contact_name || project?.customer || "there").trim().split(/\s+/)[0];
+    const attachments = [];
+    const rcpt = await receiptPdfAttachment(accessId, payment);
+    if (rcpt) attachments.push(rcpt);
+    const reviewUrl = secretValue("REVIEW_URL") || "https://maps.google.com/?cid=15380872044622826314";
+    return sendCustomerEmail(accessId, {
+      subject: "Paid in full — thank you",
+      heading: `Thank you, ${first}!`,
+      intro: "Your balance is settled and your project is complete. Your receipt is attached.",
+      lines: [
+        "Your completion certificate and the full record of the work are on your project page any time.",
+        "If everything went well, a quick review would mean the world to us — it's the #1 way other local businesses find a team they can trust.",
+      ],
+      ctaLabel: "Leave us a review",
+      ctaUrl: reviewUrl,                       // absolute — the review page, not a project view
+      attachments: attachments.length ? attachments : undefined,
+      footNote: "Not happy with something? Just reply to this email and we'll make it right — no review needed.",
+    });
+  });
 }
 
 // ---- Hiring / candidate-facing emails --------------------------------------

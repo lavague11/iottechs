@@ -246,6 +246,10 @@ export async function sendProposalAction(accessId, { emailAt } = {}) {
     return { ok: true, stage, emailed: false, scheduledSendAt: when.toISOString(), proposal: sanitizeProposal(row, tok.role) };
   }
   let emailed = false;
+  // Stage 5 item 2 — ONE "ready to sign" email, merging what used to be a survey email and a proposal
+  // email, carrying the real price-lock date. It fires on the SEND (the event), is deduped per project,
+  // and sits alongside the signature-request link below rather than replacing it.
+  import("../../../lib/email").then(({ emailProposalReadyToSign }) => emailProposalReadyToSign(accessId)).catch(() => {});
   try { const er = await emailSignatureRequest(accessId, primaryOpt); emailed = !!(er && (er.ok || er.id)); } catch { /* email best-effort */ }
   if (emailed) logProjectEvent(accessId, { kind: "email", label: "Signature request emailed to the customer", actor: actorName(tok) });
   await revalidate(accessId);
@@ -860,7 +864,11 @@ export async function recordPaymentAction(accessId, payment) {
   }
   // Fix #1: a payment may be the moment a completed job becomes paid-in-full → try the review request
   // (self-guards on complete + paid-in-full + once + never demo, so premature/duplicate sends can't happen).
-  // Stage 5 item 10: the separate review-request email is gone — the completion report carries a
+  // Stage 5 item 10 — paid in full: ONE email with the receipt and the completion report, carrying the
+  // review ask. Self-guards on the canonical financialState and on its own ledger key, so it cannot
+  // fire early and cannot fire twice. It replaced the standalone review request, which asked twice.
+  import("../../../lib/email").then(({ emailPaidInFull }) => emailPaidInFull(accessId, {})).catch(() => {});
+  // (the separate review-request email was removed here) — the completion report carries a
   // "Leave us a review" button instead, so the customer is asked once, in the document they wanted.
   // Payment events are DERIVED from the payment records in the Job Log (so existing deposits show too),
   // not logged here — logging both would double them.
@@ -928,7 +936,11 @@ export async function confirmPaymentAction(accessId, id) {
     }).catch(() => {});
   }
   // Fix #1: confirming the final payment can tip a completed job to paid-in-full → try the review request.
-  // Stage 5 item 10: the separate review-request email is gone — the completion report carries a
+  // Stage 5 item 10 — paid in full: ONE email with the receipt and the completion report, carrying the
+  // review ask. Self-guards on the canonical financialState and on its own ledger key, so it cannot
+  // fire early and cannot fire twice. It replaced the standalone review request, which asked twice.
+  import("../../../lib/email").then(({ emailPaidInFull }) => emailPaidInFull(accessId, {})).catch(() => {});
+  // (the separate review-request email was removed here) — the completion report carries a
   // "Leave us a review" button instead, so the customer is asked once, in the document they wanted.
   // Confirmed payments are derived from the records in the Job Log (not logged here — would double).
   const stage = maybeAutoAdvance(accessId);

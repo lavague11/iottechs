@@ -84,6 +84,20 @@ export async function register() {
       if (d?.sent) console.log(`[workorder] reminded ${d.sent} technician(s) to end their day`);
     } catch (e) { console.error("[workorder] sweep failed:", e?.message || e); }
   };
+  // Stage 5 items 3, 4 and 9 of docs/customer-flow-v2.md — the customer emails that fire because a DATE
+  // arrived: the quote-expiry pair, the 2-day post-signing payment reminder, and the plan's milestone
+  // notices. Every send is claimed in customer_email_log before it goes, so overlapping or repeated runs
+  // send nothing twice. Hourly, because all of its thresholds are day-grained.
+  const sweepCustomerFlow = async () => {
+    try {
+      const { sweepCustomerFlowEmails } = await import("./lib/customer-flow-sweep.js");
+      const r = await sweepCustomerFlowEmails();
+      if (r?.sent) console.log(`[flow] sent ${r.sent} customer email(s) — expiry ${r.expiry}, unpaid ${r.unpaid}, milestones ${r.milestones}`);
+    } catch (e) { console.error("[flow] customer-email sweep failed:", e?.message || e); }
+  };
+  setTimeout(sweepCustomerFlow, 150_000);              // ~2.5 min after boot
+  setInterval(sweepCustomerFlow, 60 * 60 * 1000);      // then hourly (every threshold is day-grained)
+
   setTimeout(sweepWorkOrders, 140_000);             // ~2.5 min after boot
   setInterval(sweepWorkOrders, 60 * 60 * 1000);     // then hourly; both are time-since, not time-of-day
 }

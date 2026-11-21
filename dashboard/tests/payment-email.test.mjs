@@ -8,7 +8,10 @@ const actions = readFileSync(new URL("../app/project/[accessId]/proposal-actions
 
 test("lib/email exposes emailPaymentReceived with amount + kind, gated on a positive amount", () => {
   assert.ok(/export async function emailPaymentReceived\(accessId, \{ amount, kind, method, paidAt \} = \{\}\)/.test(email), "signature takes the payment fields");
-  const fn = email.slice(email.indexOf("export async function emailPaymentReceived"), email.indexOf("export async function emailProposalReady"));
+  // Bounded by the NEXT export after it, not by a named one: "emailProposalReady" also prefix-matches
+  // emailProposalReadyToSign (Stage 5 item 2), which sits earlier in the file and made this slice empty.
+  const start = email.indexOf("export async function emailPaymentReceived");
+  const fn = email.slice(start, email.indexOf("\nexport ", start + 10));
   assert.ok(/if \(!\(amt > 0\)\) return \{ ok: false, error: "no-amount" \}/.test(fn), "no email for a zero/negative amount");
   assert.ok(fn.includes('toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })'), "amount rendered as currency");
   assert.ok(fn.includes("has been received and applied toward your balance"), "confirms it's applied to the balance");

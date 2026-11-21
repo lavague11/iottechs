@@ -654,6 +654,41 @@ function amountOf(v, base) {
   return Math.max(0, +v || 0);
 }
 
+// ---- The price-lock window ------------------------------------------------------------------------
+// A sent, unsigned, unpaid proposal is honored for PRICE_LOCK_DAYS from the window start — the later of
+// its sent date and any auto-reopen. This used to be computed inline in gateway-client.jsx and again in
+// proposal-actions.js, which was fine while the only consumer was a hero banner. Stage 5 of
+// docs/customer-flow-v2.md needs it on the SERVER too (item 2 prints the date in the email; item 3 fires
+// a reminder two days before it and a notice when it passes), and three copies of a date the customer is
+// held to would eventually disagree. One function, pure, injectable clock.
+export const PRICE_LOCK_DAYS = 7;
+const _tOf = (s) => { const t = s ? new Date(s).getTime() : NaN; return Number.isNaN(t) ? 0 : t; };
+// `proposal` = the published row; `project` carries price_reopened_at / reopen_requested_at.
+// `paid` = money received (any confirmed payment locks the price in, as does a signature).
+export function priceLockWindow(proposal, project, { paid = 0, now = Date.now() } = {}) {
+  const locked = !!proposal?.signed_name || (+paid || 0) > 0;
+  const active = !locked && ["sent", "changes_requested", "accepted"].includes(proposal?.status);
+  const start = Math.max(_tOf(proposal?.sent_at), _tOf(project?.price_reopened_at));
+  const until = active && start ? start + PRICE_LOCK_DAYS * 864e5 : null;
+  const expired = until != null && now > until;
+  // A staff reopen is pending only when the customer asked AFTER the window started — an auto-reopen
+  // inside the grace period moves price_reopened_at forward and so clears any earlier request.
+  const reopenPending = (() => {
+    const req = project?.reopen_requested_at;
+    if (!req || locked) return false;
+    return start <= _tOf(req);
+  })();
+  return {
+    locked, active, start: start || null, until, expired,
+    reopenPending,
+    // What the customer is shown / emailed, and what the sweep acts on.
+    validUntil: (active && !expired && !reopenPending && until) ? new Date(until).toISOString() : null,
+    priceExpired: active && expired && !reopenPending,
+    msLeft: until == null ? null : until - now,
+    daysLeft: until == null ? null : Math.ceil((until - now) / 864e5),
+  };
+}
+
 // ---- Survey import ---------------------------------------------------------
 // Takes the parsed survey save (localStorage iottechs_sitesurvey_v2_<PID>) and returns
 // service groups ready to merge into an option. Every individually-PLACED device

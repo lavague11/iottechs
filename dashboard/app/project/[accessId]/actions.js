@@ -688,6 +688,12 @@ export async function logAppointmentAction(accessId, { verb, title, date, event,
       verb, event: ev,
       extraEmails: staff ? [tok.email, ...(Array.isArray(inviteeEmails) ? inviteeEmails : [])] : [],
     });
+    // Stage 5 item 7 — "Install booked: date and time only." A plain confirmation beside the full
+    // invite above, keyed by the slot so a REBOOKING sends a new one rather than being suppressed.
+    const isInstall = ev && (ev.kind === "install" || /install/i.test(ev.title || ""));
+    if (isInstall && verb !== "canceled") {
+      import("../../../lib/email").then(({ emailInstallBooked }) => emailInstallBooked(accessId, ev)).catch(() => {});
+    }
   } catch { /* email is best-effort, never blocks the save */ }
   return { ok: true };
 }

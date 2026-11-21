@@ -6,6 +6,7 @@ import { projectFileBase } from "../../../lib/doc-filename";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { can, defaultProjectGroup, ROLE_COLOR } from "../../../lib/roles";
+import { priceLockWindow } from "../../../lib/proposal";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
 import { skipOutsideClose } from "../../../lib/outside-click";
@@ -3217,19 +3218,12 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // sent date and any auto-reopen). Past that it's EXPIRED (→ red hero, "Request to reopen"). Locked once
       // signed or a deposit is on file. A staff-reopen is pending only when the customer asked AFTER the grace
       // window (auto-reopen inside grace clears it via price_reopened_at and never reaches here).
-      const tOf = (s) => { const t = s ? new Date(s).getTime() : NaN; return Number.isNaN(t) ? 0 : t; };
-      const priceLocked = !!proposalData?.signed_name || (custFin?.paid || 0) > 0 || !!sFacts.deposit_recorded;
-      const priceActive = !priceLocked && ["sent", "changes_requested", "accepted"].includes(proposalData?.status);
-      const windowStart = Math.max(tOf(proposalData?.sent_at), tOf(lp.price_reopened_at));
-      const windowUntil = priceActive && windowStart ? windowStart + 7 * 864e5 : null;
-      const expired = windowUntil != null && Date.now() > windowUntil;
-      const reopenPending = (() => {
-        const req = lp.reopen_requested_at;
-        if (!req || priceLocked) return false;
-        return Math.max(tOf(proposalData?.sent_at), tOf(lp.price_reopened_at)) <= tOf(req);
-      })();
-      const priceExpired = priceActive && expired && !reopenPending;
-      const priceValidUntil = (priceActive && !expired && !reopenPending && windowUntil) ? new Date(windowUntil).toISOString() : null;
+      // ONE definition, in lib/proposal.js — the email that prints this date (Stage 5 item 2) and the
+      // sweep that acts on it (item 3) read the same function, so the customer is never shown one
+      // deadline and held to another.
+      const paidForLock = (custFin?.paid || 0) > 0 || sFacts.deposit_recorded ? 1 : 0;
+      const lockWin = priceLockWindow(proposalData, lp, { paid: paidForLock });
+      const { priceExpired, reopenPending, validUntil: priceValidUntil } = lockWin;
       return (
         <CustomerPortal
           accessId={lp.access_id}

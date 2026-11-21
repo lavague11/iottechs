@@ -254,8 +254,12 @@ test("the 7-day price lock only exists in the V2 branch — so V1 must never be 
   const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
   const v2At = gw.indexOf("if (isCustomerView && customerPortalV2) {");
   const hubAt = gw.indexOf("if (staffHub && !isCustomerView) {");
-  const lockAt = gw.indexOf("const priceExpired = priceActive && expired");
-  assert.ok(lockAt > v2At && lockAt < hubAt, "price-lock lives inside the customer V2 block");
+  // The window itself now lives in lib/proposal.js (priceLockWindow) so the Stage 5 emails and sweep
+  // read the SAME dates the customer is shown; what must stay inside the V2 branch is where it is APPLIED.
+  const lockAt = gw.indexOf("const lockWin = priceLockWindow(");
+  assert.ok(lockAt > v2At && lockAt < hubAt, "price-lock is applied inside the customer V2 block");
+  assert.match(readFileSync(new URL("../lib/proposal.js", import.meta.url), "utf8"),
+    /export function priceLockWindow\(/, "and the window is one shared definition");
 });
 
 test("Completion's fork: QR, then set up the phone or complete — on the guarded primitive", () => {

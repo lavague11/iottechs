@@ -369,6 +369,34 @@ safety classifier because those routes trigger real sweeps. They are protected a
 403 unauthenticated, but I did not work around the refusal. Confirming the production cron dashboard
 needs you, or an explicit go-ahead.
 
+**Stage 5, part 3 — the rest of the map (items 2, 3, 4's reminder, 7, 9, 10).**
+
+- *The price-lock window became one definition.* It was computed inline in `gateway-client.jsx` and again
+  in `proposal-actions.js`. Item 2 prints that date in an email and item 3 fires on it, so a third copy
+  would eventually have shown the customer one deadline and held them to another. `priceLockWindow()` in
+  `lib/proposal.js` is now the only source; the client was refactored onto it.
+- *Item 2 merged two emails into one.* `STAGE_EMAIL.site_survey` and `.proposal` are retired (renamed
+  `_site_survey_retired` / `_proposal_retired` so the copy survives an undo) and
+  `emailProposalReadyToSign` replaces both, fires on the SEND, carries the proposal PDF, and prints the
+  real price-lock date.
+- *Item 7 sits beside the invite, not instead of it.* The scheduler's full `.ics` invite still goes out;
+  item 7's plain date-and-time confirmation is a second, separate send keyed by the SLOT, so a rebooking
+  sends a new one rather than being suppressed as a duplicate.
+- *Item 10's "Leave us a review" is the button.* `sendCustomerEmail` only built project-view links, so
+  `content.ctaUrl` now also accepts an absolute URL — the review page is the first user.
+- *Items 3, 4-reminder and 9 are one sweep* (`lib/customer-flow-sweep.js`), hourly from the boot
+  scheduler and reachable at `/api/cron/customer-flow` behind an admin session or `CRON_KEY`. Every send
+  claims its key BEFORE going out, which matters most here: a sweep is the thing most likely to run
+  twice. **Verified by running it three times against 129 local projects — 22 claims after the first
+  run, 22 after the third, nothing re-sent.**
+- *The milestone rule was extracted* to `lib/milestone-due.js`, pure and dependency-free, because
+  importing the sweep pulls in `lib/email.js` and therefore Next's module resolution — the half most
+  likely to be wrong was the half that could not be tested. "Halfway" is half the work-order lines
+  complete, dated by the last line that got it there; a job of 2 lines or fewer uses install start
+  instead, since "half the lines" is not a moment anyone would recognise.
+- *Item 9 replaced the invoice reminders* rather than running beside them: the 3-days-before and
+  on-the-due-date pair in `lib/invoice-emails.js` is behind `INVOICE_REMINDERS_ENABLED = false`.
+
 ---
 
 ## Progress
@@ -379,7 +407,7 @@ needs you, or an explicit go-ahead.
 | 2 — Addendums | **partial** | `d36d8220` + this | Items 1, 3, 4 done. Item 2: change-order PDF now renders through the proposal renderer, and a signed add-on alerts admins + Maya with the document attached. **Remaining: PDF-first signing on the parallel store** (see build note 8). |
 | 3 — Work order line popup | **done** | (see git log `Stage 3`) | All 9 items. Verified live on a seeded project: steps drive the status, tapping the tip clears, flag is orthogonal (Complete · flagged), one camera button, Notes always present. |
 | 4 — Work order as a signed document | **partial** | (see git log `Stage 4`) | Items 1, 3, 4, 5, 7, 8, 9 done — incl. the AAU0080 investigation and the gate closed without retro-locking. **Not built: item 2 PDF generation, item 6 re-sign-on-new-version** (see build notes). |
-| 5 — Customer email map | **partial** | (see git log `Stage 5`) | Ledger + onceForProject built; items 6, 8, 10 (removal half), 11 done. **Remaining: items 2, 3, 7, 9, the paid-in-full email and item 4’s 2-day reminder** — see build notes. |
+| 5 — Customer email map | **done** | (see git log `Stage 5`) | All items. Ledger + onceForProject; event sends for 2, 4, 5, 7, 10; sweep for 3, 4-reminder, 9; removals for 8, 10, 11; gate for 6. Sweep verified 3× on 129 local projects with no re-sends. |
 | 6 — Scheduler, verification, deploy | **partial** | (docs only) | Item 1 answered: Hostinger is a persistent Node process, boot timers run, no cron migration needed; `/api/cron/*` already exists as a fallback. **Items 2 and 3 (per-plan email timing capture + screenshot set) not done.** |
 
 **Resume point:** Stage 4, with Stage 2 item 2 (PDF-first addendum signing) still outstanding.
