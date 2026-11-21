@@ -23,7 +23,7 @@ import { lineStatusGate, stepsAfterStatus, stepCount, creditsForAdvance, normali
 import { ensureEsignSchema } from "./esign/schema.js";
 import { ensureSeoSchema } from "./seo/schema.js";
 import { HIRING_STATUSES, statusLabel, portalOfStatus, legacyStageFromStatus, resolveHiring } from "./hiring.js";
-import { SANDBOX_SOURCE, SANDBOX_COPY_TABLES, SANDBOX_CHILD_TABLES, sandboxEmail, tagSandboxName } from "./sandbox.js";
+import { SANDBOX_SOURCE, SANDBOX_COPY_TABLES, SANDBOX_CHILD_TABLES, SANDBOX_WO_COPY_TABLES, SANDBOX_WO_CHILD_TABLES, sandboxEmail, tagSandboxName } from "./sandbox.js";
 
 // Passwords use scrypt with a per-user random salt — stored as "scrypt$<salt>$<hash>".
 // Legacy accounts were a single unsalted SHA-256; verifyPw still accepts those so existing
@@ -6164,15 +6164,25 @@ export function getNotificationFeed(userId, role) {
 }
 
 // ---- Expenses ----
+// A sandbox is a throwaway copy of a real job, so its expenses are not company spend: they must never
+// reach this list, these totals or the approval queue. A company expense carries no project at all
+// (access_id IS NULL) and always belongs here — hence the explicit NULL arm rather than a plain join
+// filter, which would silently drop every unattached expense.
+const EXPENSE_NOT_SANDBOX = `(e.access_id IS NULL OR p.sandbox_of IS NULL)`;
 export function getExpenses() {
   return db.prepare(`
     SELECT e.*, p.customer AS project_customer
     FROM expenses e LEFT JOIN projects p ON p.access_id = e.access_id COLLATE NOCASE
+    WHERE ${EXPENSE_NOT_SANDBOX}
     ORDER BY COALESCE(e.spent_on, e.created_at) DESC, e.id DESC
   `).all().map((r) => ({ ...r }));
 }
 export function getExpenseStats() {
-  const rows = db.prepare("SELECT category, amount FROM expenses").all();
+  const rows = db.prepare(`
+    SELECT e.category, e.amount
+    FROM expenses e LEFT JOIN projects p ON p.access_id = e.access_id COLLATE NOCASE
+    WHERE ${EXPENSE_NOT_SANDBOX}
+  `).all();
   let total = 0; const byCat = {};
   for (const r of rows) { total += r.amount || 0; byCat[r.category || "Other"] = (byCat[r.category || "Other"] || 0) + (r.amount || 0); }
   return { total, count: rows.length, byCat };
@@ -7143,6 +7153,34 @@ export function cloneProposal({ sourceProposalId, destAccessId, options = {}, ac
 // Copy a project row column-for-column. The column list is read from the live schema rather than typed
 // out, so a column added to `projects` next month is carried into the demo automatically instead of
 // silently reverting to its default in every sandbox.
+// Copy the source project's work order into the sandbox, remapping every child row onto the NEW wo id.
+// Runs inside the caller's transaction (no BEGIN/COMMIT here) so a failure rolls the whole demo back.
+// What travels and what doesn't is decided in lib/sandbox.js — the short version is: the document and its
+// line states do, the crew's signatures, time and pay do not.
+function copySandboxWorkOrder(sourceAccessId, accessId) {
+  const src = db.prepare("SELECT * FROM wo WHERE project_access_id = ? ORDER BY id").all(String(sourceAccessId));
+  if (!src.length) return 0;
+  const woCols = db.prepare("PRAGMA table_info(wo)").all().map((c) => c.name).filter((c) => c !== "id");
+  const insWo = db.prepare(`INSERT INTO wo (${woCols.join(",")}) VALUES (${woCols.map(() => "?").join(",")})`);
+  let copied = 0;
+  for (const row of src) {
+    insWo.run(...woCols.map((c) => (c === "project_access_id" ? accessId : (row[c] ?? null))));
+    const newWoId = Number(db.prepare("SELECT last_insert_rowid() AS id").get().id);
+    for (const { table, key } of SANDBOX_WO_COPY_TABLES) {
+      let cols;
+      try { cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name).filter((c) => c !== "id"); }
+      catch { continue; }                                    // table not in this schema yet
+      if (!cols.includes(key)) continue;
+      const kids = db.prepare(`SELECT * FROM ${table} WHERE ${key} = ?`).all(row.id);
+      if (!kids.length) continue;
+      const ins = db.prepare(`INSERT INTO ${table} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})`);
+      for (const k of kids) ins.run(...cols.map((c) => (c === key ? newWoId : (k[c] ?? null))));
+    }
+    copied += 1;
+  }
+  return copied;
+}
+
 export function createSandboxProject(sourceAccessId, actor = null) {
   const src = getJobByAccessId(sourceAccessId);
   if (!src) return { error: "Project not found." };
@@ -7193,6 +7231,9 @@ export function createSandboxProject(sourceAccessId, actor = null) {
       const ins = db.prepare(`INSERT INTO ${table} (${tcols.join(",")}) VALUES (${tcols.map(() => "?").join(",")})`);
       for (const r of rows) ins.run(...tcols.map((c) => (c === key ? accessId : (r[c] ?? null))));
     }
+    // The work order can't ride that loop: its children hang off `wo.id`, not the project id, so the new
+    // parent's id has to be threaded through them.
+    copySandboxWorkOrder(sourceAccessId, accessId);
     db.exec("COMMIT");
   } catch (e) {
     try { db.exec("ROLLBACK"); } catch { /* already rolled back */ }
@@ -7212,6 +7253,16 @@ export function discardSandboxProject(accessId) {
   if (!p.sandbox_of) return { error: "Not a demo — refusing to delete a real project." };
   db.exec("BEGIN");
   try {
+    // wo children key on wo.id, so resolve those ids BEFORE the parent row goes — otherwise every line,
+    // check-in, day log and signature the demo accrued is orphaned in the table for good.
+    try {
+      const woIds = db.prepare("SELECT id FROM wo WHERE project_access_id = ?").all(String(accessId)).map((r) => r.id);
+      for (const woId of woIds) {
+        for (const t of SANDBOX_WO_CHILD_TABLES) {
+          try { db.prepare(`DELETE FROM ${t} WHERE wo_id = ?`).run(woId); } catch { /* table not in this schema */ }
+        }
+      }
+    } catch { /* no wo table yet */ }
     for (const [table, key] of SANDBOX_CHILD_TABLES) {
       try { db.prepare(`DELETE FROM ${table} WHERE ${key} = ?`).run(String(accessId)); } catch { /* table/column may not exist yet */ }
     }
@@ -8877,10 +8928,17 @@ export function getEffectiveRates(techName) {
 
 // ---- Action Center: cross-project pending items needing a decision ----
 export function getPendingExpenses() {
-  return db.prepare("SELECT * FROM expenses WHERE status='pending' ORDER BY created_at DESC").all().map(r => ({ ...r }));
+  // Sandbox expenses are not real spend — they must never land in the approval queue (see getExpenses).
+  return db.prepare(`
+    SELECT e.* FROM expenses e LEFT JOIN projects p ON p.access_id = e.access_id COLLATE NOCASE
+     WHERE e.status='pending' AND ${EXPENSE_NOT_SANDBOX}
+     ORDER BY e.created_at DESC`).all().map(r => ({ ...r }));
 }
 export function getPendingRequests() {
-  return db.prepare("SELECT * FROM requests WHERE status='pending' ORDER BY created_at DESC").all().map(r => ({ ...r }));
+  return db.prepare(`
+    SELECT r.* FROM requests r LEFT JOIN projects p ON p.access_id = r.project_access_id COLLATE NOCASE
+     WHERE r.status='pending' AND p.sandbox_of IS NULL
+     ORDER BY r.created_at DESC`).all().map(r => ({ ...r }));
 }
 export function getPendingWorkOrders() {
   return db.prepare("SELECT * FROM work_orders WHERE status='pending' ORDER BY submitted_at DESC").all().map(r => ({ ...r }));

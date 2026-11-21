@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import {
   isSandbox, canSandbox, sandboxRoleFrom, sandboxEmail, tagSandboxName,
   SANDBOX_SOURCE, SANDBOX_ROLES, SANDBOX_CHILD_TABLES, SANDBOX_COPY_TABLES,
+  SANDBOX_WO_COPY_TABLES, SANDBOX_WO_CHILD_TABLES,
 } from "../lib/sandbox.js";
 
 const read = (p) => readFileSync(new URL(p, import.meta.url), "utf8");
@@ -62,7 +63,9 @@ test("the name is tagged once, never stacked on a re-copy", () => {
 });
 
 test("discard covers every per-project table, with the right key column for each", () => {
-  const schema = read("../lib/db.js");
+  // Most per-project tables are created in db.js, but a table may own its own schema module
+  // (`addendums` lives in lib/addendum-schema.js). Search both so the list can name either.
+  const schema = read("../lib/db.js") + "\n" + read("../lib/addendum-schema.js");
   for (const [table, key] of SANDBOX_CHILD_TABLES) {
     const at = schema.indexOf(`CREATE TABLE IF NOT EXISTS ${table} (`);
     assert.ok(at > -1, `${table} exists`);
@@ -179,4 +182,63 @@ test("Demo is offered on a real project only, and only to an admin", () => {
   assert.match(gw, /sandbox && canSandbox\s*\n?\s*\? <SandboxBar/, "the bar needs both a demo row and an admin");
   const hub = read("../app/project/[accessId]/staff-hub.jsx");
   assert.match(hub, /\{onDemo && <button role="menuitem"/, "the hub renders Demo only when the host passes it");
+});
+
+// ── A demo opens on the REAL job ───────────────────────────────────────────────────────────────────
+// It used to copy only survey/mockup/proposal, so an admin walking a finished job through the roles saw
+// no work order, no crew, no balance and an empty log — a blank version of the thing they meant to show.
+test("the demo carries the job's real state, not just its built content", () => {
+  const copied = new Set(SANDBOX_COPY_TABLES.map((t) => t.table));
+  for (const t of ["project_tool_data", "proposals", "stage_acceptances",      // the original three
+                   "project_assignments", "project_payments", "addendums",      // crew, money, change orders
+                   "install_issues", "project_events", "project_notes", "expenses", "requests"])
+    assert.ok(copied.has(t), `${t} travels into the demo`);
+  // Analytics about the real customer, and signing artefacts bound to the source document, never travel.
+  for (const t of ["project_views", "proposal_views", "sign_documents", "sign_sessions"])
+    assert.ok(!copied.has(t), `${t} must NOT be copied`);
+  assert.equal(SANDBOX_COPY_TABLES.find((t) => t.table === "expenses").key, "access_id", "expenses key differs");
+});
+
+test("the work order travels, its children are remapped, the crew's time and signatures are not", () => {
+  const copied = SANDBOX_WO_COPY_TABLES.map((t) => t.table);
+  assert.deepEqual(copied, ["wo_lines", "wo_versions"]);
+  for (const { key } of SANDBOX_WO_COPY_TABLES) assert.equal(key, "wo_id", "children hang off the wo id");
+  // A technician never signed the demo's document; their day logs and credits are real time and money.
+  for (const t of ["wo_signatures", "wo_checkins", "wo_day_logs", "wo_events", "wo_line_credits", "wo_line_media"])
+    assert.ok(!copied.includes(t), `${t} must NOT be copied into a demo`);
+  // …but every one of them must still be cleaned up, since a demo accrues its own once you work in it.
+  for (const t of ["wo_lines", "wo_versions", "wo_signatures", "wo_checkins",
+                   "wo_day_logs", "wo_events", "wo_line_credits", "wo_line_media"])
+    assert.ok(SANDBOX_WO_CHILD_TABLES.includes(t), `${t} is wiped on discard`);
+  // The live work order is `wo`; `work_orders` is the legacy table, so listing only that leaked the row.
+  const byName = Object.fromEntries(SANDBOX_CHILD_TABLES);
+  assert.equal(byName.wo, "project_access_id", "the wo row itself is discarded");
+});
+
+test("db.js remaps wo children onto the NEW wo id and resolves them before deleting the parent", () => {
+  const db = read("../lib/db.js");
+  const at = db.indexOf("function copySandboxWorkOrder(");
+  assert.ok(at > -1, "the work-order copy exists");
+  const body = db.slice(at, db.indexOf("\nexport function", at));
+  assert.ok(/last_insert_rowid\(\)/.test(body), "it reads the new wo id");
+  assert.ok(/c === key \? newWoId/.test(body), "and threads it through every child row");
+  assert.ok(!/BEGIN|COMMIT/.test(body), "it runs inside the caller's transaction so a failure rolls back");
+  const dis = db.slice(db.indexOf("export function discardSandboxProject("));
+  const woIdx = dis.indexOf("SELECT id FROM wo WHERE project_access_id");
+  const delIdx = dis.indexOf("DELETE FROM projects WHERE access_id");
+  assert.ok(woIdx > -1 && woIdx < delIdx, "child wo ids are resolved before the project row goes");
+});
+
+test("a demo's expenses never count as company spend", () => {
+  const db = read("../lib/db.js");
+  // Pre-existing leak this change had to close first: adding an expense inside a demo put it in the real
+  // /expenses list, the category totals and the approval queue.
+  for (const fn of ["getExpenses", "getExpenseStats", "getPendingExpenses", "getPendingRequests"]) {
+    const at = db.indexOf(`export function ${fn}(`);
+    assert.ok(at > -1, `${fn} exists`);
+    const body = db.slice(at, db.indexOf("\n}", at));
+    assert.ok(/sandbox_of IS NULL|EXPENSE_NOT_SANDBOX/.test(body), `${fn} excludes sandbox projects`);
+  }
+  // A company expense has no project at all — it must survive the filter.
+  assert.ok(/e\.access_id IS NULL OR p\.sandbox_of IS NULL/.test(db), "unattached expenses still count");
 });
