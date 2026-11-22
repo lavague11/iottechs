@@ -22,7 +22,10 @@ test("staff: floor carousel header on top, contextual nav footer below the canva
   assert.ok(sp.includes("<FloorSelect floors={roster}"), "the header's floor name opens FloorSelect");
   assert.ok(sp.includes('className="syp-nav"'), "a contextual nav footer exists");
   // the nav footer (below) must come AFTER the plan pane in source order (i.e. below the canvas)
-  const panePos = sp.indexOf('className="syp-pane syp-plan"');
+  // Locates the plan pane by its leading classes, not an exact attribute string: the className is a
+  // template literal now (it appends syp-plan--ar when the widget reports the plan's height). The
+  // assertion here is about SOURCE ORDER, which that change does not affect.
+  const panePos = sp.search(/className=\{?[`"]syp-pane syp-plan/);
   const navPos = sp.indexOf('className="syp-nav"');
   const floorbarPos = sp.indexOf('className="syp-floorbar"');
   assert.ok(floorbarPos > 0 && floorbarPos < panePos, "floor header is above the canvas");

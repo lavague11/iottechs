@@ -2827,13 +2827,30 @@
     // no tiling, no crop). Recomputed on every bg change, floor switch, and resize.
     var sceneAspect=null;   // width/height of the current floor's background image
     var fitOverride=null, curCover=false;   // Fit button: null=auto (by screen), true=Fill(cover), false=Fit(contain)
+    // Tell the embedding host the shape of this floor's plan. A phone frame is a fixed height, so a
+    // landscape aerial contained into it rendered as a thin band with half a screen of empty grid above
+    // and below; the host uses this to size itself to the plan instead. null = no plan yet (chooser /
+    // Build gate), which means "keep your own height".
+    // `want` is the height this frame needs to show the whole plan at its CURRENT width with no dead
+    // band: the contained plate height plus whatever chrome sits outside the canvas (the floor selector).
+    // The host applies it, which resizes this frame, which re-fits (see the ResizeObserver below) and
+    // re-posts — converging in a tick or two, and the 3px deadband stops it oscillating.
+    var _lastPlateAR=undefined, _lastWant=0;
+    function postPlateAspect(ar, want){
+      if(ar===_lastPlateAR && Math.abs((want||0)-_lastWant)<3) return;
+      _lastPlateAR=ar; _lastWant=want||0;
+      if(window.parent===window) return;
+      try{ parent.postMessage({ type:"iotSurveyPlate", project:PID, aspect:(ar>0?ar:null), wantHeight:(want>0?Math.round(want):null) }, "*"); }catch(e){}
+    }
     function fitScene(){
       var scene=document.getElementById("scene"), host=document.getElementById("working");
       if(!scene||!host) return;
       renderNorthArrow();
-      if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; renderGrid(); return; }  // no image → CSS inset:0 (full)
+      if(!bgData){ scene.style.left=scene.style.top=scene.style.width=scene.style.height=scene.style.right=scene.style.bottom=""; renderGrid(); postPlateAspect(null); return; }  // no image → CSS inset:0 (full)
       if(!sceneAspect){ var im=new Image(); im.onload=function(){ sceneAspect=(im.naturalWidth/im.naturalHeight)||1; fitScene(); }; im.onerror=function(){ sceneAspect=1; fitScene(); }; im.src=bgData; return; }
       var cw=host.clientWidth, ch=host.clientHeight; if(!cw||!ch) return;
+      // Chrome = everything in this document that is NOT the canvas (the floor selector strip).
+      postPlateAspect(sceneAspect, (cw/sceneAspect) + Math.max(0, document.documentElement.clientHeight - ch));
       // Default to CONTAIN everywhere: the WHOLE plan shows zoomed-out (customers review it; editors see the
       // full layout at a glance). Pinch to zoom in and pan; editors can tap Fill for edge-to-edge cover.
       // Device coords are % of the scene, so either fit keeps them locked to the image.
@@ -2852,6 +2869,11 @@
       if(!coverageRevealed && bgHasImage && typeof devices!=="undefined" && devices.length){ coverageRevealed=true; revealCoverage(); }
     }
     window.addEventListener("resize", fitScene);
+    // The canvas box changes for reasons a window resize never sees — the host sizing this frame to the
+    // plan (iotSurveyPlate), the panel sheet opening, entering focus. Without this the plate kept the
+    // size it was fitted at and simply overflowed, which is how a shortened frame cropped the aerial
+    // instead of re-fitting it.
+    try{ if(window.ResizeObserver){ var _ro=new ResizeObserver(function(){ fitScene(); }); var _w=document.getElementById("working"); if(_w) _ro.observe(_w); } }catch(e){}
     function loadFloor(i){ if(aligning) exitAlign(true); curFloor=i; var f=floors[i]||{};
       if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });

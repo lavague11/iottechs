@@ -31,7 +31,10 @@ const EXPECTED_TYPES = new Set([
   // (iotSurveyLoadFailed) and asks it to drop that copy and re-seed from the server (iotSurveyDiscardLocal),
   // which the host owns because the localStorage + IndexedDB mirror is the host's.
   "iotSurveyDevices", "iotSurveyDiscardLocal", "iotSurveyFocus", "iotSurveyFocusState", "iotSurveyLoadFailed",
-  "iotSurveyNavGo", "iotSurveyReqFocus", "iotSurveySelect",
+  // The widget tells the shell the height this floor's plan actually needs (contained plate + its own
+  // chrome). On a phone the frame was a fixed height a landscape aerial could never fill, so the map
+  // rendered as a thin band in half a screen of empty grid; the shell sizes the frame from this instead.
+  "iotSurveyNavGo", "iotSurveyPlate", "iotSurveyReqFocus", "iotSurveySelect",
   "iotSurveyStep", "iotSurveySubmitState", "iotSurveyZoom", "iotZonePolys", "iotZonesMigrated",
 ]);
 

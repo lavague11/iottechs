@@ -61,6 +61,7 @@ export default function SystemPlanner({
   const [curFloor, setCurFloor] = useState(0);
   const [fsOn, setFsOn] = useState(false);        // planner-level fullscreen (owns the floor context + rail + tools)
   const [bgTool, setBgTool] = useState(null);     // "draw" | "satellite" | null — which build tool is open inside the survey (from iotSurveyStep)
+  const [plateH, setPlateH] = useState(null);     // px of frame the plan actually needs (from iotSurveyPlate) — sizes the frame on phones
   const rootRef = useRef(null);
   const navRef = useRef({});   // latest Back/Next actions for the one-bar in-canvas nav (message handler reads this)
   // Devices roster: expanded by default (desktop unchanged); collapsed on a phone after mount so the list
@@ -157,6 +158,11 @@ export default function SystemPlanner({
       else if (m.type === "iotMockupSelect" && m.cid) { setSelectedCid(m.cid); post("Site Survey", { type: "iotSurveyCmd", cmd: "selectCid", project: accessId, cid: m.cid }); }
       // The devices roster is lifted into the shell (shown on both tabs) — mirror the survey's live roster.
       else if (m.type === "iotSurveyDevices") { setRoster(Array.isArray(m.floors) ? m.floors : []); setCurFloor(m.curFloor || 0); setRosterUndo(m.undo || null); }
+      // The shape of the current floor's plan. On a phone the frame is a fixed height, so a landscape
+      // aerial contained into it was a thin band with empty grid above and below; this lets the frame
+      // take the plan's own shape instead. null (chooser / Build gate / no background) → keep the
+      // fixed height, because there is no plan to take a shape from.
+      else if (m.type === "iotSurveyPlate") setPlateH(Number(m.wantHeight) > 0 ? Math.round(Number(m.wantHeight)) : null);
       // A rename made INSIDE the mockup (it already persisted to survey2 by cid) → relay to the survey
       // iframe so the live map/Devices strip reflect it immediately, closing the sync loop both ways.
       else if (m.type === "iotMockupRenamed" && m.cid) { post("Site Survey", { type: "iotSurveyCmd", cmd: "renameCid", project: accessId, cid: m.cid, name: m.name || "" }); }
@@ -564,7 +570,7 @@ export default function SystemPlanner({
           flows as a document: the survey MAP gets its own bounded height, and the camera roster flows
           BELOW it (the page scrolls) — never trapped inside a fixed frame that would clip the roster.
           Background/Plan/Cameras all show the survey pane (the rail drove its internal step). */}
-      <div className="syp-pane syp-plan" hidden={paneMode !== "plan"}>
+      <div className={`syp-pane syp-plan${plateH ? " syp-plan--ar" : ""}`} hidden={paneMode !== "plan"} style={plateH ? { "--syp-plate-h": `${plateH}px` } : undefined}>
         {planNode || <div className="syp-empty">Your site survey will appear here once it&apos;s started.</div>}
       </div>
       {/* Camera Photos — the phone-mockup photo surface, reachable from the ••• Go-to menu. No longer a
@@ -1081,7 +1087,21 @@ const CSS = `
 /* Keep the map taller than 540px on desktop so the survey uses CONTAIN (whole aerial visible + zoomable),
    not the phone COVER mode that crops the sides and blocks zooming back out. */
 .syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(74vh,680px);min-height:560px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
-@media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px} }
+@media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px}
+  /* A floor that HAS a plan takes the height the plan actually needs (--syp-plate-h, posted by the
+     widget as iotSurveyPlate.wantHeight: the contained plate plus the widget's own chrome). The fixed
+     height above is taller than a landscape aerial can fill at phone width — a 1.29 plan in a 496px
+     frame used only 289px of it, so the map read as a thin band with 42% of the frame empty grid.
+     Clamped so an extreme plan stays usable and the frame never grows past what the fixed height
+     already allowed. The !important beats the overlay hosts (.dv-overlay-body / .cpv-ovl-body
+     .ss-tool-body), which set this frame to flex:1 1 0 + height:auto!important to fill their column.
+     That is (0,3,0), so this selector is deliberately written long enough to outrank it — a shorter
+     one loses and the frame silently falls back to its min-height. */
+  .syp-pane.syp-plan--ar .ss-embed .ss-embed-frame{flex:0 0 auto!important;height:var(--syp-plate-h)!important;min-height:260px!important;max-height:min(64vh,520px)}
+  /* …and let the pane pack to that height, so the nav sits under the map instead of after a column of
+     white where the old over-tall frame used to be. */
+  .syp-pane.syp-plan--ar{flex:0 0 auto!important}
+  .syp-pane.syp-plan--ar .ss-tool-col,.syp-pane.syp-plan--ar .ss-tool-body,.syp-pane.syp-plan--ar .ss-embed{flex:0 0 auto!important;height:auto!important} }
 /* PLANNER FULLSCREEN (Phase 2, rev 2) — a CSS overlay (no Fullscreen API; see enterFs). .syp becomes a
    fixed, viewport-filling layer that covers the deck header/phase rail (which live outside it). It never
    reparents, so the iframes keep their state (no reload) and stay editable. 100dvh + safe-area for mobile. */
