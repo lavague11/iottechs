@@ -22,13 +22,15 @@ IOT TECHS FSM platform. New Wiring step in the Site Survey tool: draw cable rout
    placement. It shows where it is useful — the device roster, the equipment list, outdoor-rated camera
    checks — and `needsOutdoorRating()` treats an unconfirmed device as needing the rating.
 
-   **Three states, because two of them would be guesses.** A floor with no structure drawn, and the
-   one-cell band on the outline (the wall-mount case, which is exactly where an outdoor housing gets
-   decided), both return **`review`** with a reason, rather than an answer. Structure = painted cells ∪
-   room cells; areas and zones are driveway / yard / parking, i.e. the outdoors, and never count as
-   building. Placement is **not** in the approval fingerprint (`survey2Meaning` hashes k/x/y/aim/fov/
-   range/name), so recomputing it on an existing survey cannot void a signature — there is a test
-   asserting exactly that.
+   **Two states, one sentence** (owner decision 2026-11-22, simplifying an earlier three-state rule):
+   inside the drawn structure is indoor, **anything else is outdoor** — the wall-mount band just off the
+   footprint, a device exactly on the outline, and a floor with no structure drawn all read outdoor.
+   That default is the safe direction, not merely the simple one: an outdoor-rated housing works
+   indoors, while an indoor one in the weather fails, so where the geometry cannot prove a device is
+   inside the building, outdoor over-specs rather than under-specs. Structure = painted cells ∪ room
+   cells; areas and zones are driveway / yard / parking, i.e. the outdoors, and never count as building.
+   Placement is **not** in the approval fingerprint (`survey2Meaning` hashes k/x/y/aim/fov/range/name),
+   so recomputing it on an existing survey cannot void a signature — there is a test asserting that.
 
 ## Cable types and colours
 
@@ -233,19 +235,18 @@ deletes, the red outline on unwired devices, and the approval lock.
 - C — routes in the approval fingerprint: **agreed, Stage 2**, via the `planHash` pattern so existing approvals are untouched.
 - G — **ONE unlock control** in Stage 3: extend the existing "Edit survey" button in the submit-lock banner, never a second one.
 
-### Placement rule — 2026-11-22 (replaces the old two-state guess)
+### Placement rule — 2026-11-22
 
-The rule already half-existed: `rmDevCtx` in the widget wrote `d.placementType` as `"inside"`/`"outside"`
-from structure containment, persisted it, and surfaced it through `surveyDevices`. What it did not have
-was a way to say *I don't know* — so it guessed twice:
+The rule already half-existed: `rmDevCtx` in the widget wrote `d.placementType` from structure
+containment, persisted it, and surfaced it through `surveyDevices`. What it lacked was a pure, testable
+home — and it conflated two questions, because one variable answered both "which room names this device"
+and "is it indoors". That is how a camera bolted to an exterior wall could be named for the room behind
+it *and* declared inside.
 
-1. a floor with **no structure drawn** called every device `"outside"` — a statement about a building,
-   made without a building;
-2. the one-cell band off the footprint (the wall-mount case) was resolved by whichever room happened to
-   be adjacent, because one variable was answering both "which room names this device" and "is it
-   indoors" — which is how a camera bolted to an exterior wall could be named for the room behind it
-   *and* declared inside.
+Now: the rule lives in `lib/survey-placement.js`, the widget mirrors it under a drift test, and the
+naming tolerance is deliberately separate from the placement decision — so "Dining 1" still names the
+wall-mounted camera while its placement reads **outdoor**, which is what decides the housing.
 
-Now: the rule is a pure module (`lib/survey-placement.js`) with three states, the widget mirrors it under
-a drift test, and the naming tolerance is kept deliberately separate from the placement decision — so
-"Dining 1" still names the wall-mounted camera while its placement reads `review`.
+A three-state version (with a `review` state for the wall band and for floors with nothing drawn)
+shipped first and was simplified away the same day on the owner's call: outdoor is already the
+fail-safe answer for those cases, so a third state asked a question the default had answered.

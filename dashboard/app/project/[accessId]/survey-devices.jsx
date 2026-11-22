@@ -50,17 +50,12 @@ export default function SurveyDevices({ accessId, roster, curFloor, readOnly, lo
   const subLabel = (d) => {
     const hasLoc = !!(d.locName && d.locName.trim());
     const place = d.placementType === PLACEMENT.INSIDE ? "Inside" : d.placementType === PLACEMENT.OUTSIDE ? "Outside" : "";
-    // `review` is the placement rule declining to guess — no structure drawn on the floor, or the
-    // device sits in the wall-mount band on the outline. It reads as the question it is, at the end
-    // of the line, rather than being quietly rendered as one of the two answers.
-    const review = d.placementType === PLACEMENT.REVIEW;
     const kind = d.k === "cam" ? "Camera" : (d.kind || "Device");
     // Show the identity on the sub-line only when it adds info — not when it just repeats the headline (a hand-typed name sets both).
     const ident = !hasLoc ? (d.tag || "") : (d.name && d.name.trim() && d.name.trim() !== d.locName.trim() ? d.name.trim() : "");
     const parts = [];
-    if (place) parts.push(`${place} ${kind}`); else if (hasLoc || review) parts.push(kind);
+    if (place) parts.push(`${place} ${kind}`); else if (hasLoc) parts.push(kind);
     if (ident) parts.push(ident);
-    if (review) parts.push("Indoor?");
     return parts.join(" · ");
   };
 

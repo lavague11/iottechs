@@ -1,12 +1,12 @@
 // Indoor / outdoor, DERIVED from where a device sits against the structure drawn on Layout
-// (lib/survey-placement.js). Four cases the owner named: inside, outside, on the edge, no structure.
+// (lib/survey-placement.js). TWO states: inside the structure is indoor, anything else is outdoor —
+// the wall-mount band, exactly on the outline, and a floor with no structure drawn all read outdoor.
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   PLACEMENT, PLACEMENT_LABEL, HALF, cellKey, structureCells, floorHasDrawnStructure,
-  placementOf, needsOutdoorRating, placementReviews,
-  REVIEW_NO_STRUCTURE, REVIEW_ON_OUTLINE, REVIEW_NO_GEOMETRY,
+  placementOf, needsOutdoorRating,
 } from "../lib/survey-placement.js";
 
 const widget = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
@@ -20,6 +20,11 @@ const BLOCK = [];
 for (let c = 20; c <= 22; c++) for (let r = 20; r <= 22; r++) BLOCK.push(`${c},${r}`);
 const floorWith = (plan, devices = []) => ({ plan, devices });
 
+test("there are exactly two states", () => {
+  assert.deepEqual(PLACEMENT, { INSIDE: "inside", OUTSIDE: "outside" });
+  assert.deepEqual(PLACEMENT_LABEL, { inside: "Inside", outside: "Outside" });
+});
+
 test("cellKey maps a percent position onto the plan's half-cell grid", () => {
   assert.equal(cellKey(25.5, 40.5, VB), "25,40");
   assert.equal(cellKey(0, 0, VB), "0,0");
@@ -28,58 +33,51 @@ test("cellKey maps a percent position onto the plan's half-cell grid", () => {
   assert.equal(cellKey("x", 40, VB), null);
 });
 
-test("INSIDE — a device on a structure cell", () => {
+test("INSIDE — a device on a structure cell is indoor", () => {
   const f = floorWith({ cells: BLOCK });
-  assert.deepEqual(placementOf(at(21.5, 21.5), f, VB), { placement: PLACEMENT.INSIDE, reason: "" });
-  assert.equal(needsOutdoorRating(PLACEMENT.INSIDE), false);
+  assert.equal(placementOf(at(21.5, 21.5), f, VB), PLACEMENT.INSIDE);
+  assert.equal(needsOutdoorRating(PLACEMENT.INSIDE), false, "an indoor camera needs no outdoor rating");
 });
 
-test("OUTSIDE — a device clear of the structure on every side", () => {
+test("OUTSIDE — a device clear of the structure is outdoor", () => {
   const f = floorWith({ cells: BLOCK });
-  // (60,60) is nowhere near the 20..22 block, and none of its eight neighbours are building.
-  assert.deepEqual(placementOf(at(60.5, 60.5), f, VB), { placement: PLACEMENT.OUTSIDE, reason: "" });
-  assert.equal(needsOutdoorRating(PLACEMENT.OUTSIDE), true, "an outdoor camera needs an outdoor-rated housing");
+  assert.equal(placementOf(at(60.5, 60.5), f, VB), PLACEMENT.OUTSIDE);
+  assert.equal(needsOutdoorRating(PLACEMENT.OUTSIDE), true);
 });
 
-test("ON THE EDGE — the wall-mount band is flagged, never guessed", () => {
+test("ON THE EDGE — the wall-mount band and the outline itself are outdoor", () => {
   const f = floorWith({ cells: BLOCK });
-  // One cell off the footprint on each side, and on a diagonal corner: all touch the building.
+  // One cell off the footprint on each side, and on a diagonal corner.
   for (const [x, y] of [[23.5, 21.5], [19.5, 21.5], [21.5, 23.5], [21.5, 19.5], [23.5, 23.5], [19.5, 19.5]]) {
-    const got = placementOf(at(x, y), f, VB);
-    assert.equal(got.placement, PLACEMENT.REVIEW, `(${x},${y}) is on the outline`);
-    assert.equal(got.reason, REVIEW_ON_OUTLINE);
+    assert.equal(placementOf(at(x, y), f, VB), PLACEMENT.OUTSIDE, `(${x},${y}) is off the footprint → outdoor`);
   }
-  // Two cells out is clear of the band and resolves normally — the flag is a one-cell band, not a halo.
-  assert.equal(placementOf(at(24.5, 21.5), f, VB).placement, PLACEMENT.OUTSIDE);
-  assert.equal(needsOutdoorRating(PLACEMENT.REVIEW), true,
-    "an unanswered question about a camera that might be in the weather is not a reason to spec indoor");
+  // The boundary cell of the structure is still structure, so the very edge of the building is indoor.
+  assert.equal(placementOf(at(20.1, 20.1), f, VB), PLACEMENT.INSIDE, "a corner cell of the building is inside it");
+  assert.equal(placementOf(at(22.9, 22.9), f, VB), PLACEMENT.INSIDE);
 });
 
-test("NO STRUCTURE — nothing drawn means nothing to be inside or outside of", () => {
-  // This is the case the old two-state rule got wrong: it called every device "outside", which is a
-  // statement about a building, made without a building.
+test("NO STRUCTURE — a floor with nothing drawn is outdoor", () => {
   for (const plan of [null, undefined, {}, { cells: [] }, { cells: [], rooms: [] }, { rooms: [{ cells: [] }] }]) {
-    const got = placementOf(at(50, 50), floorWith(plan), VB);
-    assert.equal(got.placement, PLACEMENT.REVIEW, `plan ${JSON.stringify(plan)} → review`);
-    assert.equal(got.reason, REVIEW_NO_STRUCTURE);
+    assert.equal(placementOf(at(50, 50), floorWith(plan), VB), PLACEMENT.OUTSIDE, `plan ${JSON.stringify(plan)} → outdoor`);
   }
   assert.equal(floorHasDrawnStructure(floorWith({ cells: [] })), false);
   assert.equal(floorHasDrawnStructure(floorWith({ cells: BLOCK })), true);
 });
 
-test("a floor with structure but no plan geometry to measure against is also a review, not a guess", () => {
-  assert.equal(placementOf(at(50, 50), floorWith({ cells: BLOCK }), null).reason, REVIEW_NO_GEOMETRY);
-  assert.equal(placementOf({ k: "cam" }, floorWith({ cells: BLOCK }), VB).reason, REVIEW_NO_GEOMETRY,
-    "a device with no coordinates cannot be placed");
+test("nothing to measure against is outdoor too — the safe direction, not a coin flip", () => {
+  // An outdoor-rated housing works indoors; an indoor one in the weather does not. So where the
+  // geometry cannot prove a device is inside the building, outdoor over-specs rather than under-specs.
+  assert.equal(placementOf(at(50, 50), floorWith({ cells: BLOCK }), null), PLACEMENT.OUTSIDE);
+  assert.equal(placementOf({ k: "cam" }, floorWith({ cells: BLOCK }), VB), PLACEMENT.OUTSIDE);
 });
 
 test("rooms count as structure — a legacy plan can carry rooms without ever filling cells", () => {
   const f = floorWith({ rooms: [{ label: "Dining", cells: BLOCK }] });
-  assert.equal(placementOf(at(21.5, 21.5), f, VB).placement, PLACEMENT.INSIDE);
-  assert.equal(placementOf(at(60.5, 60.5), f, VB).placement, PLACEMENT.OUTSIDE);
+  assert.equal(placementOf(at(21.5, 21.5), f, VB), PLACEMENT.INSIDE);
+  assert.equal(placementOf(at(60.5, 60.5), f, VB), PLACEMENT.OUTSIDE);
   // Areas and zones are driveway / yard / parking — the outdoors — and must NOT count as building.
   const onlyAreas = floorWith({ cells: [], areas: [{ label: "Driveway", cells: BLOCK }], zoneCells: { parking: BLOCK } });
-  assert.equal(placementOf(at(21.5, 21.5), onlyAreas, VB).reason, REVIEW_NO_STRUCTURE,
+  assert.equal(placementOf(at(21.5, 21.5), onlyAreas, VB), PLACEMENT.OUTSIDE,
     "a floor with only outdoor areas has no structure drawn");
 });
 
@@ -88,30 +86,19 @@ test("structureCells ignores junk keys rather than throwing on a corrupt plan", 
   assert.deepEqual([...s].sort(), ["1,2", "3,4", "5,6"]);
 });
 
-test("placementReviews lists what a human still has to confirm, with the reason", () => {
-  const f = floorWith({ cells: BLOCK }, [at(21.5, 21.5), at(23.5, 21.5), at(60.5, 60.5)]);
-  const out = placementReviews(f, VB);
-  assert.equal(out.length, 1, "only the wall-mount one needs confirming");
-  assert.equal(out[0].cid, "c23.5_21.5");
-  assert.equal(out[0].reason, REVIEW_ON_OUTLINE);
-  assert.deepEqual(placementReviews(floorWith({ cells: BLOCK }, []), VB), [], "no devices, nothing to review");
-});
-
-test("the three labels are terse, and `review` is one of them — not a blank", () => {
-  assert.deepEqual(PLACEMENT_LABEL, { inside: "Inside", outside: "Outside", review: "Review" });
-});
-
 test("the widget's placement rule never drifts from lib/survey-placement.js", () => {
   // The widget is static HTML and cannot import, so it mirrors the rule. If the two diverge, the
   // planner and everything reading the saved blob disagree about the same camera, with no error.
   assert.match(widget, /var SUG_HALF=13\b|SUG_HALF=13,/, `the widget's half-cell size still matches HALF=${HALF}`);
   const fn = widget.slice(widget.indexOf("function rmPlacement("), widget.indexOf("function rmDevCtx("));
-  assert.ok(fn.includes('return "review"') && fn.includes('return "inside"') && fn.includes('return "outside"'),
-    "the widget returns all three states");
-  assert.ok(fn.indexOf("rmHasStructure") < fn.indexOf("rmStructHas(plan,key)"),
-    "no-structure is tested FIRST — otherwise an empty plan falls through to the outline scan");
-  assert.ok(/RM_N8/.test(fn), "the widget scans the same 8-neighbour band");
-  assert.match(widget, /var RM_N8=\[\[1,0\],\[-1,0\],\[0,1\],\[0,-1\],\[1,1\],\[1,-1\],\[-1,1\],\[-1,-1\]\]/);
+  assert.ok(fn.includes('"inside"') && fn.includes('"outside"'), "the widget returns both states");
+  assert.ok(!/review/i.test(fn), "and no third state");
+  assert.match(widget, /function rmPlacement\(plan,key\)\{ return rmStructHas\(plan,key\) \? "inside" : "outside"; \}/,
+    "the widget rule is the same single sentence as placementOf");
+  // Structure = painted cells ∪ room cells, in the widget too.
+  const has = widget.slice(widget.indexOf("function rmStructHas("), widget.indexOf("function rmPlacement("));
+  assert.ok(has.includes("plan.cells") && has.includes("plan.rooms"), "cells AND rooms count as structure");
+  assert.ok(!/areas|zoneCells/.test(has), "areas and zones are the outdoors and never count as building");
 });
 
 test("placement is NOT part of the approval fingerprint — recomputing it cannot void a signature", () => {

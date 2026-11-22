@@ -1,4 +1,4 @@
-// Device LOCATION model: identity (name/tag) ≠ location (locName "Dining 1") ≠ placement (inside/outside/review).
+// Device LOCATION model: identity (name/tag) ≠ location (locName "Dining 1") ≠ placement (inside/outside).
 // Deterministic, geometry-only. Extract the pure resolver rmDevCtx and run it on a synthetic plan; plus
 // source guards for the stable-sequence reconciler, the canvas label, persistence, and the camera-suggestion swap.
 import test from "node:test";
@@ -17,11 +17,9 @@ function extractFn(name) {
   throw new Error("unbalanced " + name);
 }
 const ZT = survey.slice(survey.indexOf("var ZONE_TYPES="), survey.indexOf("var ZONE_KEYS="));
-const RMN = survey.slice(survey.indexOf("var RM_N8="), survey.indexOf("function rmStructHas("));
 const api = new Function(`var SUG_HALF=13; ${ZT}
-  ${RMN}
   ${extractFn("sugOk")}\n${extractFn("zTypeLabel")}
-  ${extractFn("rmStructHas")}\n${extractFn("rmHasStructure")}\n${extractFn("rmPlacement")}
+  ${extractFn("rmStructHas")}\n${extractFn("rmPlacement")}
   ${extractFn("rmDevCtx")}
   return { rmDevCtx, zTypeLabel, rmPlacement };`)();
 
@@ -57,24 +55,24 @@ test("a camera over a NAMED area → outside + the area's free name (wins over t
   assert.equal(api.rmDevCtx(cell(2, 11), { plan: override }, o).base, "Front Drive", "a named area beats the legacy zone type");
 });
 
-test("wall-mount tolerance NAMES the adjacent room, but no longer asserts a placement", () => {
-  // Naming and placement are different questions, and one variable used to answer both — which is how
-  // a wall-mounted camera got named for the room behind it AND declared "inside". The naming tolerance
-  // is unchanged (you still get "Dining 1"); the placement is now `review`, because a camera bolted to
-  // the outside of that wall and one standing just inside it land in the same cell.
+test("an outside-wall camera is NAMED for the room behind it, and placed OUTDOOR", () => {
+  // Naming and placement are different questions and one variable used to answer both. The naming
+  // tolerance is unchanged — you still get "Dining 1" for a camera on the wall — while the placement
+  // reads outdoor, which is what decides whether the housing has to be outdoor-rated.
   const r = api.rmDevCtx(cell(5, 2), f, o);   // col 5 is between Dining (≤4) and Kitchen (≥6); neighbour of both
   assert.ok(r.roomIdx === 0 || r.roomIdx === 1, "picks an adjacent room, not nothing");
   assert.ok(r.base === "Dining" || r.base === "Kitchen", "still named from the adjacent room");
-  assert.equal(r.placementType, "review", "the wall-mount band is flagged, not guessed");
+  assert.equal(r.placementType, "outside", "…but the placement is outdoor");
 });
 
-test("the three placement states, straight from the widget's own rule", () => {
+test("the two placement states, straight from the widget's own rule", () => {
   const inRoom = { cells: range(1, 4, 1, 3) };
-  assert.equal(api.rmPlacement(inRoom, 2, 2, "2,2"), "inside");
-  assert.equal(api.rmPlacement(inRoom, 5, 2, "5,2"), "review", "one cell off the footprint");
-  assert.equal(api.rmPlacement(inRoom, 40, 40, "40,40"), "outside");
-  assert.equal(api.rmPlacement({ cells: [] }, 2, 2, "2,2"), "review", "nothing drawn → nothing to be inside of");
-  assert.equal(api.rmPlacement({}, 2, 2, "2,2"), "review");
+  assert.equal(api.rmPlacement(inRoom, "2,2"), "inside");
+  assert.equal(api.rmPlacement(inRoom, "5,2"), "outside", "one cell off the footprint is outdoor");
+  assert.equal(api.rmPlacement(inRoom, "40,40"), "outside");
+  assert.equal(api.rmPlacement({ cells: [] }, "2,2"), "outside", "nothing drawn → outdoor");
+  assert.equal(api.rmPlacement({}, "2,2"), "outside");
+  assert.equal(api.rmPlacement({ rooms: [{ cells: ["7,7"] }] }, "7,7"), "inside", "rooms count as structure");
 });
 
 test("a camera with no plan / off every structure → no base, outside", () => {
