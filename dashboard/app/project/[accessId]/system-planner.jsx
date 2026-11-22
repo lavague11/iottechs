@@ -700,6 +700,15 @@ function SyncBadge() {
       <span>Not saving</span>
     </div>
   );
+  // A stale-claim conflict that could not be reconciled: Retry is the WRONG action (the same bytes against
+  // the same stale claim are what the server is refusing), so this offers Reload instead.
+  if (st.conflict) return (
+    <div className="syp-sync off" role="alert" aria-live="assertive" title={st.conflict}>
+      <span className="syp-sync-dot" aria-hidden="true" />
+      <span>Changed elsewhere</span>
+      <button type="button" className="syp-sync-retry" onClick={() => window.location.reload()}>Reload</button>
+    </div>
+  );
   if (st.failed) return (
     <div className="syp-sync off" role="alert" aria-live="assertive">
       <span className="syp-sync-dot" aria-hidden="true" />

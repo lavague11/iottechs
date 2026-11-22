@@ -86,6 +86,55 @@ export function survey2CameraCount(raw) {
   return m.floors.reduce((n, f) => n + (f.devices || []).filter(v => v.k === "cam").length, 0);
 }
 
+// ---- survey2: fold a camera-field patch back into an open editor's draft ---------------------
+// /api/project-cameras writes survey2 DIRECTLY (setSurveyCameraPhoto / setSurveyCameraName) so the
+// mockup, the proposal builder and the camera roster can patch one camera without the survey being
+// open. When it IS open, that write moves the server revision underneath the editor and every
+// autosave afterwards is refused as stale (B14) — correctly, because the editor's copy really is
+// missing the photo. Reloading would throw away the editor's unsaved work; re-claiming blindly would
+// throw away the photo. So reconcile instead, with `ancestor` (the last copy this client successfully
+// pushed) as the common parent of both sides.
+//
+// Deliberately NARROW. It accepts ONLY what that endpoint can produce: `photo`, `photoName` and
+// `name` on a device that still sits at the same (floor, index) and still has the same kind. Any other
+// divergence — a device added, removed or moved, a floor changed, a background swapped — is a real
+// conflict this must not guess at, and returns ok:false so the caller stops and asks the human.
+const CAM_PATCH_FIELDS = ["photo", "photoName", "name"];
+export function mergeSurveyCameraPatch(ancestorRaw, serverRaw, localRaw) {
+  const a = parse(ancestorRaw), s = parse(serverRaw), l = parse(localRaw);
+  if (!a || !s || !l || !Array.isArray(a.floors) || !Array.isArray(s.floors) || !Array.isArray(l.floors)) return { ok: false };
+  if (s.floors.length !== a.floors.length) return { ok: false };
+  // Everything OUTSIDE the device arrays must be untouched on the server side, or this is not a
+  // camera patch. Compare ancestor-vs-server with the devices blanked out.
+  const strip = (d) => stable({ ...d, floors: d.floors.map((f) => ({ ...f, devices: (f.devices || []).length })) });
+  if (strip(a) !== strip(s)) return { ok: false };
+  const patches = [];
+  for (let fi = 0; fi < s.floors.length; fi++) {
+    const sd = s.floors[fi].devices || [], ad = a.floors[fi].devices || [];
+    if (sd.length !== ad.length) return { ok: false };
+    for (let di = 0; di < sd.length; di++) {
+      const sv = sd[di] || {}, av = ad[di] || {};
+      if (sv.k !== av.k) return { ok: false };                       // a different device sits here now
+      const changed = Object.keys({ ...sv, ...av }).filter((k) => stable(sv[k]) !== stable(av[k]));
+      if (!changed.length) continue;
+      if (changed.some((k) => !CAM_PATCH_FIELDS.includes(k))) return { ok: false };   // not a camera patch
+      patches.push({ fi, di, k: sv.k, fields: Object.fromEntries(changed.map((k) => [k, sv[k]])) });
+    }
+  }
+  if (!patches.length) return { ok: true, merged: localRaw, patches: 0 };   // server moved for some other reason
+  // Apply onto the LOCAL draft, which keeps every edit the user has made since. A patch whose device
+  // is no longer where it was locally is dropped rather than forced onto the wrong camera.
+  const out = JSON.parse(JSON.stringify(l));
+  let applied = 0;
+  for (const p of patches) {
+    const dev = out.floors?.[p.fi]?.devices?.[p.di];
+    if (!dev || dev.k !== p.k) continue;
+    Object.assign(dev, p.fields);
+    applied += 1;
+  }
+  return { ok: true, merged: JSON.stringify(out), patches: applied };
+}
+
 // ---- Camera mockup (localStorage key iot_cctv_<id>, tool "mockup") --------------------------
 function mockupMeaning(d) {
   if (!d) return null;

@@ -15,7 +15,7 @@
 // raw JSON with no Flight encoding, so it can't hit that bug.
 
 import { idbGet, idbSet, idbDel, idbAvailable } from "./idb-store.js";
-import { toolHasData } from "../../../lib/tool-data.js";
+import { toolHasData, mergeSurveyCameraPatch } from "../../../lib/tool-data.js";
 
 // Tools whose "is this empty?" test is EXACT, and which may therefore take part in the empty-local
 // recovery below. `survey2Meaning` keys off floors that have been started / have a background / have
@@ -89,6 +89,31 @@ export async function postToolData(accessId, tool, raw) {
   // Our write became the new server version; remember it so the next push is not itself stale.
   if (out?.ok && out.saved?.rev) _setBaseRev(accessId, tool, out.saved.rev);
   return out;
+}
+
+// A `stale` refusal (B14) means the server row moved after we last read or wrote it. Retrying the same
+// bytes can NEVER succeed — the claim we send is the stale part — so without this a single outside write
+// left the autosync POSTing identically every 5s forever while the survey silently stopped saving. The
+// one routine outside writer is /api/project-cameras (camera photo / rename), which patches the same
+// survey2 blob, so reconcile that case and surface anything else rather than guessing.
+//
+// Returns the raw string to push next, or null when the caller must stop and ask the human.
+async function reconcileStale(accessId, tool, localRaw) {
+  const ancestor = _lastPushed.get(`${accessId}:${tool}`);
+  let serverRaw = null, serverRev = null;
+  try {
+    const r = await (await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`)).json();
+    if (!r?.ok) return null;
+    serverRaw = r.saved?.data ?? null; serverRev = r.saved?.rev || "0";
+  } catch { return null; }   // couldn't read — treat as unresolved, never as "ours wins"
+  // Someone else's copy is byte-identical to ours: nothing to merge, just re-claim and carry on.
+  if (serverRaw === localRaw) { _setBaseRev(accessId, tool, serverRev); return localRaw; }
+  if (tool !== "survey2") return null;                       // no reconciler for the other tools
+  if (ancestor == null) return null;                         // no common parent → cannot merge safely
+  const m = mergeSurveyCameraPatch(ancestor, serverRaw, localRaw);
+  if (!m.ok) return null;                                    // a real conflict — the human decides
+  _setBaseRev(accessId, tool, serverRev);                    // our next push is made against what we just read
+  return m.merged;
 }
 
 // `force`: for read-only viewers (the customer), the SERVER is the source of truth — always pull
@@ -203,11 +228,17 @@ const _lastPushed = new Map();
 // cannot help (the bytes are the problem), so it is reported differently from `failed`.
 let _status = { online: typeof navigator === "undefined" ? true : navigator.onLine !== false, pending: new Set(), quota: null, failed: false, blockedKeys: new Set(), savedAt: 0 };
 const BLOCKED_MSG = "This device’s copy can’t be read — it is not being saved";
+// Keys whose last push was refused as stale AND could not be reconciled (reconcileStale returned null):
+// the server copy genuinely diverged in a way only a person can settle. Pushing is stopped for the key —
+// retrying identical bytes against a stale claim can never succeed — and the badge says so. Cleared by a
+// successful push, or by startToolAutosync, which only runs after a fresh seed.
+const _conflicts = new Set();
+const CONFLICT_MSG = "This was changed somewhere else — reload the page to get the latest copy";
 const _statusSubs = new Set();
 function snapshot() {
   // `blocked` is per project:tool, not global: the survey being unreadable must not clear itself when the
   // schedule's autosync starts (they share this status object), and vice versa.
-  return { online: _status.online, pending: _status.pending.size, quota: _status.quota, failed: _status.failed, blocked: _status.blockedKeys.size ? BLOCKED_MSG : null, savedAt: _status.savedAt };
+  return { online: _status.online, pending: _status.pending.size, quota: _status.quota, failed: _status.failed, blocked: _status.blockedKeys.size ? BLOCKED_MSG : null, conflict: _conflicts.size ? CONFLICT_MSG : null, savedAt: _status.savedAt };
 }
 function emitStatus() {
   const snap = snapshot();
@@ -242,13 +273,14 @@ if (typeof window !== "undefined") {
 export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 5000 } = {}) {
   const mapKey = `${accessId}:${tool}`;
   _suspended.delete(mapKey);   // a (re)start always follows a successful seed
+  _conflicts.delete(mapKey);   // …and a fresh seed is exactly how a conflict is resolved
   if (_status.blockedKeys.delete(mapKey)) emitStatus();   // a (re)start clears only THIS key
   let stopped = false;
   let readOnly = false;
   let inFlight = false;
 
   async function push() {
-    if (stopped || readOnly || inFlight || _suspended.has(mapKey)) return;
+    if (stopped || readOnly || inFlight || _suspended.has(mapKey) || _conflicts.has(mapKey)) return;
     let cur;
     try { cur = localStorage.getItem(storageKey); } catch { return; }
     if (cur == null || cur === _lastPushed.get(mapKey)) { _status.pending.delete(mapKey); emitStatus(); return; }
@@ -269,8 +301,20 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
     if (typeof navigator !== "undefined" && navigator.onLine === false) { _status.online = false; emitStatus(); return; }
     inFlight = true;
     try {
-      const r = await postToolData(accessId, tool, cur);
-      if (r?.ok) { _lastPushed.set(mapKey, cur); _status.pending.delete(mapKey); if (!_status.online) _status.online = true; _status.failed = false; _status.savedAt = Date.now(); emitStatus(); }   // synced → "Saved ✓"
+      let r = await postToolData(accessId, tool, cur);
+      // Stale claim → reconcile ONCE, then push the reconciled copy. Retrying `cur` unchanged is futile,
+      // so an unreconcilable conflict stops this key instead of spinning (see reconcileStale).
+      if (r?.stale) {
+        const next = await reconcileStale(accessId, tool, cur);
+        if (next == null) {
+          _conflicts.add(mapKey); _status.pending.delete(mapKey); emitStatus();
+          return;
+        }
+        if (next !== cur) { try { localStorage.setItem(storageKey, next); } catch { /* blocked */ } if (idbAvailable()) await idbSet(storageKey, next); }
+        cur = next;
+        r = await postToolData(accessId, tool, cur);
+      }
+      if (r?.ok) { _lastPushed.set(mapKey, cur); _status.pending.delete(mapKey); _conflicts.delete(mapKey); if (!_status.online) _status.online = true; _status.failed = false; _status.savedAt = Date.now(); emitStatus(); }   // synced → "Saved ✓"
       else if (r?.error === "Read-only for your role.") { readOnly = true; _status.pending.delete(mapKey); emitStatus(); }  // viewer — stop pushing
       else { _status.failed = true; emitStatus(); }   // a real server rejection → say so; it stays pending and the next tick (or Retry) resends
     } catch {

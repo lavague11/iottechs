@@ -677,7 +677,7 @@ test("ONE validated host POST — every host-side writer of a tool blob goes thr
   assert.match(sync, /export async function postToolData/);
   assert.match(sync, /if \(!toolPayloadSendable\(tool, raw\)\) return \{ refused: true/, "the gate is INSIDE postToolData");
   assert.doesNotMatch(postBody(sync), /allowEmpty/, "and a host mirror never declares clear-intent");
-  assert.match(sync, /const r = await postToolData\(accessId, tool, cur\);/, "push() goes through it");
+  assert.match(sync, /\b(?:const|let) r = await postToolData\(accessId, tool, cur\);/, "push() goes through it");
   const approve = readFileSync(new URL("../app/project/[accessId]/survey-approve.jsx", import.meta.url), "utf8");
   assert.match(approve, /const r = await postToolData\(accessId, d\.tool, raw\);/, "flushDraft goes through it");
   assert.match(approve, /if \(r\?\.refused\) \{/, "and reports the refusal instead of reporting a sync");
@@ -690,9 +690,16 @@ test("ONE validated host POST — every host-side writer of a tool blob goes thr
   assert.ok(gatePos > 0 && gatePos < sync.indexOf("idbSet(storageKey, cur)"), "refused before the mirror");
   assert.ok(gatePos < sync.indexOf("await postToolData(accessId, tool, cur)"), "and before the POST");
   // Retry cannot resurrect a suspended key, and the user is never told "Saved" while nothing is sent.
-  assert.match(sync, /if \(stopped \|\| readOnly \|\| inFlight \|\| _suspended\.has\(mapKey\)\) return;/);
+  assert.match(sync, /if \(stopped \|\| readOnly \|\| inFlight \|\| _suspended\.has\(mapKey\) \|\| _conflicts\.has\(mapKey\)\) return;/);
+  // A `stale` refusal (B14) must never be retried with the same bytes: the stale part IS the claim we
+  // send, so an identical resend can only fail again — which is how one outside camera write (via
+  // /api/project-cameras) silently stopped a survey saving for the life of the page, 5s at a time.
+  assert.match(sync, /if \(r\?\.stale\) \{/, "a stale refusal is handled on its own, not as a generic failure");
+  assert.match(sync, /const next = await reconcileStale\(accessId, tool, cur\);/, "it reconciles instead");
+  assert.match(sync, /if \(next == null\) \{\s*\n\s*_conflicts\.add\(mapKey\);/, "and an unreconcilable conflict STOPS the key");
   const sp = readFileSync(new URL("../app/project/[accessId]/system-planner.jsx", import.meta.url), "utf8");
   assert.ok(sp.indexOf("if (st.blocked) return (") < sp.indexOf("if (st.failed) return ("), "'Not saving' outranks every other badge state");
+  assert.ok(sp.indexOf("if (st.conflict) return (") < sp.indexOf("if (st.failed) return ("), "'Changed elsewhere' (Reload) outranks 'Save failed' (Retry) — Retry is the wrong action for a stale claim");
   assert.ok(sp.indexOf("if (st.blocked) return (") < sp.indexOf("if (st.online && st.pending === 0)"), "and it is never replaced by 'Saved'");
 });
 
