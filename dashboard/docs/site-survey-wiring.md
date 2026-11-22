@@ -180,7 +180,7 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 | Stage | Scope | State |
 |---|---|---|
 | — | Spec into the repo + vault mirror, Stage 1 investigation, conflicts logged | **done** |
-| 1 | Route step, drawing, head-end, cable types and colours | **partial** — see below |
+| 1 | Route step, drawing, head-end, cable types and colours | **done** — drawing verified live at 375px |
 | 2 | Bundles, risers, editing rules, undo, lock | not started |
 | 3 | Submitted/signed survey opening, legend, run summary, work order + both PDFs | not started |
 
@@ -208,13 +208,25 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 - Duplicate a floor: the head-end copies (pure geometry), the runs deliberately do not — `cloneDevices` mints
   fresh cids, so every route's `dev` would point at a device that no longer exists.
 
-**Not in — Stage 1 is not finished.** There is no way to CREATE a run from the UI yet:
-- tap-device → tap-points → finish at the head-end (§The Route step 4)
-- placing the head-end marker by tapping (§3)
-- the cable-type and Home-run/Daisy-chain pickers (§5)
+**The drawing interaction (added 2026-11-22, Stage 1 now complete):**
+- Tap a device → tap points along the path → tap the head-end (home run) or another device (daisy chain).
+  Verified live on journey-test ASC0129 at 375px: both endings, the chip override, undo and cancel.
+- Head-end: arm the control, tap once to place. It disarms itself; tapping again moves it, never adds a second.
+- Cable chips: the picker AND the legend, in one row at the bottom of the canvas, within thumb reach.
+- `frozen() || RO` blocks every write, so a submitted survey cannot be drawn on (§Editing rules 8).
 
-So Route today shows the finished floor and draws any runs that exist, but a user cannot draw one. The model,
-the persistence and the rendering it will write into are all in place and tested.
+**Two decisions worth knowing, both departures from a literal reading of the spec:**
+
+1. **The run type is DERIVED, not a toggle.** §5 reads like a Home/Daisy control, but §4 already says a run
+   ends at the head-end *or* at another device — which is the same fact. Deriving it removes a control from a
+   one-handed bar and makes it impossible for the label to contradict the geometry. The field still stores
+   `home`/`daisy`, so an explicit override can be added later without a migration.
+2. **The cable prefills from the device kind** (speaker → speaker wire, display → HDMI, outlet → power,
+   everything else → Cat6), with the chips as the override. Smart defaults rule: the system already knows.
+
+**Still Stage 2, as scoped:** bundles and their count badges, risers, the full editing rules (tap-to-delete,
+the bundle picker, dragging a bundle point, the daisy-chain-break warning), the undo stack across multi-floor
+deletes, the red outline on unwired devices, and the approval lock.
 
 **Settled by the owner, 2026-11-22** (was "open"):
 - D — **C7 stays.** Do not change the canonical code; the diagram and work order match every other surface.

@@ -145,9 +145,14 @@ export default function StaffHub({
 .cpv-ovl-body .ss-tool-body>.ss-embed{flex:1 1 0;min-height:0;height:auto;display:flex;flex-direction:column}
 .cpv-ovl-body .ss-tool-body .ss-embed-frame{flex:1 1 0;min-height:0;height:auto!important}
 /* Overlay bar — consistent with the hub header: tool name LEFT, project name CENTERED, X RIGHT. */
-.cpv-ovl-bar{display:grid;grid-template-columns:1fr auto 1fr;gap:10px;box-shadow:0 1px 0 rgba(16,20,24,.03)}
+/* fit-content() on the centre track, not a bare auto. An auto (or minmax(0,auto)) track takes its
+   MAX-content width, so a long project name ("[JOURNEY-TEST] Maple Street Market") overflowed the
+   grid and painted straight over the tool name on the left — measured at 72px of overlap on a 375px
+   screen, with the name's own ellipsis never engaging because the track had grown to fit it rather
+   than constraining it. fit-content(52%) caps the track, so the ellipsis finally does its job. */
+.cpv-ovl-bar{display:grid;grid-template-columns:minmax(0,1fr) fit-content(52%) minmax(0,1fr);gap:10px;box-shadow:0 1px 0 rgba(16,20,24,.03)}
 .cpv-ovl-tool{justify-self:start;min-width:0;font-weight:700;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cpv-ovl-proj{justify-self:center;min-width:0;display:inline-flex;align-items:baseline;gap:7px}
+.cpv-ovl-proj{justify-self:center;min-width:0;max-width:100%;overflow:hidden;display:inline-flex;align-items:baseline;gap:7px}
 .cpv-ovl-projname{min-width:0;font-weight:800;font-size:15px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cpv-ovl-ctx{font-size:12px;font-weight:600;color:var(--meta);font-family:var(--font-mono),ui-monospace,monospace;flex:0 0 auto}
 .cpv-ovl-x{justify-self:end}

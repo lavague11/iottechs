@@ -91,6 +91,27 @@
      appended to #planWorld after this, so they stay on top and stay tappable. */
   #routeLayer{position:absolute;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;overflow:visible;display:none}
   body.routing #routeLayer,#routeLayer.on{display:block}
+  /* While routing, markers are display-only so a tap falls through to the canvas and is hit-tested by
+     geometry — the same trick body.regions uses. Otherwise every device tap would hit its own
+     select/drag handler and a run could never start on one. */
+  body.routing .devNode{pointer-events:none}
+  body.routing #working{cursor:crosshair}
+  /* Route bar — bottom centre, inside thumb reach. Contextual: the head-end button is replaced by undo
+     + cancel once a run is in progress, so the bar never carries a control that does nothing. */
+  /* Metrics are tight on purpose: four cable chips plus the head-end control have to fit inside a
+     375px phone without clipping. Measured at 343px of content against 353px of bar. */
+  #rtBar{position:absolute;left:50%;transform:translateX(-50%);bottom:14px;z-index:7;display:none;align-items:center;gap:4px;
+    padding:5px;border-radius:999px;background:rgba(255,255,255,.96);box-shadow:0 6px 22px rgba(16,20,24,.18);backdrop-filter:blur(6px);max-width:calc(100vw - 20px)}
+  body.routing #rtBar{display:flex}
+  .rtChip{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 9px;border:1px solid transparent;border-radius:999px;background:none;
+    font:700 12px/1 var(--sans,system-ui,sans-serif);color:#5c6269;cursor:pointer;white-space:nowrap}
+  .rtChip i{width:11px;height:11px;border-radius:3px;flex:none;box-shadow:0 0 0 1.5px #0E1216 inset}
+  .rtChip.on{background:#101418;color:#fff}
+  .rtBtn{width:34px;height:34px;flex:none;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line,#e3e5e8);
+    border-radius:999px;background:#fff;color:#101418;cursor:pointer}
+  .rtBtn.on{background:#101418;border-color:#101418;color:#fff}
+  .rtBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .rtSep{width:1px;height:20px;background:var(--line,#e3e5e8);flex:none}
   .ztag{position:absolute;padding:2px 7px;border-radius:999px;background:rgba(16,20,24,.7);color:#fff;font:600 10px/1.3 system-ui,sans-serif;white-space:nowrap;transform-origin:50% 50%}
   #rgBar{position:absolute;left:14px;bottom:116px;z-index:6;display:none;gap:6px;align-items:center} #rgBar #zoneName{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #zoneName.vbtn{height:34px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.9);font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12)}
@@ -729,6 +750,7 @@
           <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
+          <div id="rtBar" role="toolbar" aria-label="Wiring"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
           <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Area</button></div><button class="vbtn" id="zoneName" aria-label="Edit area" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete area" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="bdDel" title="Clear boundary" aria-label="Clear boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
           <div id="zonePop" role="dialog" aria-label="Area"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Area name"></div>
@@ -1795,8 +1817,8 @@
     var routing=false;
     function rCable(k){ for(var i=0;i<ROUTE_CABLES.length;i++) if(ROUTE_CABLES[i][0]===k) return ROUTE_CABLES[i]; return ROUTE_CABLES[0]; }
     function rRoutes(create){ var f=floors[curFloor]; if(!f) return []; if(!Array.isArray(f.routes)){ if(!create) return []; f.routes=[]; } return f.routes; }
-    function enterRoute(){ routing=true; document.body.classList.add("routing"); renderRoutes(); }
-    function exitRoute(){ if(!routing) return; routing=false; document.body.classList.remove("routing"); }
+    function enterRoute(){ routing=true; document.body.classList.add("routing"); rtDraft=null; rtHeadMode=false; renderRoutes(); renderRouteBar(); }
+    function exitRoute(){ if(!routing) return; routing=false; rtDraft=null; rtHeadMode=false; document.body.classList.remove("routing"); renderRouteBar(); }
     // Every run as two stacked polylines: a dark outline underneath, the neon colour over it. That pairing
     // is what makes a bright cable readable on a WHITE floor plan and on a dark aerial photo both — a
     // single neon stroke disappears into one or the other. A daisy chain is dashed, a home run solid.
@@ -1812,12 +1834,122 @@
         s+='<polyline points="'+d+'" fill="none" stroke="'+ROUTE_OUTLINE+'" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
         s+='<polyline points="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"'+dash+'/>';
       }
+      // The run being drawn, live: same stacked pair so it reads exactly as it will once committed, plus
+      // a dot on every tapped point so you can see what you have placed and what Undo will take back.
+      if(rtDraft && rtDraft.pts.length){
+        var dd="", k;
+        for(k=0;k<rtDraft.pts.length;k++) dd+=(dd?" ":"")+rtDraft.pts[k][0]+","+rtDraft.pts[k][1];
+        if(rtDraft.pts.length>1){
+          s+='<polyline points="'+dd+'" fill="none" stroke="'+ROUTE_OUTLINE+'" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+          s+='<polyline points="'+dd+'" fill="none" stroke="'+rCable(rtDraft.cable)[2]+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+        }
+        for(k=0;k<rtDraft.pts.length;k++){
+          s+='<circle cx="'+rtDraft.pts[k][0]+'" cy="'+rtDraft.pts[k][1]+'" r="1.1" fill="'+rCable(rtDraft.cable)[2]+'" stroke="'+ROUTE_OUTLINE+'" stroke-width="2" vector-effect="non-scaling-stroke"/>';
+        }
+      }
       var h=f.head;
       if(h && isFinite(h.x) && isFinite(h.y)){
         s+='<rect x="'+(h.x-1.7)+'" y="'+(h.y-1.7)+'" width="3.4" height="3.4" rx="0.7" fill="'+ROUTE_BUNDLE+'" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"/>';
       }
       rl.innerHTML=s;
     }
+
+    /* ---- Route EDITING. Tap a device, tap the path, tap the head-end. ------------------------------
+       The run TYPE is derived from where you finish rather than being a toggle you set first: ending on
+       the head-end is a home run, ending on another device is a daisy chain. §4 of the spec already
+       describes the two endings, so a separate Home/Daisy control would be the same fact entered twice
+       and able to contradict the geometry. The field still stores it, so an explicit override can be
+       added later without a migration. */
+    var rtDraft=null;        // { dev, cable, pts } while a run is being drawn
+    var rtCable=null;        // chip override; null = whatever the device kind implies
+    var rtHeadMode=false;    // the next tap places (or moves) the head-end
+    var RT_TOUCH=26;         // tap slop in px for hitting a marker — a fingertip, not a mouse pixel
+    // The cable a device kind implies, so the common case needs no decision: a speaker is speaker wire,
+    // a display is HDMI, an outlet is power, everything else is Cat6. The chips override it.
+    function rtDefaultCable(k){ return k==="spk" ? "speaker" : k==="disp" ? "hdmi" : k==="outlet" ? "power" : "cat6"; }
+    function rtDevKey(d){ return d ? (d.cid || ("id"+d.id)) : ""; }
+    function rtPct(cx,cy){
+      var w=document.getElementById("planWorld")||document.getElementById("scene"); if(!w) return null;
+      var r=w.getBoundingClientRect(); if(!(r.width>0&&r.height>0)) return null;
+      return { x:Math.max(0,Math.min(100,(cx-r.left)/r.width*100)), y:Math.max(0,Math.min(100,(cy-r.top)/r.height*100)), rw:r.width, rh:r.height }; }
+    function rtNear(p,x,y){ var dx=(x-p.x)/100*p.rw, dy=(y-p.y)/100*p.rh; return (dx*dx+dy*dy) <= RT_TOUCH*RT_TOUCH; }
+    function rtDeviceAt(p){ for(var i=devices.length-1;i>=0;i--){ var d=devices[i];
+      if(!d || d.placed===false || !isFinite(+d.x) || !isFinite(+d.y)) continue;
+      if(rtNear(p,+d.x,+d.y)) return d; } return null; }
+    function rtHeadAt(p){ var h=(floors[curFloor]||{}).head; return (h && isFinite(h.x) && rtNear(p,h.x,h.y)) ? h : null; }
+    function rtNewId(rs){ var n=1, used={}; rs.forEach(function(r){ used[r.id]=1; }); while(used["r"+n]) n++; return "r"+n; }
+    function rt2(v){ return Math.round(v*100)/100; }
+    function rtCommit(endPt, runType){
+      var f=floors[curFloor]; if(!f||!rtDraft) return;
+      var pts=rtDraft.pts.concat([endPt]);
+      if(pts.length>=2){ var rs=rRoutes(true); if(rs.length<200) rs.push({ id:rtNewId(rs), dev:rtDraft.dev, cable:rtDraft.cable, run:runType, pts:pts }); }
+      rtDraft=null; queueSave(); renderRoutes(); renderRouteBar(); }
+    function rtTap(cx,cy){
+      if(frozen()||RO) return;                       // a submitted survey is locked (§8)
+      var f=floors[curFloor]; if(!f) return;
+      var p=rtPct(cx,cy); if(!p) return;
+      if(rtHeadMode){ f.head={x:rt2(p.x),y:rt2(p.y)}; rtHeadMode=false; queueSave(); renderRoutes(); renderRouteBar(); return; }
+      var dev=rtDeviceAt(p), head=rtHeadAt(p);
+      if(!rtDraft){
+        if(!dev) return;                             // a run starts at a device; empty space does nothing
+        rtDraft={ dev:rtDevKey(dev), cable:(rtCable||rtDefaultCable(dev.k)), pts:[[rt2(+dev.x),rt2(+dev.y)]] };
+        renderRoutes(); renderRouteBar(); return; }
+      if(head){ rtCommit([head.x,head.y],"home"); return; }                       // …back to the head-end
+      if(dev && rtDevKey(dev)!==rtDraft.dev){ rtCommit([rt2(+dev.x),rt2(+dev.y)],"daisy"); return; }   // …or on to another device
+      rtDraft.pts.push([rt2(p.x),rt2(p.y)]); renderRoutes(); renderRouteBar(); }
+    function rtUndoPoint(){
+      if(!rtDraft) return;
+      rtDraft.pts.pop();
+      if(!rtDraft.pts.length) rtDraft=null;          // undoing the device anchor cancels the run
+      renderRoutes(); renderRouteBar(); }
+    function rtCancel(){ rtDraft=null; renderRoutes(); renderRouteBar(); }
+    var RT_ICON={ head:'<rect x="3" y="4" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7.5h.01M7 17h.01"/>',
+      undo:'<path d="M3 9h11a5 5 0 0 1 0 10h-3"/><path d="M7 5 3 9l4 4"/>',
+      x:'<path d="M18 6 6 18M6 6l12 12"/>' };
+    function rtIcon(k){ return '<svg viewBox="0 0 24 24" aria-hidden="true">'+RT_ICON[k]+'</svg>'; }
+    function renderRouteBar(){
+      var bar=document.getElementById("rtBar"); if(!bar) return;
+      if(!routing){ bar.innerHTML=""; return; }
+      var sel = rtDraft ? rtDraft.cable : rtCable, s="", i;
+      // The chips are the picker AND the legend — four colours named once, where the drawing happens.
+      for(i=0;i<ROUTE_CABLES.length;i++){ var c=ROUTE_CABLES[i];
+        // One word on the chip ("Speaker", not "Speaker wire") — four chips plus the head-end control
+        // have to fit a 375px phone, and the full name is still the accessible name and the tooltip.
+        // The canonical names live in the model and are what the legend and run summary print.
+        s+='<button type="button" class="rtChip'+(sel===c[0]?" on":"")+'" data-cable="'+c[0]+'" aria-pressed="'+(sel===c[0])+'" aria-label="'+c[1]+'" title="'+c[1]+'"><i style="background:'+c[2]+'"></i>'+c[1].split(" ")[0]+'</button>'; }
+      s+='<span class="rtSep"></span>';
+      if(rtDraft){
+        s+='<button type="button" class="rtBtn" data-rt="undo" aria-label="Undo point" title="Undo">'+rtIcon("undo")+'</button>';
+        s+='<button type="button" class="rtBtn" data-rt="cancel" aria-label="Cancel run" title="Cancel">'+rtIcon("x")+'</button>';
+      } else {
+        s+='<button type="button" class="rtBtn'+(rtHeadMode?" on":"")+'" data-rt="head" aria-label="Head-end" aria-pressed="'+rtHeadMode+'" title="Head-end">'+rtIcon("head")+'</button>';
+      }
+      bar.innerHTML=s; }
+    // Delegated, so the bar can be re-rendered freely without rebinding.
+    document.addEventListener("click", function(e){
+      if(!routing) return;
+      var chip=e.target.closest&&e.target.closest(".rtChip"), btn=e.target.closest&&e.target.closest(".rtBtn");
+      if(chip){ e.stopPropagation(); var k=chip.getAttribute("data-cable");
+        rtCable=k; if(rtDraft) rtDraft.cable=k;    // switching mid-run recolours the run in progress
+        renderRoutes(); renderRouteBar(); return; }
+      if(btn){ e.stopPropagation(); var a=btn.getAttribute("data-rt");
+        if(a==="head"){ rtHeadMode=!rtHeadMode; renderRouteBar(); }
+        else if(a==="undo") rtUndoPoint();
+        else if(a==="cancel") rtCancel();
+        return; } }, true);
+    // TAP, not click: a drag is the canvas panning and must not drop a route point. Bound once on the
+    // working canvas; the bar's own controls are handled above and stop propagation before this fires.
+    (function(){
+      var dx0=0, dy0=0, moved=false, downT=0;
+      var host=document.getElementById("working"); if(!host) return;
+      host.addEventListener("pointerdown", function(e){ if(!routing) return; dx0=e.clientX; dy0=e.clientY; moved=false; downT=Date.now(); }, true);
+      host.addEventListener("pointermove", function(e){ if(!routing||moved) return;
+        if(Math.abs(e.clientX-dx0)>8 || Math.abs(e.clientY-dy0)>8) moved=true; }, true);
+      host.addEventListener("pointerup", function(e){
+        if(!routing || moved || Date.now()-downT>700) return;     // a long press is not a tap either
+        if(e.target && e.target.closest && e.target.closest("#rtBar")) return;
+        rtTap(e.clientX, e.clientY); }, true);
+    })();
     function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;
       renderRoutes();   // before the zonesMigrated early-return below — routes are independent of the legacy zone migration
       var _mf=floors[curFloor];
