@@ -1022,6 +1022,21 @@ const CSS = `
 .syp-nav .syp-nav-mi:disabled{opacity:.34;cursor:default}
 .syp-nav-mi-dot{width:14px;flex:none;display:inline-flex;align-items:center;justify-content:center;color:var(--dv-gold,#b98a2e);font-size:11px}
 .syp-nav-sep{height:1px;background:var(--dv-line,#E4E4DF);margin:5px 4px}
+/* PHONE — three slots do not fit on one row. The right slot gets ~118px of the 347 available, while a
+   gate hint ("Draw the structure first") or a state label ("Awaiting customer approval") is 190–215px.
+   justify-content:flex-end made that slot overflow LEFTWARD, printing the hint straight across the step
+   button — two labels on top of each other. Give the action its own full-width row (a better thumb
+   target as well) and leave Back + the current step on row one. Comes after the base .syp-nav rules
+   above on purpose: a media query adds no specificity, so equal selectors are resolved by order. */
+@media (max-width:700px){
+  .syp-nav{flex-wrap:wrap;row-gap:7px}
+  /* order puts the spacer BEFORE the action slot when the lines are packed, so row one is
+     [Back 1fr] [step auto] [spacer 1fr] — the step stays dead-centre, exactly as on desktop — and the
+     action, whose 100% basis cannot share a line, is pushed onto row two. */
+  .syp-nav::after{content:"";order:1;flex:1 1 0;min-width:0}
+  .syp-nav > .syp-nav-side--right{order:2;flex:1 0 100%;min-width:0}
+  .syp-nav > .syp-nav-side--right > .syp-nav-cta{flex:1 1 auto;justify-content:center;min-width:0;white-space:normal}
+}
 /* SURVEY NAVIGATION popover — the Add-Service-modal design language (white/paper surface, soft border,
    big shadow, rounded, 2-col icon tiles). Used by both the top ••• (drops down) and the footer ••• (up). */
 .syp-navpop-backdrop{position:fixed;inset:0;z-index:1200}

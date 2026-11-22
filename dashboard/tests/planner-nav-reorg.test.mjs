@@ -57,6 +57,18 @@ test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a 
   assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");
 });
 
+test("phone: the bottom bar wraps — the action takes its own row and the step stays centred", () => {
+  // At 375px the bar has 347px for [Back] [step] [action], and the right slot gets ~118px while a gate
+  // hint ("Draw the structure first") or a state label ("Awaiting customer approval") is 190–215px wide.
+  // justify-content:flex-end made that slot overflow LEFTWARD, printing its label straight across the
+  // step button. These three rules are the fix; the ::after spacer is what keeps the step dead-centre
+  // on row one once the action has been pushed down to row two.
+  const mq = sp.slice(sp.indexOf(".syp-nav-sep{"));
+  assert.ok(/@media \(max-width:700px\)\{\s*\.syp-nav\{flex-wrap:wrap/.test(mq), "the nav bar wraps at phone width");
+  assert.ok(/\.syp-nav::after\{content:"";order:1;flex:1 1 0/.test(mq), "a spacer mirrors Back so the step stays centred");
+  assert.ok(/\.syp-nav > \.syp-nav-side--right\{order:2;flex:1 0 100%/.test(mq), "the action slot takes a full row, after the spacer");
+});
+
 test("FloorSelect exposes full parity: switch/add/rename/duplicate/delete", () => {
   const f = sp.slice(sp.indexOf("function FloorSelect("));
   for (const bit of ["onSwitch", "onAdd", "onRename", "onDuplicate", "onDelete", "+ Add floor", "Rename", "Duplicate", "Delete"]) {
