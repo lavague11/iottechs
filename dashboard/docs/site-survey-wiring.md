@@ -10,7 +10,25 @@ IOT TECHS FSM platform. New Wiring step in the Site Survey tool: draw cable rout
 4. Drawing a run: tap the device first, then tap points along the path back to the head-end (or to another device for daisy chain). Free multi-point lines that can pass straight through the structure.
 5. Run type per line: Home run (default) or Daisy chain.
 6. Cameras stay as numbered circles with their angle cone. Triangles are reserved for risers.
-7. Devices are labelled with their existing device IDs (e.g. IC7, IC14), and the same IDs appear on the work order lines.
+7. Devices are labelled with their existing device IDs (e.g. C7, C14), and the same IDs appear on the work order lines. **Owner decision 2026-11-22: C7, not IC7** — the canonical code in `lib/survey2-model.js` strips the leading `I` on purpose, and the diagram and work order must match what the customer layout, the AI device resolver and every other surface already show. Do not change the canonical code.
+
+   **Indoor / outdoor is DERIVED from placement, never typed.** A device inside the structure drawn on
+   Layout is indoor; outside it, outdoor. Computed from the device's position against that floor's
+   structure outline (`lib/survey-placement.js` `placementOf`, mirrored in the widget's `rmPlacement`;
+   a drift test keeps them equal). There is no manual field and there must never be one — the planner
+   already knows the footprint, so a second human-entered answer could only disagree with it.
+
+   It is a derived property, kept **out of the name**: identity (`C7`) ≠ location (`Dining 1`) ≠
+   placement. It shows where it is useful — the device roster, the equipment list, outdoor-rated camera
+   checks — and `needsOutdoorRating()` treats an unconfirmed device as needing the rating.
+
+   **Three states, because two of them would be guesses.** A floor with no structure drawn, and the
+   one-cell band on the outline (the wall-mount case, which is exactly where an outdoor housing gets
+   decided), both return **`review`** with a reason, rather than an answer. Structure = painted cells ∪
+   room cells; areas and zones are driveway / yard / parking, i.e. the outdoors, and never count as
+   building. Placement is **not** in the approval fingerprint (`survey2Meaning` hashes k/x/y/aim/fov/
+   range/name), so recomputing it on an existing survey cannot void a signature — there is a test
+   asserting exactly that.
 
 ## Cable types and colours
 
@@ -56,7 +74,7 @@ These are critical; build exactly as written.
 ## Opening a submitted or signed survey
 
 1. A submitted or signed survey opens with the Survey Navigation popup already showing, titled "Where would you like to go?" (all steps with checkmarks, plus Tools: Full screen, Walkthrough). Closing it leaves the user on the last step. Applies to every role and entry point, including ?view=survey links. In-progress surveys open as today.
-2. It opens view-only: no dragging, placing, drawing or deleting until the user taps an "Edit" button (top right). Moving between steps stays view-only.
+2. It opens view-only: no dragging, placing, drawing or deleting until the user taps an "Edit" button (top right). Moving between steps stays view-only. **Owner decision 2026-11-22: ONE unlock control.** Extend the existing "Edit survey" button in the submit-lock banner — do not add a second unlock beside it.
 3. Editing a signed survey does not automatically require re-approval. After saving, an optional "Send for re-approval" button appears; nothing is sent unless it is pressed.
 
 ## Verify
@@ -198,7 +216,24 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 So Route today shows the finished floor and draws any runs that exist, but a user cannot draw one. The model,
 the persistence and the rendering it will write into are all in place and tested.
 
-**Open for the owner** (logged, not blocking Stage 1):
-- D — device IDs read `C7` today, not `IC7`. Built to match the existing system; say the word to change the canonical code instead.
-- C — routes in the approval fingerprint. Additive-safe for every existing project, but it is a signature-binding change, so it lands in Stage 2 rather than being assumed.
-- G — §Opening a submitted or signed survey changes behaviour for existing live surveys, and would add a second unlock control beside the one already in the submit-lock banner.
+**Settled by the owner, 2026-11-22** (was "open"):
+- D — **C7 stays.** Do not change the canonical code; the diagram and work order match every other surface.
+- C — routes in the approval fingerprint: **agreed, Stage 2**, via the `planHash` pattern so existing approvals are untouched.
+- G — **ONE unlock control** in Stage 3: extend the existing "Edit survey" button in the submit-lock banner, never a second one.
+
+### Placement rule — 2026-11-22 (replaces the old two-state guess)
+
+The rule already half-existed: `rmDevCtx` in the widget wrote `d.placementType` as `"inside"`/`"outside"`
+from structure containment, persisted it, and surfaced it through `surveyDevices`. What it did not have
+was a way to say *I don't know* — so it guessed twice:
+
+1. a floor with **no structure drawn** called every device `"outside"` — a statement about a building,
+   made without a building;
+2. the one-cell band off the footprint (the wall-mount case) was resolved by whichever room happened to
+   be adjacent, because one variable was answering both "which room names this device" and "is it
+   indoors" — which is how a camera bolted to an exterior wall could be named for the room behind it
+   *and* declared inside.
+
+Now: the rule is a pure module (`lib/survey-placement.js`) with three states, the widget mirrors it under
+a drift test, and the naming tolerance is kept deliberately separate from the placement decision — so
+"Dining 1" still names the wall-mounted camera while its placement reads `review`.

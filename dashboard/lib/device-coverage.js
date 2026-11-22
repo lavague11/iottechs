@@ -6,6 +6,7 @@
 // → EXPLAIN its coverage (here) → record the customer's concern against it (feedback capture).
 
 import { kindOf } from "./survey2-model.js";
+import { PLACEMENT } from "./survey-placement.js";
 
 const round = (n) => Math.round(Number(n) || 0);
 const hasNum = (n) => Number.isFinite(Number(n)) && Number(n) !== 0;
@@ -24,7 +25,10 @@ export function describeCoverage(d) {
   if (!d) return null;
   const name = deviceName(d);
   const where = d.loc || d.label || "";
-  const place = d.placementType ? ` (${d.placementType})` : "";
+  // `review` is not a placement — it is the rule declining to guess. Rendering it as "(review)" inside
+  // a sentence of facts would read as a third placement value; state the unknown as the fact it is.
+  const place = d.placementType === PLACEMENT.REVIEW ? " (indoor/outdoor unconfirmed)"
+    : d.placementType ? ` (${d.placementType})` : "";
   let s = `${name} is on ${d.floorName || "this floor"}${where ? ` in ${where}` : ""}${place}`;
   const def = kindOf(d.k) || {};
   if (d.cone) {

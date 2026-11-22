@@ -2213,6 +2213,29 @@
     //   placement = d.placementType ("inside" | "outside") — from canonical Structure containment.
     // The canvas shows the LOCATION; identity stays in the record. Per-location sequence is STABLE (stored
     // d.locSeq/d.locKey): a new camera in a room takes the next number; deleting one does not reshuffle. ----
+    /* PLACEMENT (indoor / outdoor) — mirrors lib/survey-placement.js placementOf(); a drift test pins
+       the two equal. THREE states, because the two-state version had to guess twice: on a floor with
+       no structure drawn it called every device "outside" (a statement about a building, made with no
+       building), and in the one-cell band off the footprint — the wall-mount case, where an outdoor
+       housing is actually decided — it picked a side the grid cannot distinguish. Both are "review"
+       now, which is a question rather than an answer. Structure = painted cells ∪ room cells; areas
+       and zones are driveway/yard, i.e. the outdoors, and are deliberately not part of it. */
+    var RM_N8=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]];
+    function rmStructHas(plan,k){
+      if(Array.isArray(plan.cells) && plan.cells.indexOf(k)>=0) return true;
+      var rs=Array.isArray(plan.rooms)?plan.rooms:[];
+      for(var i=0;i<rs.length;i++){ if(rs[i] && Array.isArray(rs[i].cells) && rs[i].cells.indexOf(k)>=0) return true; }
+      return false; }
+    function rmHasStructure(plan){
+      if(Array.isArray(plan.cells) && plan.cells.length) return true;
+      var rs=Array.isArray(plan.rooms)?plan.rooms:[];
+      for(var i=0;i<rs.length;i++){ if(rs[i] && Array.isArray(rs[i].cells) && rs[i].cells.length) return true; }
+      return false; }
+    function rmPlacement(plan,c,r,key){
+      if(!rmHasStructure(plan)) return "review";
+      if(rmStructHas(plan,key)) return "inside";
+      for(var i=0;i<RM_N8.length;i++){ if(rmStructHas(plan,(c+RM_N8[i][0])+","+(r+RM_N8[i][1]))) return "review"; }
+      return "outside"; }
     function rmDevCtx(d, f, o){ var vb=o&&o.vb, plan=f&&f.plan, res={placementType:"",roomIdx:-1,base:""};
       if(!vb||!(vb.vw>0)||!(vb.vh>0)||!plan||!sugOk(d.x)||!sugOk(d.y)) return res;
       var c=Math.floor((vb.x0+(+d.x)/100*vb.vw)/SUG_HALF), r=Math.floor((vb.y0+(+d.y)/100*vb.vh)/SUG_HALF), key=c+","+r;
@@ -2221,11 +2244,14 @@
       function areaAt(k){ for(var i=0;i<areas.length;i++){ var ar=areas[i]; if(ar&&Array.isArray(ar.cells)&&(ar.label||"").trim()&&ar.cells.indexOf(k)>=0) return String(ar.label).trim(); } return ""; }
       var ri=roomAt(key);
       if(ri<0){ for(var j=0;j<N.length&&ri<0;j++) ri=roomAt((c+N[j][0])+","+(r+N[j][1])); }   // wall-mount tolerance: the anchor may sit on a boundary cell
+      // NAMING tolerance above (which room is this "Dining 1" in) is deliberately NOT the placement
+      // rule below. They are different questions and were answered by one variable until now, which is
+      // why a wall-mounted camera could be named for the room behind it AND declared "inside".
       var inStruct = ri>=0 || (Array.isArray(plan.cells)&&plan.cells.indexOf(key)>=0);
       // OUTDOOR: a NAMED area wins (the free label — "Driveway"/"Backyard"); fall back to the legacy typed zone label.
       var areaLbl=""; if(!inStruct){ areaLbl=areaAt(key); for(var ja=0;ja<N.length&&!areaLbl;ja++) areaLbl=areaAt((c+N[ja][0])+","+(r+N[ja][1])); }
       var zt=null, zc=plan.zoneCells; if(!areaLbl && zc){ for(var t in zc){ if(t==="site"||t==="interior"||t==="exterior"||!Array.isArray(zc[t])) continue; if(zc[t].indexOf(key)>=0){ zt=t; break; } } }
-      res.placementType = inStruct ? "inside" : "outside";
+      res.placementType = rmPlacement(plan, c, r, key);
       if(ri>=0){ res.roomIdx=ri; res.base=(rooms[ri].label&&String(rooms[ri].label).trim())||""; }
       else if(areaLbl){ res.base=areaLbl; }
       else if(zt){ res.base=zTypeLabel(zt); }
