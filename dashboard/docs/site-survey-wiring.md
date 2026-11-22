@@ -226,6 +226,15 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 2. **The cable prefills from the device kind** (speaker → speaker wire, display → HDMI, outlet → power,
    everything else → Cat6), with the chips as the override. Smart defaults rule: the system already knows.
 
+**Undo/redo is scoped to the step (fixed 2026-11-22).** The floating undo button is not a general history
+— it is "pop the last placed device", and the region editor keeps its own separate `bdHist`, which is why
+`body.regions` hides the device one in CSS. Route draws over the same Setup canvas and that handler never
+learned about it, so on Route undo deleted a **camera** and left every cable run in place (reproduced
+live: 3 cameras → 2, routes unchanged). Route now has its own snapshot stack of `{routes, head}` per
+floor, and `undoAction`/`redoAction` check the step first and **return**, so a Route undo with nothing to
+undo is a no-op that cannot reach a device. The same two buttons serve both steps; on Route they are
+hidden while a run is being drawn, because the bar's own undo owns the in-progress points.
+
 **Still Stage 2, as scoped:** bundles and their count badges, risers, the full editing rules (tap-to-delete,
 the bundle picker, dragging a bundle point, the daisy-chain-break warning), the undo stack across multi-floor
 deletes, the red outline on unwired devices, and the approval lock.

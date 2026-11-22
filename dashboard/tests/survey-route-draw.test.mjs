@@ -24,10 +24,14 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
   const api = new Function("S", `
     ${CABLE_SRC}
     var routing=true, rtDraft=null, rtCable=null, rtHeadMode=false, RT_TOUCH=26;
-    var devices=S.devices, floors=[S.floor], curFloor=0;
+    var rtHist=[], rtHi=-1, rtHistFloor=-1, RT_HIST_MAX=60;
+    var devices=S.devices, floors=[S.floor], curFloor=0, redoStk=[];
     function frozen(){ return S.frozen; } var RO=S.RO;
     function queueSave(){ S.saves++; }
-    function renderRoutes(){} function renderRouteBar(){}
+    function renderRoutes(){} function renderRouteBar(){} function updateRedoBtn(){}
+    function renderPanel(){} function updateCount(){} function reconcileLocations(){}
+    function removeDevice(id){ for(var i=0;i<devices.length;i++) if(devices[i].id===id){ devices.splice(i,1); return; } }
+    function reAdd(sd){ devices.push(sd); }
     function rCable(k){ for(var i=0;i<ROUTE_CABLES.length;i++) if(ROUTE_CABLES[i][0]===k) return ROUTE_CABLES[i]; return ROUTE_CABLES[0]; }
     function rRoutes(create){ var f=floors[curFloor]; if(!f) return []; if(!Array.isArray(f.routes)){ if(!create) return []; f.routes=[]; } return f.routes; }
     var document={ getElementById:function(){ return { getBoundingClientRect:function(){ return {left:0,top:0,width:400,height:400}; } }; } };
@@ -43,10 +47,25 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
     ${extractFn("rtTap")}
     ${extractFn("rtUndoPoint")}
     ${extractFn("rtCancel")}
+    ${extractFn("rtSnap")}
+    ${extractFn("rtHistReset")}
+    ${extractFn("rtHistPush")}
+    ${extractFn("rtCanUndo")}
+    ${extractFn("rtCanRedo")}
+    ${extractFn("rtApply")}
+    ${extractFn("rtHistUndo")}
+    ${extractFn("rtHistRedo")}
+    ${extractFn("undoAction")}
+    ${extractFn("redoAction")}
+    rtHistReset();
     return { tap:rtTap, undo:rtUndoPoint, cancel:rtCancel,
       draft:function(){ return rtDraft; }, head:function(){ return rtHeadMode; },
       setHeadMode:function(v){ rtHeadMode=v; }, setCable:function(v){ rtCable=v; },
-      floor:function(){ return floors[0]; }, defCable:rtDefaultCable };
+      floor:function(){ return floors[0]; }, defCable:rtDefaultCable,
+      undoAction:undoAction, redoAction:redoAction,
+      devices:function(){ return devices; },
+      setRouting:function(v){ routing=v; }, routing:function(){ return routing; },
+      canUndo:rtCanUndo, canRedo:rtCanRedo, histLen:function(){ return rtHist.length; } };
   `);
   const S = { devices, floor, frozen, RO, saves: 0 };
   return { api: api(S), S };
@@ -188,6 +207,90 @@ test("the bar is contextual: head-end at rest, undo + cancel while drawing", () 
   // Every icon-only control still carries a name for a screen reader.
   ["Undo point", "Cancel run", "Head-end"].forEach((l) => assert.ok(bar.includes(`aria-label="${l}"`), `aria-label ${l}`));
   assert.ok(/aria-pressed="/.test(bar), "toggles report their state");
+});
+
+// ---- Step-scoped undo/redo. The bug: Route draws over the SAME Setup canvas as Placement, and the
+// floating undo button was hardcoded to "pop the last placed device" with no step check — so on Route
+// it deleted a CAMERA and left every cable run in place. Reproduced live before the fix.
+test("ROUTE: draw a run, undo removes the RUN and leaves every camera alone; redo brings it back", () => {
+  const cams = [dev("c1", "cam", 20, 20), dev("c2", "cam", 60, 60)];
+  const { api } = build({ devices: cams, floor: { head: { x: 90, y: 90 } } });
+  api.tap(px(20), px(20)); api.tap(px(50), px(50)); api.tap(px(90), px(90));
+  assert.equal(api.floor().routes.length, 1, "a run was committed");
+  assert.equal(api.devices().length, 2);
+
+  api.undoAction();
+  assert.equal(api.floor().routes.length, 0, "the RUN is what undo removed");
+  assert.equal(api.devices().length, 2, "both cameras are still here — this is the bug, pinned");
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2"]);
+
+  api.redoAction();
+  assert.equal(api.floor().routes.length, 1, "redo brings the run back");
+  assert.equal(api.devices().length, 2, "and still does not touch a camera");
+});
+
+test("ROUTE: head-end placement is undoable too, and is a route operation not a device one", () => {
+  const { api } = build({ devices: [dev("c1", "cam", 20, 20)], floor: {} });
+  api.setHeadMode(true); api.tap(px(70), px(30));
+  assert.deepEqual(api.floor().head, { x: 70, y: 30 });
+  api.undoAction();
+  assert.equal(api.floor().head, null, "the head-end came back off");
+  assert.equal(api.devices().length, 1, "the camera is untouched");
+  api.redoAction();
+  assert.deepEqual(api.floor().head, { x: 70, y: 30 });
+});
+
+test("ROUTE with no route history: undo is a no-op and CANNOT fall through to a camera", () => {
+  const cams = [dev("c1", "cam", 20, 20), dev("c2", "cam", 60, 60), dev("c3", "cam", 80, 20)];
+  const { api, S } = build({ devices: cams, floor: {} });
+  assert.equal(api.canUndo(), false, "nothing to undo");
+  api.undoAction(); api.undoAction(); api.undoAction();
+  assert.equal(api.devices().length, 3, "all three cameras still present");
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2", "c3"]);
+  assert.equal(S.saves, 0, "and nothing was written");
+  api.redoAction();
+  assert.equal(api.devices().length, 3, "redo with nothing to redo is also inert");
+});
+
+test("ROUTE: undo does not reach PAST the point the step was entered at", () => {
+  // The baseline snapshot is taken on entry, so repeated undo stops at "the routes as they were when
+  // I opened Route" rather than unwinding into whatever came before.
+  const { api } = build({ devices: [dev("c1", "cam", 20, 20)], floor: { head: { x: 90, y: 90 }, routes: [{ id: "r0", dev: "c0", cable: "cat6", run: "home", pts: [[1, 1], [2, 2]] }] } });
+  api.tap(px(20), px(20)); api.tap(px(90), px(90));
+  assert.equal(api.floor().routes.length, 2);
+  api.undoAction(); api.undoAction(); api.undoAction();
+  assert.equal(api.floor().routes.length, 1, "stops at the run that was already there on entry");
+  assert.equal(api.floor().routes[0].id, "r0");
+});
+
+test("PLACEMENT: undo/redo still pops and restores the last placed device, exactly as before", () => {
+  const cams = [dev("c1", "cam", 20, 20), dev("c2", "cam", 60, 60)];
+  const { api } = build({ devices: cams, floor: {} });
+  api.setRouting(false);                               // the Placement step
+  api.undoAction();
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1"], "the last placed camera is popped");
+  api.redoAction();
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2"], "and redo puts it back");
+});
+
+test("the step guard goes first and RETURNS — the source shape that makes the fall-through impossible", () => {
+  // The device-touching symbol differs per function: undo reads `devices`, redo restores from `redoStk`.
+  for (const [name, fn, deviceToken] of [
+    ["undoAction", extractFn("undoAction"), "devices"],
+    ["redoAction", extractFn("redoAction"), "redoStk"],
+  ]) {
+    const guard = fn.indexOf("if(routing)");
+    const touch = fn.indexOf(deviceToken);
+    assert.ok(guard >= 0, `${name} checks the step`);
+    assert.ok(/if\(routing\)\{[^}]*return; \}/.test(fn), `${name}'s routing branch returns`);
+    assert.ok(touch > 0, `${name} does reach device state via ${deviceToken}`);
+    assert.ok(guard < touch, `${name} checks the step BEFORE it can reach ${deviceToken}`);
+  }
+  // …and the buttons themselves are hidden on Route unless the route history has something in it.
+  assert.ok(/ub\.style\.display = routing \? \(\(!rtDraft && !frozen\(\) && !RO && rtCanUndo\(\)\)/.test(survey),
+    "the floating undo follows the route history while routing");
+  assert.ok(/b\.style\.display = routing \? \(\(!rtDraft && !frozen\(\) && rtCanRedo\(\)\)/.test(survey),
+    "…and so does redo");
 });
 
 test("phone width: the route bar fits, and the overlay header's centre track is capped", () => {
