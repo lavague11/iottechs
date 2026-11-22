@@ -6,7 +6,7 @@ import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
 import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
-import { stepAfter, stepBefore, railFromEcho, layoutNextOk } from "../../../lib/survey-rail";
+import { stepAfter, stepBefore, railFromEcho } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
@@ -399,11 +399,14 @@ export default function SystemPlanner({
       if (bgTool === "satellite" || bgTool === "draw" || sig.bgReady) return { ok: true, hint: "" };
       return { ok: false, hint: "Choose a background" };
     }
-    if (railStep === "layout") {
-      // The floor's real structure: the iframe's live signal once it has reported, the SAVED floor before that.
-      if (layoutNextOk({ live: synced, liveHasPlan: sig.hasPlan, savedFloor: surveyFloors(sv)[curFloor] })) return { ok: true, hint: "" };
-      return { ok: false, hint: "Draw the structure first" };
-    }
+    // Layout does NOT gate Placement. It used to: Next stayed dead behind "Draw the structure first"
+    // until the floor reported a structure, which meant a floor whose outline was plainly drawn on
+    // screen could still refuse to advance — the live signal and the saved floor disagreeing is enough
+    // to block someone looking straight at their own building. Blocking on a derived signal is the
+    // wrong trade here: the house rule is to gate on the EARLIEST valid signal and show an "awaiting"
+    // state rather than a locked door. The Layout step's ✓ still tracks whether a structure exists, so
+    // the information is kept — it just stops being a blocker.
+    if (railStep === "layout") return { ok: true, hint: "" };
     if (!sig.bgReady) return { ok: false, hint: "Set a background first" };
     return { ok: true, hint: "" };
   })();

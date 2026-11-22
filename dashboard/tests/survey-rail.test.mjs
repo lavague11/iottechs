@@ -81,7 +81,20 @@ test("a saved Background step resumes on Background, view-only; a floor switch o
   assert.ok(shell.includes('if (railRef.current === "background") { pendingRef.current = "background"; surveyCmd({ cmd: "step", step: 0, focus: "view" }); }'));
 });
 
-test("Layout's Next: disabled with no structure, enabled once one exists (saved shape, not a flag)", () => {
+test("Layout does NOT gate Placement — a drawn floor can never be told to draw first", () => {
+  // The gate used to hold Next behind "Draw the structure first" until the floor reported a structure.
+  // Two signals feed that (the iframe's live echo and the saved floor) and when they disagree the user
+  // is looking at their own outline while the button refuses to move. Gate on the earliest valid
+  // signal and show state instead of blocking — the ✓ still reports whether a structure exists.
+  assert.match(shell, /if \(railStep === "layout"\) return \{ ok: true, hint: "" \};/,
+    "Layout's Next is unconditional");
+  assert.ok(!shell.includes('hint: "Draw the structure first"'), "the blocking hint is gone");
+  assert.ok(!/import \{[^}]*layoutNextOk/.test(shell), "and the gate helper is no longer imported");
+  // The Layout step still TRACKS a structure — information, not a blocker.
+  assert.ok(shell.includes("done: sig.hasPlan || surveySubmitted"), "the Layout tick still follows the floor");
+});
+
+test("floorHasStructure still answers 'is there a structure' for the tick and the widget mirror", () => {
   const empty = { plan: { cells: [], rooms: [] } };
   const drawn = { plan: { cells: ["0,0", "1,0"], rooms: [] } };
   assert.equal(floorHasStructure(null), false);
@@ -99,7 +112,6 @@ test("Layout's Next: disabled with no structure, enabled once one exists (saved 
   // after it has reported, its current signal wins both ways (drawn now / erased now)
   assert.equal(layoutNextOk({ live: true, liveHasPlan: true, savedFloor: empty }), true);
   assert.equal(layoutNextOk({ live: true, liveHasPlan: false, savedFloor: drawn }), false);
-  assert.ok(shell.includes("layoutNextOk({ live: synced, liveHasPlan: sig.hasPlan, savedFloor: surveyFloors(sv)[curFloor] })"), "the gate uses it");
 });
 
 test("the widget's structure check is the same function, and a drawn plan re-emits to the host", () => {

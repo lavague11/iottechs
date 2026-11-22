@@ -1475,6 +1475,12 @@
     ];
     var FLAT={}; GROUPS.forEach(function(g){ g.items.forEach(function(it){ it.group=g; FLAT[it.k]=it; }); });
     function cat(k){ return FLAT[k]; }
+    // Same lookup, but it ALWAYS returns something drawable. A kind this build does not know is not a
+    // reason to destroy a device (reAdd used to return on one, dropping it from the live array — and
+    // since the next save serialises that array, a device dropped on load was deleted on the next
+    // write). It keeps its own k so the record round-trips unchanged, and renders as the neutral dot.
+    var MISC_GROUP=GROUPS[GROUPS.length-1];
+    function catSafe(k){ return FLAT[k] || { k:k, name:String(k||"Device"), ic:"dot", group:MISC_GROUP }; }
     function iconOf(it){ return ICONS[it.ic]||ICONS.dot; }
     function setHint(m){ var h=document.getElementById("wizHint"); if(h) h.textContent=m; }
     // Title-case: capitalise the first letter of every word (after a space, "(", "/" or "-"); leaves the
@@ -2834,7 +2840,14 @@
     function newFloorId(){ var id; do { id="f_"+Math.random().toString(36).slice(2,10); } while(floors.some(function(f){ return f && f.id===id; })); return id; }   // stable per-floor id (keys geometry by id, not array index)
     function ensureFloorIds(){ var seen={}; floors.forEach(function(f){ if(!f) return; if(!f.id || seen[f.id]){ f.id=null; f.id=newFloorId(); } seen[f.id]=1; }); }   // backfill + dedupe (a later floor sharing an id gets a fresh one)
     ensureFloorIds();
-    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null,placed:(d.placed!==false)}; }); }
+    // `tag` (IC7, IC8 …) is PERSISTED. It used to be left out and re-minted on every load from a count
+    // of same-group devices on earlier floors, so a device's visible id moved whenever any earlier
+    // floor changed — eight cameras saved as IC7–IC14 reopened as IC43–IC52 with nothing lost and
+    // nothing to point at. An id that is recomputed is not an id. Saved rows that predate this carry
+    // no tag and still fall back to the derived one in reAdd, so nothing is renumbered by the change
+    // itself. NOT in the approval fingerprint (survey2Meaning hashes k/x/y/aim/fov/range/name only),
+    // so persisting it cannot void a signature.
+    function stripDevs(){ return devices.map(function(d){ return {k:d.k,x:d.x,y:d.y,aim:d.aim,aimed:d.aimed,fov:d.fov,range:d.range,name:d.name,tag:d.tag||"",locName:d.locName||"",placementType:d.placementType||"",locSeq:+d.locSeq||0,locKey:d.locKey||"",photo:d.photo||null,photoName:d.photoName||null,cid:d.cid||null,placed:(d.placed!==false)}; }); }
     function snapFloor(){ if(!stateLoaded) return; var f=floors[curFloor]; if(!f) return; f.bg=bgData; f.started=bgHasImage; f.bgSource=curBgSource; f.scale=curFloorScale||null; f.aerial=curFloorAerial||null; f.devices=stripDevs(); }   // !stateLoaded → the in-memory floor is the placeholder; snapping it would erase the saved floor
     function queueSave(){ clearTimeout(saveT); saveT=setTimeout(save,400); clearTimeout(sugT); sugT=setTimeout(refreshSugs,350); }   // refreshSugs repaints the suggestion rows only (a move/aim/zone edit can change them)
     // Tell the host (project page) the live floor count + whether there's anything yet, so its
@@ -2919,10 +2932,16 @@
     // Dim lives in the bottom-right ••• menu now; toggling it keeps the menu open so you can flip it back.
     (function(){ var b=document.getElementById("dimMenuBtn"); if(b){ b.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
       b.addEventListener("click", function(e){ e.stopPropagation(); dimmed=!dimmed; applyDim(); queueSave(); }); } })();
-    function reAdd(sd){ var it=cat(sd.k); if(!it) return; var g=it.group; devSeq++;
-      var nG=floorsBefore(function(x){return cat(x.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
+    // An unrecognised kind used to RETURN here, which silently dropped the device from the roster —
+    // and because the next save serialises the live array, a device dropped on load was deleted on the
+    // next write. A kind this build does not know is not a reason to destroy someone's survey: keep
+    // the record, keep its own k, and render it with the neutral dot so it is visible and fixable.
+    function reAdd(sd){ var it=catSafe(sd.k); var g=it.group; devSeq++;
+      // catSafe throughout, not cat: these counters walk EVERY device, so one unknown kind anywhere on
+      // the floor used to throw here and take the whole load down with it.
+      var nG=floorsBefore(function(x){return catSafe(x.k).group.key===g.key;})+devices.filter(function(d){return catSafe(d.k).group.key===g.key;}).length+1;
       var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
-      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:"I"+g.letter+nG,name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null)),placed:(sd.placed!==false)};
+      var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:(sd.tag||("I"+g.letter+nG)),name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null)),placed:(sd.placed!==false)};
       devices.push(d); mountDevice(d); }   // mountDevice skips unplaced (placed===false) → they surface in the tray
     // Phase 4.2 view modes. A floor is hybrid-capable only when it has the ctx aerial crop, the transparent plan layer, AND a
     // ctx-framed opaque bg (bgCtx) — so one plate (the ctx extent) holds all three and device %-coords stay valid in every view.
@@ -3191,6 +3210,7 @@
     }
     function switchFloor(i){ if(i===curFloor) return; delete collapsedFloors[i]; snapFloor(); loadFloor(i); renderFloorTabs(); goStep(bgHasImage?(curStep>0?curStep:1):0); queueSave(); }
     function cloneDevices(devs){ var out=JSON.parse(JSON.stringify(devs||[]));
+      out.forEach(function(d){ delete d.tag; });   // a COPY gets its own id — tags are persisted now, so carrying one over would duplicate it
       if(out.length){ var used={}; floors.forEach(function(fl){ (fl.devices||[]).forEach(function(d){ if(d.cid) used[d.cid]=1; }); });   // cloned cameras get a fresh cid unique across ALL floors (proposal line items key on it)
         out.forEach(function(d){ if(!d.cid) return; var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(used[id]); used[id]=1; d.cid=id; }); }
       return out; }
