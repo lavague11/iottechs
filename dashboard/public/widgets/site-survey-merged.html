@@ -112,6 +112,14 @@
   .rtBtn.on{background:#101418;border-color:#101418;color:#fff}
   .rtBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .rtSep{width:1px;height:20px;background:var(--line,#e3e5e8);flex:none}
+  /* The head-end "+". Bottom-right: thumb reach, clear of the route bar (bottom-centre) and the floor
+     controls (top). Sits over the map but is only present while there is no head-end to show instead. */
+  #rtHeadAdd{position:absolute;right:14px;bottom:62px;z-index:7;width:42px;height:42px;border-radius:50%;
+    border:1px solid var(--line,#e3e5e8);background:rgba(255,255,255,.96);color:#101418;cursor:pointer;
+    display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(16,20,24,.2);backdrop-filter:blur(6px)}
+  #rtHeadAdd:hover{border-color:#101418}
+  #rtHeadAdd.on{background:#101418;border-color:#101418;color:#fff}   /* armed: the next map tap places it */
+  #rtHeadAdd svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round}
   .ztag{position:absolute;padding:2px 7px;border-radius:999px;background:rgba(16,20,24,.7);color:#fff;font:600 10px/1.3 system-ui,sans-serif;white-space:nowrap;transform-origin:50% 50%}
   #rgBar{position:absolute;left:14px;bottom:116px;z-index:6;display:none;gap:6px;align-items:center} #rgBar #zoneName{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #zoneName.vbtn{height:34px;padding:0 11px;border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.9);font-size:12px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,17,18,.12)}
@@ -750,6 +758,7 @@
           <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
+          <button type="button" id="rtHeadAdd" aria-label="Add head-end" title="Head-end" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           <div id="rtBar" role="toolbar" aria-label="Wiring"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
           <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Area</button></div><button class="vbtn" id="zoneName" aria-label="Edit area" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete area" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="bdDel" title="Clear boundary" aria-label="Clear boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
@@ -1841,18 +1850,24 @@
       if(rtHistFloor!==curFloor) rtHistReset();   // a fresh baseline per floor; undo can never reach another floor
       renderRoutes(); renderRouteBar(); updateCamBtns(); }
     function exitRoute(){ if(!routing) return; routing=false; rtDraft=null; rtHeadMode=false;
-      document.body.classList.remove("routing"); renderRouteBar(); updateCamBtns(); }
+      document.body.classList.remove("routing"); rtSyncHeadAdd(false); renderRouteBar(); updateCamBtns(); }
     // Every run as two stacked polylines: a dark outline underneath, the neon colour over it. That pairing
     // is what makes a bright cable readable on a WHITE floor plan and on a dark aerial photo both — a
     // single neon stroke disappears into one or the other. A daisy chain is dashed, a home run solid.
     function renderRoutes(){
       var rl=document.getElementById("routeLayer"); if(!rl) return;
       var f=floors[curFloor]||{}, rs=Array.isArray(f.routes)?f.routes:[], s="", i;
+      var hd=f.head;
       for(i=0;i<rs.length;i++){
         var r=rs[i]||{}, pts=r.pts;
         if(!Array.isArray(pts) || pts.length<2) continue;
-        var d="", j;
-        for(j=0;j<pts.length;j++){ var p=pts[j]; if(!p) continue; d+=(d?" ":"")+p[0]+","+p[1]; }
+        var d="", j, last=pts.length-1;
+        for(j=0;j<pts.length;j++){ var p=pts[j]; if(!p) continue;
+          // A home run ALWAYS lands on the live head-end. Re-anchoring on move keeps the saved path
+          // right; this keeps the drawing right for a row saved before that existed, so there is no
+          // version of the data that can render a run floating next to the thing it terminates at.
+          var isEnd = (j===last && r.run==="home" && hd && isFinite(hd.x) && isFinite(hd.y));
+          d+=(d?" ":"")+(isEnd?hd.x:p[0])+","+(isEnd?hd.y:p[1]); }
         var col=rCable(r.cable)[2], dash=(r.run==="daisy")?' stroke-dasharray="3 2"':"";
         s+='<polyline points="'+d+'" fill="none" stroke="'+ROUTE_OUTLINE+'" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
         s+='<polyline points="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"'+dash+'/>';
@@ -1870,11 +1885,17 @@
           s+='<circle cx="'+rtDraft.pts[k][0]+'" cy="'+rtDraft.pts[k][1]+'" r="1.1" fill="'+rCable(rtDraft.cable)[2]+'" stroke="'+ROUTE_OUTLINE+'" stroke-width="2" vector-effect="non-scaling-stroke"/>';
         }
       }
+      // The head-end marker. It used to be a featureless dark square, which read as an empty
+      // placeholder box rather than as the rack every run terminates at — so it carries the same rack
+      // glyph the toolbar button uses, drawn in plate-% around the point.
       var h=f.head;
       if(h && isFinite(h.x) && isFinite(h.y)){
-        s+='<rect x="'+(h.x-1.7)+'" y="'+(h.y-1.7)+'" width="3.4" height="3.4" rx="0.7" fill="'+ROUTE_BUNDLE+'" stroke="#fff" stroke-width="2" vector-effect="non-scaling-stroke"/>';
+        s+='<rect x="'+(h.x-2.3)+'" y="'+(h.y-2.3)+'" width="4.6" height="4.6" rx="1" fill="'+ROUTE_BUNDLE+'" stroke="#fff" stroke-width="2.4" vector-effect="non-scaling-stroke"/>';
+        s+='<rect x="'+(h.x-1.25)+'" y="'+(h.y-1.35)+'" width="2.5" height="1.05" rx="0.3" fill="none" stroke="#fff" stroke-width="1.3" vector-effect="non-scaling-stroke"/>';
+        s+='<rect x="'+(h.x-1.25)+'" y="'+(h.y+0.3)+'" width="2.5" height="1.05" rx="0.3" fill="none" stroke="#fff" stroke-width="1.3" vector-effect="non-scaling-stroke"/>';
       }
       rl.innerHTML=s;
+      rtSyncHeadAdd(!(h && isFinite(h.x) && isFinite(h.y)));
     }
 
     /* ---- Route EDITING. Tap a device, tap the path, tap the head-end. ------------------------------
@@ -1934,7 +1955,7 @@
       if(frozen()||RO) return;                       // a submitted survey is locked (§8)
       var f=floors[curFloor]; if(!f) return;
       var p=rtPct(cx,cy); if(!p) return;
-      if(rtHeadMode){ f.head={x:rt2(p.x),y:rt2(p.y)}; rtHeadMode=false; rtHistPush(); queueSave(); renderRoutes(); renderRouteBar(); return; }
+      if(rtHeadMode){ rtHeadMoveTo(rt2(p.x),rt2(p.y)); rtHeadMode=false; return; }
       var dev=rtDeviceAt(p), head=rtHeadAt(p);
       if(!rtDraft){
         if(!dev) return;                             // a run starts at a device; empty space does nothing
@@ -1943,6 +1964,46 @@
       if(head){ rtCommit([head.x,head.y],"home"); return; }                       // …back to the head-end
       if(dev && rtDevKey(dev)!==rtDraft.dev){ rtCommit([rt2(+dev.x),rt2(+dev.y)],"daisy"); return; }   // …or on to another device
       rtDraft.pts.push([rt2(p.x),rt2(p.y)]); renderRoutes(); renderRouteBar(); }
+    /* The head-end is the thing home runs TERMINATE at, so moving it has to take their endpoints with
+       it. Storing the head's coordinates into a run at commit time (which is what happened before)
+       meant a later move left every endpoint behind — proven at 51 percent-units of gap. Re-anchoring
+       here keeps the SAVED path correct, which matters because the PDF and the work order read these
+       points; renderRoutes additionally snaps a home run's last point to the live head, which covers
+       rows saved before this fix. Daisy chains are untouched: they end on a device, not the head. */
+    function rtReanchorHomeRuns(f,x,y){
+      var rs=Array.isArray(f.routes)?f.routes:[], n=0;
+      for(var i=0;i<rs.length;i++){ var r=rs[i];
+        if(!r || r.run!=="home" || !Array.isArray(r.pts) || r.pts.length<2) continue;
+        r.pts[r.pts.length-1]=[x,y]; n++; }
+      return n; }
+    function rtHeadMoveTo(x,y){
+      var f=floors[curFloor]; if(!f) return 0;
+      f.head={x:x,y:y};
+      var n=rtReanchorHomeRuns(f,x,y);
+      rtHistPush(); queueSave(); renderRoutes(); renderRouteBar();
+      return n; }
+    /* The on-map "+" for the head-end. It exists because until you place one there is nothing on the
+       map to tell you a head-end is the missing piece — the only way in was a button in the toolbar.
+       It shows ONLY while routing with no head-end placed, and is replaced by the marker itself the
+       moment one exists, so it is never a control that does nothing. Bottom-right of the canvas:
+       thumb reach on a phone, clear of the route bar (bottom-centre) and of the floor controls (top).
+       Tap it to ARM, then tap where the rack actually is — a head-end dropped at some default would
+       just have to be moved, and its position is the whole point. Tapping it again disarms, so an
+       accidental tap costs nothing and there is no half-armed state to get stuck in. While a head-end
+       exists this button is gone and the toolbar's head-end control arms the MOVE, so the two never
+       offer the same action at the same time. */
+    function rtSyncHeadAdd(show){
+      var b=document.getElementById("rtHeadAdd"); if(!b) return;
+      var on=(show && routing && !frozen() && !RO);
+      b.style.display=on ? "" : "none";
+      if(on) b.classList.toggle("on", !!rtHeadMode); else b.classList.remove("on");
+      b.setAttribute("aria-pressed", on && rtHeadMode ? "true" : "false"); }
+    function rtAddHead(){
+      if(frozen()||RO) return;
+      var f=floors[curFloor]; if(!f || (f.head && isFinite(f.head.x))) return;
+      rtHeadMode=!rtHeadMode;        // arm, or cancel cleanly when it was already armed
+      rtDraft=null;                  // arming abandons a half-drawn run rather than mixing two modes
+      renderRoutes(); renderRouteBar(); }
     function rtUndoPoint(){
       if(!rtDraft) return;
       rtDraft.pts.pop();
@@ -1967,8 +2028,10 @@
       if(rtDraft){
         s+='<button type="button" class="rtBtn" data-rt="undo" aria-label="Undo point" title="Undo">'+rtIcon("undo")+'</button>';
         s+='<button type="button" class="rtBtn" data-rt="cancel" aria-label="Cancel run" title="Cancel">'+rtIcon("x")+'</button>';
-      } else {
-        s+='<button type="button" class="rtBtn'+(rtHeadMode?" on":"")+'" data-rt="head" aria-label="Head-end" aria-pressed="'+rtHeadMode+'" title="Head-end">'+rtIcon("head")+'</button>';
+      } else if((floors[curFloor]||{}).head){
+        // Only once one EXISTS — then this arms the MOVE. Before that the on-map + is the way in, and
+        // two controls offering the same action at the same time is the thing to avoid.
+        s+='<button type="button" class="rtBtn'+(rtHeadMode?" on":"")+'" data-rt="head" aria-label="Move head-end" aria-pressed="'+rtHeadMode+'" title="Head-end">'+rtIcon("head")+'</button>';
       }
       bar.innerHTML=s;
       updateCamBtns(); }   // the floating undo/redo follow the route history while routing
@@ -1979,6 +2042,7 @@
       if(chip){ e.stopPropagation(); var k=chip.getAttribute("data-cable");
         rtCable=k; if(rtDraft) rtDraft.cable=k;    // switching mid-run recolours the run in progress
         renderRoutes(); renderRouteBar(); return; }
+      if(e.target.closest && e.target.closest("#rtHeadAdd")){ e.stopPropagation(); rtAddHead(); return; }
       if(btn){ e.stopPropagation(); var a=btn.getAttribute("data-rt");
         if(a==="head"){ rtHeadMode=!rtHeadMode; renderRouteBar(); }
         else if(a==="undo") rtUndoPoint();
@@ -1994,7 +2058,7 @@
         if(Math.abs(e.clientX-dx0)>8 || Math.abs(e.clientY-dy0)>8) moved=true; }, true);
       host.addEventListener("pointerup", function(e){
         if(!routing || moved || Date.now()-downT>700) return;     // a long press is not a tap either
-        if(e.target && e.target.closest && e.target.closest("#rtBar")) return;
+        if(e.target && e.target.closest && e.target.closest("#rtBar,#rtHeadAdd")) return;   // the bar and the head-end + own their own taps
         rtTap(e.clientX, e.clientY); }, true);
     })();
     function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;

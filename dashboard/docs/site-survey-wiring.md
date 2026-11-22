@@ -226,6 +226,20 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 2. **The cable prefills from the device kind** (speaker → speaker wire, display → HDMI, outlet → power,
    everything else → Cat6), with the chips as the override. Smart defaults rule: the system already knows.
 
+**The head-end: an on-map + and a real connection (2026-11-22).** There was never a placeholder in the
+Route step — the dark box where the runs converge *is* the head-end marker, drawn only when one exists,
+and it read as an empty placeholder because it was a featureless square. It now carries the same rack
+glyph the toolbar uses. Placing one used to be possible only from a toolbar button, so there is now a
+**+ bottom-right of the canvas**, shown only while routing with no head-end: tap to arm, tap the map
+where the rack actually is, tap + again to cancel. Once one exists the + is gone and the toolbar's
+control arms the MOVE, so the two never offer the same action at once.
+
+And the connection was real: a home run copied the head's coordinates at commit time, so moving the
+head-end left every endpoint behind (measured at 51 percent-units of gap). `rtHeadMoveTo` now re-anchors
+every home run — daisy chains are untouched, since they end on a device — and `renderRoutes` additionally
+draws a home run's last point at the live head-end, so a row saved before this fix cannot render floating
+either. Verified at 375px: head-end moved, both home runs followed with **maxGap 0**.
+
 **Undo/redo is scoped to the step (fixed 2026-11-22).** The floating undo button is not a general history
 — it is "pop the last placed device", and the region editor keeps its own separate `bdHist`, which is why
 `body.regions` hides the device one in CSS. Route draws over the same Setup canvas and that handler never
