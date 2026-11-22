@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useId } from "react";
 import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
@@ -399,6 +399,7 @@ export default function SystemPlanner({
   })();
   const nextEnabled = nextGate.ok;
   const nextHint = nextGate.hint;
+  const navHintId = useId();   // names the quiet gate reason to the disabled Next (aria-describedby)
   // The Review CTA = the one outstanding canonical action (reuses toolAccepted + the gateway handlers;
   // nothing about the fingerprint/approval architecture changes).
   const svApproved = toolAccepted(svMeta, acceptances && acceptances.site_survey);
@@ -645,7 +646,15 @@ export default function SystemPlanner({
               nextEnabled ? (
                 <button className="syp-nav-cta" onClick={() => goRail(nextStep)}>{nextLabel(nextStep)} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
               ) : (
-                <button className="syp-nav-cta muted" disabled>{nextHint || nextLabel(nextStep)}</button>
+                // The gate REASON is helper text, not a button label. The control keeps the next step's
+                // one-word name (label ladder) and the reason sits beside it, small, grey and unboxed.
+                // It stays VISIBLE rather than becoming a hover tooltip — a phone has no hover, and this
+                // is the one place that says why Next won't move — and names the disabled button to a
+                // screen reader through aria-describedby.
+                <>
+                  {nextHint && <span className="syp-nav-hint" id={navHintId}>{nextHint}</span>}
+                  <button className="syp-nav-cta muted" disabled aria-describedby={nextHint ? navHintId : undefined}>{nextLabel(nextStep)} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+                </>
               )
             ) : <span />}
           </div>
@@ -999,12 +1008,15 @@ const CSS = `
 .syp-nav .syp-nav-back{display:inline-flex;align-items:center;gap:6px;justify-content:flex-start;appearance:none;cursor:pointer;font:inherit;font-size:.86rem;font-weight:700;color:var(--dv-meta,#787D84);background:transparent;border:0;padding:8px 4px;border-radius:100px}
 .syp-nav .syp-nav-back:hover{color:var(--dv-ink,#101418)}
 .syp-nav-side{display:inline-flex;align-items:center}
-.syp-nav-side--right{justify-content:flex-end}
+.syp-nav-side--right{justify-content:flex-end;gap:10px}
 .syp-nav-centerwrap{position:relative;flex:0 0 auto;display:inline-flex}
 .syp-nav-center{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:.92rem;font-weight:800;letter-spacing:.01em;color:var(--dv-ink,#101418);background:transparent;border:0;padding:8px 12px;border-radius:100px;white-space:nowrap}
 .syp-nav-center:hover{background:var(--dv-raise,#F6F6F4)}
 .syp-nav-center svg{color:var(--dv-meta,#787D84);flex:none}
-.syp-nav-hint{font-size:.82rem;font-weight:600;letter-spacing:.01em;color:var(--dv-meta,#787D84);white-space:nowrap}
+/* The gate reason beside a disabled Next. Quiet by construction: no border, no background, meta
+   colour, smaller than the control it explains. It yields width before the button does, and only
+   ellipsises in the last resort — on the narrowest phone the pair still fits side by side. */
+.syp-nav-hint{font-size:.82rem;font-weight:600;letter-spacing:.01em;color:var(--dv-meta,#787D84);white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
 .syp-nav .syp-nav-cta{appearance:none;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;font-size:.88rem;font-weight:800;letter-spacing:.01em;padding:10px 18px;border-radius:100px;border:1px solid var(--dv-ink,#101418);background:var(--dv-ink,#101418);color:#fff;transition:background .15s;white-space:nowrap}
 .syp-nav .syp-nav-cta:hover:not(:disabled){background:#000}
 .syp-nav .syp-nav-cta.muted{background:transparent;color:var(--dv-meta,#787D84);border-color:var(--dv-line,#E4E4DF);cursor:default;font-weight:700}

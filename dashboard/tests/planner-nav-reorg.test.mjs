@@ -46,8 +46,14 @@ test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a 
   // the center button shows the CURRENT step and opens Survey Navigation upward
   assert.ok(sp.includes('className="syp-nav-center"') && sp.includes("{STEP_LABEL[railStep]"), "center button shows the current step name");
   assert.ok(sp.includes('renderNavPop(navMenuOpen, setNavMenuOpen, "up-center")'), "center opens the Survey Navigation popover upward");
-  // disabled Next shows a short hint instead of a silent no-op
-  assert.ok(sp.includes("{nextHint || nextLabel(nextStep)}"), "a gated Next shows its hint, never a silent click");
+  // A gated Next is never a silent no-op — but the REASON is helper text, not the button's label.
+  // The control keeps the next step's one-word name (label ladder: "Draw the structure first" is a
+  // sentence, and a sentence is not a button) and the reason renders beside it as quiet meta text,
+  // visible rather than a hover tooltip because a phone has no hover.
+  assert.ok(sp.includes('<span className="syp-nav-hint" id={navHintId}>{nextHint}</span>'), "the gate reason renders as quiet text, not as the button label");
+  assert.ok(/<button className="syp-nav-cta muted" disabled aria-describedby=\{nextHint \? navHintId : undefined\}>\{nextLabel\(nextStep\)\}/.test(sp),
+    "the gated button keeps the step name and is described by the reason");
+  assert.ok(!sp.includes("{nextHint || nextLabel(nextStep)}"), "the hint is no longer a button label");
   // Submit CTA (label just 'Submit', not Re-submit) drives the canonical submit / continue
   assert.ok(/label: "Approval"/.test(sp) && !/label: "Re-submit"/.test(sp) && sp.includes("Continue to Proposal"), "Submit CTA = Approval / Awaiting / Continue (no Re-submit label)");
   assert.ok(sp.includes('await onSubmitTool("site_survey")'), "CTA drives the canonical submit (onSubmitTool)");
