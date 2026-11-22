@@ -8,6 +8,7 @@
 //   x / y are PERCENT of the floor's background image (rotation is baked into the image; zoom and
 //   pan are view-only), so any renderer projects them as x/100 × imageWidth, y/100 × imageHeight.
 import { validXf, xfIsId, xfApplyPx } from "./plan-xf.js";
+import { validRoutes, validHead } from "./survey-routes.js";
 
 // `range` on a coverage kind is its DEFAULT reach in FEET (cone throw, or speaker radius) — real-world
 // scale when the floor is scaled from a trace, else a sensible px fraction fallback (see surveyScene).
@@ -140,6 +141,11 @@ export function parseSurveyFloors(raw) {
         // Site boundary + zones (plate-% polygons) so the customer layout / PDF can render the same estimated site context the planner shows.
         boundary: (f.boundary && Array.isArray(f.boundary.pts) && f.boundary.pts.length >= 3) ? { pts: f.boundary.pts } : null,
         zones: Array.isArray(f.zones) ? f.zones.filter((z) => z && Array.isArray(z.pts) && z.pts.length >= 3).map((z) => ({ label: z.label || "", type: z.type || "custom", pts: z.pts })) : [],
+        // Wiring runs + the head-end they terminate at (lib/survey-routes.js owns the shape). This map is
+        // an ALLOW-LIST: a field not named here never reaches the customer layout, the PDF or the work
+        // order, so routes have to be carried explicitly like zones above.
+        routes: validRoutes(f.routes),
+        head: validHead(f.head),
         // Hybrid composite inputs (the leveled aerial under the plan + the manual plan→aerial alignment the
         // planner saved). Carried so the exporter / customer layout can composite the SAME aligned hybrid;
         // absent/legacy floors keep these null/false and render plan-only, exactly as before.

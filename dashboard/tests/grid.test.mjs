@@ -34,9 +34,12 @@ test("4.3 draw: the baked grid is emitted only when no vb is given; paper rect +
 test("4.3 survey: the plan layers live inside #planWorld (one alignment transform); #alignDrag closes #scene; #gridScale is outside", () => {
   // The plan/grid/zones/rooms + devices ride ONE manual-alignment transform → wrapped in #planWorld over the fixed #aerialImg.
   // #alignDrag (the Align drag surface) is a direct child of #scene after #planWorld; #gridScale sits outside #scene.
-  assert.match(survey, /<div id="planWorld"><div class="stage-img" id="stageImg"><\/div><div class="dimOverlay"><\/div><div id="gridLayer"><\/div><svg id="zoneLayer"[^>]*><\/svg><div id="zoneTags"><\/div><svg id="regionLayer"[^>]*><\/svg><svg id="roomLayer"[^>]*><\/svg><\/div><div id="alignDrag"><\/div><\/div><div id="gridScale"><\/div>/);
+  // #routeLayer (wiring runs) belongs INSIDE #planWorld for the same reason the others do: on a hybrid
+  // floor the plan is transformed over the aerial, and a run drawn outside that transform would sit off
+  // the plan it was traced on.
+  assert.match(survey, /<div id="planWorld"><div class="stage-img" id="stageImg"><\/div><div class="dimOverlay"><\/div><div id="gridLayer"><\/div><svg id="zoneLayer"[^>]*><\/svg><div id="zoneTags"><\/div><svg id="regionLayer"[^>]*><\/svg><svg id="roomLayer"[^>]*><\/svg><svg id="routeLayer"[^>]*><\/svg><\/div><div id="alignDrag"><\/div><\/div><div id="gridScale"><\/div>/);
   assert.match(survey, /#gridLayer\{[^}]*pointer-events:none[^}]*z-index:2|#gridLayer\{[^}]*z-index:2[^}]*pointer-events:none/);
-  assert.match(survey, /\.devNode\{[^}]*z-index:5/, "device markers sit above the grid (z2), zone (z3) and boundary (z4) layers");
+  assert.match(survey, /\.devNode\{[^}]*z-index:5/, "device markers sit above the grid (z2), zone (z3), boundary and route (z4) layers — a run never covers the marker it starts at");
 });
 
 test("3d survey: Grid is a 3-level Off/Light/Full control, default OFF, applySettings reflects it, save/restore persist + migrate", () => {

@@ -7,6 +7,7 @@ import { toolAccepted } from "./survey-approve";   // fingerprint check — driv
 import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
 import { stepAfter, stepBefore, railFromEcho, layoutNextOk } from "../../../lib/survey-rail";
+import { routeTotal } from "../../../lib/survey-routes";
 
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
@@ -281,6 +282,7 @@ export default function SystemPlanner({
     if (step === "background") surveyCmd({ cmd: "step", step: 0, ...(view ? { focus: "view" } : {}) });
     else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });     // Layout toolset — draw structure / rooms / areas
     else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });    // Cameras toolset — place + aim cameras
+    else if (step === "route") surveyCmd({ cmd: "step", step: 1, focus: "route" });        // Route toolset — head-end + cable runs over the placed devices
     // views / review: shell state only — both iframes stay mounted (no map reload between Layout ↔ Cameras)
   };
   // Floor-plan highlight: when the AI resolves a device (coverage answer, or a device-bound flag/feedback),
@@ -298,6 +300,10 @@ export default function SystemPlanner({
   }, [accessId]);   // eslint-disable-line react-hooks/exhaustive-deps -- goRail/surveyCmd use refs + stable setters
 
   const camsPlaced = sig.camCount || camCount;
+  // Runs drawn, read from the SAVED blob rather than an iframe echo: the Route tile's ✓ has to be
+  // right the moment the survey reopens, before the widget has said anything (same reason the roster
+  // and Camera Angles read the blob — see lib/survey-state.js).
+  const routesDrawn = useMemo(() => routeTotal(surveyFloors(sv)), [sv]);
   // REBUILD → Round 2: FOUR steps. Base (pick a background) · Layout (draw structure/rooms/areas) ·
   // Cameras (place + aim) · Submit (summary + lock). Layout and Cameras are the SAME live map — the rail
   // only swaps the toolset, no reload. Views (Camera Photos) stays reachable via the ••• Go-to menu.
@@ -317,6 +323,10 @@ export default function SystemPlanner({
       icon: <><path d="M12 2 2 7l10 5 10-5-10-5z" /><path d="M2 12l10 5 10-5" /><path d="M2 17l10 5 10-5" /></> },
     { key: "cameras", label: "Placement", color: "#4E8C6A", done: camsPlaced > 0 || surveySubmitted, enabled: sig.bgReady,
       icon: <><circle cx="12" cy="10" r="3" /><path d="M12 2a8 8 0 0 0-8 8c0 5.4 8 12 8 12s8-6.6 8-12a8 8 0 0 0-8-8z" /></> },
+    // Route (the wiring diagram) sits after Placement: runs are drawn from placed devices back to the
+    // head-end, so there is nothing to draw from until Placement has happened.
+    { key: "route", label: "Route", color: "#1F8E93", done: routesDrawn > 0 || surveySubmitted, enabled: sig.bgReady,
+      icon: <><path d="M4 20v-6a3 3 0 0 1 3-3h7a3 3 0 0 0 3-3V4" /><circle cx="4" cy="21" r="1.6" /><circle cx="20" cy="3" r="1.6" /></> },
     { key: "views", label: "Camera Angles", color: "#8673A6", done: hasViews, enabled: sig.bgReady,
       icon: <><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /></> },
     { key: "review", label: "Approval", color: "#3E7D5A", done: false, enabled: sig.bgReady, span: true,
@@ -374,8 +384,8 @@ export default function SystemPlanner({
   // Order + one-step moves live in lib/survey-rail (RAIL_STEPS = Background, Layout, Placement, Camera Angles, Approval).
   const prevStep = stepBefore(railStep);
   const nextStep = stepAfter(railStep);
-  const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
-  const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", views: "Camera Angles", review: "Approval" };
+  const NEXT_PROMPT = { layout: "Layout", cameras: "Placement", route: "Route", views: "Camera Angles", review: "Approval" };
+  const STEP_LABEL = { background: "Background", layout: "Layout", cameras: "Placement", route: "Route", views: "Camera Angles", review: "Approval" };
   // Camera Angles: photos are OPTIONAL. With none attached, Next reads "Skip" and still goes to Approval
   // (section L) — so the step never reads as a requirement the user has to satisfy.
   const camsWithPhoto = (roster || []).reduce((n, f) => n + (Array.isArray(f?.devices) ? f.devices : []).filter((d) => d && d.k === "cam" && d.photo).length, 0);

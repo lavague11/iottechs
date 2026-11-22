@@ -10,8 +10,19 @@ import { RAIL_STEPS } from "../lib/survey-state.js";
 const widget = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const shell = readFileSync(new URL("../app/project/[accessId]/system-planner.jsx", import.meta.url), "utf8");
 
-test("the declared order is Background, Layout, Placement, Camera Angles, Approval", () => {
-  assert.deepEqual(RAIL_STEPS, ["background", "layout", "cameras", "views", "review"]);
+test("the declared order is Background, Layout, Placement, Route, Camera Angles, Approval", () => {
+  // Route (the wiring diagram) sits after Placement: runs start at placed devices, and drawing them
+  // before the angle cones exist keeps the plan readable while cable paths are traced.
+  assert.deepEqual(RAIL_STEPS, ["background", "layout", "cameras", "route", "views", "review"]);
+});
+
+test("the widget's mirrored RAIL_STEPS never drifts from lib/survey-state.js", () => {
+  // The widget keeps its own copy to validate the `railStep` command under bare JS. If the two lists
+  // disagree, normRail() silently drops the new step and the survey reopens on the wrong one — no
+  // error anywhere. Pin them equal.
+  const m = widget.match(/var RAIL_STEPS=(\[[^\]]*\])/);
+  assert.ok(m, "the widget still declares RAIL_STEPS");
+  assert.deepEqual(JSON.parse(m[1]), RAIL_STEPS, "widget RAIL_STEPS == lib RAIL_STEPS");
 });
 
 test("Next advances exactly one step from every position; Back is the inverse; ends are null", () => {
@@ -24,8 +35,8 @@ test("Next advances exactly one step from every position; Back is the inverse; e
   assert.equal(stepAfter("nonsense"), null);
 });
 
-test("the nav menu lists the five steps in order and lands exactly on the tile clicked", () => {
-  const items = [...shell.slice(shell.indexOf("const NAV_ITEMS")).matchAll(/\{ key: "(\w+)"/g)].map((m) => m[1]).slice(0, 5);
+test("the nav menu lists every step in order and lands exactly on the tile clicked", () => {
+  const items = [...shell.slice(shell.indexOf("const NAV_ITEMS")).matchAll(/\{ key: "(\w+)"/g)].map((m) => m[1]).slice(0, RAIL_STEPS.length);
   assert.deepEqual(items, RAIL_STEPS, "menu order == rail order (Placement is not Camera Angles)");
   assert.ok(shell.includes("goRail(it.key)"), "a tile navigates to its own key");
 });
@@ -46,8 +57,11 @@ test("a dock echo never skips a step", () => {
   const up = railFromEcho("layout", "draw", "layout");
   assert.deepEqual([up.step, up.pending], ["layout", null]);
   assert.equal(railFromEcho("layout", "cameras", up.pending).step, "cameras");
-  // Placement stays Placement; Views/Review are never yanked
+  // Placement stays Placement; Route/Views/Review are never yanked. Route matters most here: it draws
+  // over the SAME Setup canvas, so the iframe echoes dock "cameras" the whole time Route is open and
+  // without the guard that echo would drag the user back to Placement mid-run.
   assert.equal(railFromEcho("cameras", "cameras").step, "cameras");
+  assert.equal(railFromEcho("route", "cameras").step, "route");
   assert.equal(railFromEcho("views", "cameras").step, "views");
   assert.equal(railFromEcho("review", "draw").step, "review");
   // the satellite editor is Background

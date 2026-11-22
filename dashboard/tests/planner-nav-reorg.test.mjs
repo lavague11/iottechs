@@ -12,6 +12,9 @@ const gw = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", 
 test("rebuild: 4-step rail Base · Layout · Cameras · Submit; steps track geometry/cameras/submission", () => {
   assert.ok(sp.includes('label: "Background"') && sp.includes('label: "Layout"') && sp.includes('label: "Placement"') && sp.includes('label: "Approval"'), "4-step rail labels (Background · Layout · Placement · Approval)");
   assert.ok(!/label: "Views"/.test(sp) && !/label: "Plan"/.test(sp), "no 'Views'/'Plan' rail step (Plan split into Layout + Cameras)");
+  // Route is a NAV step (the wiring diagram), not a fifth tile on the compact rail above — the rail
+  // stays the four load-bearing stages, exactly as Camera Angles is nav-only.
+  assert.ok(sp.includes('label: "Route"'), "Route is in the nav");
   assert.ok(sp.includes('done: sig.hasPlan || surveySubmitted') && sp.includes('done: camsPlaced > 0 || surveySubmitted'), "Layout done = geometry/submitted; Cameras done = cameras/submitted");
   assert.ok(/surveySubmitted = false/.test(sp), "surveySubmitted prop on SystemPlanner");
   assert.ok(gw.includes("surveySubmitted={!!acceptances.submit_site_survey}"), "gateway passes submission state");

@@ -71,14 +71,14 @@ test("place 2 cameras → close → reopen: both cameras, the scale and the step
 
 // ---------------------------------------------------------------- root cause 2: the step ------------
 test("a rail step past Layout round-trips — Placement, Camera Angles and Approval are all restorable", () => {
-  assert.deepEqual(RAIL_STEPS, ["background", "layout", "cameras", "views", "review"]);
+  assert.deepEqual(RAIL_STEPS, ["background", "layout", "cameras", "route", "views", "review"]);
   for (const step of RAIL_STEPS) {
     const blob = JSON.stringify({ ...SAVED, lastStep: step });
     assert.equal(surveyLastStep(blob), step, `lastStep "${step}" (rail index ${RAIL_STEPS.indexOf(step)}) survives a reopen`);
   }
   // Index >= 2 is the regression: the widget's own goStep clamps to 0..1 because it only HAS two internal
   // steps, so the five-step rail position has to be stored separately — which is what lastStep is.
-  for (const step of ["cameras", "views", "review"]) {
+  for (const step of ["cameras", "route", "views", "review"]) {
     assert.ok(RAIL_STEPS.indexOf(step) >= 2);
     assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: step })), step);
   }
@@ -174,7 +174,7 @@ function widgetEnv({ stored = null, breakLoadFloor = false } = {}) {
     var curStep=1, railStep=null, editedAfterSubmit=false, dimmed=false, submitted=false, approved=false;
     var ISZ=1, showFovState=false, gridMode=0, sideCollapsed=false, showAllAngles=false, bgToolOpen=null;
     var bgToolSrc=null, lastJson=null, RO=false, PID="P1", PKEY="k", saveT=null, sugT=null, clearIntent=false;
-    var RAIL_STEPS=["background","layout","cameras","views","review"];
+    var RAIL_STEPS=["background","layout","cameras","route","views","review"];
     var localStorage={ getItem:function(){ return S.store.value; }, setItem:function(k,v){ S.store.value=v; },
       removeItem:function(){ S.store.value=null; } };
     var parent={ postMessage:function(m){ S.msgs.push(m); } };

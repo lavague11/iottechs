@@ -14,8 +14,12 @@
 // to bind customer approvals, so nothing here reshapes an existing field. The one field this module
 // introduced to the blob is `lastStep` (a string), which the fingerprint ignores.
 
-// The host rail's five steps, in order. `goRail` in system-planner.jsx uses exactly these keys.
-export const RAIL_STEPS = ["background", "layout", "cameras", "views", "review"];
+// The host rail's steps, in order. `goRail` in system-planner.jsx uses exactly these keys, and
+// stepAfter/stepBefore (lib/survey-rail.js) are pure index maths over this array — so the ORDER here
+// is the only place the flow is declared. "route" (the wiring diagram) sits after Placement and
+// before Camera Angles on purpose: routes are drawn over placed devices, and drawing them before the
+// angle cones exist keeps the plan readable while you trace cable paths.
+export const RAIL_STEPS = ["background", "layout", "cameras", "route", "views", "review"];
 
 export function normalizeRailStep(step) {
   const s = String(step || "").trim().toLowerCase();

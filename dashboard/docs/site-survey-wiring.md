@@ -162,9 +162,41 @@ Built as (1) for now, since §7's real requirement is *the diagram and the work 
 | Stage | Scope | State |
 |---|---|---|
 | — | Spec into the repo + vault mirror, Stage 1 investigation, conflicts logged | **done** |
-| 1 | Route step, drawing, head-end, cable types and colours | not started |
+| 1 | Route step, drawing, head-end, cable types and colours | **partial** — see below |
 | 2 | Bundles, risers, editing rules, undo, lock | not started |
 | 3 | Submitted/signed survey opening, legend, run summary, work order + both PDFs | not started |
+
+## Stage 1 — what is in, what is not
+
+**In (committed, 1907 tests green, production build clean, verified live on ASC0113):**
+- The step itself. `RAIL_STEPS` is now `background · layout · cameras · route · views · review`, so Back/Next
+  move through Route with no other change (`stepAfter`/`stepBefore` are pure index maths). Placement's Next
+  reads "Route"; Route's Next reads "Camera Angles". Route has a nav tile between Placement and Camera Angles.
+- `railFromEcho` now guards `route` alongside `views`/`review`. Route draws over the SAME Setup canvas, so the
+  iframe echoes dock `"cameras"` the whole time it is open; without the guard that echo dragged the user back
+  to Placement mid-run.
+- `focus:"route"` returns early in the widget's `step` handler. Falling through reached `contextualEdit()` and
+  opened the Layout **draw editor** — found before shipping, not after.
+- `lib/survey-routes.js` — the shared model: the four cables with their colours, run types, validation and
+  caps on restore, head-end validation, `routeCounts` / `runSummary`, and `unwiredDevices` for §Editing rules 6.
+- Routes + head-end carried through `parseSurveyFloors`, the allow-list every renderer reads through.
+- `#routeLayer` renders stored runs: dark outline under a neon stroke (what makes a bright cable readable on a
+  white plan AND a dark aerial), daisy chains dashed, the head-end as a marker. Inside `#planWorld`, so runs
+  ride the hybrid alignment transform like devices and zones. Under the device markers (z4 vs z5), so a run
+  never covers the camera it starts at.
+- Drift tests: the widget's `RAIL_STEPS` and its `ROUTE_CABLES` are now pinned equal to the lib copies. Neither
+  had a guard before; a silent divergence would have reopened surveys on the wrong step, or drawn the same run
+  in two different colours in the planner and the PDF, with no error either way.
+- Duplicate a floor: the head-end copies (pure geometry), the runs deliberately do not — `cloneDevices` mints
+  fresh cids, so every route's `dev` would point at a device that no longer exists.
+
+**Not in — Stage 1 is not finished.** There is no way to CREATE a run from the UI yet:
+- tap-device → tap-points → finish at the head-end (§The Route step 4)
+- placing the head-end marker by tapping (§3)
+- the cable-type and Home-run/Daisy-chain pickers (§5)
+
+So Route today shows the finished floor and draws any runs that exist, but a user cannot draw one. The model,
+the persistence and the rendering it will write into are all in place and tested.
 
 **Open for the owner** (logged, not blocking Stage 1):
 - D — device IDs read `C7` today, not `IC7`. Built to match the existing system; say the word to change the canonical code instead.

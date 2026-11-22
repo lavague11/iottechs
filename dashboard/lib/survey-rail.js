@@ -37,7 +37,10 @@ export function floorHasStructure(f) {
 //  - no dock never moves the rail (it used to nudge Background -> Layout, which made Background a no-op).
 export function railFromEcho(cur, dock, pending = null, step = null) {
   const keep = { step: cur, reissue: false, pending };
-  if (cur === "views" || cur === "review") return keep;
+  // Steps the widget's internal model has no counterpart for (it has only 0 Background / 1 Setup).
+  // Route draws over the Setup canvas, so the iframe keeps echoing dock "cameras" the whole time it
+  // is open — without this guard that echo would drag the rail back to Placement under the user.
+  if (cur === "route" || cur === "views" || cur === "review") return keep;
   if (dock === "satellite") return { step: "background", reissue: false, pending: pending === "background" ? null : pending };
   if (dock === "draw") return { step: "layout", reissue: false, pending: null };
   if (dock === "cameras") {
