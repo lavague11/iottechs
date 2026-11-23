@@ -409,6 +409,33 @@ test("the step guard goes first and RETURNS — the source shape that makes the 
     "…and so does redo");
 });
 
+test("a Route tap is a route point and NEVER also drops an armed device", () => {
+  // The bug: Placement leaves a kind armed (an NVR, say). On Route every canvas tap then added a
+  // route point AND placed that device. Guarded three ways, because one of them is the UI state and
+  // two are the write path — the same belt-and-braces the region editor already has.
+  const enter = extractFn("enterRoute");
+  assert.ok(/if\(armedK\) arm\(null\);/.test(enter), "entering Route disarms, as setRegionMode does");
+  assert.ok(/setAngleMode\(false\)/.test(enter) && /setEraseMode\(false\)/.test(enter),
+    "…and clears the other canvas modes with it");
+  const place = extractFn("placeAt");
+  assert.ok(/\|\|routing\) return;/.test(place), "placeAt refuses while routing");
+  assert.ok(/frozen\(\)\|\|!armedK\|\|inChrome\(e\)\|\|regionMode\|\|routing/.test(survey),
+    "…and so does the pointer path that calls it");
+});
+
+test("NVR and amplifier markers invert — a head-end is not one more camera", () => {
+  assert.match(survey, /var RT_BASE_KINDS=\{ nvr:1, amp:1 \};/, "the two base kinds are named once");
+  assert.match(survey, /\.devNode\.base \.devDot\{background:var\(--ink,#101112\);border-color:var\(--ink,#101112\);color:var\(--gold,#b98a2e\)\}/,
+    "dark body, gold glyph — inverted from every other marker's white body");
+  assert.ok(survey.includes('(RT_BASE_KINDS[d.k]?" base":"")'), "the class is applied from the device kind");
+  // The glyph colour is written INLINE from the device's group (purple for Sound), and inline beats
+  // any stylesheet rule — so the gold is chosen at the source instead of fought with !important.
+  assert.ok(survey.includes('style="color:\'+(RT_BASE_KINDS[d.k]?"#b98a2e":d.color)+\'"'),
+    "a base product's glyph is gold whatever group it came from — an amp must not stay purple");
+  // The ordinary marker is unchanged.
+  assert.match(survey, /\.devNode \.devDot\{width:var\(--isz,40px\)[^}]*background:#fff/, "other devices stay white");
+});
+
 test("BUG #103 — Route shows only Route's tools; Placement's + is not one of them", () => {
   // On Route the top-left + was still there, and it opened Placement's device-category picker
   // (Camera / Angle / NVR / ISP / PoE Switch / Display) on a step that places no devices.

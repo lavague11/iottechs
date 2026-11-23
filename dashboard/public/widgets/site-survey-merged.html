@@ -400,6 +400,10 @@
   .devNode .devDot:active{cursor:grabbing}
   .devNode.aim .devDot,.devNode.aim .devDot:active{cursor:pointer}   /* Angles: the icon doesn't move — only aim/length */
   .devNode .devDot{color:var(--ink)}
+  /* Base products (NVR, amplifier) invert: dark body, gold glyph. Everything else runs back to these,
+     and on a plan of twenty white markers a head-end that looks like one more camera is a liability. */
+  .devNode.base .devDot{background:var(--ink,#101112);border-color:var(--ink,#101112);color:var(--gold,#b98a2e)}
+  .devNode.base .devDot svg{stroke-width:1.9}
   .devNode .devDot svg{width:calc(var(--isz,40px)*.47);height:calc(var(--isz,40px)*.47);stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot,.devNode:hover .devDot,.devNode.hl .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
@@ -1471,6 +1475,10 @@
     var ISZ=20, showFovState=false, gridMode=0, sideCollapsed=true, showAllAngles=false;   // icon size (default Small now) + FOV shading (default OFF) + panel collapse + all-angles (default OFF) + grid display 0 off·1 light·2 full (default OFF — the finished plan should look finished; Show ▸ Grid turns it on)
     var angleMode=false;   // Setup step: false = placing devices (+), true = setting camera angles (arrow). Replaces the old separate Angles step.
     var devices=[], devSeq=0, selId=null, armedK=null, curStep=0, dimmed=false;
+    // HEAD-END / BASE products. An NVR and an amplifier are what everything else runs back TO — they
+    // are not one more camera on the wall, and at a glance on a busy plan they read as one. Their
+    // markers invert: dark body, gold glyph, against every other device's white body.
+    var RT_BASE_KINDS={ nvr:1, amp:1 };
     var collapsedFloors={};   // floor index → collapsed? (the SURVEY panel shows every floor under a divider)
     var ICONS={
       cam:'<svg viewBox="0 0 24 24"><path d="M23 19V7a2 2 0 00-2-2h-3l-2-2H8L6 5H3a2 2 0 00-2 2v12a2 2 0 002 2h18a2 2 0 002-2z"/><circle cx="12" cy="13" r="3.5"/></svg>',
@@ -1645,7 +1653,7 @@
     work.addEventListener("pointerup", ptrGone, true);
     work.addEventListener("pointercancel", ptrGone, true);
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
-    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode||aligning) return; var p=planPctFromClient(cx,cy);   // client → plan-% (through the active alignment)
+    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode||aligning||routing) return;   // routing: the tap is a route point, never a device var p=planPctFromClient(cx,cy);   // client → plan-% (through the active alignment)
       addDevice(armedK,p.x,p.y); devMenu.classList.remove("show"); }
     // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
     var loupeEl=null;
@@ -1662,7 +1670,7 @@
     // the crosshair. Mouse places immediately (precise cursor). A second finger (pinch) cancels it.
     var placing=false, placePt=null;
     work.addEventListener("pointerdown", function(e){
-      if(frozen()||!armedK||inChrome(e)||regionMode) return;
+      if(frozen()||!armedK||inChrome(e)||regionMode||routing) return;   // see placeAt — Route owns the canvas tap
       if(e.pointerType==="mouse"){ placeAt(e.clientX,e.clientY); return; }
       if(activePtrs.size>1){ placing=false; hideLoupe(); return; }
       placing=true; placePt={x:e.clientX,y:e.clientY};
@@ -1878,6 +1886,10 @@
     function rCable(k){ for(var i=0;i<ROUTE_CABLES.length;i++) if(ROUTE_CABLES[i][0]===k) return ROUTE_CABLES[i]; return ROUTE_CABLES[0]; }
     function rRoutes(create){ var f=floors[curFloor]; if(!f) return []; if(!Array.isArray(f.routes)){ if(!create) return []; f.routes=[]; } return f.routes; }
     function enterRoute(){ routing=true; document.body.classList.add("routing"); rtDraft=null; rtHeadMode=false;
+      // Placement may have left a device armed; on Route a canvas tap is a route point, and an armed
+      // kind made every tap ALSO drop an NVR. Disarm on entry, same as setRegionMode does.
+      if(angleMode) setAngleMode(false); if(eraseMode) setEraseMode(false);
+      if(armedK) arm(null); if(selId!=null) select(null); devMenu.classList.remove("show");
       if(rtHistFloor!==curFloor) rtHistReset();   // a fresh baseline per floor; undo can never reach another floor
       renderRoutes(); renderRouteBar(); updateCamBtns(); }
     function exitRoute(){ if(!routing) return; routing=false; rtDraft=null; rtHeadMode=false;
@@ -2371,8 +2383,11 @@
     function postSurveyComment(d){ if(!d) return; try{ parent.postMessage({type:"iotSurveyComment", project:PID, anchor:(d.name||d.tag||"Camera")}, "*"); }catch(e){} }
     function mountDevice(d){
       if(d && d.placed===false) return;   // UNPLACED camera — no map marker; it lives in the unplaced tray until dragged onto the plan
-      var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":""); el.id="dev-"+d.id;
-      el.innerHTML='<div class="devDot" style="color:'+d.color+'">'+iconOf(cat(d.k))+'</div>'+
+      var el=document.createElement("div"); el.className="devNode"+(angleMode&&d.cone?" aim":"")+(RT_BASE_KINDS[d.k]?" base":""); el.id="dev-"+d.id;
+      // A base product's glyph is GOLD on its dark body, whatever group it came from. The inline colour
+      // below is the group's (purple for Sound), and being inline it beats any stylesheet rule — so the
+      // choice is made here rather than fought with !important downstream.
+      el.innerHTML='<div class="devDot" style="color:'+(RT_BASE_KINDS[d.k]?"#b98a2e":d.color)+'">'+iconOf(cat(d.k))+'</div>'+
         (d.cone?'<div class="fovWrap"><div class="fovGrow"><svg class="coneSvg"><defs><radialGradient id="cg'+d.id+'" gradientUnits="userSpaceOnUse"><stop class="s0" offset="0"></stop><stop class="s1" offset="1"></stop></radialGradient></defs><path class="coneP" fill="url(#cg'+d.id+')"></path></svg><div class="coneLine"></div></div></div>':'')+
         (d.ring?'<div class="ringWrap"><span class="ringRipple"></span><span class="ringC"></span><span class="ringGrip" title="Drag to size the coverage"></span></div>':'')+
         '<div class="icLabel"></div>'+
