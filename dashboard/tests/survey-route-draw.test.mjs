@@ -63,9 +63,21 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
     ${extractFn("rtApply")}
     ${extractFn("rtHistUndo")}
     ${extractFn("rtHistRedo")}
+    // Placement now has a real history of its own (pHist), which undoAction delegates to off-Route.
+    var pHist=[], pHi=-1, pHistFloor=-1, selId=null, devSeq=0;
+    var work={ querySelectorAll:function(){ return []; } };
+    function mountDevice(){} function reportDevices(){} function renderUnplacedTray(){} function updateCamBtns(){}
+    ${extractFn("pSnap")}
+    ${extractFn("pHistReset")}
+    ${extractFn("pHistPush")}
+    ${extractFn("pCanUndo")}
+    ${extractFn("pCanRedo")}
+    ${extractFn("pApply")}
+    ${extractFn("pHistUndo")}
+    ${extractFn("pHistRedo")}
     ${extractFn("undoAction")}
     ${extractFn("redoAction")}
-    rtHistReset();
+    rtHistReset(); pHistReset();
     return { tap:rtTap, undo:rtUndoPoint, cancel:rtCancel,
       draft:function(){ return rtDraft; }, head:function(){ return rtHeadMode; },
       setHeadMode:function(v){ rtHeadMode=v; }, setCable:function(v){ rtCable=v; },
@@ -74,7 +86,8 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
       moveHead:rtHeadMoveTo, addHead:rtAddHead, deleteRun:rtDeleteRun, routeAt:rtRouteAt,
       devices:function(){ return devices; },
       setRouting:function(v){ routing=v; }, routing:function(){ return routing; },
-      canUndo:rtCanUndo, canRedo:rtCanRedo, histLen:function(){ return rtHist.length; } };
+      canUndo:rtCanUndo, canRedo:rtCanRedo, histLen:function(){ return rtHist.length; },
+      pPush:pHistPush, pCanUndo:pCanUndo, setDevices:function(v){ devices=v; } };
   `);
   const S = { devices, floor, frozen, RO, saves: 0 };
   return { api: api(S), S };
@@ -383,28 +396,40 @@ test("ROUTE: undo does not reach PAST the point the step was entered at", () => 
   assert.equal(api.floor().routes[0].id, "r0");
 });
 
-test("PLACEMENT: undo/redo still pops and restores the last placed device, exactly as before", () => {
+test("PLACEMENT: undo reverses the LAST ACTION — it no longer pops the last placed device (R7)", () => {
+  // The old behaviour this replaces: undo always removed the most recently added device, whatever the
+  // user had actually just done. Move a camera and the move stayed while a different camera vanished.
   const cams = [dev("c1", "cam", 20, 20), dev("c2", "cam", 60, 60)];
   const { api } = build({ devices: cams, floor: {} });
   api.setRouting(false);                               // the Placement step
+  api.devices()[1].x = 88;                             // the last action is a MOVE, not an add
+  api.pPush();
   api.undoAction();
-  assert.deepEqual(api.devices().map((d) => d.cid), ["c1"], "the last placed camera is popped");
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2"], "both cameras are still there");
+  assert.equal(api.devices().find((d) => d.cid === "c2").x, 60, "and the move is what got reversed");
   api.redoAction();
-  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2"], "and redo puts it back");
+  assert.equal(api.devices().find((d) => d.cid === "c2").x, 88, "redo re-applies that same move");
 });
 
-test("the step guard goes first and RETURNS — the source shape that makes the fall-through impossible", () => {
-  // The device-touching symbol differs per function: undo reads `devices`, redo restores from `redoStk`.
-  for (const [name, fn, deviceToken] of [
-    ["undoAction", extractFn("undoAction"), "devices"],
-    ["redoAction", extractFn("redoAction"), "redoStk"],
+test("the step guard goes first and RETURNS — Route undo can never reach a device", () => {
+  // Behaviour first: on Route, with nothing in the route history, undo/redo must leave devices alone.
+  const cams = [dev("c1", "cam", 20, 20), dev("c2", "cam", 60, 60)];
+  const { api } = build({ devices: cams, floor: {} });
+  api.undoAction(); api.redoAction();                  // routing is true by default in this harness
+  assert.deepEqual(api.devices().map((d) => d.cid), ["c1", "c2"],
+    "a Route undo with an empty route history touched no device");
+
+  // …and the shape that makes the fall-through impossible: the step guard precedes the Placement call.
+  for (const [name, fn, placementCall] of [
+    ["undoAction", extractFn("undoAction"), "pHistUndo"],
+    ["redoAction", extractFn("redoAction"), "pHistRedo"],
   ]) {
     const guard = fn.indexOf("if(routing)");
-    const touch = fn.indexOf(deviceToken);
+    const touch = fn.indexOf(placementCall);
     assert.ok(guard >= 0, `${name} checks the step`);
     assert.ok(/if\(routing\)\{[^}]*return; \}/.test(fn), `${name}'s routing branch returns`);
-    assert.ok(touch > 0, `${name} does reach device state via ${deviceToken}`);
-    assert.ok(guard < touch, `${name} checks the step BEFORE it can reach ${deviceToken}`);
+    assert.ok(touch > 0, `${name} reaches Placement state via ${placementCall}`);
+    assert.ok(guard < touch, `${name} checks the step BEFORE it can reach ${placementCall}`);
   }
   // …and the buttons themselves are hidden on Route unless the route history has something in it.
   assert.ok(/ub\.style\.display = routing \? \(\(!rtDraft && !frozen\(\) && !RO && rtCanUndo\(\)\)/.test(survey),

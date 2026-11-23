@@ -1608,25 +1608,53 @@
     })();
     // Undo: remove the last-placed device
     // Undo removes the last placed device and remembers it so Redo can put it back; placing anything new clears the redo stack.
-    var redoStk=[];
-    /* STEP-SCOPED UNDO. This button is not a general history — it is "pop the last placed device",
-       and the floor's region editor keeps its own separate stack (bdHist / #bdUndo), which is why
-       body.regions hides this one in CSS. Route draws over the SAME Setup canvas as Placement, and
-       this handler never learned about it: on Route it stayed visible and deleted the last CAMERA
-       while leaving every cable run in place. Same shared-canvas blind spot already guarded in
-       railFromEcho and in the focus:"route" branch — the guard goes FIRST and RETURNS, so a Route
-       undo with nothing to undo is a no-op and can never fall through to a device. */
+    /* STEP-SCOPED UNDO. The floor's region editor keeps its own separate stack (bdHist / #bdUndo),
+       which is why body.regions hides this one in CSS. Route draws over the SAME Setup canvas as
+       Placement, so the guard below goes FIRST and RETURNS — a Route undo can never fall through to
+       a device (railFromEcho and the focus:"route" branch guard the same shared canvas).
+
+       PLACEMENT HISTORY (survey-rules.md R7: undo reverses the ACTUAL last action, on this step only).
+       This used to be "pop the last placed device" — not a history at all. After MOVING a camera,
+       undo left the move in place and deleted a different camera, the most recently added one
+       (measured: 5 devices → 4, the moved one still at its new coordinates, and 4 of 6 cable runs
+       orphaned by the two deletes). A snapshot stack covers add, delete, move and rename with one
+       mechanism, the same shape Route already uses. The floor's routes ride along because deleting a
+       device cascades to its runs and the two must undo together; the stack resets on every step and
+       floor change, so a Placement undo can never reach a run edited on the Route step. */
+    var pHist=[], pHi=-1, pHistFloor=-1;
+    function pSnap(){ var f=floors[curFloor]||{};
+      return JSON.stringify({ d:devices, r:(Array.isArray(f.routes)?f.routes:[]) }); }
+    function pHistReset(){ try{ pHist=[pSnap()]; pHi=0; }catch(e){ pHist=[]; pHi=-1; } pHistFloor=curFloor; }
+    function pHistPush(){ if(frozen()||RO) return;
+      if(pHistFloor!==curFloor || pHi<0){ pHistReset(); return; }
+      var s; try{ s=pSnap(); }catch(e){ return; }
+      if(pHist[pHi]===s) return;                       // the action changed nothing — not a history step
+      pHist.length=pHi+1; pHist.push(s); pHi++;
+      if(pHist.length>60){ pHist.shift(); pHi--; } }
+    function pCanUndo(){ return pHistFloor===curFloor && pHi>0; }
+    function pCanRedo(){ return pHistFloor===curFloor && pHi>=0 && pHi<pHist.length-1; }
+    function pApply(s){ var st; try{ st=JSON.parse(s); }catch(e){ return; }
+      [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
+      devices=st.d||[]; selId=null;
+      // mountDevice, not reAdd: a restore puts the record back VERBATIM. reAdd re-derives tag and name,
+      // which would renumber the very devices undo is supposed to bring back unchanged.
+      devices.forEach(function(d){ if(+d.id>devSeq) devSeq=+d.id; mountDevice(d); });
+      var f=floors[curFloor]; if(f) f.routes=(st.r||[]);
+      try{ renderRoutes(); renderRouteBar(); }catch(e){}
+      // No reconcileLocations here: the snapshot already holds the resolved names, and re-running the
+      // resolver would let undo land somewhere other than where it started.
+      renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); updateCamBtns(); }
+    function pHistUndo(){ if(frozen()||RO||!pCanUndo()) return; pHi--; pApply(pHist[pHi]); }
+    function pHistRedo(){ if(frozen()||RO||!pCanRedo()) return; pHi++; pApply(pHist[pHi]); }
     function updateRedoBtn(){ var b=document.getElementById("redoBtn"); if(!b) return;
       b.style.display = routing ? ((!rtDraft && !frozen() && rtCanRedo()) ? "" : "none")
-                                : ((redoStk.length && !frozen()) ? "" : "none"); }   // Redo only appears when there's something to redo
+                                : ((pCanRedo() && !frozen() && !RO) ? "" : "none"); }   // Redo only appears when there's something to redo
     function undoAction(){
       if(routing){ if(!rtDraft) rtHistUndo(); return; }        // Route owns undo on its own step
-      if(frozen()||!devices.length) return;
-      var d=devices[devices.length-1]; redoStk.push(Object.assign({},d)); removeDevice(d.id); updateRedoBtn(); }
+      pHistUndo(); }
     function redoAction(){
       if(routing){ if(!rtDraft) rtHistRedo(); return; }
-      if(frozen()||!redoStk.length) return;
-      var sd=redoStk.pop(); reAdd(sd); renderPanel(); updateCount(); reconcileLocations(); queueSave(); updateRedoBtn(); }
+      pHistRedo(); }
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", undoAction);
     var redoBtn=document.getElementById("redoBtn"); if(redoBtn) redoBtn.addEventListener("click", redoAction);
     // NAV-FIX §2: undo floats bottom-left of the canvas and shows ONLY after a change (a placed device to
@@ -1635,7 +1663,7 @@
     // is being drawn — the bar's own undo owns the in-progress points, so there are never two undos live.
     function updateCamBtns(){ var ub=document.getElementById("undoBtn");
       if(ub) ub.style.display = routing ? ((!rtDraft && !frozen() && !RO && rtCanUndo()) ? "" : "none")
-                                        : ((devices.length && !frozen() && !RO) ? "" : "none");
+                                        : ((pCanUndo() && !frozen() && !RO) ? "" : "none");
       updateRedoBtn(); }
     var cbUndo=document.getElementById("cbUndo"); if(cbUndo) cbUndo.addEventListener("click", function(){ var b=document.getElementById("undoBtn"); if(b) b.click(); updateCamBtns(); });
     var cbRedo=document.getElementById("cbRedo"); if(cbRedo) cbRedo.addEventListener("click", function(){ var b=document.getElementById("redoBtn"); if(b) b.click(); updateCamBtns(); });
@@ -1696,7 +1724,7 @@
       var cur=(d.locName||d.name||"").trim();
       var nm=window.prompt("Name this device", cur);
       if(nm===null) return;                                   // cancelled: change nothing
-      applyManualName(d, nm); renderDevice(d); renderPanel(); reportDevices(); queueSave(); }
+      applyManualName(d, nm); renderDevice(d); renderPanel(); reportDevices(); queueSave(); pHistPush(); updateCamBtns(); }
     function dcDelete(){ var d=byIdDev(dcId); hideDevCtx(); eraseDevice(d); }   // eraseDevice carries the confirm
     (function(){
       var m=document.getElementById("devCtx"); if(!m) return;
@@ -2064,8 +2092,8 @@
     var rtDraft=null;        // { dev, cable, pts } while a run is being drawn
     var rtCable=null;        // chip override; null = whatever the device kind implies
     var rtHeadMode=false;    // the next tap places (or moves) the head-end
-    /* ROUTE HISTORY — the THIRD undo stack in this widget, and deliberately so. Devices have
-       "pop the last placed one" (redoStk) and the region editor has bdHist; neither can express a
+    /* ROUTE HISTORY — the THIRD undo stack in this widget, and deliberately so. Placement has its own
+       snapshot stack (pHist) and the region editor has bdHist; neither can express a
        route change, and a shared stack is exactly how undo on Route came to delete a camera. This one
        holds snapshots of ONLY {routes, head} for the current floor, so there is no reachable path
        from a Route undo to a device. Per floor: switching floors restarts it rather than letting an
@@ -2411,22 +2439,39 @@
     // Count matching devices on all EARLIER floors so numbering is continuous across floors
     // (Floor 2's first camera continues after Floor 1's last — a "continuation", not a restart).
     function floorsBefore(pred){ var n=0; for(var i=0;i<curFloor;i++){ ((floors[i]&&floors[i].devices)||[]).forEach(function(sd){ if(pred(sd)) n++; }); } return n; }
+    /* NEXT ORDINAL = THE HIGHEST ONE IN USE + 1 — never the count (survey-rules.md, Identity).
+       A count re-issues the ordinal of anything deleted: delete IC4 and the next camera was minted
+       "IC5 / Camera 4" again, so two different devices carried one identity. It persisted to the blob,
+       reached the customer layout and the proposal PDF through survey2-model's `code`, and left the
+       approval fingerprint ambiguous (survey2Meaning hashes `name`). So read the ordinal actually
+       written on every device and take the maximum. Tags count per GROUP, names per KIND. */
+    var reAddPool=null;   // during a floor load, the whole source list — so a legacy device with no tag
+                          // can never be minted onto a tag that appears LATER in that same list.
+    function ordFromTag(sd){ var m=/^I?[A-Za-z](\d+)$/.exec(String((sd&&sd.tag)||"")); return m?+m[1]:0; }
+    function ordFromName(sd){ var m=/(\d+)\s*$/.exec(String((sd&&sd.name)||"")); return m?+m[1]:0; }
+    function maxOrd(pred, pick){ var hi=0;
+      function scan(list){ (list||[]).forEach(function(sd){ if(!sd||!pred(sd)) return; var n=pick(sd); if(isFinite(n)&&n>hi) hi=n; }); }
+      for(var i=0;i<floors.length;i++){ if(i!==curFloor) scan(floors[i]&&floors[i].devices); }
+      scan(reAddPool);                  // the not-yet-loaded remainder of this floor, during a load
+      scan(devices);                    // the live floor IS the array, not floors[curFloor].devices
+      return hi; }
+    function nextGroupOrd(g){ return maxOrd(function(sd){ return catSafe(sd.k).group.key===g.key; }, ordFromTag)+1; }
+    function nextTypeOrd(k){ return maxOrd(function(sd){ return sd.k===k; }, ordFromName)+1; }
     // cid = a stable per-camera id that outlives (floor, index): it rides through save/restore so a
     // proposal line item's camera_id can always find this exact camera (View Placement). Cameras only.
     function mkcid(){ var id; do { id="c"+Math.random().toString(36).slice(2,9); } while(devices.some(function(d){return d.cid===id;})); return id; }
     function addDevice(k,x,y){ var it=cat(k); if(!it) return; var g=it.group; devSeq++;
-      var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;   // tag counts within the group, across floors
-      var nType=floorsBefore(function(sd){return sd.k===k;})+devices.filter(function(d){return d.k===k;}).length+1;                        // name counts within the item type, across floors
+      var nGroup=nextGroupOrd(g);   // tag: highest in this group, across floors, + 1
+      var nType=nextTypeOrd(k);     // name: highest of this item type, across floors, + 1
       var defRange = pxPerFt()>0 ? (REACH_FT[k] || (it.ring?18:40)) : RANGE;   // scaled floor → real-foot default reach; else legacy px
       var d={id:devSeq,k:k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:x,y:y,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:(k==="cam"?mkcid():null)};
       devices.push(d); mountDevice(d); renderPanel(); updateCount(); reconcileLocations(); queueSave();
-      redoStk.length=0; updateRedoBtn(); }   // a new placement invalidates the redo stack; a new camera resolves its room/zone location on placement
+      pHistPush(); updateCamBtns(); }   // one history step per placement (a new one drops any redo); a new camera resolves its room/zone location on placement
     // MERGE: add a camera from the Photos view with NO map — a real survey device, just `placed:false`
     // (one record, one id, one cid, shared by both views). It gets a name/photo in Photos; later, when a
     // base exists, it shows in the unplaced tray to drag onto the plan. No marker is mounted until placed.
     function addUnplacedCamera(){ if(frozen()||RO) return null; var it=cat("cam"); if(!it) return null; var g=it.group; devSeq++;
-      var nGroup=floorsBefore(function(sd){return cat(sd.k).group.key===g.key;})+devices.filter(function(d){return cat(d.k).group.key===g.key;}).length+1;
-      var nType=floorsBefore(function(sd){return sd.k==="cam";})+devices.filter(function(d){return d.k==="cam";}).length+1;
+      var nGroup=nextGroupOrd(g), nType=nextTypeOrd("cam");   // highest in use + 1, same rule as addDevice
       var defRange = pxPerFt()>0 ? (REACH_FT.cam || 40) : RANGE;
       var d={id:devSeq,k:"cam",cone:!!it.cone,ring:!!it.ring,color:g.color,x:null,y:null,aim:0,aimed:false,fov:it.fov||30,range:defRange,tag:"I"+g.letter+nGroup,name:it.name+" "+nType,cid:mkcid(),placed:false};
       devices.push(d); renderPanel(); updateCount(); reportDevices(); queueSave(); renderUnplacedTray();
@@ -2884,6 +2929,9 @@
         // aerial async before enterDraw opens, so a pre-emptive goStep(1) flashed the empty Placement canvas
         // for that gap ("clicking Layout skips me to placement"). The draw tool's Done path (finishBackground)
         // lands on Placement on its own, so nothing downstream needs the step pre-set.
+        // R7: the history belongs to THIS visit to the step. Resetting on every rail move is what stops
+        // a Placement undo from reaching a cable run edited on Route, or vice versa.
+        pHistReset();
         if(m.focus!=="route") exitRoute();   // leaving Route by ANY other rail move puts the canvas back
         if(m.focus==="view" && typeof m.step==="number"){ goStep(m.step); return; }   // show the step only — a passive resume / floor switch never opens an editor
         if(m.focus==="layout" && typeof m.step==="number"){ contextualEdit(m.step); return; }   // Layout: walls, rooms, areas
@@ -2939,7 +2987,7 @@
       // Rename by STABLE cid — the host relays a rename made in the mockup so the survey stays in sync
       // (the name lives once; a rename anywhere shows everywhere). Current floor only; other floors were
       // already updated server-side and re-hydrate on reload.
-      if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ applyManualName(rd, m.name); renderDevice(rd); renderPanel(); reconcileLocations(); queueSave(); } return; }
+      if(m.cmd==="renameCid"){ if(frozen())return; var rd=null; for(var ri=0;ri<devices.length;ri++){ if(devices[ri].cid&&devices[ri].cid===m.cid){ rd=devices[ri]; break; } } if(rd){ applyManualName(rd, m.name); renderDevice(rd); renderPanel(); reconcileLocations(); queueSave(); pHistPush(); } return; }
       // Photo relayed from the mockup (by stable cid) — update the device's photo so the map + the shared
       // Devices roster (via reportDevices → iotSurveyDevices) reflect it live. A photo is NOT in the survey
       // fingerprint, so this is applied even on a submitted/frozen survey (Views are often done after submit).
@@ -2950,7 +2998,7 @@
         renderPanel(); renderUnplacedTray(); queueSave(); return; }   // renderPanel → reportDevicesSoon → the shared Devices roster + liveCameras refresh; tray thumb updates too
       if(!d) return;
       if(frozen()) return;   // submitted (or customer) → view/select only; no rename/photo/delete until unsubmit
-      if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); }
+      if(m.cmd==="rename"){ applyManualName(d, m.name); renderDevice(d); renderPanel(); reconcileLocations(); queueSave(); pHistPush(); }
       else if(m.cmd==="fov"){ d.fov=Math.max(20,Math.min(360,+m.fov||d.fov)); renderDevice(d); renderPanel(); queueSave(); }
       else if(m.cmd==="delete"){ removeDevice(d.id, m.token); }
       else if(m.cmd==="photo"){ d.photo=m.photo||null; d.photoName=m.photo?(m.photoName||d.name||null):null; renderDevice(d); renderPanel(); queueSave(); }
@@ -2965,11 +3013,26 @@
     // iotSurveyDevices) so its toast can never outlive a stash that is gone. A token-less (map-side) delete
     // stashes nothing.
     var delStash=[];
+    /* A device's cable runs BELONG to the device (survey-rules.md, Referential integrity). Removing it
+       without them left runs whose `dev` key nothing carried — and those orphans persisted, so the
+       wiring diagram and the work order showed cable to a device that did not exist. Measured: undoing
+       two device adds stranded 4 of 6 runs. The cut runs ride in the delete stash so putting the device
+       back puts its cable back with it. */
+    function cutRunsFor(d){
+      var f=floors[curFloor]; if(!d || !f || !Array.isArray(f.routes)) return [];
+      var key=rtDevKey(d), cut=f.routes.filter(function(r){ return r && r.dev===key; });
+      if(!cut.length) return [];
+      f.routes=f.routes.filter(function(r){ return !r || r.dev!==key; });
+      try{ renderRoutes(); renderRouteBar(); }catch(e){}
+      return cut; }
     function removeDevice(id, token){ var el=document.getElementById("dev-"+id); if(el) el.remove();
-      if(token){ for(var si=0;si<devices.length;si++){ if(devices[si].id===id){
-        var keep=devices; devices=[keep[si]]; var rec=stripDevs()[0]; devices=keep;   // the ONE strip shape (persisted records carry no id/tag/colour)
-        delStash.push({token:token, cid:rec.cid, rec:rec, tag:keep[si].tag, idx:si, floor:floors[curFloor]}); if(delStash.length>20) delStash.shift(); break; } } }
-      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); }
+      var gone=null; for(var gi=0;gi<devices.length;gi++){ if(devices[gi].id===id){ gone=devices[gi]; break; } }
+      var cutRuns=cutRunsFor(gone);
+      if(token && gone){ var si=devices.indexOf(gone);
+        var keep=devices; devices=[gone]; var rec=stripDevs()[0]; devices=keep;   // the ONE strip shape (persisted records carry no id/tag/colour)
+        delStash.push({token:token, cid:rec.cid, rec:rec, tag:gone.tag, idx:si, floor:floors[curFloor], runs:cutRuns}); if(delStash.length>20) delStash.shift(); }
+      devices=devices.filter(function(d){return d.id!==id;}); if(selId===id) selId=null; renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave();
+      pHistPush(); updateCamBtns(); }   // the delete AND its cascaded runs are one history step
     function undoDeleteDevice(token){ if(frozen()||!token) return false;
       var s=null; for(var ui=0;ui<delStash.length;ui++){ if(delStash[ui].token===token){ s=delStash.splice(ui,1)[0]; break; } }
       if(!s) return false;
@@ -2985,10 +3048,24 @@
         // Restore the original tag only while it is still free: delete IC5 → add a camera (recount hands out
         // IC5) → undo would otherwise show IC5 twice. If taken, keep the tag reAdd assigned.
         if(s.tag && !devices.some(function(d){ return d!==nd && d.tag===s.tag; })) nd.tag=s.tag;
+        restoreRuns(s, floors[curFloor], rtDevKey(nd));   // the cable comes back with the device
         try{ renderDevice(nd); }catch(e){}
-        renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); return true; }
+        renderPanel(); updateCount(); reportDevices(); renderUnplacedTray(); queueSave(); pHistPush(); updateCamBtns(); return true; }
       var fd=s.floor.devices||(s.floor.devices=[]);   // another floor is showing: its stored list takes the record
-      fd.splice(Math.min(s.idx,fd.length),0,s.rec); reportDevices(); queueSave(); return true; }
+      fd.splice(Math.min(s.idx,fd.length),0,s.rec);
+      // Only a record with a cid can be re-keyed off-floor. A non-camera is keyed by runtime id, which
+      // is re-derived on the next load, so its runs would re-attach to whatever lands on that number.
+      // NOTE: no apostrophes in comments inside this function. The test harness extracts it by counting
+      // braces and treats a quote as a string start, so one apostrophe swallows the rest of the file.
+      if(s.cid) restoreRuns(s, s.floor, s.cid);
+      reportDevices(); queueSave(); return true; }
+    function restoreRuns(s, f, key){
+      if(!s || !s.runs || !s.runs.length || !f || !key) return;
+      if(!Array.isArray(f.routes)) f.routes=[];
+      s.runs.forEach(function(r){ if(!r) return;
+        var c=JSON.parse(JSON.stringify(r)); c.dev=key;   // the record returns with a NEW id, so re-key
+        if(!f.routes.some(function(x){ return x && x.id===c.id; })) f.routes.push(c); });
+      try{ renderRoutes(); renderRouteBar(); }catch(e){} }
     // A hand-typed rename becomes the shown label everywhere (map pin, roster, proposal all read locName-first,
     // then name). Setting both + a manual flag makes the rename stick; reconcileLocations preserves it. An empty
     // name clears the flag → the auto geometry location takes over again on the next reconcile. (This is an
@@ -2999,6 +3076,7 @@
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
 
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
+    window.SV_BUILD="20261123-g1-identity-runs-undo";   // bumped per fix group, so a live check can prove which build is serving
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     // ---- THE SAVE GATE (section L: "survey data is not being saved") -------------------------------
@@ -3135,8 +3213,7 @@
     function reAdd(sd){ var it=catSafe(sd.k); var g=it.group; devSeq++;
       // catSafe throughout, not cat: these counters walk EVERY device, so one unknown kind anywhere on
       // the floor used to throw here and take the whole load down with it.
-      var nG=floorsBefore(function(x){return catSafe(x.k).group.key===g.key;})+devices.filter(function(d){return catSafe(d.k).group.key===g.key;}).length+1;
-      var nT=floorsBefore(function(x){return x.k===sd.k;})+devices.filter(function(d){return d.k===sd.k;}).length+1;
+      var nG=nextGroupOrd(g), nT=nextTypeOrd(sd.k);   // only used when the record carries no tag/name of its own
       var d={id:devSeq,k:sd.k,cone:!!it.cone,ring:!!it.ring,color:g.color,x:sd.x,y:sd.y,aim:sd.aim||0,aimed:(sd.aimed!=null?!!sd.aimed:(sd.aim!=null&&sd.aim!==0)),fov:sd.fov||it.fov||30,range:sd.range||RANGE,tag:(sd.tag||("I"+g.letter+nG)),name:sd.name||(it.name+" "+nT),locName:sd.locName||"",placementType:sd.placementType||"",locSeq:+sd.locSeq||0,locKey:sd.locKey||"",photo:sd.photo||null,photoName:sd.photoName||null,cid:(sd.cid||(sd.k==="cam"?mkcid():null)),placed:(sd.placed!==false)};
       devices.push(d); mountDevice(d); }   // mountDevice skips unplaced (placed===false) → they surface in the tray
     // Phase 4.2 view modes. A floor is hybrid-capable only when it has the ctx aerial crop, the transparent plan layer, AND a
@@ -3399,7 +3476,12 @@
       devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
       focusMode=false; updateFocusBtn();   // each floor opens in Full view
-      setStageBg(); (f.devices||[]).forEach(reAdd); renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations(); renderUnplacedTray();   // resolve/refresh location names for this floor's cameras against its plan + surface any unplaced cameras
+      // reAddPool = the whole stored list while it loads, so ordinals are minted against the tags that
+      // appear LATER in it too, not just the ones already re-added. Cleared in a finally — leaving it
+      // set would make every later mint read a stale floor.
+      setStageBg(); reAddPool=(f.devices||[]); try{ reAddPool.forEach(reAdd); } finally { reAddPool=null; }
+      pHistReset();   // a floor's history starts here: undo can never reach across a floor switch
+      renderPanel(); updateCount(); renderNorthArrow(); reconcileLocations(); renderUnplacedTray();   // resolve/refresh location names for this floor's cameras against its plan + surface any unplaced cameras
       var s0=surveyWiz.querySelectorAll(".steps .s")[0];
       if(bgHasImage){ document.getElementById("bgstep").style.display="none"; document.getElementById("working").style.display="block"; s0.classList.add("done"); fitScene(); }
       else { document.getElementById("working").style.display="none"; document.getElementById("bgstep").style.display=""; s0.classList.remove("done"); }
@@ -3658,7 +3740,7 @@
           var pp=planPctFromClient(ev.clientX,ev.clientY); d.x=Math.max(2,Math.min(98,pp.x)); d.y=Math.max(2,Math.min(98,pp.y)); renderDevice(d);   // client → plan-% through the active alignment, so a dragged device lands under the cursor when aligned
           showLoupe(ev.clientX, ev.clientY); }   // magnifier over the exact mount point (mouse + touch)
         function up(){ dot.removeEventListener("pointermove",mv); dot.removeEventListener("pointerup",up); dot.removeEventListener("pointercancel",up); hideLoupe(); el.classList.remove("drag");
-          if(moved){ reconcileLocations(); queueSave(); }   // moved into another room/zone → location name + inside/outside follow (identity unchanged)
+          if(moved){ reconcileLocations(); queueSave(); pHistPush(); updateCamBtns(); }   // a finished move is one history step (R7); moving into another room/zone takes the location name + inside/outside with it (identity unchanged)
           else if(d.photo){ if(popId===d.id && popPinned) hideViewPop(); else showViewPop(d, el, true); }   // a clean tap on a photographed camera → toggle its full view
         }
         dot.addEventListener("pointermove",mv); dot.addEventListener("pointerup",up); dot.addEventListener("pointercancel",up); }); }

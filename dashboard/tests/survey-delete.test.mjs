@@ -50,6 +50,11 @@ function world({ submitted = false, RO = false, floors, curFloor = 0 } = {}) {
   vm.runInContext([
     "function frozen(){ return RO || submitted || restoreFailed; }",
     "var delStash=[];",
+    // Deleting a device now cascades to its cable runs and records one history step, so the real
+    // cutRunsFor/restoreRuns come in too — stubbing them out would hide the cascade these tests cover.
+    "function rtDevKey(d){ return d ? (d.cid || ('id'+d.id)) : ''; }",
+    "function renderRoutes(){} function renderRouteBar(){} function pHistPush(){} function updateCamBtns(){}",
+    extractFn(widget, "cutRunsFor"), extractFn(widget, "restoreRuns"),
     extractFn(widget, "removeDevice"), extractFn(widget, "undoDeleteDevice"), extractFn(widget, "stripDevs"),
     extractFn(widget, "deleteFloor"), extractFn(widget, "pushServer"),
   ].join("\n"), sb);

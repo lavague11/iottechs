@@ -32,9 +32,18 @@ function harness(floors, curFloor) {
     var floors=S.floors, curFloor=S.curFloor, devices=[], devSeq=0, RANGE=40;
     function mountDevice(){}
     ${extractFn("floorsBefore")}
+    ${extractFn("ordFromTag")}
+    ${extractFn("ordFromName")}
+    ${extractFn("maxOrd")}
+    ${extractFn("nextGroupOrd")}
+    ${extractFn("nextTypeOrd")}
+    var reAddPool=null;
     ${extractFn("reAdd")}
     ${extractFn("stripDevs")}
-    function loadFloorDevices(i){ curFloor=i; devices=[]; devSeq=0; (floors[i].devices||[]).forEach(reAdd); }
+    // Mirrors loadFloor: the whole stored list is visible to the mint while it loads, so a record with
+    // no tag cannot be handed one that appears later in that same list.
+    function loadFloorDevices(i){ curFloor=i; devices=[]; devSeq=0;
+      reAddPool=(floors[i].devices||[]); try{ reAddPool.forEach(reAdd); } finally { reAddPool=null; } }
     return { load:loadFloorDevices, save:stripDevs, live:function(){ return devices; } };
   `)({ floors, curFloor });
 }
