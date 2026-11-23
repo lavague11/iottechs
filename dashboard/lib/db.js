@@ -9100,7 +9100,21 @@ export function getWorkOrderDoc(accessId, { actorId = null, actorName = null } =
   const media = woLineMediaFor(row.id);
   const photos = {};
   for (const m of media) (photos[m.line_key] ||= []).push({ id: m.id, slot: m.slot, url: m.media_url, by: m.by_name, at: m.at });
-  const liveLines = woLines(payload).map((l) => ({ ...l, state: lineState[l.key] || null, photos: photos[l.key] || [], steps: stepCount(l.kind) }));
+  // BUG #102 — a camera's sub-bundle is NOT separate work. "Camera 1" opens its own checklist (Cable
+  // Dropped → Cable Managed → Wires Terminated → Camera Mounted → Camera Online), which already IS the
+  // mounting, the programming and the waterproofing; listing those sub-lines again as their own steps
+  // made a 224-step work order out of eight cameras, and none of them was ever tickable, so the order
+  // could not reach done. The money says the same thing: techItemTotal is techLine(parent) + every
+  // sub, so the parent's total already contains them — the flat list was showing one payout twice.
+  //
+  // Filtered HERE, where the technician's live list is built — never in woLines(), which feeds
+  // workOrderFingerprint: changing that would void every signed work order. Payout is unaffected
+  // either way (woTotal reads the option tree, not this array), and a sub whose parent has no
+  // checklist of its own is kept, because then it is the only place that work appears.
+  const parentSteps = new Map(woLines(payload).map((l) => [l.key, stepCount(l.kind)]));
+  const coveredByParent = (l) => l.parentKey && (parentSteps.get(l.parentKey) || 0) > 1;
+  const liveLines = woLines(payload).filter((l) => !coveredByParent(l))
+    .map((l) => ({ ...l, state: lineState[l.key] || null, photos: photos[l.key] || [], steps: stepCount(l.kind) }));
   return {
     id: row.id, accessId: row.project_access_id,
     sourceProposalId: row.source_proposal_id, sourceVersion: row.source_version, sourceOption: row.source_option,
