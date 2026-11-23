@@ -7881,7 +7881,10 @@ export function confirmedPaymentTotal(accessId, kind) {
 // ---- Browser-tool data backup (survey / mockup / schedule JSON blobs) ----
 // "tracking" = equipment shipment info for the Schedule stage ({number, carrier, note}) —
 // staff set it, the customer's scheduling page displays it.
-export const TOOL_KEYS = new Set(["survey", "survey2", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc"]);
+// "walkthrough" is the install checklist (lib/walkthrough.js, docs/install-tool-plan.md). It is a
+// DELIBERATELY INERT key: no gate function may read it, because the checklist must never block an
+// install. tests/walkthrough-never-gates.test.mjs fails if any of them ever does.
+export const TOOL_KEYS = new Set(["survey", "survey2", "mockup", "schedule", "tracking", "install", "addendum", "receiving", "techs", "qc", "walkthrough"]);
 // B14 — the version a client must echo to prove it is writing against what it read.
 //
 // A content hash rather than a column: it needs no migration, it cannot drift from the row it
