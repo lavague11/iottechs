@@ -108,7 +108,7 @@ One commit per group; the owner approves each before the next begins.
 | 1 | **Data** — identity ordinals (highest + 1, all six sites), delete cascades to cable runs, Placement undo reverses the actual last action | **DONE** · `7df33e4b` · 1,995 tests pass · verified live on ASC0122 |
 | 2 | **Flow** — nav popup on open (R1), start at Background (R3), Back no longer stuck at Layout + the nav Background item works (R2), floor picker off Camera Angles and Approval (R4), an explicit "Use this background" on Background | **DONE** · `918ff739` · 2,009 tests pass · verified live on ASC0122 |
 | 2b | **R5 — hybrid view on Placement and Route** | **NOT DONE, reported.** The draw tool emits a plan layer only with BOTH a seed and a context (`planLayerSVG`, draw-floorplan.html); a floor whose base was never traced has neither, so there is no aerial handed back to save. Real instance: **ASC0056 floor 1** — aerial present, `bgSource` satellite, `ctx` absent. The fix is a full-extent context mode inside the draw tool: geometry that feeds the customer layout and the proposal PDF, so it needs live alignment checks. Owner decides whether to take it on. |
-| 3 | **Misleading screens** — Approval never READY with open items, no "Not saving" or "1 Issue" on a clean new survey, no false "Changed elsewhere" leaking from another tool, Approval fills the screen | not started |
+| 3 | **Misleading screens** | **DONE** · `e47b9564` · 2,031 tests pass · verified live. Note: the "1 Issue" badge was the **Next.js dev overlay**, not our UI — but it was reporting a real hydration mismatch (a literal style tag inside a comment in the planner stylesheet), now fixed. |
 | 4 | **Mobile** — full walkthrough at 375px | not started · blocked on the PIN (see queued item 2) |
 | — | **Close-out** — rerun the whole walkthrough on desktop and phone, update `survey-walkthrough.md` with pass/fail for every rule | not started |
 
@@ -116,7 +116,7 @@ One commit per group; the owner approves each before the next begins.
 
 | # | Item | Why it is open |
 |---|---|---|
-| D1 | **Repair the duplicate tags/names already in stored surveys.** ASC0122 still carries an `IC5 / Camera 4` pair minted by the old count-based rule. | **STILL OPEN — the owner decides.** Touches fingerprints and real customer data, so it is outside what gets decided without them. `survey2Meaning` hashes `name`: renaming a stored device moves the fingerprint of an already-signed survey. New duplicates are impossible now; repairing old rows is a separate, scoped job. |
+| D1 | **DONE** · ASC0122 repaired (`IC5`->`IC7`, "Camera 4"->"Camera 6"); ASC0112 hand-typed duplicates left alone by design. Prod still to run. Original note: **Repair the duplicate tags/names already in stored surveys.** ASC0122 still carries an `IC5 / Camera 4` pair minted by the old count-based rule. | **STILL OPEN — the owner decides.** Touches fingerprints and real customer data, so it is outside what gets decided without them. `survey2Meaning` hashes `name`: renaming a stored device moves the fingerprint of an already-signed survey. New duplicates are impossible now; repairing old rows is a separate, scoped job. |
 | D2 | **A stray tap dropped a device**, because arming outlived the placing. | **DONE** · `3b77fc2e` · arming survives consecutive taps (eight cameras in eight taps) but not a move, delete, rename, undo or right-click. |
 
 ## Queued after the fix pass — do not start until the owner says
