@@ -115,8 +115,8 @@ One commit per group; the owner approves each before the next begins.
 
 | # | Item | Why it is open |
 |---|---|---|
-| D1 | **Repair the duplicate tags/names already in stored surveys.** ASC0122 still carries an `IC5 / Camera 4` pair minted by the old count-based rule. | `survey2Meaning` hashes `name`, so renaming stored devices moves the fingerprint of an already-signed survey. New duplicates are now impossible; repairing old rows is a separate, scoped job — unsigned surveys only, with a dry run first. |
-| D2 | **A stray tap still drops a device.** Arming persists after a placement, so a mis-aimed click adds a camera (it happened during Group 1 testing: it minted `IC7 / Camera 6` correctly, then had to be deleted). | Not in any listed group. Fold into Group 2, or leave. |
+| D1 | **Repair the duplicate tags/names already in stored surveys.** ASC0122 still carries an `IC5 / Camera 4` pair minted by the old count-based rule. | **STILL OPEN — the owner decides.** Touches fingerprints and real customer data, so it is outside what gets decided without them. `survey2Meaning` hashes `name`: renaming a stored device moves the fingerprint of an already-signed survey. New duplicates are impossible now; repairing old rows is a separate, scoped job. |
+| D2 | **A stray tap dropped a device**, because arming outlived the placing. | **DONE** · `3b77fc2e` · arming survives consecutive taps (eight cameras in eight taps) but not a move, delete, rename, undo or right-click. |
 
 ## Queued after the fix pass — do not start until the owner says
 
