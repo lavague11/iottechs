@@ -1127,6 +1127,18 @@ const CSS = `
 /* Keep the map taller than 540px on desktop so the survey uses CONTAIN (whole aerial visible + zoomable),
    not the phone COVER mode that crops the sides and blocks zooming back out. */
 .syp-plan .ss-embed-frame{flex:0 0 auto;width:100%;height:min(74vh,680px);min-height:560px;border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;display:block}
+/* DESKTOP: the plan pane must not be squeezed by what sits under it. .syp is a flex column and the
+   device roster below it is flex:0 1 auto at its natural height — eight photo thumbnails make that
+   514px. The pane is the only flexible child, so it absorbed the whole shortfall: measured at 88px of
+   map in a 724px column, while the widget was asking for 579. The Background chooser and the add-floor
+   sheet live in that same pane, so they were crushed with it — which is why satellite could be neither
+   seen nor started. Give the pane the height the widget actually asks for (--syp-plate-h, posted as
+   iotSurveyPlate), clamped, and let the overlay's own scroll carry the roster instead of the map
+   paying for it. Written as .syp > … (0,3,0) so it outranks .cpv-ovl-body .syp-plan (0,2,0) on order-
+   independent specificity rather than on which component's <style> happens to mount last. */
+@media (min-width:701px){
+  .syp > .syp-pane.syp-plan{flex:0 0 auto;height:clamp(360px, var(--syp-plate-h, 68vh), 74vh)}
+}
 @media (max-width:700px){ .syp-plan .ss-embed-frame{height:min(64vh,520px);min-height:340px}
   /* A floor that HAS a plan takes the height the plan actually needs (--syp-plate-h, posted by the
      widget as iotSurveyPlate.wantHeight: the contained plate plus the widget's own chrome). The fixed

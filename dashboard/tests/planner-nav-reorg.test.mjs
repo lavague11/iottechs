@@ -66,6 +66,19 @@ test("one shared bottom bar: linear 5-step Back/center-step/Next (no skips) + a 
   assert.ok(sp.includes("{customer && footer}"), "customer approve surface stays standalone");
 });
 
+test("desktop: the map pane keeps its own height and is never squeezed by the roster below it", () => {
+  // Measured on ASC0082: .syp is a 724px flex column holding floorbar 61 + plan pane + nav 62 +
+  // device roster 514. The pane was the only flexible child, so it took the shortfall — 88px of map
+  // while the widget asked for 579 — and the Background chooser and add-floor sheet, which live in
+  // that same pane, were crushed with it. An explicit height moves the overflow to the overlay's
+  // own scroll instead.
+  assert.match(sp, /@media \(min-width:701px\)\{\s*\.syp > \.syp-pane\.syp-plan\{flex:0 0 auto;height:clamp\(360px, var\(--syp-plate-h, 68vh\), 74vh\)\}/,
+    "the desktop pane has an explicit, clamped height driven by the widget's own request");
+  // (0,3,0) so it beats .cpv-ovl-body .syp-plan (0,2,0) regardless of which <style> mounts last.
+  assert.ok(!/\.syp > \.syp-pane\.syp-plan\{[^}]*!important/.test(sp),
+    "…won on specificity, not on !important");
+});
+
 test("phone: the bottom bar wraps — the action takes its own row and the step stays centred", () => {
   // At 375px the bar has 347px for [Back] [step] [action], and the right slot gets ~118px while a gate
   // hint ("Draw the structure first") or a state label ("Awaiting customer approval") is 190–215px wide.
