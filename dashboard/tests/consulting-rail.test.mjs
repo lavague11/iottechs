@@ -19,7 +19,9 @@ test("the rail replaces the Plans|Views toggle (single Consulting navigation)", 
 });
 
 test("rail drives the survey's internal step via postMessage (Background→0, Plan→1, Cameras→1+devices); Views/Review shell-only", () => {
-  assert.ok(shell.includes('if (step === "background") surveyCmd({ cmd: "step", step: 0, ...(view ? { focus: "view" } : {}) });'), "Background → survey step 0 (view focus only on a passive resume)");
+  // R2: Background SHOWS the background. It no longer reopens the background editor, which on a floor
+  // built with the draw tool echoed dock "draw" and dragged the rail back to Layout.
+  assert.ok(shell.includes('if (step === "background") surveyCmd({ cmd: "step", step: 0, focus: "view" });'), "Background → survey step 0, always view focus");
   assert.ok(shell.includes('else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });'), "Layout → survey step 1 (structure toolset)");
   assert.ok(shell.includes('else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });'), "Cameras → survey step 1 + device focus");
   // paneMode keeps both iframes mounted (visibility only); Views flips to the mockup pane

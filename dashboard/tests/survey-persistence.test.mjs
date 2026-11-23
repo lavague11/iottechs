@@ -82,8 +82,9 @@ test("a rail step past Layout round-trips — Placement, Camera Angles and Appro
     assert.ok(RAIL_STEPS.indexOf(step) >= 2);
     assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: step })), step);
   }
-  assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: undefined })), "layout", "no saved step → the old default");
-  assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: "nonsense" })), "layout", "junk never selects a step");
+  // R3: with nothing saved there is no step to resume, and the flow starts at Background.
+  assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: undefined })), "background", "no saved step → the first step");
+  assert.equal(surveyLastStep(JSON.stringify({ ...SAVED, lastStep: "nonsense" })), "background", "junk never selects a step — it falls back to the first one");
   assert.equal(normalizeRailStep("REVIEW"), "review");
   assert.equal(normalizeRailStep("placement"), null, "only the five real rail keys are accepted");
 });
@@ -129,7 +130,7 @@ test("a corrupt blob yields nothing instead of throwing — the host must never 
     assert.doesNotThrow(() => rosterFromSurvey(bad));
     assert.doesNotThrow(() => camerasFromSurvey(bad));
     assert.doesNotThrow(() => surveyFloorScales(bad));
-    assert.equal(surveyLastStep(bad), "layout");
+    assert.equal(surveyLastStep(bad), "background");   // R3 — the first step, not Layout
     assert.equal(surveyHasDevices(bad), false);
   }
   // A legacy single-floor save (pre-floors[]) still reads as one floor.

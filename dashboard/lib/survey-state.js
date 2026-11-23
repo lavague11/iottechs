@@ -109,7 +109,10 @@ export function surveyEditedAfterSubmit(raw) {
 export function surveyLastStep(raw, { submitted = false } = {}) {
   const d = parse(raw);
   if (submitted || surveySubmitted(raw)) return "review";   // submitted → Approval, in review mode
-  return normalizeRailStep(d && d.lastStep) || "layout";
+  // R3: the flow starts at BACKGROUND. With nothing saved there is no step to resume, and the first
+  // step of the order is where a survey begins — defaulting to Layout made a brand-new survey open
+  // with the rail reading Layout while the canvas asked for a background.
+  return normalizeRailStep(d && d.lastStep) || "background";
 }
 
 // Does the saved blob hold anything a reopen must show? Used to decide whether an empty in-memory

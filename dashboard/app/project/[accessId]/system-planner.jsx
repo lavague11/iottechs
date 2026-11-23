@@ -6,7 +6,7 @@ import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
 import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
-import { stepAfter, stepBefore, railFromEcho } from "../../../lib/survey-rail";
+import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
 
 // Projects whose rail the user has navigated in this session. Module scope on purpose: a per-mount
@@ -46,7 +46,8 @@ export default function SystemPlanner({
   // SECTION L: the rail step is the "last_step" a reopen must resume at. It is persisted in the survey2
   // blob (additive `lastStep`) by the widget, and read back from the SERVER row below — so Edit → always
   // landing on Layout is gone. An explicit initialStep (a deep link) still wins.
-  const [railStep, setRailStep] = useState(() => customer ? (initialStep || "layout") : (initialStep && initialStep !== "views" ? initialStep : "layout"));
+  // R3: the flow starts at Background. A deep-linked initialStep still wins; only the fallback moved.
+  const [railStep, setRailStep] = useState(() => customer ? (initialStep || "background") : (initialStep && initialStep !== "views" ? initialStep : "background"));
   const navTouched = useRef(!!initialStep);   // once the user (or a deep link) picks a step, the saved step stops being adopted
   const [sig, setSig] = useState({ bgReady: hasSurvey, hasPlan: hasSurvey, camCount: hasCams ? 1 : 0 });  // survey completion signals, seeded from server props, kept live by iotSurveyStep
   const railRef = useRef(railStep);   // latest rail step for the message handler (its effect closes over first render)
@@ -299,7 +300,12 @@ export default function SystemPlanner({
     setRailStep(step);
     // Persist it as the survey's last step (the widget owns the blob; we only tell it where we are).
     surveyCmd({ cmd: "railStep", step });
-    if (step === "background") surveyCmd({ cmd: "step", step: 0, ...(view ? { focus: "view" } : {}) });
+    // R2: Background is a destination, not an editor. It used to reopen the background tool, and on a
+    // floor whose background came from the DRAW tool that reopened the Structure editor — which echoes
+    // dock "draw", so the rail was dragged straight back to Layout. That is why Back stuck on Layout and
+    // why the nav Background tile appeared to do nothing. Showing the step is always focus:"view";
+    // changing the background stays an explicit click on the floor actions.
+    if (step === "background") surveyCmd({ cmd: "step", step: 0, focus: "view" });
     else if (step === "layout") surveyCmd({ cmd: "step", step: 1, focus: "layout" });     // Layout toolset — draw structure / rooms / areas
     else if (step === "cameras") surveyCmd({ cmd: "step", step: 1, focus: "devices" });    // Cameras toolset — place + aim cameras
     else if (step === "route") surveyCmd({ cmd: "step", step: 1, focus: "route" });        // Route toolset — head-end + cable runs over the placed devices
@@ -502,6 +508,16 @@ export default function SystemPlanner({
     setReopened(false);
   };
   const [navMenuOpen, setNavMenuOpen] = useState(false);
+  /* R1 — opening Site Survey always shows Survey Navigation, centred, so the first thing you do is
+     choose a step. Staff only: a customer has no rail to choose from. Once per mount, and never over
+     a deep link (?step=...), which already names the step the user asked for. */
+  const [navOpenOnLoad, setNavOpenOnLoad] = useState(false);
+  const navOpenedOnce = useRef(false);
+  useEffect(() => {
+    if (customer || navOpenedOnce.current || initialStep) return;
+    navOpenedOnce.current = true;
+    setNavOpenOnLoad(true);
+  }, [customer, initialStep]);
   const [topMenuOpen, setTopMenuOpen] = useState(false);   // the floor-bar ••• Go-to (reachable when the footer is hidden)
 
   // The in-canvas docks post iotSurveyNavGo{dir}; the planner resolves it to the real next/prev step here.
@@ -574,10 +590,13 @@ export default function SystemPlanner({
             )}
           </div>
         )
-      ) : (
-        /* NAV-FIX §1/look&feel: ONE top floor bar on every step (including Submit). No Map/Photos toggle and
-           no ••• — Survey Navigation lives only in the bottom bar's center button. The switcher is plain text
-           with ‹ › arrows: the left arrow hides on Floor 1, the right arrow becomes + on the last floor. */
+      ) : !FLOOR_BAR_STEPS.has(railStep) ? null : (
+        /* ONE top floor bar, on the steps where a floor is the thing you are working on (R4):
+           Background, Layout, Placement, Route. Camera Angles pages through CAMERAS and Approval
+           summarises the whole survey, so a floor switcher there is a control for something the step
+           is not about. No Map/Photos toggle and no ••• — Survey Navigation lives only in the bottom
+           bar's center button. The switcher is plain text with ‹ › arrows: the left arrow hides on
+           Floor 1, the right arrow becomes + on the last floor. */
         <div className="syp-floorbar" onPointerDown={fbDown} onPointerMove={fbMove} onPointerUp={fbUp} onPointerCancel={fbUp}>
           <div className="syp-fb-nav">
             {curFloor > 0 ? (
@@ -665,6 +684,8 @@ export default function SystemPlanner({
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 15l-6-6-6 6" /></svg>
             </button>
             {renderNavPop(navMenuOpen, setNavMenuOpen, "up-center")}
+            {/* R1 — the same panel, centred, shown once when the survey opens. */}
+            {renderNavPop(navOpenOnLoad, setNavOpenOnLoad, "center")}
           </div>
           <div className="syp-nav-side syp-nav-side--right">
             {railStep === "review" ? (
@@ -1089,6 +1110,8 @@ const CSS = `
 .syp-navpop--down{top:calc(100% + 8px);bottom:auto}
 .syp-navpop--up{bottom:calc(100% + 8px);top:auto}
 .syp-navpop--up-center{bottom:calc(100% + 10px);top:auto;left:50%;right:auto;transform:translateX(-50%)}
+/* R1 — the panel the survey opens on. Fixed and centred on the SCREEN, not anchored to a trigger. */
+.syp-navpop--center{position:fixed;top:50%;left:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);z-index:1201}
 .syp-navpop-head{display:flex;align-items:center;gap:9px;padding:15px 16px 9px}
 .syp-navpop-title{font-size:1rem;font-weight:700;color:var(--dv-ink,#101418)}
 .syp-navpop-x{margin-left:auto;width:30px;height:30px;display:inline-flex;align-items:center;justify-content:center;border:none;background:none;color:var(--dv-meta,#787D84);cursor:pointer;border-radius:8px}

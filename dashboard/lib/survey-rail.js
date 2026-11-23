@@ -4,6 +4,12 @@
 // rail past a step the user did not ask for.
 import { RAIL_STEPS } from "./survey-state.js";
 
+// R4 — the floor picker shows on Background, Layout, Placement and Route only. Those are the steps
+// where a FLOOR is the thing being worked on. Camera Angles pages through cameras and Approval
+// summarises the whole survey, so a floor switcher on either is a control for something the step is
+// not about. Exported so the shell and its tests read the same list.
+export const FLOOR_BAR_STEPS = new Set(["background", "layout", "cameras", "route"]);
+
 // Back / Next: exactly one step in the declared order, null at either end. Unknown steps resolve to null.
 export function stepAfter(cur) { const i = RAIL_STEPS.indexOf(cur); return i < 0 ? null : (RAIL_STEPS[i + 1] || null); }
 export function stepBefore(cur) { const i = RAIL_STEPS.indexOf(cur); return i < 0 ? null : (RAIL_STEPS[i - 1] || null); }
@@ -42,7 +48,15 @@ export function railFromEcho(cur, dock, pending = null, step = null) {
   // is open — without this guard that echo would drag the rail back to Placement under the user.
   if (cur === "route" || cur === "views" || cur === "review") return keep;
   if (dock === "satellite") return { step: "background", reissue: false, pending: pending === "background" ? null : pending };
-  if (dock === "draw") return { step: "layout", reissue: false, pending: null };
+  // A "draw" echo normally means the Structure editor is open, which IS Layout. But when the shell has
+  // just asked for Background, a draw dock is the tail of the editor we are leaving (or the background
+  // tool reopening on a floor whose background was BUILT with the draw tool). Honouring it there dragged
+  // the rail straight back to Layout — the reason Back stuck on Layout and the nav Background tile looked
+  // dead. Background keeps the rail; the pending clears so the next genuine draw echo is believed.
+  if (dock === "draw") {
+    if (pending === "background" || cur === "background") return { step: "background", reissue: false, pending: null };
+    return { step: "layout", reissue: false, pending: null };
+  }
   if (dock === "cameras") {
     if (cur === "cameras") return { step: "cameras", reissue: false, pending: null };
     if (cur === "layout") {
