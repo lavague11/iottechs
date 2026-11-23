@@ -116,6 +116,63 @@ export function runSummary(floors) {
     .join(" · ");
 }
 
+// ---- BUNDLES. Where runs share a stretch of path they are one physical bundle in the ceiling, and
+// the drawing has to say so: one thicker line with a count, not four coincident strokes that read as
+// a single cable and under-report the work.
+//
+// A "segment" is one straight piece between consecutive points of a run. Two segments are the same
+// stretch when their endpoints match within TOL, in EITHER direction — a run traced back toward the
+// head-end crosses the same ceiling as one traced away from it. Geometry only: this never edits a
+// stored route, so bundles appear and dissolve as runs are drawn and deleted.
+export const BUNDLE_TOL = 0.9;          // percent-units — about a finger's width of drawing slop
+// Endpoints are CLUSTERED, not rounded to a grid. Rounding looks like a tolerance and is not one: two
+// taps a third of TOL apart still land in different buckets when they straddle a boundary, so a bundle
+// would split for a reason invisible to the person drawing it. Clustering asks the real question —
+// "is there already a point within TOL of this one" — and is cheap at survey sizes.
+function clusterer(tol = BUNDLE_TOL) {
+  const centres = [];
+  return (p) => {
+    for (let i = 0; i < centres.length; i++) {
+      const c = centres[i];
+      if (Math.abs(c[0] - p[0]) <= tol && Math.abs(c[1] - p[1]) <= tol) return i;
+    }
+    centres.push([p[0], p[1]]);
+    return centres.length - 1;
+  };
+}
+// Undirected key: the two endpoint clusters sorted, so A→B and B→A collide on purpose.
+const segKeyOf = (ia, ib) => (ia <= ib ? `${ia}|${ib}` : `${ib}|${ia}`);
+
+// Every segment across every run, grouped by the stretch it occupies:
+//   → [{ a, b, runs:[{id, cable, run}], cables:[…], count, mixed }]
+// `mixed` means more than one cable TYPE on the stretch, which draws in the neutral bundle colour
+// rather than picking one member's colour and claiming the bundle is all that cable.
+export function bundleSegments(routes) {
+  const byStretch = new Map();
+  const cluster = clusterer();
+  validRoutes(routes).forEach((r) => {
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const a = r.pts[i], b = r.pts[i + 1];
+      const ia = cluster(a), ib = cluster(b);
+      if (ia === ib) continue;                               // zero-length (or within slop): nothing to share
+      const k = segKeyOf(ia, ib);
+      let e = byStretch.get(k);
+      if (!e) { e = { a, b, runs: [] }; byStretch.set(k, e); }
+      if (!e.runs.some((x) => x.id === r.id)) e.runs.push({ id: r.id, cable: r.cable, run: r.run });
+    }
+  });
+  return [...byStretch.values()].map((e) => {
+    const cables = [...new Set(e.runs.map((x) => x.cable))];
+    return { a: e.a, b: e.b, runs: e.runs, cables, count: e.runs.length, mixed: cables.length > 1 };
+  });
+}
+// Only the stretches carrying more than one run — these get the thicker line and the count badge.
+export const bundles = (routes) => bundleSegments(routes).filter((s) => s.count > 1);
+// Where a bundle's badge sits: the midpoint of the shared stretch.
+export const segMidpoint = (s) => [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2];
+// A shared stretch of ONE cable type keeps that colour; a mixed bundle takes the neutral dark.
+export const bundleColor = (s) => (s.mixed ? BUNDLE_COLOR : cableColor(s.cables[0]));
+
 // Devices with no run on them, by cid — §Editing rules 6 (red outline on the plan, and a warning
 // listing them at Approval). A WARNING: it never blocks a submit. Annotation kinds (Important /
 // Outlet / Hazard) are notes on the plan, not equipment, so they are never counted as unwired.

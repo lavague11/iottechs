@@ -102,6 +102,7 @@
      Same shape as body.regions hiding the device undo while the region editor is up. */
   body.routing #addDeviceBtn,
   body.routing #buildPlanFab{display:none!important}
+  body:not(.routing) #rtCableWrap{display:none!important}
   /* Route bar — bottom centre, inside thumb reach. Contextual: the head-end button is replaced by undo
      + cancel once a run is in progress, so the bar never carries a control that does nothing. */
   /* Metrics are tight on purpose: four cable chips plus the head-end control have to fit inside a
@@ -118,6 +119,19 @@
   .rtBtn.on{background:#101418;border-color:#101418;color:#fff}
   .rtBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .rtSep{width:1px;height:20px;background:var(--line,#e3e5e8);flex:none}
+  /* Cable picker: Route's tool in the top-left slot the other steps already use, so each step's tools
+     live in one place. The + carries a dot in the CURRENT cable's colour — the selection is visible
+     without opening anything, which is what the bottom chip row was really for. */
+  #rtCableBtn{position:relative}
+  #rtCableBtn i{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:3px;box-shadow:0 0 0 1.5px #fff}
+  #rtCablePop{position:absolute;top:calc(100% + 6px);left:0;z-index:12;display:none;flex-direction:column;gap:2px;min-width:168px;
+    background:#fff;border:1px solid var(--line,#e3e5e8);border-radius:12px;box-shadow:0 14px 40px rgba(16,17,18,.22);padding:6px}
+  #rtCablePop.open{display:flex}
+  .rtOpt{display:flex;align-items:center;gap:9px;width:100%;padding:9px 10px;border:0;border-radius:8px;background:none;cursor:pointer;
+    font:600 13px/1 var(--sans,system-ui,sans-serif);color:var(--ink,#101112);text-align:left}
+  .rtOpt:hover{background:var(--soft,#f6f7f8)}
+  .rtOpt i{width:12px;height:12px;border-radius:3px;flex:none;box-shadow:0 0 0 1.5px #0E1216 inset}
+  .rtOpt .rtTick{margin-left:auto;color:var(--gold,#b98a2e);font-weight:800}
   /* The head-end "+". Bottom-right: thumb reach, clear of the route bar (bottom-centre) and the floor
      controls (top). Sits over the map but is only present while there is no head-end to show instead. */
   #rtHeadAdd{position:absolute;right:14px;bottom:62px;z-index:7;width:42px;height:42px;border-radius:50%;
@@ -781,6 +795,11 @@
           </div>
           <div class="ctxbar">
             <button class="ctxbtn" id="addDeviceBtn" title="Add device" aria-label="Add device"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+            <!-- Route's own tool, in the same top-left slot the other steps use: + opens the cable picker. -->
+            <div id="rtCableWrap" style="display:none;position:relative">
+              <button class="ctxbtn" id="rtCableBtn" aria-haspopup="menu" aria-expanded="false" title="Cable" aria-label="Cable"><i id="rtCableDot"></i><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+              <div id="rtCablePop" role="menu" aria-label="Cable"></div>
+            </div>
             <!-- Primary build action: shown only on an aerial-not-yet-plan floor (canBuild), hidden otherwise. One home, top-left. -->
             <button class="ctxbtn build" id="buildPlanFab" title="Create floor plan" aria-label="Create floor plan" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/></svg><span>Floor Plan</span></button>
             <!-- Fit/Focus button removed; camera-angles moved into the device palette (Aim cameras) to declutter the canvas. -->
@@ -1862,13 +1881,44 @@
       if(rtHistFloor!==curFloor) rtHistReset();   // a fresh baseline per floor; undo can never reach another floor
       renderRoutes(); renderRouteBar(); updateCamBtns(); }
     function exitRoute(){ if(!routing) return; routing=false; rtDraft=null; rtHeadMode=false;
-      document.body.classList.remove("routing"); rtSyncHeadAdd(false); renderRouteBar(); updateCamBtns(); }
+      document.body.classList.remove("routing"); rtCableOpen=false; rtSyncHeadAdd(false); rtRenderCable(); renderRouteBar(); updateCamBtns(); }
     // Every run as two stacked polylines: a dark outline underneath, the neon colour over it. That pairing
     // is what makes a bright cable readable on a WHITE floor plan and on a dark aerial photo both — a
     // single neon stroke disappears into one or the other. A daisy chain is dashed, a home run solid.
+    /* BUNDLES — mirrors bundleSegments() in lib/survey-routes.js (a drift test pins the tolerance and
+       the undirected key). Runs sharing a stretch of ceiling are one physical bundle; drawing them as
+       four coincident strokes reads as a single cable and hides the work. Undirected on purpose: a run
+       traced back toward the head-end crosses the same ceiling as one traced away from it. */
+    var RT_BUNDLE_TOL=0.9;
+    // Endpoints are CLUSTERED, not grid-rounded — rounding looks like a tolerance and is not one: two
+    // taps a third of TOL apart still split when they straddle a bucket boundary. Mirrors clusterer()
+    // in lib/survey-routes.js.
+    function rtClusterer(){ var centres=[];
+      return function(p){ for(var i=0;i<centres.length;i++){ var c=centres[i];
+          if(Math.abs(c[0]-p[0])<=RT_BUNDLE_TOL && Math.abs(c[1]-p[1])<=RT_BUNDLE_TOL) return i; }
+        centres.push([p[0],p[1]]); return centres.length-1; }; }
+    function rtSegKey(ia,ib){ var ka=ia, kb=ib; return ka<=kb ? ka+"|"+kb : kb+"|"+ka; }
+    function rtBundles(rs){
+      var map={}, order=[], cluster=rtClusterer();
+      for(var i=0;i<rs.length;i++){ var r=rs[i]; if(!r||!Array.isArray(r.pts)) continue;
+        for(var j=0;j<r.pts.length-1;j++){ var a=r.pts[j], b=r.pts[j+1];
+          if(!a||!b) continue;
+          var ia=cluster(a), ib=cluster(b);
+          if(ia===ib) continue;
+          var k=rtSegKey(ia,ib), e=map[k];
+          if(!e){ e={ a:a, b:b, runs:[], cables:{} }; map[k]=e; order.push(k); }
+          var seen=false; for(var q=0;q<e.runs.length;q++) if(e.runs[q].id===r.id) seen=true;
+          if(!seen){ e.runs.push({id:r.id,cable:r.cable}); e.cables[r.cable]=1; } } }
+      var out={};
+      for(var o=0;o<order.length;o++){ var en=map[order[o]];
+        if(en.runs.length<2) continue;
+        var cab=Object.keys(en.cables);
+        out[order[o]]={ a:en.a, b:en.b, n:en.runs.length, mixed:cab.length>1, color:(cab.length>1?ROUTE_BUNDLE:rCable(cab[0])[2]) }; }
+      return out; }
     function renderRoutes(){
       var rl=document.getElementById("routeLayer"); if(!rl) return;
       var f=floors[curFloor]||{}, rs=Array.isArray(f.routes)?f.routes:[], s="", i;
+      var bun=rtBundles(rs), drawn={};
       var hd=f.head;
       for(i=0;i<rs.length;i++){
         var r=rs[i]||{}, pts=r.pts;
@@ -1883,6 +1933,17 @@
         var col=rCable(r.cable)[2], dash=(r.run==="daisy")?' stroke-dasharray="3 2"':"";
         s+='<polyline points="'+d+'" fill="none" stroke="'+ROUTE_OUTLINE+'" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
         s+='<polyline points="'+d+'" fill="none" stroke="'+col+'" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"'+dash+'/>';
+      }
+      // Shared stretches ON TOP, once each: one thicker line for the bundle, so four runs down the
+      // same corridor read as four cables and not as one. Drawn after the individual runs so the
+      // bundle is what you see where they coincide.
+      for(var bk in bun){ if(drawn[bk]) continue; drawn[bk]=1; var bs=bun[bk];
+        var bd=bs.a[0]+","+bs.a[1]+" "+bs.b[0]+","+bs.b[1];
+        s+='<polyline points="'+bd+'" fill="none" stroke="'+ROUTE_OUTLINE+'" stroke-width="8" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+        s+='<polyline points="'+bd+'" fill="none" stroke="'+bs.color+'" stroke-width="5.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>';
+        var mx=(bs.a[0]+bs.b[0])/2, my=(bs.a[1]+bs.b[1])/2;
+        s+='<circle cx="'+mx+'" cy="'+my+'" r="2.1" fill="'+ROUTE_OUTLINE+'" stroke="#fff" stroke-width="1.6" vector-effect="non-scaling-stroke"/>';
+        s+='<text x="'+mx+'" y="'+my+'" text-anchor="middle" dominant-baseline="central" fill="#fff" font-size="2.6" font-weight="700" font-family="system-ui,sans-serif" style="paint-order:stroke">'+bs.n+'</text>';
       }
       // The run being drawn, live: same stacked pair so it reads exactly as it will once committed, plus
       // a dot on every tapped point so you can see what you have placed and what Undo will take back.
@@ -2004,6 +2065,26 @@
        accidental tap costs nothing and there is no half-armed state to get stuck in. While a head-end
        exists this button is gone and the toolbar's head-end control arms the MOVE, so the two never
        offer the same action at the same time. */
+    // The top-left cable picker. The + shows the live selection as a coloured dot, and the dropdown
+    // names each cable in full — the one-word chips were a width compromise the bar no longer forces.
+    var rtCableOpen=false;
+    function rtCurCable(){ return rtDraft ? rtDraft.cable : (rtCable || "cat6"); }
+    function rtRenderCable(){
+      var wrap=document.getElementById("rtCableWrap"), dot=document.getElementById("rtCableDot"),
+          pop=document.getElementById("rtCablePop"), btn=document.getElementById("rtCableBtn");
+      if(!wrap||!pop) return;
+      wrap.style.display = (routing && !frozen() && !RO) ? "" : "none";
+      if(!routing){ rtCableOpen=false; pop.classList.remove("open"); return; }
+      var cur=rtCurCable(), s="", i;
+      if(dot) dot.style.background=rCable(cur)[2];
+      for(i=0;i<ROUTE_CABLES.length;i++){ var c=ROUTE_CABLES[i];
+        s+='<button type="button" class="rtOpt" role="menuitemradio" aria-checked="'+(cur===c[0])+'" data-cable="'+c[0]+'">'
+          +'<i style="background:'+c[2]+'"></i>'+c[1]+(cur===c[0]?'<span class="rtTick">✓</span>':'')+'</button>'; }
+      pop.innerHTML=s;
+      pop.classList.toggle("open", rtCableOpen);
+      if(btn) btn.setAttribute("aria-expanded", rtCableOpen?"true":"false"); }
+    function rtToggleCable(open){ rtCableOpen=(open==null)?!rtCableOpen:!!open; rtRenderCable(); }
+    function rtPickCable(k){ rtCable=k; if(rtDraft) rtDraft.cable=k; rtCableOpen=false; renderRoutes(); rtRenderCable(); }
     function rtSyncHeadAdd(show){
       var b=document.getElementById("rtHeadAdd"); if(!b) return;
       var on=(show && routing && !frozen() && !RO);
@@ -2029,14 +2110,10 @@
     function renderRouteBar(){
       var bar=document.getElementById("rtBar"); if(!bar) return;
       if(!routing){ bar.innerHTML=""; return; }
-      var sel = rtDraft ? rtDraft.cable : rtCable, s="", i;
-      // The chips are the picker AND the legend — four colours named once, where the drawing happens.
-      for(i=0;i<ROUTE_CABLES.length;i++){ var c=ROUTE_CABLES[i];
-        // One word on the chip ("Speaker", not "Speaker wire") — four chips plus the head-end control
-        // have to fit a 375px phone, and the full name is still the accessible name and the tooltip.
-        // The canonical names live in the model and are what the legend and run summary print.
-        s+='<button type="button" class="rtChip'+(sel===c[0]?" on":"")+'" data-cable="'+c[0]+'" aria-pressed="'+(sel===c[0])+'" aria-label="'+c[1]+'" title="'+c[1]+'"><i style="background:'+c[2]+'"></i>'+c[1].split(" ")[0]+'</button>'; }
-      s+='<span class="rtSep"></span>';
+      var s="";
+      // The cable picker moved to the top-left + (rtRenderCable) — it is Route's tool and belongs in
+      // the same slot every other step puts its tools. The bar keeps only what is contextual.
+      rtRenderCable();
       if(rtDraft){
         s+='<button type="button" class="rtBtn" data-rt="undo" aria-label="Undo point" title="Undo">'+rtIcon("undo")+'</button>';
         s+='<button type="button" class="rtBtn" data-rt="cancel" aria-label="Cancel run" title="Cancel">'+rtIcon("x")+'</button>';
@@ -2050,10 +2127,10 @@
     // Delegated, so the bar can be re-rendered freely without rebinding.
     document.addEventListener("click", function(e){
       if(!routing) return;
-      var chip=e.target.closest&&e.target.closest(".rtChip"), btn=e.target.closest&&e.target.closest(".rtBtn");
-      if(chip){ e.stopPropagation(); var k=chip.getAttribute("data-cable");
-        rtCable=k; if(rtDraft) rtDraft.cable=k;    // switching mid-run recolours the run in progress
-        renderRoutes(); renderRouteBar(); return; }
+      var opt=e.target.closest&&e.target.closest(".rtOpt"), btn=e.target.closest&&e.target.closest(".rtBtn");
+      if(e.target.closest && e.target.closest("#rtCableBtn")){ e.stopPropagation(); rtToggleCable(); return; }
+      if(opt){ e.stopPropagation(); rtPickCable(opt.getAttribute("data-cable")); return; }   // switching mid-run recolours the run in progress
+      if(rtCableOpen && !(e.target.closest && e.target.closest("#rtCablePop"))) rtToggleCable(false);   // tap anywhere else closes it
       if(e.target.closest && e.target.closest("#rtHeadAdd")){ e.stopPropagation(); rtAddHead(); return; }
       if(btn){ e.stopPropagation(); var a=btn.getAttribute("data-rt");
         if(a==="head"){ rtHeadMode=!rtHeadMode; renderRouteBar(); }
@@ -2070,7 +2147,7 @@
         if(Math.abs(e.clientX-dx0)>8 || Math.abs(e.clientY-dy0)>8) moved=true; }, true);
       host.addEventListener("pointerup", function(e){
         if(!routing || moved || Date.now()-downT>700) return;     // a long press is not a tap either
-        if(e.target && e.target.closest && e.target.closest("#rtBar,#rtHeadAdd")) return;   // the bar and the head-end + own their own taps
+        if(e.target && e.target.closest && e.target.closest("#rtBar,#rtHeadAdd,#rtCableWrap")) return;   // the bar and the head-end + own their own taps
         rtTap(e.clientX, e.clientY); }, true);
     })();
     function renderBoundary(){ var rl=document.getElementById("regionLayer"), tag=document.getElementById("boundaryTag"); if(!rl) return;

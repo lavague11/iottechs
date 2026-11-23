@@ -424,13 +424,16 @@ test("BUG #103 — Route shows only Route's tools; Placement's + is not one of t
 test("phone width: the route bar fits, and the overlay header's centre track is capped", () => {
   // Measured at 375px: four chips plus the head-end control were 378px of content in a 353px bar, so
   // "Power" was clipped off the end. One-word chip labels plus tighter metrics bring it to 348.
-  assert.ok(/\.rtChip\{[^}]*padding:0 9px/.test(survey), "chip padding is the tightened value");
+  // The cable chips are gone from the bar — the picker is the top-left + (rtRenderCable), which is
+  // where every other step keeps its tools. That also ends the width squeeze the one-word chip labels
+  // existed to solve: the dropdown names each cable in full.
   assert.ok(/#rtBar\{[^}]*gap:4px/.test(survey), "bar gap is the tightened value");
-  assert.ok(/\.rtSep\{(?:(?!margin)[^}])*\}/.test(survey), "the separator carries no margin");
   const bar = extractFn("renderRouteBar");
-  assert.ok(bar.includes('c[1].split(" ")[0]'), "the chip shows one word");
-  assert.ok(bar.includes('aria-label="\'+c[1]+\'"') || bar.includes("aria-label=\"'+c[1]+'\""),
-    "…while the full cable name stays the accessible name");
+  assert.ok(!bar.includes("rtChip"), "no chip row in the bar any more");
+  assert.ok(bar.includes("rtRenderCable()"), "the bar defers the picker to the top-left +");
+  const pick = extractFn("rtRenderCable");
+  assert.ok(pick.includes("c[1]") && !pick.includes('split(" ")[0]'), "the dropdown shows the full cable name");
+  assert.ok(/aria-checked/.test(pick), "and reports the current choice to a screen reader");
 
   // The overlay title bar: a bare `auto` centre track takes MAX-content, so a long project name
   // overflowed the grid and painted over the tool name on the left (72px of overlap, measured) while
@@ -446,6 +449,6 @@ test("a drag pans the canvas and must never drop a route point", () => {
   assert.ok(/moved=true/.test(src) && />8/.test(src), "movement past a few px disqualifies the tap");
   assert.ok(/if\(!routing \|\| moved \|\| Date\.now\(\)-downT>700\) return;/.test(src),
     "pointerup only taps when it did not move and was not a long press");
-  assert.ok(src.includes('closest("#rtBar,#rtHeadAdd")'),
-    "taps on the toolbar and on the head-end + are not canvas taps — both own their own");
+  assert.ok(src.includes('closest("#rtBar,#rtHeadAdd,#rtCableWrap")'),
+    "the bar, the head-end + and the cable + all own their own taps — none is a canvas tap");
 });
