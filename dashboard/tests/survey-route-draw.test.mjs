@@ -409,6 +409,18 @@ test("the step guard goes first and RETURNS — the source shape that makes the 
     "…and so does redo");
 });
 
+test("BUG #103 — Route shows only Route's tools; Placement's + is not one of them", () => {
+  // On Route the top-left + was still there, and it opened Placement's device-category picker
+  // (Camera / Angle / NVR / ISP / PoE Switch / Display) on a step that places no devices.
+  assert.match(survey, /body\.routing #addDeviceBtn,\s*body\.routing #buildPlanFab\{display:none!important\}/,
+    "the device + and the Floor Plan action are hidden while routing");
+  // The precedent this follows: the region editor already hides the tool that is not its own.
+  assert.match(survey, /body\.regions #undoBtn\{display:none!important\}/, "same shape as the regions rule");
+  // Route's OWN tools stay: the cable bar, and the head-end + only while there is no head-end.
+  assert.match(survey, /body\.routing #rtBar\{display:flex\}/, "the cable bar is Route's own");
+  assert.ok(survey.includes('id="rtHeadAdd"'), "…as is the head-end +");
+});
+
 test("phone width: the route bar fits, and the overlay header's centre track is capped", () => {
   // Measured at 375px: four chips plus the head-end control were 378px of content in a 353px bar, so
   // "Power" was clipped off the end. One-word chip labels plus tighter metrics bring it to 348.

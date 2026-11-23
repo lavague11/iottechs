@@ -96,6 +96,12 @@
      select/drag handler and a run could never start on one. */
   body.routing .devNode{pointer-events:none}
   body.routing #working{cursor:crosshair}
+  /* Each step shows ONLY its own tools. Route owns the cable bar and the head-end +; the device "+"
+     belongs to Placement and the Floor Plan action to Layout, and on Route that + opened the device
+     category picker (Camera / Angle / NVR / ISP / PoE / Display) over a step that places no devices.
+     Same shape as body.regions hiding the device undo while the region editor is up. */
+  body.routing #addDeviceBtn,
+  body.routing #buildPlanFab{display:none!important}
   /* Route bar — bottom centre, inside thumb reach. Contextual: the head-end button is replaced by undo
      + cancel once a run is in progress, so the bar never carries a control that does nothing. */
   /* Metrics are tight on purpose: four cable chips plus the head-end control have to fit inside a
