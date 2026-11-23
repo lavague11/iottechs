@@ -99,6 +99,27 @@ each one was broken at some point.
 
 # Progress
 
+## URGENT — the overwrite bug, and ASC0055
+
+**The cause, found 2026-11-23.** `toolWriteIsStale` returned FALSE when a writer sent no `baseRev`
+("no claim made -> nothing to check"), so a tab that never successfully read the row could overwrite
+it. `emptyOverContent` did not catch it because the blob was not empty. That is how ASC0055 lost six
+named cameras off Floor 1 in a single write at 05:47 on 2026-11-23.
+
+**Closed** in `7afb5929` (Group 5, built ahead of the rest of Group 2 because data was being lost in
+real time): a write to a survey that already holds work must carry a claim, and a per-tab editing
+lease means only one editor writes a row at a time. Both enforced on BOTH write paths. Verified with
+two tabs.
+
+**The clean source** is the Hostinger files backup **2026-11-22 02:30** — ASC0055 row written
+2026-11-03 16:43:55, holding Floor 1 (6 cameras) AND Floor 2 (9 cameras) intact. Saved as a 197 KB
+JSON in the session scratchpad (`asc0055-clean-survey2.json`, sha256 `ddc5c874633002ed…`); both
+1.1 GB archives and the extracted databases were deleted. **The restore is NOT done — it waits for
+the owner.**
+
+**Where NVR 29-38 came from: nowhere else.** ASC0055 is the only project in either backup that
+carries an `nvr`-kind device at all. They were generated inside its own row, not copied in.
+
 ## The fix pass
 
 One commit per group; the owner approves each before the next begins.
