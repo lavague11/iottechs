@@ -40,6 +40,28 @@ const EXACT_EMPTY = new Set(["survey2", "survey"]);
 // floor, or Start Over on the only one), and refusing to send it would leave the deleted survey live on
 // the customer's portal forever. Emptiness is only used on the INBOUND side (the seed), where recovering
 // a browser that already holds an empty blob is the point.
+// WHY a payload was refused, because the two reasons mean opposite things to a person.
+// "empty"      — valid, just nothing in it yet. A brand-new survey. Not a problem, not a badge.
+// "unreadable" — unparseable, impossible for the tool, or a legacy blob that must not be posted back.
+//                This is the alarm the badge exists for.
+// Returns null when the payload is sendable. toolPayloadSendable is the boolean wrapper, so every
+// existing caller keeps working unchanged.
+export function toolPayloadRefusal(tool, raw) {
+  if (typeof raw !== "string") return "unreadable";
+  if (raw.trim() === "") return "empty";
+  if (raw.length > 8_000_000) return "unreadable";
+  let d;
+  try { d = JSON.parse(raw); } catch { return "unreadable"; }
+  if (!d || typeof d !== "object") return "unreadable";
+  if (d.__legacyAdapted) return "unreadable";
+  if (EXACT_EMPTY.has(tool)) {
+    if (d.floors != null && !Array.isArray(d.floors)) return "unreadable";
+    // Valid and simply empty. The outbound gate still refuses to SEND it — that refusal is what stops
+    // an empty blob overwriting a real survey — but refusing to send nothing is not a fault to report.
+    if (!toolHasData(tool, raw)) return "empty";
+  }
+  return null;
+}
 export function toolPayloadSendable(tool, raw) {
   if (typeof raw !== "string") return false;
   if (raw.trim() === "") return false;
@@ -235,19 +257,24 @@ const BLOCKED_MSG = "This device’s copy can’t be read — it is not being sa
 const _conflicts = new Set();
 const CONFLICT_MSG = "This was changed somewhere else — reload the page to get the latest copy";
 const _statusSubs = new Set();
-function snapshot() {
-  // `blocked` is per project:tool, not global: the survey being unreadable must not clear itself when the
-  // schedule's autosync starts (they share this status object), and vice versa.
-  return { online: _status.online, pending: _status.pending.size, quota: _status.quota, failed: _status.failed, blocked: _status.blockedKeys.size ? BLOCKED_MSG : null, conflict: _conflicts.size ? CONFLICT_MSG : null, savedAt: _status.savedAt };
+// `forKey` ("<accessId>:<tool>") scopes the two per-key flags to the tool the caller is showing.
+// The comment below always claimed `blocked` was per project:tool — the code read `.size`, which is
+// every tool at once, so the MOCKUP being blocked or conflicted rendered as the SURVEY saying
+// "Not saving" / "Changed elsewhere", complete with a Reload button, while the survey saved fine.
+function snapshot(forKey = null) {
+  const hit = (set) => (forKey ? set.has(forKey) : set.size > 0);
+  return { online: _status.online, pending: _status.pending.size, quota: _status.quota, failed: _status.failed,
+    blocked: hit(_status.blockedKeys) ? BLOCKED_MSG : null, conflict: hit(_conflicts) ? CONFLICT_MSG : null,
+    savedAt: _status.savedAt };
 }
 function emitStatus() {
-  const snap = snapshot();
-  _statusSubs.forEach((fn) => { try { fn(snap); } catch { /* subscriber threw */ } });
+  _statusSubs.forEach((sub) => { try { sub.fn(snapshot(sub.forKey)); } catch { /* subscriber threw */ } });
 }
-export function subscribeSyncStatus(fn) {
-  _statusSubs.add(fn);
-  try { fn(snapshot()); } catch { /* immediate push */ }
-  return () => _statusSubs.delete(fn);
+export function subscribeSyncStatus(fn, forKey = null) {
+  const sub = { fn, forKey };
+  _statusSubs.add(sub);
+  try { fn(snapshot(forKey)); } catch { /* immediate push */ }
+  return () => _statusSubs.delete(sub);
 }
 // "Retry" on the failed-save indicator: push every running autosync again, now. The localStorage copy
 // IS the queue, so a retry never needs the caller to hold the data.
@@ -286,9 +313,13 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
     if (cur == null || cur === _lastPushed.get(mapKey)) { _status.pending.delete(mapKey); emitStatus(); return; }
     // THE OUTBOUND GATE. Refuse before the IndexedDB mirror, not just before the POST — mirroring first
     // is how the corruption was made durable as well as remote.
-    if (!toolPayloadSendable(tool, cur)) {
+    const refusal = toolPayloadRefusal(tool, cur);
+    if (refusal) {
       _status.pending.delete(mapKey);
-      _status.blockedKeys.add(mapKey);
+      // "Nothing saved yet" is not "your copy is broken". A brand-new survey showed a red
+      // "Not saving" alarm whose tooltip described corruption, before the user had done anything.
+      if (refusal === "empty") _status.blockedKeys.delete(mapKey);
+      else _status.blockedKeys.add(mapKey);
       emitStatus();
       return;
     }

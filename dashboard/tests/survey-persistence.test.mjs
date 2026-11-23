@@ -568,13 +568,42 @@ test("every writer of the survey2 ROW is enumerated — a new one can't appear u
   assert.match(actions, /if \(!allowEmpty && \(tool === "survey2" \|\| tool === "survey"\)/);
 });
 
-test("the 'not saving' badge is per project:tool, not global", () => {
-  // The status object is shared by every tool's autosync (survey2, mockup, schedule), so a global flag
-  // meant the schedule's loop could clear the survey's warning — or raise one for the wrong tool.
+test("the 'not saving' badge is per project:tool, not global — EXECUTED", async () => {
+  // The status object is shared by every tool's autosync (survey2, mockup, schedule). The flag was
+  // stored per key but REPORTED with `.size`, which is every tool at once — so the mockup being
+  // blocked rendered as the SURVEY saying "Not saving", and a conflict on one tool put a
+  // "Changed elsewhere · Reload" banner over a survey that was saving perfectly.
+  const { suspendToolSync, subscribeSyncStatus } = await import("../app/project/[accessId]/tool-sync.js");
+  const mine = [], theirs = [], global = [];
+  const un1 = subscribeSyncStatus((s) => mine.push(s), "P9:survey2");
+  const un2 = subscribeSyncStatus((s) => theirs.push(s), "P9:mockup");
+  const un3 = subscribeSyncStatus((s) => global.push(s));          // unscoped — still sees anything
+  suspendToolSync("P9", "mockup");                                  // a DIFFERENT tool goes bad
+  const last = (a) => a[a.length - 1];
+  assert.equal(last(mine).blocked, null, "the survey does not wear the mockup's fault");
+  assert.ok(last(theirs).blocked, "the mockup does");
+  assert.ok(last(global).blocked, "and an unscoped subscriber still sees it");
+  un1(); un2(); un3();
+  // The storage is still per key, and a restart clears only its own.
   assert.match(sync, /blockedKeys: new Set\(\)/);
-  assert.match(sync, /blocked: _status\.blockedKeys\.size \? BLOCKED_MSG : null/);
   assert.match(sync, /_status\.blockedKeys\.add\(`\$\{accessId\}:\$\{tool\}`\)/, "suspend blocks one key");
   assert.match(sync, /if \(_status\.blockedKeys\.delete\(mapKey\)\) emitStatus\(\);\s*\/\/ a \(re\)start clears only THIS key/);
+});
+
+test("an EMPTY survey is not an alarm — only an unreadable one is", async () => {
+  const { toolPayloadRefusal } = await import("../app/project/[accessId]/tool-sync.js");
+  // A brand-new survey: valid, simply nothing in it yet. It is still not SENT (that refusal is what
+  // stops an empty blob overwriting a real survey) but it must not raise "Not saving".
+  assert.equal(toolPayloadRefusal("survey2", JSON.stringify({ floors: [] })), "empty");
+  assert.equal(toolPayloadRefusal("survey2", JSON.stringify({ floors: [{ name: "Floor 1", bg: null, devices: [], started: false }] })), "empty");
+  assert.equal(toolPayloadRefusal("survey2", ""), "empty");
+  // The real alarms stay alarms.
+  assert.equal(toolPayloadRefusal("survey2", "{broken"), "unreadable");
+  assert.equal(toolPayloadRefusal("survey2", JSON.stringify({ floors: { length: 2 } })), "unreadable");
+  assert.equal(toolPayloadRefusal("survey2", JSON.stringify({ __legacyAdapted: true, floors: [] })), "unreadable");
+  assert.equal(toolPayloadRefusal("survey2", null), "unreadable");
+  // A real survey is sendable.
+  assert.equal(toolPayloadRefusal("survey2", JSON.stringify({ floors: [{ name: "Floor 1", bg: "x", started: true, devices: [{ k: "cam" }] }] })), null);
 });
 
 test("the second loss path end to end: an empty local blob + an unreadable server does NOT open an editor", async () => {
@@ -687,7 +716,7 @@ test("ONE validated host POST — every host-side writer of a tool blob goes thr
   assert.equal((approve.match(/fetch\("\/api\/tool-data"/g) || []).length, 0, "flushDraft has none of its own");
   // The autosync's own guard refuses BEFORE the IndexedDB mirror — mirroring first is what made the
   // corruption durable as well as remote.
-  const gatePos = sync.indexOf("if (!toolPayloadSendable(tool, cur))");
+  const gatePos = sync.indexOf("const refusal = toolPayloadRefusal(tool, cur);");
   assert.ok(gatePos > 0 && gatePos < sync.indexOf("idbSet(storageKey, cur)"), "refused before the mirror");
   assert.ok(gatePos < sync.indexOf("await postToolData(accessId, tool, cur)"), "and before the POST");
   // Retry cannot resurrect a suspended key, and the user is never told "Saved" while nothing is sent.

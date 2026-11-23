@@ -76,3 +76,44 @@ export function railFromEcho(cur, dock, pending = null, step = null) {
 export function layoutNextOk({ live, liveHasPlan, savedFloor }) {
   return live ? !!liveHasPlan : floorHasStructure(savedFloor);
 }
+
+// ---- Submit step completeness -----------------------------------------------------------------
+// ONE source for the Approval badge, the open-items list and the summary (survey-rules.md, Status
+// honesty). The badge used to derive from the iframe echo while the summary beside it derived from
+// the saved blob, so a survey edited in one sitting read "READY - Everything looks complete"
+// directly above "4 missing photos", and only a reload made the two agree.
+//
+// The floor carries the background; the roster carries the devices. A floor the echo has not
+// described yet is UNKNOWN, not missing — claiming "needs a background" for a floor nobody has
+// heard about is the same class of lie.
+export function submitRows(floors = [], roster = []) {
+  const n = Math.max((floors || []).length, (roster || []).length);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const f = (floors || [])[i] || null;
+    const r = (roster || [])[i] || null;
+    const devices = (r && Array.isArray(r.devices) && r.devices.length)
+      ? r.devices
+      : (f ? (f.cams || (Array.isArray(f.devices) ? f.devices : [])) : []);
+    const cams = devices.filter((d) => d && d.k === "cam" && d.placed !== false);
+    out.push({
+      name: (r && r.name) || (f && f.name) || `Floor ${i + 1}`,
+      bg: (f && f.bg) || null,
+      hasBase: f ? !!(f.bg || (f.ctx && f.ctx.src) || f.aerial || f.bgSource) : true,
+      camCount: cams.length,
+      missing: cams.filter((c) => !c.photo).length,
+    });
+  }
+  return out;
+}
+
+// A real gap is a floor with no background, or a PLACED camera with no photo. A floor with no
+// cameras is fine and is never flagged. Each gap names the step that fixes it.
+export function submitGaps(rows = []) {
+  const gaps = [];
+  rows.forEach((f, i) => {
+    if (!f.hasBase) { gaps.push({ floor: i, name: f.name, label: "Needs a background", step: "background" }); return; }
+    if (f.missing > 0) gaps.push({ floor: i, name: f.name, label: `${f.missing} camera${f.missing > 1 ? "s" : ""} need a photo`, step: "views" });
+  });
+  return gaps;
+}

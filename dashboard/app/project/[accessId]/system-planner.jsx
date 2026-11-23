@@ -6,7 +6,7 @@ import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
 import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
-import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS } from "../../../lib/survey-rail";
+import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS, submitRows, submitGaps } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
 
 // Projects whose rail the user has navigated in this session. Module scope on purpose: a per-mount
@@ -450,18 +450,11 @@ export default function SystemPlanner({
   // NAV-FIX §8: Submit is blocked until every floor is complete. A real gap is: a floor with no background,
   // or a PLACED camera with no photo. A floor with no cameras is fine (never flagged). Each gap links to the
   // step that fixes it. (Cameras stay a system-wide account; this only checks per-floor completeness.)
-  const surveyGaps = (() => {
-    const gaps = [];
-    (floors || []).forEach((f, i) => {
-      const name = f.name || `Floor ${i + 1}`;
-      const hasBase = !!(f.bg || (f.ctx && f.ctx.src) || f.aerial || f.bgSource);
-      if (!hasBase) { gaps.push({ floor: i, name, label: "Needs a background", step: "background" }); return; }
-      const cams = (f.cams || (f.devices || []).filter((d) => d.k === "cam")).filter((d) => d.placed !== false);
-      const noPhoto = cams.filter((c) => !c.photo).length;
-      if (noPhoto > 0) gaps.push({ floor: i, name, label: `${noPhoto} camera${noPhoto > 1 ? "s" : ""} need a photo`, step: "views" });
-    });
-    return gaps;
-  })();
+  // ONE COMPLETENESS SOURCE for the whole Submit step (survey-rules.md, Status honesty).
+  // The rules are pure and live in lib/survey-rail.js, so the badge, the open-items list and the
+  // summary read one function and a test can execute it.
+  const submitFloors = useMemo(() => submitRows(floors, roster), [floors, roster]);
+  const surveyGaps = useMemo(() => submitGaps(submitFloors), [submitFloors]);
   const surveyComplete = surveyGaps.length === 0;
   // REBUILD: ONE Submit button, gated on the SURVEY. Blocked (muted) while there are gaps; Submit label is
   // just "Submit" (never Re-submit). Mockup/Camera-Views submission is dropped from the flow.
@@ -545,9 +538,9 @@ export default function SystemPlanner({
   };
 
   return (
-    <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}`} ref={rootRef}>
+    <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}${paneMode === "review" ? " syp--review" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
-      {!customer && <SyncBadge />}
+      {!customer && <SyncBadge syncKey={`${accessId}:survey2`} />}
 
       {/* The submit lock, said out loud — on every step, not just Review. This is the ONE unlock control
           (the Review footer no longer carries a second Unsubmit). */}
@@ -662,7 +655,7 @@ export default function SystemPlanner({
               ))}
             </div>
           )}
-          <SubmitSummary floors={floors} roster={roster} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
+          <SubmitSummary rows={submitFloors} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
           {/* The Submit action lives in the universal bottom bar (center "Submit ▾") — no inline approve bar. */}
         </div>
       )}
@@ -749,9 +742,10 @@ export default function SystemPlanner({
 // SYNC STATUS — offline-first indicator. Every change is written to the device first (localStorage,
 // survives reload); this badge shows "Offline — will sync" when there's no signal and a queued edit,
 // "Saving…" while a change is in flight, and nothing once everything is on the server.
-function SyncBadge() {
+function SyncBadge({ syncKey = null }) {
   const [st, setSt] = useState({ online: true, pending: 0, quota: null, failed: false, blocked: null, savedAt: 0 });
-  useEffect(() => subscribeSyncStatus(setSt), []);
+  // Scoped to THIS tool: another tool being blocked or conflicted is not this survey's status.
+  useEffect(() => subscribeSyncStatus(setSt, syncKey), [syncKey]);
   // "Saved ✓" is a confirmation, not a permanent label — it shows for 2.5s after the queue drains, then
   // the badge disappears again (section L asked for a save indicator, not another piece of chrome).
   const [justSaved, setJustSaved] = useState(false);
@@ -811,15 +805,10 @@ function SyncBadge() {
 
 // SUBMIT SUMMARY — the real Step-3 summary: per-floor plan thumbnail, camera count, and a flag for
 // cameras still missing a photo. Thumbnails open the Plan; the missing-photo flag opens Camera Photos.
-function SubmitSummary({ floors = [], roster = [], onGoPlan, onGoPhotos }) {
-  const src = (roster && roster.length) ? roster : floors;
-  const list = src.map((f, i) => {
-    const devices = Array.isArray(f.devices) ? f.devices : [];
-    const cams = devices.filter((d) => d && d.k === "cam");
-    const missing = cams.filter((c) => !c.photo).length;
-    const bg = (floors[i] && floors[i].bg) || f.bg || null;
-    return { name: f.name || `Floor ${i + 1}`, bg, camCount: cams.length, missing };
-  });
+// `rows` is submitFloors — the SAME rows the Approval badge and the open-items list read, so the
+// summary can never contradict the verdict printed above it.
+function SubmitSummary({ rows = [], onGoPlan, onGoPhotos }) {
+  const list = rows;
   if (!list.length) return <div className="syp-summary-empty">Start a floor to see the summary.</div>;
   const totalCams = list.reduce((n, f) => n + f.camCount, 0);
   const totalMissing = list.reduce((n, f) => n + f.missing, 0);
@@ -970,6 +959,13 @@ const CSS = `
   .syp-devtog svg{transition:transform .18s}
 }
 .syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;padding:16px 18px;margin-bottom:12px}
+/* Approval has no canvas, so the shell kept its full plan-height reservation and left roughly 600px
+   of blank below a 130px card — with the footer stranded in the middle of the screen. The step now
+   fills: the review block takes the free space and the nav sits at the bottom, which also stops
+   Back and Next moving vertically between steps. */
+.syp.syp--review{min-height:100%}
+.syp.syp--review .syp-review{flex:0 0 auto}
+.syp.syp--review .syp-nav{margin-top:auto}
 .syp-review-h{display:flex;align-items:center;gap:10px;font-size:.95rem;font-weight:800;color:var(--dv-ink,#101418)}
 .syp-review-sub{margin-top:3px;font-size:.82rem;color:var(--dv-meta,#787D84)}
 /* §8: deliverable status badge next to the title */
@@ -1178,7 +1174,10 @@ const CSS = `
    seen nor started. Give the pane the height the widget actually asks for (--syp-plate-h, posted as
    iotSurveyPlate), clamped, and let the overlay's own scroll carry the roster instead of the map
    paying for it. Written as .syp > … (0,3,0) so it outranks .cpv-ovl-body .syp-plan (0,2,0) on order-
-   independent specificity rather than on which component's <style> happens to mount last. */
+   independent specificity rather than on which component happens to mount its stylesheet last.
+   (No literal style tag in this comment: inside an inline stylesheet the server escapes it and the
+   client does not, which is a hydration mismatch — React then throws this subtree away and rebuilds
+   it on the client. That mismatch was the whole content of the dev overlay's "1 Issue" badge.) */
 @media (min-width:701px){
   .syp > .syp-pane.syp-plan{flex:0 0 auto;height:clamp(360px, var(--syp-plate-h, 68vh), 74vh)}
 }
