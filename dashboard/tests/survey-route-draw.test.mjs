@@ -436,6 +436,16 @@ test("NVR and amplifier markers invert — a head-end is not one more camera", (
   assert.match(survey, /\.devNode \.devDot\{width:var\(--isz,40px\)[^}]*background:#fff/, "other devices stay white");
 });
 
+test("the plan is never painted twice — the open editor owns it", () => {
+  // Measured on ASC0055 Floor 1 with the Structure editor up: #satFrame 1082x518 AND #stageImg
+  // 1082x519 both display:block, each painting the same plan at its own scale. That is the "two
+  // overlapping, offset outlines" that reads as a duplicated structure — drawn twice, not stored twice.
+  assert.match(survey, /body\.bgtool #stageImg\{visibility:hidden\}/, "the canvas copy yields while the editor is open");
+  assert.ok(survey.includes('document.body.classList.add("bgtool")'), "set when the dock opens");
+  assert.ok(/function exitBg\(committed\)\{\s*document\.body\.classList\.remove\("bgtool"\);/.test(survey),
+    "and cleared when it closes, or the plan would stay hidden after Done");
+});
+
 test("the number badge inverts with the body, so it is readable on a base marker", () => {
   // The default badge is dark fill / white figure — invisible on a dark base marker.
   assert.match(survey, /\.devNode\.base \.devNum\{background:#fff;color:var\(--ink,#101418\);border-color:var\(--ink,#101418\)\}/,

@@ -94,6 +94,13 @@
   /* While routing, markers are display-only so a tap falls through to the canvas and is hit-tested by
      geometry — the same trick body.regions uses. Otherwise every device tap would hit its own
      select/drag handler and a run could never start on one. */
+  /* While the Structure editor is open it IS the plan: it loads the aerial as its own backdrop and
+     draws the plan over it. The survey canvas underneath also paints that plan — on a floor whose
+     saved background IS the plan SVG, #stageImg is a second copy of the same shape at the canvas
+     scale rather than the editor scale. Both were visible at once (measured 1082x518 against
+     1082x519), which is the "two overlapping, offset outlines" that read as a duplicated structure.
+     The data was never duplicated; it was drawn twice. The editor is authoritative while it is up. */
+  body.bgtool #stageImg{visibility:hidden}
   body.routing .devNode{pointer-events:none}
   body.routing #working{cursor:crosshair}
   /* Each step shows ONLY its own tools. Route owns the cable bar and the head-end +; the device "+"
@@ -1055,6 +1062,7 @@
       pendingBgSource=source; var reloaded=ensureBgToolSrc(src);
       if(reloaded) showBgLoading(); else hideBgLoading();   // a fresh (re)load → veil until the tool is ready; a warm iframe is instant
       satFrame.style.display="block";
+      document.body.classList.add("bgtool");   // the open editor owns the plan — see the CSS note on #stageImg
       document.getElementById("bgstep").style.display="none";
       surveyWiz.style.display="none";   // the tool owns the screen while building — hide the survey bar (steps/location) for max canvas
       // Both tools (Structure/draw AND Satellite/Aerial) now carry their own Back in their dock, so the
@@ -1138,6 +1146,7 @@
     function pinAllFloorsActiveVersions(){ (floors||[]).forEach(pinActiveVersions); }
     // leave build mode; if committed, show the working canvas, else show the door chooser
     function exitBg(committed){
+      document.body.classList.remove("bgtool");
       if(!committed) pendingCtxSwap=false;   // Phase H2: backed out of the satellite without "Use" (satBack / refresh-exit) → cancel any pending enhanced-background swap so a later capture never swaps ctx.src
       hideBgLoading();
       satFrame.style.display="none";
