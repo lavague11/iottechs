@@ -2112,6 +2112,11 @@
       if(rtHeadMode){ rtHeadMoveTo(rt2(p.x),rt2(p.y)); rtHeadMode=false; return; }
       var dev=rtDeviceAt(p), head=rtHeadAt(p);
       if(!rtDraft){
+        // Not drawing: a tap on a run deletes that run. Checked before the device test so a run passing
+        // under a marker still belongs to the marker — you start runs far more often than you delete them.
+        if(!dev && !head){
+          var hit=rtRouteAt(Array.isArray(f.routes)?f.routes:[], p.x, p.y);
+          if(hit){ rtDeleteRun(hit.id); return; } }
         if(!dev) return;                             // a run starts at a device; empty space does nothing
         rtDraft={ dev:rtDevKey(dev), cable:(rtCable||rtDefaultCable(dev.k)), pts:[[rt2(+dev.x),rt2(+dev.y)]] };
         renderRoutes(); renderRouteBar(); return; }
@@ -2178,6 +2183,27 @@
       rtHeadMode=!rtHeadMode;        // arm, or cancel cleanly when it was already armed
       rtDraft=null;                  // arming abandons a half-drawn run rather than mixing two modes
       renderRoutes(); renderRouteBar(); }
+    /* TAP A RUN TO DELETE IT (§Editing rules 1): the WHOLE run goes, device to head-end, never a
+       partial segment. No confirm — the route history undo covers it, and a confirm on every stray
+       cable tap would be worse than one undo. Mirrors routeAt() in lib/survey-routes.js. */
+    var RT_HIT_TOL=1.6;
+    function rtDistToSeg(px,py,a,b){
+      var vx=b[0]-a[0], vy=b[1]-a[1], len2=vx*vx+vy*vy;
+      if(len2===0) return Math.sqrt((px-a[0])*(px-a[0])+(py-a[1])*(py-a[1]));
+      var t=((px-a[0])*vx+(py-a[1])*vy)/len2; t=Math.max(0,Math.min(1,t));
+      var dx=px-(a[0]+t*vx), dy=py-(a[1]+t*vy); return Math.sqrt(dx*dx+dy*dy); }
+    function rtRouteAt(rs,x,y){
+      var best=null, bestD=Infinity;
+      for(var i=0;i<rs.length;i++){ var r=rs[i]; if(!r||!Array.isArray(r.pts)) continue;
+        for(var j=0;j<r.pts.length-1;j++){ var d=rtDistToSeg(x,y,r.pts[j],r.pts[j+1]);
+          if(d<=RT_HIT_TOL && d<bestD){ bestD=d; best=r; } } }
+      return best; }
+    function rtDeleteRun(id){
+      var f=floors[curFloor]; if(!f||!Array.isArray(f.routes)) return false;
+      var n=f.routes.length;
+      f.routes=f.routes.filter(function(r){ return !r || r.id!==id; });
+      if(f.routes.length===n) return false;
+      rtHistPush(); queueSave(); renderRoutes(); renderRouteBar(); return true; }
     function rtUndoPoint(){
       if(!rtDraft) return;
       rtDraft.pts.pop();

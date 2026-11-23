@@ -38,7 +38,9 @@ test("Next advances exactly one step from every position; Back is the inverse; e
 test("the nav menu lists every step in order and lands exactly on the tile clicked", () => {
   const items = [...shell.slice(shell.indexOf("const NAV_ITEMS")).matchAll(/\{ key: "(\w+)"/g)].map((m) => m[1]).slice(0, RAIL_STEPS.length);
   assert.deepEqual(items, RAIL_STEPS, "menu order == rail order (Placement is not Camera Angles)");
-  assert.ok(shell.includes("goRail(it.key)"), "a tile navigates to its own key");
+  // `jump: true` — Survey Navigation is the one place chronological order does not apply, and is
+  // therefore exempt from the one-step-per-press lock that Next/Back now carry.
+  assert.ok(shell.includes("goRail(it.key, { jump: true })"), "a tile navigates to its own key, as a jump");
 });
 
 test("a dock echo never skips a step", () => {
@@ -79,6 +81,24 @@ test("a saved Background step resumes on Background, view-only; a floor switch o
   assert.ok(shell.includes("goRail(want, { view: true })"));
   assert.ok(widget.includes('if(m.focus==="view" && typeof m.step==="number"){ goStep(m.step); return; }'), "view focus shows the step, opens no editor");
   assert.ok(shell.includes('if (railRef.current === "background") { pendingRef.current = "background"; surveyCmd({ cmd: "step", step: 0, focus: "view" }); }'));
+});
+
+test("chronological: one press is one step, and nothing re-adopts behind the user", () => {
+  // "I clicked Placement and it went to Route." The footer CTA re-labels itself in place the instant the
+  // rail moves — Layout's "Placement" becomes Placement's "Route" at the same coordinates — so a second
+  // activation during that re-render advances twice. A short lock makes one press mean one step.
+  assert.match(shell, /if \(now - navLockT\.current < 450\) return;/, "Next/Back move one step per press");
+  assert.match(shell, /const goRail = \(step, \{ view = false, jump = false \} = \{\}\) => \{/, "jumps are a distinct kind of move");
+  assert.match(shell, /if \(!jump && !view\) \{/, "…and the lock applies only to Next/Back");
+  // Survey Navigation and the Approval gap links jump freely — that is what they are for.
+  assert.ok(shell.includes("goRail(it.key, { jump: true })"), "Survey Navigation is exempt");
+  assert.ok(shell.includes("goRail(g.step, { jump: true })"), "the Approval gap links are exempt");
+  // The resume must not re-apply the saved step over a step the user chose. A per-mount ref resets on
+  // remount; this one is module-scope and keyed by project.
+  assert.match(shell, /^const _navTouched = new Set\(\);$/m, "module-scope, so it survives a remount");
+  assert.match(shell, /if \(sv == null \|\| stepAdopted\.current \|\| navTouched\.current \|\| _navTouched\.has\(accessId\)\) return;/,
+    "the resume checks it");
+  assert.ok(shell.includes("_navTouched.add(accessId);"), "and every navigation records it");
 });
 
 test("Layout does NOT gate Placement — a drawn floor can never be told to draw first", () => {

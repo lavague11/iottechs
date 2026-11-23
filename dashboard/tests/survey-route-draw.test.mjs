@@ -45,6 +45,10 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
     ${extractFn("rt2")}
     ${extractFn("rtCommit")}
     ${extractFn("rtTap")}
+    var RT_HIT_TOL=1.6;
+    ${extractFn("rtDistToSeg")}
+    ${extractFn("rtRouteAt")}
+    ${extractFn("rtDeleteRun")}
     ${extractFn("rtReanchorHomeRuns")}
     ${extractFn("rtHeadMoveTo")}
     ${extractFn("rtSyncHeadAdd")}
@@ -67,7 +71,7 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
       setHeadMode:function(v){ rtHeadMode=v; }, setCable:function(v){ rtCable=v; },
       floor:function(){ return floors[0]; }, defCable:rtDefaultCable,
       undoAction:undoAction, redoAction:redoAction,
-      moveHead:rtHeadMoveTo, addHead:rtAddHead,
+      moveHead:rtHeadMoveTo, addHead:rtAddHead, deleteRun:rtDeleteRun, routeAt:rtRouteAt,
       devices:function(){ return devices; },
       setRouting:function(v){ routing=v; }, routing:function(){ return routing; },
       canUndo:rtCanUndo, canRedo:rtCanRedo, histLen:function(){ return rtHist.length; } };
@@ -434,6 +438,30 @@ test("NVR and amplifier markers invert — a head-end is not one more camera", (
     "a base product's glyph is gold whatever group it came from — an amp must not stay purple");
   // The ordinary marker is unchanged.
   assert.match(survey, /\.devNode \.devDot\{width:var\(--isz,40px\)[^}]*background:#fff/, "other devices stay white");
+});
+
+test("tapping a run deletes the WHOLE run, and undo brings it back", () => {
+  const { api } = build({ devices: [dev("c1", "cam", 20, 20), dev("c2", "cam", 80, 20)], floor: { head: { x: 50, y: 90 } } });
+  api.tap(px(20), px(20)); api.tap(px(50), px(90));          // run 1
+  api.tap(px(80), px(20)); api.tap(px(50), px(90));          // run 2
+  assert.equal(api.floor().routes.length, 2);
+  // A tap ON the first run's line, away from any marker, removes that run and only that run.
+  const r1 = api.floor().routes[0], mid = [(r1.pts[0][0] + r1.pts[1][0]) / 2, (r1.pts[0][1] + r1.pts[1][1]) / 2];
+  api.tap(px(mid[0]), px(mid[1]));
+  assert.equal(api.floor().routes.length, 1, "one run gone");
+  assert.equal(api.floor().routes[0].dev, "c2", "…and it was the one tapped, not the other");
+  // Undo covers it — which is why there is no confirm dialog on a stray tap.
+  api.undoAction();
+  assert.equal(api.floor().routes.length, 2, "undo restores the deleted run");
+});
+
+test("a tap on a marker still starts a run, even when a cable passes under it", () => {
+  // The device test wins: you start runs far more often than you delete them.
+  const { api } = build({ devices: [dev("c1", "cam", 50, 50)], floor: { head: { x: 90, y: 90 },
+    routes: [{ id: "x1", dev: "other", cable: "cat6", run: "home", pts: [[10, 50], [90, 50]] }] } });
+  api.tap(px(50), px(50));
+  assert.ok(api.draft(), "a run started from the marker");
+  assert.equal(api.floor().routes.length, 1, "the run passing under it was not deleted");
 });
 
 test("the plan is never painted twice — the open editor owns it", () => {

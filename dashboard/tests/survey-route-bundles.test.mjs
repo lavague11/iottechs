@@ -3,7 +3,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { bundleSegments, bundles, segMidpoint, bundleColor, BUNDLE_TOL, BUNDLE_COLOR, cableColor } from "../lib/survey-routes.js";
+import { bundleSegments, bundles, segMidpoint, bundleColor, routeAt, BUNDLE_TOL, BUNDLE_COLOR, cableColor } from "../lib/survey-routes.js";
 
 const widget = readFileSync(new URL("../public/widgets/site-survey-merged.html", import.meta.url), "utf8");
 const run = (id, cable, pts) => ({ id, dev: "d" + id, cable, run: "home", pts });
@@ -74,6 +74,38 @@ test("the same run cannot bundle with itself, and degenerate input is ignored", 
   assert.deepEqual(bundleSegments([run("r1", "cat6", [[20, 20], [20, 20]])]), []);
   assert.deepEqual(bundleSegments(null), []);
   assert.deepEqual(bundleSegments([{ id: "x", pts: [[1, 1]] }]), [], "a one-point run has no segment");
+});
+
+test("routeAt finds the run under a tap — nearest wins, and the whole run is identified", () => {
+  const routes = [
+    run("r1", "cat6", [[10, 10], [10, 80]]),      // a vertical line at x=10
+    run("r2", "speaker", [[40, 10], [40, 80]]),   // another at x=40
+  ];
+  // Right on the line.
+  assert.equal(routeAt(routes, 10, 45)?.id, "r1");
+  // Within tolerance beside it.
+  assert.equal(routeAt(routes, 11.2, 45)?.id, "r1");
+  // Clear of both.
+  assert.equal(routeAt(routes, 25, 45), null, "a tap between runs hits nothing");
+  // Past the end of the segment — not an infinite line.
+  assert.equal(routeAt(routes, 10, 95), null, "beyond the run's end is a miss");
+  // Overlapping runs: the nearer one wins rather than whichever is first.
+  const over = [run("a", "cat6", [[0, 20], [100, 20]]), run("b", "hdmi", [[0, 23], [100, 23]])];
+  assert.equal(routeAt(over, 50, 20.2)?.id, "a");
+  assert.equal(routeAt(over, 50, 22.8)?.id, "b");
+  // It reports the run, not a segment — deleting is always the whole cable.
+  const hit = routeAt(routes, 10, 45);
+  assert.deepEqual([hit.id, hit.cable, hit.run], ["r1", "cat6", "home"]);
+});
+
+test("the widget's hit test mirrors routeAt, and deleting removes the WHOLE run", () => {
+  assert.match(widget, /var RT_HIT_TOL=1\.6;/, "same tolerance as routeAt's default");
+  const del = widget.slice(widget.indexOf("function rtDeleteRun("), widget.indexOf("function rtUndoPoint("));
+  assert.ok(/f\.routes\.filter\(function\(r\)\{ return !r \|\| r\.id!==id; \}\)/.test(del),
+    "filters by run id — never a partial segment");
+  assert.ok(/rtHistPush\(\)/.test(del), "and pushes history, so undo covers the delete instead of a confirm dialog");
+  // A tap on a marker still belongs to the marker: the run test runs only when nothing else is under it.
+  assert.ok(widget.includes("if(!dev && !head){"), "devices and the head-end win the tap");
 });
 
 test("the widget renders bundles from the shared model, not its own copy", () => {

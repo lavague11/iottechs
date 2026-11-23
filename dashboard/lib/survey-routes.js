@@ -173,6 +173,29 @@ export const segMidpoint = (s) => [(s.a[0] + s.b[0]) / 2, (s.a[1] + s.b[1]) / 2]
 // A shared stretch of ONE cable type keeps that colour; a mixed bundle takes the neutral dark.
 export const bundleColor = (s) => (s.mixed ? BUNDLE_COLOR : cableColor(s.cables[0]));
 
+// ---- HIT-TESTING a run, for tap-to-delete (§Editing rules 1: a tap removes the WHOLE run, device to
+// head-end, never a partial segment). Distance from a point to a segment, in percent-units.
+function distToSeg(px, py, a, b) {
+  const vx = b[0] - a[0], vy = b[1] - a[1];
+  const len2 = vx * vx + vy * vy;
+  if (len2 === 0) return Math.hypot(px - a[0], py - a[1]);
+  let t = ((px - a[0]) * vx + (py - a[1]) * vy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (a[0] + t * vx), py - (a[1] + t * vy));
+}
+// The run under a tap, or null. Nearest wins, so overlapping runs resolve to the one actually touched
+// rather than whichever happens to be first in the array.
+export function routeAt(routes, x, y, tol = 1.6) {
+  let best = null, bestD = Infinity;
+  validRoutes(routes).forEach((r) => {
+    for (let i = 0; i < r.pts.length - 1; i++) {
+      const d = distToSeg(x, y, r.pts[i], r.pts[i + 1]);
+      if (d <= tol && d < bestD) { bestD = d; best = r; }
+    }
+  });
+  return best ? { id: best.id, dev: best.dev, cable: best.cable, run: best.run, dist: bestD } : null;
+}
+
 // Devices with no run on them, by cid — §Editing rules 6 (red outline on the plan, and a warning
 // listing them at Approval). A WARNING: it never blocks a submit. Annotation kinds (Important /
 // Outlet / Hazard) are notes on the plan, not equipment, so they are never counted as unwired.

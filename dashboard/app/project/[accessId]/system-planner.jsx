@@ -9,6 +9,10 @@ import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors
 import { stepAfter, stepBefore, railFromEcho } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
 
+// Projects whose rail the user has navigated in this session. Module scope on purpose: a per-mount
+// ref resets on remount, and the saved lastStep would then be re-applied over the step they chose.
+const _navTouched = new Set();
+
 // SYSTEM PLANNER — the unified Consulting workspace. One stage, one workspace: two working modes
 // [ PLAN | CAMERA VIEWS ] plus one presentation action ▶ Walkthrough. The survey map (PLAN) is where
 // cameras are created + named (single source of truth); CAMERA VIEWS attaches/reviews each shot; the
@@ -260,9 +264,13 @@ export default function SystemPlanner({
   // A saved "background" resumes on Background — where the user left off. It only SHOWS the step (view focus):
   // a passive restore never opens the background editor; only a click does. Submitted surveys
   // resume on Approval in review mode — surveyLastStep decides that from the server's acceptance row.
+  // The resume runs ONCE per project per session. navTouched is a ref, so a remount used to reset it and
+  // the saved lastStep would be re-applied over a step the user had just navigated to — the rail moving
+  // on its own, under them. _navTouched is module-scope and keyed by project, so once someone has
+  // navigated this survey, nothing re-adopts behind their back.
   const stepAdopted = useRef(false);
   useEffect(() => {
-    if (sv == null || stepAdopted.current || navTouched.current) return;
+    if (sv == null || stepAdopted.current || navTouched.current || _navTouched.has(accessId)) return;
     stepAdopted.current = true;
     const want = surveyLastStep(sv, { submitted: !!surveySubmitted });
     if (customer) return;                        // the customer's entry is their own (floor pager), never the staff rail
@@ -272,8 +280,20 @@ export default function SystemPlanner({
 
   // Navigate the rail. Background/Plan/Cameras drive the SAME survey pane's internal step (postMessage,
   // no reload); Views/Review are shell-only. Internal users can jump to any completed section freely.
-  const goRail = (step, { view = false } = {}) => {
+  // CHRONOLOGICAL. Next and Back move exactly ONE step per activation. The footer CTA re-labels itself
+  // in place the moment the rail moves — Layout's "Placement" becomes Placement's "Route" at the same
+  // screen position — so a second activation arriving during that re-render lands on the NEW label and
+  // advances twice ("I clicked Placement and it went to Route"). A short lock makes one press mean one
+  // step. Survey Navigation is explicitly exempt: jumping to any step is what it is for.
+  const navLockT = useRef(0);
+  const goRail = (step, { view = false, jump = false } = {}) => {
+    const now = Date.now();
+    if (!jump && !view) {
+      if (now - navLockT.current < 450) return;   // one press, one step
+      navLockT.current = now;
+    }
     navTouched.current = true;
+    _navTouched.add(accessId);   // survives a remount — see the resume effect
     railRef.current = step;
     pendingRef.current = step === "layout" || step === "background" ? step : null;   // cleared when it arrives (railFromEcho)
     setRailStep(step);
@@ -348,7 +368,7 @@ export default function SystemPlanner({
           {NAV_ITEMS.map((it) => (
             <button key={it.key} type="button" disabled={!it.enabled}
               className={`syp-navpop-tile${railStep === it.key ? " cur" : ""}${it.span ? " span" : ""}`}
-              onClick={() => { if (it.enabled) { goRail(it.key); setOpen(false); } }}>
+              onClick={() => { if (it.enabled) { goRail(it.key, { jump: true }); setOpen(false); } }}>
               <span className="syp-navpop-ic" style={{ color: it.color, background: `${it.color}22` }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
               </span>
@@ -615,7 +635,7 @@ export default function SystemPlanner({
             <div className="syp-gaps">
               <div className="syp-gaps-h">{svStale ? "Incomplete since you submitted" : "Open items"}</div>
               {surveyGaps.map((g, i) => (
-                <button key={i} type="button" className="syp-gap" onClick={() => { setCurFloor(g.floor); surveyCmd({ cmd: "floor", i: g.floor }); goRail(g.step); }}>
+                <button key={i} type="button" className="syp-gap" onClick={() => { setCurFloor(g.floor); surveyCmd({ cmd: "floor", i: g.floor }); goRail(g.step, { jump: true }); }}>
                   <span className="syp-gap-floor">{g.name}</span>
                   <span className="syp-gap-label">{g.label}</span>
                   <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
