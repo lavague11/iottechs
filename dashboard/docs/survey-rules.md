@@ -163,6 +163,45 @@ backup file browser sat on "Loading files" and was not retried.
 Never enter it.** (Claude in Chrome cannot resize the owner's maximized window; the pane can emulate
 375×812 but has its own cookie jar and lands on the PIN screen.)
 
+**Q4 — AI pre-fill from a location photo.** Owner spec, 2026-11-23, item 5 of a list whose other
+items have not arrived. NOT STARTED.
+
+When a location photo is added, send it to Claude (Sonnet, vision) and suggest:
+**mount surface · mount height / ladder needed · junction box · indoor/outdoor.**
+
+- Every suggestion carries a **confidence** and is shown AS a suggestion.
+- The tech **confirms or changes every field**. **Nothing counts as filled until a person confirms
+  it** — an unconfirmed suggestion is not a value, and must not satisfy any gate, count toward
+  completeness, or reach a customer surface.
+- **Cable new vs existing stays manual.** A photo cannot tell whether a line works.
+- The stored photo stays at **original size**; a **~1,000 px copy** goes to the AI.
+
+Where it plugs in:
+- Vision calls already have a pattern — `app/api/read-licence/route.js` proxies to
+  `https://api.anthropic.com/v1/messages` with the server-held `ANTHROPIC_API_KEY`
+  (`secretValue()`), client never sees the key. A new route should copy that shape, not re-invent it.
+- Use the current Sonnet (`claude-sonnet-5-5`); check whatever model id the existing route sends
+  before copying it, since it may predate the 5 family.
+- Photos already move through `/api/media` (HEIC-safe). The downscaled copy is for the request only
+  and is not something to store twice.
+- The new fields belong on the device record. `survey2Meaning` hashes only
+  `k/x/y/aim/fov/range/name` — so adding them is **signature-safe**, as long as they are NOT added
+  to that allow-list.
+- Suggestions, confidences and the model's reasoning are **internal**: role-visibility pass before
+  anything renders, and nothing of this reaches the customer layout or the PDF.
+- One paid vision call per photo: gate it behind the key being present, and behind a flag, so a
+  survey with forty photos cannot quietly run forty calls.
+
+> **CONFLICT to resolve before building — indoor/outdoor is already a DERIVED value, not a field.**
+> `lib/survey-placement.js` `placementOf()` decides inside/outside geometrically from whether the
+> device sits in a painted structure cell, and the owner's own earlier rule was that there is no
+> manual indoor/outdoor field and only two states. Having the AI suggest it, and a tech confirm it,
+> creates a second source of truth for the same fact and the two will disagree.
+> Suggested resolution: the AI value is a **cross-check, not a field** — when it disagrees with the
+> derived placement, raise it (a device the plan says is inside but the photo says is outdoors
+> usually means the structure is drawn wrong, which is useful). The other three fields are new and
+> have no such conflict. Owner decides.
+
 **Q3 — Layout redesign.** Only after everything above passes. The map fills the screen on desktop and
 phone; devices move to a side panel on desktop and a pull-up sheet on the phone; toolbars never cover
 the drawing. Write the plan to `docs/survey-layout.md` **with mockups** and wait for the owner's OK
