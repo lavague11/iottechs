@@ -121,20 +121,22 @@ One commit per group; the owner approves each before the next begins.
 ## Queued after the fix pass — do not start until the owner says
 
 **Q1 — ASC0055 restore. Investigate only, no writes.**
-Use Claude in Chrome on the Supabase dashboard for IOT TECHS; the owner handles any login.
-1. List the available backups and their dates.
-2. Find the newest one from **before** Floor 2's cameras (Camera 7–13 plus Cash) turned into NVR 29–38.
-3. **Never restore a backup over the live database.** Restore to a separate project or branch.
-4. Pull **only** ASC0055's `survey2` row.
-5. Show the Floor 2 devices side by side with today's.
-6. **Wait for the owner's OK before writing anything back.**
+The data is **node:sqlite on Hostinger** — `lib/db.js` → `dbDir()` → `dashboard.db`, where
+`project_tool_data` holds ASC0055's `survey2` row. Not Supabase. The backup to find is therefore a
+**Hostinger backup containing `dashboard.db`**.
 
-> **Resolve first, before this item starts:** the IOT TECHS app on Hostinger runs on **node:sqlite**
-> (`lib/db.js` → `dbDir()` → `dashboard.db`), not Supabase — `project_tool_data` is a SQLite table, and
-> that is where ASC0055's `survey2` row lives. A Supabase project may exist for something else in the
-> business. So the first question of this item is **which store actually holds the row to be compared**,
-> and therefore where its backups are. Ask the owner rather than assuming either answer. Everything
-> above still applies whichever store it turns out to be.
+1. Use Claude in Chrome on **Hostinger hPanel ▸ Backups**; the owner handles the login.
+2. List the available backup dates.
+3. **Restore nothing.** Not over the live database, not anywhere.
+4. Download or extract **only `dashboard.db`** from the newest backup dated **before** Floor 2's
+   cameras (Camera 7–13 plus Cash) turned into NVR 29–38.
+5. Open that file **read-only**, locally (`new DatabaseSync(path, { readOnly: true })`).
+6. Show ASC0055's `survey2` **Floor 2 devices side by side with today's**.
+7. **Wait for the owner's OK before writing anything back.**
+
+> Context that shapes the job: `project_tool_data` keeps **no version history** — one row per
+> project+tool, overwritten in place. A point-in-time file backup is the only route to the original
+> Floor 2 devices, so dating the backups against the change is the whole task.
 
 **Q2 — Phone test.** When Group 4 runs, **ask the owner to enter the PIN in the Claude browser pane.
 Never enter it.** (Claude in Chrome cannot resize the owner's maximized window; the pane can emulate

@@ -54,6 +54,9 @@ function world({ submitted = false, RO = false, floors, curFloor = 0 } = {}) {
     // cutRunsFor/restoreRuns come in too — stubbing them out would hide the cascade these tests cover.
     "function rtDevKey(d){ return d ? (d.cid || ('id'+d.id)) : ''; }",
     "function renderRoutes(){} function renderRouteBar(){} function pHistPush(){} function updateCamBtns(){}",
+    // removeDevice now disarms: a delete is the opposite of placing another one.
+    "var armedK=null; function arm(k){ armedK=k; }",
+    extractFn(widget, "disarm"),
     extractFn(widget, "cutRunsFor"), extractFn(widget, "restoreRuns"),
     extractFn(widget, "removeDevice"), extractFn(widget, "undoDeleteDevice"), extractFn(widget, "stripDevs"),
     extractFn(widget, "deleteFloor"), extractFn(widget, "pushServer"),

@@ -1651,10 +1651,10 @@
                                 : ((pCanRedo() && !frozen() && !RO) ? "" : "none"); }   // Redo only appears when there's something to redo
     function undoAction(){
       if(routing){ if(!rtDraft) rtHistUndo(); return; }        // Route owns undo on its own step
-      pHistUndo(); }
+      disarm(); pHistUndo(); }
     function redoAction(){
       if(routing){ if(!rtDraft) rtHistRedo(); return; }
-      pHistRedo(); }
+      disarm(); pHistRedo(); }
     var undoBtn=document.getElementById("undoBtn"); if(undoBtn) undoBtn.addEventListener("click", undoAction);
     var redoBtn=document.getElementById("redoBtn"); if(redoBtn) redoBtn.addEventListener("click", redoAction);
     // NAV-FIX §2: undo floats bottom-left of the canvas and shows ONLY after a change (a placed device to
@@ -1688,9 +1688,16 @@
     });
     document.addEventListener("keydown", function(e){ if(e.key==="Escape"){ arm(null); setEraseMode(false); devMenu.classList.remove("show"); } });
     var PLUS_SVG='<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>';
+    /* Arming SURVIVES consecutive canvas taps on purpose: placing eight cameras should be eight taps,
+       not eight trips to the palette. It must not survive anything else. A move, a delete, a rename,
+       an undo or a right-click all mean "I have stopped placing", and staying armed through them is
+       how a mis-aimed click silently drops a device (observed in testing: a stale click added
+       IC7 / Camera 6 while a camera had been armed several actions earlier). enterRoute already
+       disarms for the same reason — this extends that rule to the rest of the non-placement actions. */
+    function disarm(){ if(armedK) arm(null); }
     function arm(k){ if(k){ if(angleMode) setAngleMode(false); if(eraseMode) setEraseMode(false); } armedK=k; work.classList.toggle("arming",!!k);
       [].forEach.call(devMenu.querySelectorAll(".mi"), function(mi){ mi.classList.toggle("on",mi.dataset.k===k); });
-      var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the armed type's icon
+      var ab=document.getElementById("addDeviceBtn"); if(ab) ab.innerHTML = k ? iconOf(cat(k)) : PLUS_SVG;   // the button wears the icon of the armed kind (no apostrophes in comments inside an extracted function)
       if(typeof renderRooms==="function") renderRooms();   // placing a device → room selection off; idle → rooms clickable again
     }
     // Eraser tool — a palette entry that DELETES instead of placing. Tap Eraser to arm it, then tap a device → confirm → delete.
@@ -1707,6 +1714,7 @@
     function hideDevCtx(){ var m=document.getElementById("devCtx"); if(m){ m.classList.remove("open"); m.innerHTML=""; } dcId=null; }
     function showDevCtx(d, cx, cy){
       if(!d || frozen() || RO) return;                       // the menu only offers edits
+      disarm();
       var m=document.getElementById("devCtx"); if(!m) return;
       dcId=d.id;
       var nm=cap(d.locName||(d.name&&d.name.trim())||d.tag||"Device");
@@ -2586,9 +2594,10 @@
         if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; rg.title = pxPerFt()>0 ? (Math.round(d.range)+" ft radius") : "Drag to size the coverage"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
-    function select(id){ selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null){ growCone(id); growCoverage(id); }   // selecting (incl. Walkthrough via selectCid) replays that device's coverage reveal
-      // Broadcast the picked camera's cid so the host (System Planner) can focus the same camera in
-      // the CAMERA VIEWS pane. Only on genuine picks here — suppressed when we're applying a relay.
+    function select(id){ if(id!=null) disarm();   // picking an existing device means you have stopped placing
+      selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null){ growCone(id); growCoverage(id); }   // selecting (incl. Walkthrough via selectCid) replays the coverage reveal for that device
+      // Broadcast the cid of the picked camera so the host (System Planner) can focus the same camera in
+      // the CAMERA VIEWS pane. Only on genuine picks here — suppressed while a relay is being applied.
       if(!_suppressSelPost){ var sd=byIdDev(id); try{ parent.postMessage({ type:"iotSurveySelect", project:PID, cid:(sd&&sd.cid)||null }, "*"); }catch(e){} }
       _suppressSelPost=false;
     }
@@ -3025,7 +3034,7 @@
       f.routes=f.routes.filter(function(r){ return !r || r.dev!==key; });
       try{ renderRoutes(); renderRouteBar(); }catch(e){}
       return cut; }
-    function removeDevice(id, token){ var el=document.getElementById("dev-"+id); if(el) el.remove();
+    function removeDevice(id, token){ disarm(); var el=document.getElementById("dev-"+id); if(el) el.remove();
       var gone=null; for(var gi=0;gi<devices.length;gi++){ if(devices[gi].id===id){ gone=devices[gi]; break; } }
       var cutRuns=cutRunsFor(gone);
       if(token && gone){ var si=devices.indexOf(gone);
@@ -3076,7 +3085,7 @@
     function updateCount(){ panelN.textContent=devices.length+(devices.length===1?" device":" devices"); }
 
     // ---- floors + persistence: each finalized background becomes a floor; autosave per project ----
-    window.SV_BUILD="20261123-g1-identity-runs-undo";   // bumped per fix group, so a live check can prove which build is serving
+    window.SV_BUILD="20261123-g1-disarm";   // bumped per fix group, so a live check can prove which build is serving
     var PKEY="iottechs_survey2_"+(PID||"default"), bgData=null, saveT=null, submitted=false, approved=false;
     var floors=[{name:"Floor 1",bg:null,devices:[],started:false}], curFloor=0;
     // ---- THE SAVE GATE (section L: "survey data is not being saved") -------------------------------

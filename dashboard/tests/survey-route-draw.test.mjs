@@ -67,6 +67,9 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
     var pHist=[], pHi=-1, pHistFloor=-1, selId=null, devSeq=0;
     var work={ querySelectorAll:function(){ return []; } };
     function mountDevice(){} function reportDevices(){} function renderUnplacedTray(){} function updateCamBtns(){}
+    // undo/redo disarm: a correction is never a placement.
+    var armedK=null; function arm(k){ armedK=k; }
+    ${extractFn("disarm")}
     ${extractFn("pSnap")}
     ${extractFn("pHistReset")}
     ${extractFn("pHistPush")}

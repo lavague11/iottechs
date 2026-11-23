@@ -83,3 +83,63 @@ test("every inline <script> in public/widgets parses", () => {
   assert.ok(blocks >= 3, `expected inline scripts to be found, got ${blocks}`);
   assert.deepEqual(failures, [], `${failures.length} inline script(s) do not parse:\n  ${failures.join("\n  ")}`);
 });
+
+// Every widget function the test suite brace-extracts must still be extractable.
+//
+// The extractors in tests/survey-*.test.mjs count braces and treat a quote character as the start of
+// a string. One apostrophe in a comment inside a function body — "the armed type's icon" — opens a
+// string that only closes at some unrelated quote later in the file, so the extractor walks past the
+// real closing brace. It then either explodes with a syntax error or, worse, silently asserts against
+// the wrong code. Both happened while fixing Group 1.
+//
+// This compares a COMMENT-AWARE scan of each function against the naive brace count the test
+// extractors use. When they disagree, the function is a trap, and the message says which comment.
+test("widget functions used by the test suite extract cleanly (no quotes in their comments)", () => {
+  const widget = readFileSync(
+    path.join(process.cwd(), "public", "widgets", "site-survey-merged.html"), "utf8");
+
+  // The honest scanner: understands line comments, block comments and strings.
+  function realEnd(start) {
+    let i = widget.indexOf("{", widget.indexOf(")", start)), depth = 0;
+    const comments = [];
+    for (let j = i; j < widget.length; j++) {
+      const c = widget[j], n = widget[j + 1];
+      if (c === "/" && n === "/") { const e = widget.indexOf("\n", j); comments.push(widget.slice(j, e < 0 ? widget.length : e)); j = e < 0 ? widget.length : e; continue; }
+      if (c === "/" && n === "*") { const e = widget.indexOf("*/", j + 2); comments.push(widget.slice(j, e < 0 ? widget.length : e + 2)); j = (e < 0 ? widget.length : e + 1); continue; }
+      if (c === '"' || c === "'" || c === "`") { const q = c; for (j++; j < widget.length; j++) { if (widget[j] === "\\") { j++; continue; } if (widget[j] === q) break; } continue; }
+      if (c === "{") depth++; else if (c === "}" && --depth === 0) return { end: j, comments };
+    }
+    return { end: -1, comments };
+  }
+  // The naive scanner the test extractors actually use.
+  function naiveEnd(start) {
+    let i = widget.indexOf("{", widget.indexOf(")", start)), depth = 0, q = null;
+    for (let j = i; j < widget.length; j++) {
+      const c = widget[j];
+      if (q) { if (c === "\\") j++; else if (c === q) q = null; continue; }
+      if (c === '"' || c === "'") { q = c; continue; }
+      if (c === "{") depth++; else if (c === "}" && --depth === 0) return j;
+    }
+    return -1;
+  }
+
+  // The functions the survey tests extract today. Add a name here when a test starts extracting it.
+  const NAMES = ["placeAt", "arm", "disarm", "select", "showDevCtx", "undoAction", "redoAction",
+    "addDevice", "addUnplacedCamera", "reAdd", "removeDevice", "undoDeleteDevice", "cutRunsFor",
+    "restoreRuns", "stripDevs", "deleteFloor", "pushServer", "floorsBefore", "maxOrd", "ordFromTag",
+    "ordFromName", "nextGroupOrd", "nextTypeOrd", "pSnap", "pHistReset", "pHistPush", "pCanUndo",
+    "pCanRedo", "pApply", "pHistUndo", "pHistRedo", "rtTap", "rtCommit", "rtDevKey", "rtHeadMoveTo"];
+
+  const bad = [];
+  for (const name of NAMES) {
+    const start = widget.indexOf("function " + name + "(");
+    if (start < 0) { bad.push(`${name}: not found in the widget`); continue; }
+    const real = realEnd(start), naive = naiveEnd(start);
+    if (real.end !== naive) {
+      const culprit = real.comments.find((c) => /['"]/.test(c));
+      bad.push(`${name}: the brace extractor overruns by ${naive - real.end} chars` +
+        (culprit ? ` — a quote in this comment: ${culprit.trim().slice(0, 90)}` : ""));
+    }
+  }
+  assert.deepEqual(bad, [], `${bad.length} function(s) are a trap for the test extractors:\n  ${bad.join("\n  ")}`);
+});
