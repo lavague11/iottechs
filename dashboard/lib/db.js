@@ -12,6 +12,7 @@ import { SVC_STATUSES, SVC_STATUS_ALIAS, svcStatusLabel, svcAutoAdvance } from "
 import { missingReqs, nextStageOf, AUTO_STAGES, MASTER_ORDER } from "./stage-flow.js";
 import { isStampableCompletionDate } from "./completion-date.js";
 import { toolHasData, toolFingerprint, survey2CameraCount, installAppointmentConfirmed } from "./tool-data.js";
+import { claimStatus, isClaimedTool } from "./tool-claim.js";
 import { parseSurveyFloors, surveyDevices, legacySurveyToSurvey2 } from "./survey2-model.js";
 import { SUPPORT_PHONE } from "./nap.js";
 import { installProgress, qcProgress, qcItemStates } from "./install-checklist-model.js";
@@ -1777,6 +1778,21 @@ function init() {
       updated_at    TEXT DEFAULT (datetime('now','localtime')),
       published_at  TEXT,
       archived_at   TEXT
+    )
+  `);
+  // ---- One editor at a time (lib/tool-claim.js) ----
+  // A short lease on a tool row, held by one EDITOR (one browser tab), renewed by a heartbeat.
+  // While it is live, nobody else may write that row. It is the companion to the no-claim refusal
+  // in toolWriteNeedsClaim: together they are why a stale tab can no longer overwrite a survey.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tool_claims (
+      project_access_id TEXT NOT NULL,
+      tool              TEXT NOT NULL,
+      editor_id         TEXT NOT NULL,
+      editor_name       TEXT,
+      acquired_at       TEXT DEFAULT (datetime('now','localtime')),
+      renewed_at        TEXT DEFAULT (datetime('now','localtime')),
+      PRIMARY KEY (project_access_id, tool)
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_sops_status ON sops(status, updated_at)`);
@@ -7905,6 +7921,55 @@ export function toolWriteIsStale(accessId, tool, baseRev) {
   if (typeof baseRev !== "string" || !baseRev) return false;      // no claim made -> nothing to check
   return baseRev !== toolRev(getToolData(accessId, tool)?.data ?? null);
 }
+// ---- One editor at a time ----------------------------------------------------------------------
+// The lease itself. The RULES are pure and live in lib/tool-claim.js so they can be tested without a
+// database; these four functions are only storage.
+export function getToolClaim(accessId, tool) {
+  return db.prepare("SELECT project_access_id, tool, editor_id, editor_name, acquired_at, renewed_at FROM tool_claims WHERE project_access_id=? COLLATE NOCASE AND tool=?")
+    .get(String(accessId), String(tool)) || null;
+}
+// Acquire or renew. Refuses when somebody else holds a live lease, unless `takeover` is set — which
+// only ever comes from a person clicking "Take over", never from a background loop.
+export function claimToolEditor(accessId, tool, editorId, editorName = null, { takeover = false } = {}) {
+  const row = getToolClaim(accessId, tool);
+  const st = claimStatus(row, editorId);
+  if (st.state === "held" && !takeover) return { ok: false, claim: row, status: st };
+  db.prepare(`
+    INSERT INTO tool_claims (project_access_id, tool, editor_id, editor_name, acquired_at, renewed_at)
+    VALUES (?,?,?,?,datetime('now','localtime'),datetime('now','localtime'))
+    ON CONFLICT(project_access_id, tool)
+    DO UPDATE SET editor_id=excluded.editor_id, editor_name=excluded.editor_name,
+      acquired_at=CASE WHEN tool_claims.editor_id=excluded.editor_id THEN tool_claims.acquired_at ELSE excluded.acquired_at END,
+      renewed_at=excluded.renewed_at
+  `).run(String(accessId), String(tool), String(editorId), editorName || null);
+  const after = getToolClaim(accessId, tool);
+  return { ok: true, claim: after, status: claimStatus(after, editorId) };
+}
+// Only the holder releases it. A tab closing must never free somebody else's lease.
+export function releaseToolClaim(accessId, tool, editorId) {
+  db.prepare("DELETE FROM tool_claims WHERE project_access_id=? COLLATE NOCASE AND tool=? AND editor_id=?")
+    .run(String(accessId), String(tool), String(editorId));
+  return getToolClaim(accessId, tool);
+}
+
+// THE OVERWRITE HOLE, closed. toolWriteIsStale only fires when the caller SENDS a baseRev:
+// "no claim made -> nothing to check". So a tab that never successfully read the row could push its
+// own copy straight over a newer one, and that is how ASC0055 lost six named cameras off Floor 1 in
+// a single write. A write to a survey that ALREADY HAS a row must now carry a claim.
+//
+// Deliberately narrow:
+//   · only the survey tools, where the row is the only copy of the work;
+//   · only when a row exists — the first write of a new survey has nothing to lose;
+//   · an EMPTY stored row counts as nothing to lose either, so a fresh survey still starts cleanly.
+// A client that has genuinely read the row always has a baseRev, so this costs an honest writer
+// nothing and stops a blind one completely.
+export function toolWriteNeedsClaim(accessId, tool, baseRev) {
+  if (!isClaimedTool(tool)) return false;
+  if (typeof baseRev === "string" && baseRev) return false;      // a claim was made
+  const existing = getToolData(accessId, tool);
+  return !!(existing?.data && toolHasData(tool, existing.data));
+}
+
 export function saveToolData(accessId, tool, data, byName) {
   db.prepare(`
     INSERT INTO project_tool_data (project_access_id, tool, data, updated_by, updated_at)

@@ -4,7 +4,8 @@ import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
-import { subscribeSyncStatus, retryToolSync } from "./tool-sync";
+import { subscribeSyncStatus, retryToolSync, subscribeClaim, takeOverTool } from "./tool-sync";
+import { claimBanner } from "../../../lib/tool-claim";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
 import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS, submitRows, submitGaps } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
@@ -540,6 +541,7 @@ export default function SystemPlanner({
   return (
     <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}${paneMode === "review" ? " syp--review" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
+      {!customer && <EditingElsewhere accessId={accessId} />}
       {!customer && <SyncBadge syncKey={`${accessId}:survey2`} />}
 
       {/* The submit lock, said out loud — on every step, not just Review. This is the ONE unlock control
@@ -742,6 +744,23 @@ export default function SystemPlanner({
 // SYNC STATUS — offline-first indicator. Every change is written to the device first (localStorage,
 // survives reload); this badge shows "Offline — will sync" when there's no signal and a queued edit,
 // "Saving…" while a change is in flight, and nothing once everything is on the server.
+// ONE EDITOR AT A TIME. When somebody else holds the lease this survey is read-only — the server
+// refuses our writes anyway, so saying so is the honest version of what is already true. One line,
+// one action: the person either wants the survey or they do not.
+function EditingElsewhere({ accessId }) {
+  const [st, setSt] = useState(null);
+  useEffect(() => subscribeClaim(setSt, `${accessId}:survey2`), [accessId]);
+  const line = claimBanner(st);
+  if (!line) return null;
+  return (
+    <div className="syp-claim" role="status">
+      <span className="syp-claim-dot" aria-hidden="true" />
+      <span>{line}</span>
+      <button type="button" className="syp-claim-take" onClick={() => takeOverTool(accessId, "survey2")}>Take over</button>
+    </div>
+  );
+}
+
 function SyncBadge({ syncKey = null }) {
   const [st, setSt] = useState({ online: true, pending: 0, quota: null, failed: false, blocked: null, savedAt: 0 });
   // Scoped to THIS tool: another tool being blocked or conflicted is not this survey's status.
@@ -958,6 +977,12 @@ const CSS = `
   .syp-devwrap.open .syp-devtog svg{transform:rotate(180deg)}
   .syp-devtog svg{transition:transform .18s}
 }
+.syp-claim{display:inline-flex;align-items:center;gap:9px;padding:7px 10px 7px 12px;border-radius:100px;
+  background:#FFF4E5;border:1px solid #E8C99B;color:#6B4A12;font-size:.82rem;font-weight:700;margin-bottom:8px}
+.syp-claim-dot{width:7px;height:7px;border-radius:100px;background:#C98A2B;flex:none}
+.syp-claim-take{appearance:none;cursor:pointer;font:inherit;font-size:.8rem;font-weight:700;
+  padding:4px 11px;border-radius:100px;border:1px solid #6B4A12;background:transparent;color:#6B4A12}
+.syp-claim-take:hover{background:#6B4A12;color:#fff}
 .syp-review{border:1px solid var(--dv-line,#E4E4DF);border-radius:14px;background:#fff;padding:16px 18px;margin-bottom:12px}
 /* Approval has no canvas, so the shell kept its full plan-height reservation and left roughly 600px
    of blank below a 130px card — with the footer stranded in the middle of the screen. The step now

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolRev } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, toolRev } from "../../../lib/db";
+import { claimStatus, isClaimedTool } from "../../../lib/tool-claim.js";
 import { can } from "../../../lib/roles";
 import { toolHasData } from "../../../lib/tool-data";
 
@@ -90,7 +91,7 @@ function emptyOverContent(accessId, tool, data, allowEmpty) {
 }
 
 export async function POST(req) {
-  const { accessId, tool, data, allowEmpty, baseRev } = await req.json();
+  const { accessId, tool, data, allowEmpty, baseRev, editorId } = await req.json();
   const tok = await getSessionRole();
   if (!tok) return Response.json({ error: "Session expired." });
   if (!SYNC_TOOLS.has(tool)) return Response.json({ error: "Unknown tool." });
@@ -111,11 +112,31 @@ export async function POST(req) {
   // exists — unbounded growth from an abandoned tab, and it means deleting a project does not
   // reliably remove its tool data. Resolve the project first.
   if (!getJobByAccessId(accessId)) return Response.json({ error: "That project no longer exists." });
-  // B14: refuse a write made against a version the caller did not read. Optional, so a client that
-  // sends no baseRev is accepted exactly as before; one that sends a stale rev is told, rather than
-  // silently winning. `stale: true` lets the client re-seed instead of retrying the same bytes.
+  // B14: refuse a write made against a version the caller did not read. One that sends a stale rev
+  // is told, rather than silently winning. `stale: true` lets the client re-seed instead of retrying
+  // the same bytes.
   if (toolWriteIsStale(accessId, tool, baseRev)) {
     return Response.json({ error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true });
+  }
+  // …and the hole B14 left open: it only fired when a claim WAS sent. A tab that never successfully
+  // read the row sent none, so it overwrote whatever was there. That is how ASC0055 lost six named
+  // cameras off Floor 1 in a single write. A survey that already holds work now requires a claim.
+  if (toolWriteNeedsClaim(accessId, tool, baseRev)) {
+    return Response.json({ error: "This copy was never loaded from the server, so it wasn’t saved. Reload to get the latest copy.", stale: true });
+  }
+  // ONE EDITOR AT A TIME. While somebody else holds a live lease on this row, nobody else writes it.
+  // The lease is per browser tab, because two tabs belonging to one person is the case that actually
+  // loses data. `editorId` identifies the writer; a client that sends none is treated as "not the
+  // holder", so it cannot write a claimed survey either.
+  if (isClaimedTool(tool)) {
+    const claim = getToolClaim(accessId, tool);
+    const st = claimStatus(claim, editorId);
+    if (st.state === "held") {
+      return Response.json({
+        error: `${st.holderName || "Someone else"} is editing this survey, so your change wasn’t saved.`,
+        claimed: true, holderName: st.holderName || null, msLeft: st.msLeft,
+      });
+    }
   }
   if (emptyOverContent(accessId, tool, data, allowEmpty)) {
     return Response.json({ error: "Refused: that would replace the saved survey with an empty one." });

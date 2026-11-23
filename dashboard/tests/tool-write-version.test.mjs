@@ -52,8 +52,9 @@ test("both write paths enforce it, and say so rather than silently winning", () 
     assert.match(src, /changed somewhere else since you opened it/, `${who} explains`);
     assert.match(src, /stale: true/, `${who} marks it so the client can re-seed`);
   }
-  assert.match(route, /const \{ accessId, tool, data, allowEmpty, baseRev \} = await req\.json\(\);/);
-  assert.match(actions, /\{ allowEmpty = false, baseRev = null \} = \{\}/);
+  // Both paths also carry the editor id, for the one-editor-at-a-time lease.
+  assert.match(route, /const \{ accessId, tool, data, allowEmpty, baseRev, editorId \} = await req\.json\(\);/);
+  assert.match(actions, /\{ allowEmpty = false, baseRev = null, editorId = null \} = \{\}/);
 });
 
 test("the enforcement runs AFTER the role gate, so it cannot become an id or content oracle", () => {

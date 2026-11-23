@@ -464,6 +464,10 @@ function hostEnv(localValue) {
     removeItem: () => {},
   };
   globalThis.fetch = async (url, opts) => {
+    const u = String(url || "");
+    // The editing lease has its own endpoint and its own heartbeat. These tests are about what
+    // reaches the SURVEY ROW, so claim traffic is answered and not counted.
+    if (u.includes("/api/tool-claim")) return { json: async () => ({ ok: true, status: { state: "mine" } }) };
     if (!opts || opts.method !== "POST") return { json: async () => ({ ok: true, saved: { data: null } }) };   // the priming GET: server has nothing
     posted.push(JSON.parse(opts.body));
     return { json: async () => ({ ok: true, saved: { updated_at: 1 } }) };

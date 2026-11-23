@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, toolWriteIsStale, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
+  getJobByAccessId, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -21,6 +21,7 @@ import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerpr
 import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
 import { addendumLabel } from "../../../lib/addendum-display";
 import { can, ROLE_KEYS } from "../../../lib/roles";
+import { claimStatus, isClaimedTool } from "../../../lib/tool-claim.js";
 import { paymentsForViewer } from "../../../lib/customer-portal";
 import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
 import { fetchTracking } from "../../../lib/tracking";
@@ -1075,7 +1076,7 @@ export async function proposalLayoutMetaAction(accessId) {
   // normally /api/media URLs now, so the old scan both missed built layouts AND could show empty ones.
   return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
-export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false, baseRev = null } = {}) {
+export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false, baseRev = null, editorId = null } = {}) {
   const tok = await getSessionRole();
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
@@ -1102,9 +1103,22 @@ export async function saveToolDataAction(accessId, tool, data, { allowEmpty = fa
   // never whether the target is real, and there is no foreign key on project_tool_data. A stale tab
   // on a deleted project would otherwise keep recreating orphan rows. The two write paths must agree.
   if (!getJobByAccessId(accessId)) return { error: "That project no longer exists." };
-  // B14, same gate as /api/tool-data: optional baseRev, refused when behind.
+  // B14, same gate as /api/tool-data: refused when behind.
   if (toolWriteIsStale(accessId, tool, baseRev)) {
     return { error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true };
+  }
+  // …and the hole B14 left open, closed on BOTH write paths or it is not closed at all: a caller
+  // that sends no claim used to overwrite whatever was there, which is how ASC0055 lost six named
+  // cameras off Floor 1 in a single write.
+  if (toolWriteNeedsClaim(accessId, tool, baseRev)) {
+    return { error: "This copy was never loaded from the server, so it wasn’t saved. Reload to get the latest copy.", stale: true };
+  }
+  // ONE EDITOR AT A TIME — the same lease the REST path honours. The two write paths must agree.
+  if (isClaimedTool(tool)) {
+    const st = claimStatus(getToolClaim(accessId, tool), editorId);
+    if (st.state === "held") {
+      return { error: `${st.holderName || "Someone else"} is editing this survey, so your change wasn’t saved.`, claimed: true, holderName: st.holderName || null };
+    }
   }
   // A customer's addendum write is a signature, nothing more: their copy came over the wire
   // without techPay (see sanitizeToolRead), so saving it verbatim would wipe payout data — and

@@ -1,4 +1,5 @@
 "use client";
+import { CLAIM_HEARTBEAT_MS, isClaimedTool, newEditorId } from "../../../lib/tool-claim.js";
 
 // Keeps the browser tools' localStorage drafts (survey / mockup / schedule) mirrored to the
 // server. localStorage stays the fast working copy; the server row is the authoritative backup
@@ -97,6 +98,47 @@ export function toolPayloadSendable(tool, raw) {
 // B14: the server revision this client last READ or successfully wrote, per accessId:tool. Sent
 // with every write so the server can refuse one made against a version we never saw. Unset means
 // "no claim" and the server accepts, which is how a client from before this shipped keeps working.
+// ---- ONE EDITOR AT A TIME (lib/tool-claim.js) --------------------------------------------------
+// The editor id is per TAB, in sessionStorage. Two tabs belonging to one person are two editors,
+// which is the case that actually loses data: the stale copy is a stale tab, not a stale colleague.
+let _editorId = null;
+export function editorId() {
+  if (_editorId) return _editorId;
+  try { _editorId = sessionStorage.getItem("iot_editor_id") || null; } catch { /* private mode */ }
+  if (!_editorId) {
+    _editorId = newEditorId();
+    try { sessionStorage.setItem("iot_editor_id", _editorId); } catch { /* private mode */ }
+  }
+  return _editorId;
+}
+const _claims = new Map();          // mapKey -> status from lib/tool-claim claimStatus
+const _claimSubs = new Set();
+export function subscribeClaim(fn, mapKey) {
+  const sub = { fn, mapKey };
+  _claimSubs.add(sub);
+  try { fn(_claims.get(mapKey) || null); } catch { /* immediate push */ }
+  return () => _claimSubs.delete(sub);
+}
+function emitClaim(mapKey) {
+  const st = _claims.get(mapKey) || null;
+  _claimSubs.forEach((sub) => { if (sub.mapKey === mapKey) { try { sub.fn(st); } catch { /* threw */ } } });
+}
+export function claimFor(accessId, tool) { return _claims.get(`${accessId}:${tool}`) || null; }
+
+async function claimCall(accessId, tool, action) {
+  try {
+    const r = await fetch("/api/tool-claim", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessId, tool, editorId: editorId(), action }),
+    });
+    const out = await r.json();
+    if (out && out.status) { _claims.set(`${accessId}:${tool}`, out.status); emitClaim(`${accessId}:${tool}`); }
+    return out;
+  } catch { return null; }          // offline: keep whatever we last knew, never assume we hold it
+}
+// A person pressing "Take over". Never called by a loop.
+export async function takeOverTool(accessId, tool) { return claimCall(accessId, tool, "takeover"); }
+
 const _baseRev = new Map();
 export const _setBaseRev = (accessId, tool, rev) => { if (typeof rev === "string" && rev) _baseRev.set(`${accessId}:${tool}`, rev); };
 
@@ -105,7 +147,7 @@ export async function postToolData(accessId, tool, raw) {
   const res = await fetch("/api/tool-data", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessId, tool, data: raw, baseRev: _baseRev.get(`${accessId}:${tool}`) || undefined }),
+    body: JSON.stringify({ accessId, tool, data: raw, baseRev: _baseRev.get(`${accessId}:${tool}`) || undefined, editorId: editorId() }),
   });
   const out = await res.json();
   // Our write became the new server version; remember it so the next push is not itself stale.
@@ -306,8 +348,21 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   let readOnly = false;
   let inFlight = false;
 
+  // ONE EDITOR AT A TIME. Take the lease on start and keep it with a heartbeat. While somebody else
+  // holds it this tab does not push at all — the server would refuse anyway, and a loop retrying a
+  // refusal every 5 seconds is just noise. The lease is released when the tab goes away, so a closed
+  // laptop frees the survey rather than holding it until the TTL lapses.
+  let claimTimer = null;
+  const claimed = isClaimedTool(tool);
+  const beat = () => { claimCall(accessId, tool, "claim"); };
+  if (claimed) {
+    beat();
+    claimTimer = setInterval(beat, CLAIM_HEARTBEAT_MS);
+  }
+
   async function push() {
     if (stopped || readOnly || inFlight || _suspended.has(mapKey) || _conflicts.has(mapKey)) return;
+    if (claimed && (_claims.get(mapKey) || {}).state === "held") return;   // somebody else is editing
     let cur;
     try { cur = localStorage.getItem(storageKey); } catch { return; }
     if (cur == null || cur === _lastPushed.get(mapKey)) { _status.pending.delete(mapKey); emitStatus(); return; }
@@ -370,5 +425,13 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   })();
 
   const timer = setInterval(push, intervalMs);
-  return () => { stopped = true; clearInterval(timer); _flushers.delete(push); };
+  const release = () => { if (claimed) { try { navigator.sendBeacon?.("/api/tool-claim", new Blob([JSON.stringify({ accessId, tool, editorId: editorId(), action: "release" })], { type: "application/json" })); } catch { /* best effort */ } } };
+  if (claimed && typeof window !== "undefined") window.addEventListener("pagehide", release);
+  return () => {
+    stopped = true; clearInterval(timer); _flushers.delete(push);
+    if (claimTimer) clearInterval(claimTimer);
+    if (claimed && typeof window !== "undefined") window.removeEventListener("pagehide", release);
+    // Give the lease back on the way out, so the next tab does not wait out the TTL.
+    if (claimed) claimCall(accessId, tool, "release");
+  };
 }
