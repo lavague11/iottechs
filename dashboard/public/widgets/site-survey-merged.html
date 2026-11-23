@@ -1722,7 +1722,10 @@
     work.addEventListener("pointerup", ptrGone, true);
     work.addEventListener("pointercancel", ptrGone, true);
     function inChrome(e){ return e.target.closest(".devNode,.utils,.zoombar,.ctxbar,.devmenu,.plandim"); }
-    function placeAt(cx,cy){ if(frozen()||!armedK||regionMode||aligning||routing) return;   // routing: the tap is a route point, never a device var p=planPctFromClient(cx,cy);   // client → plan-% (through the active alignment)
+    // `routing` is in the guard because on the Route step a canvas tap is a route point, never a device.
+    function placeAt(cx,cy){
+      if(frozen()||!armedK||regionMode||aligning||routing) return;
+      var p=planPctFromClient(cx,cy);   // client → plan-% (through the active alignment)
       addDevice(armedK,p.x,p.y); devMenu.classList.remove("show"); }
     // ---- magnifier loupe (touch): magnifies the aerial under the finger with a centred crosshair ----
     var loupeEl=null;
