@@ -106,7 +106,8 @@ One commit per group; the owner approves each before the next begins.
 | Group | What | Status |
 |---|---|---|
 | 1 | **Data** — identity ordinals (highest + 1, all six sites), delete cascades to cable runs, Placement undo reverses the actual last action | **DONE** · `7df33e4b` · 1,995 tests pass · verified live on ASC0122 |
-| 2 | **Flow** — nav popup on open (R1), start at Background (R3), Back no longer stuck at Layout + the nav Background item works (R2), floor picker off Camera Angles and Approval (R4), aerial saved to the floor when the structure is drawn so Placement and Route always match Layout (R5), an explicit "Use this background" on Background | not started |
+| 2 | **Flow** — nav popup on open (R1), start at Background (R3), Back no longer stuck at Layout + the nav Background item works (R2), floor picker off Camera Angles and Approval (R4), an explicit "Use this background" on Background | **DONE** · `918ff739` · 2,009 tests pass · verified live on ASC0122 |
+| 2b | **R5 — hybrid view on Placement and Route** | **NOT DONE, reported.** The draw tool emits a plan layer only with BOTH a seed and a context (`planLayerSVG`, draw-floorplan.html); a floor whose base was never traced has neither, so there is no aerial handed back to save. Real instance: **ASC0056 floor 1** — aerial present, `bgSource` satellite, `ctx` absent. The fix is a full-extent context mode inside the draw tool: geometry that feeds the customer layout and the proposal PDF, so it needs live alignment checks. Owner decides whether to take it on. |
 | 3 | **Misleading screens** — Approval never READY with open items, no "Not saving" or "1 Issue" on a clean new survey, no false "Changed elsewhere" leaking from another tool, Approval fills the screen | not started |
 | 4 | **Mobile** — full walkthrough at 375px | not started · blocked on the PIN (see queued item 2) |
 | — | **Close-out** — rerun the whole walkthrough on desktop and phone, update `survey-walkthrough.md` with pass/fail for every rule | not started |
@@ -137,6 +138,26 @@ The data is **node:sqlite on Hostinger** — `lib/db.js` → `dbDir()` → `dash
 > Context that shapes the job: `project_tool_data` keeps **no version history** — one row per
 > project+tool, overwritten in place. A point-in-time file backup is the only route to the original
 > Floor 2 devices, so dating the backups against the change is the whole task.
+
+**Q1 progress (2026-11-23) — backup dates listed, nothing downloaded or restored.**
+Hostinger ▸ iot-techs.com ▸ Files ▸ Backups ▸ Restore and download ▸ **Files backup** (not the
+"Database backup" tab — that is MySQL, and this app stores SQLite as a file). Daily automated.
+18 restore points available:
+
+```
+2026-11-23 02:30   2026-11-22 02:30   2026-11-21 02:30   2026-11-20 02:30
+2026-11-19 02:30   2026-11-18 02:30   2026-11-17 02:30   2026-11-16 02:30
+2026-11-15 02:30   2026-11-14 02:30   2026-11-13 02:30   2026-11-12 02:30
+2026-11-11 02:30   2026-11-08 02:30   2026-11-01 02:30   2026-10-25 10:55
+2026-10-18 06:48   2026-10-11 06:41
+```
+
+Still needed before a backup can be called "before the change": the date Floor 2 changed. The
+in-app row carries no history, so the way to find it is to read ASC0055's `survey2` row out of
+candidate backups and compare — which means downloading `dashboard.db`, and that waits for the
+owner. Hostinger also warns that "database export files" are excluded from backups; that means
+`.sql` dumps, but whether `dashboard.db` is actually inside the archive is unconfirmed — the
+backup file browser sat on "Loading files" and was not retried.
 
 **Q2 — Phone test.** When Group 4 runs, **ask the owner to enter the PIN in the Claude browser pane.
 Never enter it.** (Claude in Chrome cannot resize the owner's maximized window; the pane can emulate
