@@ -119,6 +119,18 @@
   .rtBtn.on{background:#101418;border-color:#101418;color:#fff}
   .rtBtn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
   .rtSep{width:1px;height:20px;background:var(--line,#e3e5e8);flex:none}
+  /* Right-click a marker: Rename / Delete, at the pointer. Two actions, so it is a menu and not a
+     sheet; it closes on the next click, Escape, or any scroll/zoom that would move it off its marker. */
+  #devCtx{position:fixed;z-index:140;display:none;flex-direction:column;gap:2px;min-width:150px;background:#fff;
+    border:1px solid var(--line,#e3e5e8);border-radius:10px;box-shadow:0 14px 40px rgba(16,17,18,.24);padding:5px}
+  #devCtx.open{display:flex}
+  #devCtx .dcName{padding:6px 9px 4px;font:700 11px/1.2 var(--sans,system-ui,sans-serif);color:var(--muted,#6b7076);
+    letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+  #devCtx button{display:flex;align-items:center;gap:9px;width:100%;padding:8px 9px;border:0;border-radius:7px;background:none;
+    cursor:pointer;font:600 13px/1 var(--sans,system-ui,sans-serif);color:var(--ink,#101112);text-align:left}
+  #devCtx button:hover{background:var(--soft,#f6f7f8)}
+  #devCtx button.danger{color:#c4553d}
+  #devCtx button svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
   /* Cable picker: Route's tool in the top-left slot the other steps already use, so each step's tools
      live in one place. The + carries a dot in the CURRENT cable's colour — the selection is visible
      without opening anything, which is what the bottom chip row was really for. */
@@ -404,6 +416,9 @@
      and on a plan of twenty white markers a head-end that looks like one more camera is a liability. */
   .devNode.base .devDot{background:var(--ink,#101112);border-color:var(--ink,#101112);color:var(--gold,#b98a2e)}
   .devNode.base .devDot svg{stroke-width:1.9}
+  /* …and the number inverts with the body. The default badge is dark-on-dark against a base marker,
+     which is unreadable: white fill, black figure, black ring. */
+  .devNode.base .devNum{background:#fff;color:var(--ink,#101418);border-color:var(--ink,#101418)}
   .devNode .devDot svg{width:calc(var(--isz,40px)*.47);height:calc(var(--isz,40px)*.47);stroke:currentColor;fill:none;stroke-width:1.7}
   .devNode.sel .devDot,.devNode:hover .devDot,.devNode.hl .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
@@ -784,6 +799,7 @@
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <button type="button" id="rtHeadAdd" aria-label="Add head-end" title="Head-end" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
           <div id="rtBar" role="toolbar" aria-label="Wiring"></div>
+          <div id="devCtx" role="menu" aria-label="Device"></div>
           <div id="sidePop" role="dialog" aria-label="Side"><div class="sp-list" id="sidePopList"></div><input id="sidePopInput" maxlength="24" placeholder="Name" aria-label="Side name"></div>
           <div id="rgBar"><div class="viewseg" id="rgKind" role="group" aria-label="Draw"><button class="vbtn" data-k="boundary">Boundary</button><button class="vbtn" data-k="zone">Area</button></div><button class="vbtn" id="zoneName" aria-label="Edit area" style="display:none"></button><button class="ubtn" id="zoneDel" title="Delete" aria-label="Delete area" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="bdDel" title="Clear boundary" aria-label="Clear boundary" style="display:none"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button><button class="ubtn" id="siBtn" title="Analyze" aria-label="Analyze Site" style="display:none"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16v4M17 18h4"/></svg></button></div>
           <div id="zonePop" role="dialog" aria-label="Area"><div class="sp-list" id="zonePopList"></div><input id="zonePopInput" maxlength="40" placeholder="Name" aria-label="Area name"></div>
@@ -1644,6 +1660,50 @@
     var eraseMode=false;
     function setEraseMode(on){ eraseMode=!!on; if(eraseMode) arm(null); document.body.classList.toggle("erasing",eraseMode);
       var mi=devMenu.querySelector(".mi-erase"); if(mi) mi.classList.toggle("on",eraseMode); }
+    /* RIGHT-CLICK a marker → Rename / Delete at the pointer. Both actions already existed (applyManualName
+       and eraseDevice); until now the only way to reach them was the roster card, which means hunting for
+       the right row while looking at the pin you actually mean. Read-only and submitted surveys get no
+       menu — the actions behind it are edits. */
+    var dcId=null;
+    var DC_ICON={ pen:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+      bin:'<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>' };
+    function hideDevCtx(){ var m=document.getElementById("devCtx"); if(m){ m.classList.remove("open"); m.innerHTML=""; } dcId=null; }
+    function showDevCtx(d, cx, cy){
+      if(!d || frozen() || RO) return;                       // the menu only offers edits
+      var m=document.getElementById("devCtx"); if(!m) return;
+      dcId=d.id;
+      var nm=cap(d.locName||(d.name&&d.name.trim())||d.tag||"Device");
+      // zEsc, not raw: the name is hand-typed and this goes into innerHTML.
+      m.innerHTML='<div class="dcName">'+zEsc(nm)+'</div>'
+        +'<button type="button" role="menuitem" data-dc="rename"><svg viewBox="0 0 24 24">'+DC_ICON.pen+'</svg>Rename</button>'
+        +'<button type="button" role="menuitem" data-dc="delete" class="danger"><svg viewBox="0 0 24 24">'+DC_ICON.bin+'</svg>Delete</button>';
+      m.classList.add("open");
+      // Keep it on screen: flip left/up when it would run past the edge.
+      var r=m.getBoundingClientRect(), x=cx, y=cy;
+      if(x + r.width > window.innerWidth - 8) x = Math.max(8, cx - r.width);
+      if(y + r.height > window.innerHeight - 8) y = Math.max(8, cy - r.height);
+      m.style.left=x+"px"; m.style.top=y+"px"; }
+    function dcRename(){ var d=byIdDev(dcId); hideDevCtx(); if(!d||frozen()) return;
+      var cur=(d.locName||d.name||"").trim();
+      var nm=window.prompt("Name this device", cur);
+      if(nm===null) return;                                   // cancelled: change nothing
+      applyManualName(d, nm); renderDevice(d); renderPanel(); reportDevices(); queueSave(); }
+    function dcDelete(){ var d=byIdDev(dcId); hideDevCtx(); eraseDevice(d); }   // eraseDevice carries the confirm
+    (function(){
+      var m=document.getElementById("devCtx"); if(!m) return;
+      m.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
+      m.addEventListener("click", function(e){ e.stopPropagation();
+        var b=e.target.closest && e.target.closest("button[data-dc]"); if(!b) return;
+        if(b.getAttribute("data-dc")==="rename") dcRename(); else dcDelete(); });
+      // Opened from the marker itself, so it works whatever mode the canvas is in.
+      work.addEventListener("contextmenu", function(e){
+        var node=e.target.closest && e.target.closest(".devNode"); if(!node) { hideDevCtx(); return; }
+        var d=byIdDev(+String(node.id).replace("dev-","")); if(!d) return;
+        e.preventDefault(); e.stopPropagation(); showDevCtx(d, e.clientX, e.clientY); }, true);
+      document.addEventListener("pointerdown", function(e){ if(dcId!=null && !(e.target.closest && e.target.closest("#devCtx"))) hideDevCtx(); }, true);
+      document.addEventListener("keydown", function(e){ if(e.key==="Escape") hideDevCtx(); });
+      window.addEventListener("scroll", hideDevCtx, true);
+    })();
     function eraseDevice(d){ if(!d||frozen()) return; hideViewPop();
       var nm=cap(d.locName||(d.name&&d.name.trim())||d.tag||"this device");
       if(window.confirm("Delete "+nm+"?")) removeDevice(d.id); }

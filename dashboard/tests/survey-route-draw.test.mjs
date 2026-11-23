@@ -436,6 +436,31 @@ test("NVR and amplifier markers invert — a head-end is not one more camera", (
   assert.match(survey, /\.devNode \.devDot\{width:var\(--isz,40px\)[^}]*background:#fff/, "other devices stay white");
 });
 
+test("the number badge inverts with the body, so it is readable on a base marker", () => {
+  // The default badge is dark fill / white figure — invisible on a dark base marker.
+  assert.match(survey, /\.devNode\.base \.devNum\{background:#fff;color:var\(--ink,#101418\);border-color:var\(--ink,#101418\)\}/,
+    "white fill, black figure, black ring");
+  assert.match(survey, /\.devNode \.devNum\{[^}]*background:var\(--ink,#101418\);color:#fff[^}]*border:1\.5px solid #fff/,
+    "…and the ordinary badge is unchanged");
+});
+
+test("right-click a marker: Rename and Delete, reusing the actions that already existed", () => {
+  const show = extractFn("showDevCtx");
+  assert.ok(/if\(!d \|\| frozen\(\) \|\| RO\) return;/.test(show), "no menu on a locked or read-only survey — it only offers edits");
+  assert.ok(show.includes('data-dc="rename"') && show.includes('data-dc="delete"'), "two actions, and only two");
+  assert.ok(show.includes("zEsc(nm)"), "the hand-typed name is escaped before it reaches innerHTML");
+  assert.ok(/x \+ r\.width > window\.innerWidth/.test(show) && /y \+ r\.height > window\.innerHeight/.test(show),
+    "it flips rather than opening off-screen");
+  // Reuse, not reimplementation: rename goes through applyManualName, delete through eraseDevice's confirm.
+  assert.ok(/applyManualName\(d, nm\)/.test(extractFn("dcRename")), "rename reuses applyManualName");
+  assert.ok(/if\(nm===null\) return;/.test(extractFn("dcRename")), "cancelling the prompt changes nothing");
+  assert.ok(/eraseDevice\(d\)/.test(extractFn("dcDelete")), "delete reuses eraseDevice, which carries the confirm");
+  // It is opened from the marker, and dismissed the three ways a menu should be.
+  assert.ok(survey.includes('work.addEventListener("contextmenu"'), "bound on the canvas, matched to .devNode");
+  assert.ok(survey.includes('if(e.key==="Escape") hideDevCtx();'), "Escape closes it");
+  assert.ok(survey.includes('window.addEventListener("scroll", hideDevCtx, true)'), "…as does scrolling it off its marker");
+});
+
 test("BUG #103 — Route shows only Route's tools; Placement's + is not one of them", () => {
   // On Route the top-left + was still there, and it opened Placement's device-category picker
   // (Camera / Angle / NVR / ISP / PoE Switch / Display) on a step that places no devices.
