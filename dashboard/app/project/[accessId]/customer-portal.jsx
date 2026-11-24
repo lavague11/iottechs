@@ -374,7 +374,7 @@ function installSub(state, appt) {
 export const PORTAL_CSS = `
 .cpv{--ink:#101418;--ink-soft:#3A4048;--meta:#787D84;--faint:#A1A6AC;--paper:#F4F4F2;--raise:#FBFBFA;--line:#E4E4DF;--line-soft:#EDEDE9;--gold:#C9A96E;--gold-deep:#A8842F;--gold-text:#8A6A1F;--green:#2E7D5B;
   position:fixed;inset:0;overflow-y:auto;background:#fff;color:var(--ink);font:15px/1.5 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif}
-.cpv-head{position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.cpv-head{position:sticky;top:var(--sbx-h,0px);z-index:5;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 20px;background:rgba(255,255,255,.9);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .cpv-mark{font-weight:800;letter-spacing:-.01em;font-size:14px;color:var(--ink)}
 .cpv-port{display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:600;color:var(--ink-soft);text-decoration:none;border:1px solid var(--line);border-radius:999px;padding:7px 14px;white-space:nowrap;background:var(--raise);cursor:pointer;font-family:inherit}
 .cpv-port:hover{border-color:var(--ink);color:var(--ink)}
@@ -448,7 +448,7 @@ export const PORTAL_CSS = `
 /* A fixed overlay starts BELOW the demo bar when one is present (--sbx-h is set by sandbox-bar.jsx;
    0 everywhere else), so the bar never covers the overlay's own title row and close button. */
 .cpv-ovl{position:fixed;top:var(--sbx-h,0);right:0;bottom:0;left:0;z-index:40;background:#fff;display:flex;flex-direction:column}
-.cpv-ovl-bar{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+.cpv-ovl-bar{position:sticky;top:var(--sbx-h,0px);z-index:2;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 18px;background:rgba(255,255,255,.95);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
 .cpv-ovl-x{background:none;border:0;color:var(--ink-soft);cursor:pointer;display:flex;padding:4px;flex:0 0 auto}
 .cpv-ovl-x:hover{color:var(--ink)}
 .cpv-ovl-title{font-weight:700;color:var(--ink)}

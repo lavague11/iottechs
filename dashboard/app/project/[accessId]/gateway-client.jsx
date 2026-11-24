@@ -42,6 +42,7 @@ import TechProjectBoard  from "./tech-board";
 import InstallChecklist  from "./install-checklist";
 import InstallAddendum   from "./install-addendum";
 import SystemQrTool      from "./system-qr-tool";
+import SystemQrModal     from "./system-qr-modal";
 import QCChecklist, { QcSignoff } from "./qc-checklist";
 import CompletionPanel   from "./completion-panel";
 import CompletionChoice  from "./completion-choice";
@@ -1846,6 +1847,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
   const [verifyCust, setVerifyCust]     = useState(null); // pending external customer awaiting identity confirmation
   const [expOpen,    setExpOpen]        = useState(false);
   const [hubPayOpen, setHubPayOpen]     = useState(false);   // Staff Hub "Record Payment" modal
+  const [hubQrOpen, setHubQrOpen]       = useState(false);   // the project's activation QR, from the action rail
   const [reqOpen,    setReqOpen]        = useState(false);
   const [pvwOpen,    setPvwOpen]        = useState(false);   // Proposal Views modal (header icon)
   const [showCloseModal, setShowCloseModal] = useState(false);
@@ -3500,6 +3502,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // Fix #5 — every lifecycle state surfaces ONE correct next action. Routes use the hub's own overlay
       // views (survey/proposal/schedule/workorder/closeout/completion) or an action callback (payment →
       // the Record Payment modal). Labels mirror the canonical STATE_ACTION primaries (project-status.js).
+      const canSeeMoney = can(cView, "customer.financials.view");
+      // The two states whose whole subject is money. For a role that cannot see financials the hero
+      // is suppressed entirely rather than reworded — there is nothing true and useful to say in its
+      // place, and an empty-shell banner is worse than no banner.
+      const MONEY_STATES = new Set(["AWAITING_DEPOSIT", "AWAITING_FINAL_PAYMENT"]);
       const CTA = {
         INTAKE:             { label: "Open Site Survey", view: "survey" },
         BUILD_SURVEY:       { label: "Open Site Survey", view: "survey" },
@@ -3510,11 +3517,15 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Request-Signature modal via ?reqsign); everyone else just opens the proposal.
         AWAITING_SIGNATURE: officeRole ? { label: "Request Signature", inlineSign: true } : { label: "Open Proposal", view: "proposal" },
         CHANGES_REQUESTED:  { label: "Open Proposal", view: "proposal" },
-        AWAITING_DEPOSIT:   { label: "Record Deposit", action: "payment" },
+        // MONEY IS NOT FOR EVERY ROLE. A technician may not see the customer's financials
+        // (`customer.financials.view` excludes tech), so "Record Deposit" / "Record Final Payment" —
+        // and the money-flavoured status above them — never render for one. Their work does not
+        // change because an invoice is unpaid, and the hero would be an action they cannot take.
+        AWAITING_DEPOSIT:   canSeeMoney ? { label: "Record Deposit", action: "payment" } : null,
         READY_TO_SCHEDULE:  { label: "Schedule Install", view: "schedule" },
         INSTALL_SCHEDULED:  { label: "View Schedule", view: "schedule" },
         INSTALL_IN_PROGRESS:{ label: "Open Work Order", view: "workorder" },
-        AWAITING_FINAL_PAYMENT: { label: "Record Final Payment", action: "payment" },
+        AWAITING_FINAL_PAYMENT: canSeeMoney ? { label: "Record Final Payment", action: "payment" } : null,
         // COMPLETE / CLOSED_NOT_COMPLETED: nothing to do — no primary action.
       };
       // Card verb reflects state: Create (never started) · Edit (started/submitted) · Completed (signed/done).
@@ -3558,9 +3569,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         pay:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
         cal:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
         phone: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>,
+        qr:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v.01"/></svg>,
         mail:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>,
       };
       const hubActions = [
+        // The customer's own activation QR, reachable from the portal home instead of only from
+        // inside Completion. Shown to anyone on the project once the QR exists — it is the thing the
+        // customer scans to set their app up, and staff get asked for it constantly.
+        lp.system_qr && { key: "qr", label: "System QR", icon: SI.qr, onClick: () => setHubQrOpen(true) },
         (staffFinance?.hasContract && !staffFinance?.paidInFull) && { key: "pay", label: "Record Payment", tone: "pay", icon: SI.pay, onClick: () => setHubPayOpen(true) },
         { key: "schedule", label: hubAppt ? "Reschedule" : "Schedule", view: "schedule", icon: SI.cal },
         lp.contact_phone && { key: "call", label: "Call", href: `tel:${lp.contact_phone}`, icon: SI.phone },
@@ -3572,7 +3588,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <StaffHub
             accessId={lp.access_id}
             project={lp}
-            status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
+            status={as && !(MONEY_STATES.has(projState) && !canSeeMoney) ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
             finance={staffFinance}
             appt={hubAppt}
             phases={simple3.phases}
@@ -3594,6 +3610,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             onDemo={offerDemo ? startDemo : null}
             demoBusy={demoBusy}
           />
+          {hubQrOpen && <SystemQrModal src={lp.system_qr} onClose={() => setHubQrOpen(false)} />}
           <RecordPaymentModal open={hubPayOpen} onClose={() => setHubPayOpen(false)} accessId={lp.access_id}
             stage={projectStage === "payment" ? "payment" : "approval_deposit"} showToast={showLiveToast}
             onRecorded={() => { setHubPayOpen(false); refreshAcceptances(); }} />
@@ -4877,7 +4894,7 @@ const PV_CSS = `
 .pac-logo:after{margin:6px 10px}
 
 /* Header → light sticky nav */
-.pvx .masthead{position:sticky;top:0;z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:0;margin-bottom:8px}
+.pvx .masthead{position:sticky;top:var(--sbx-h,0px);z-index:60;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-bottom:1px solid var(--line);padding:0;margin-bottom:8px}
 .pvx .masthead-inner{max-width:1180px;margin:0 auto;padding:12px 26px;display:flex;justify-content:space-between;align-items:center;gap:16px}
 .pvx .brand-link{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
 .pvx .brand-text{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:1.1rem;letter-spacing:-.02em}
