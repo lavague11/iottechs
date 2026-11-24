@@ -3190,7 +3190,14 @@
       var intent=clearIntent; clearIntent=false;   // one declared clear authorizes exactly one write
       try{ fetch("/api/tool-data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({accessId:PID,tool:"survey2",data:json,allowEmpty:intent})})
         .then(function(r){ if(!r||!r.ok) return {error:1}; return r.json().catch(function(){ return {ok:1}; }); })
-        .then(function(j){ serverSaveState(!(j&&j.error)); })
+        .then(function(j){
+          // A REFUSAL IS NOT A CONNECTION PROBLEM. The server turns this write away when the row needs
+          // a claim, when somebody else holds the editing lease, when the survey is signed off, or when
+          // this device holds a copy that was never reconciled. In every one of those cases the HOST
+          // already says so, in its own banner, in real words. Saying "check your connection" here puts
+          // a third and wrong explanation on the same screen, and sends the person to look at their wifi.
+          if(j && j.error && (j.stale || j.claimed || j.signedOff)){ serverSaveState(true); return; }
+          serverSaveState(!(j&&j.error)); })
         .catch(function(){ serverSaveState(false); }); }catch(e){ serverSaveState(false); } }
     function save(){ if(!stateLoaded) return;   // SAVE GATE — see stateLoaded above; a pre-restore (or failed-restore) save would overwrite the saved row with the empty placeholder
       var json; try{ json=serialize(); }catch(e){ json=null; } if(json) lastJson=json;

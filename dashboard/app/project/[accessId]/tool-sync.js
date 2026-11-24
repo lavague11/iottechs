@@ -231,7 +231,14 @@ export async function seedToolData(accessId, tool, storageKey, { force = false }
     const recoverable = EXACT_EMPTY.has(tool);
     if (!force && local != null && (!recoverable || toolHasData(tool, local))) {
       if (idbAvailable()) { const inIdb = await idbGet(storageKey); if (inIdb == null) await idbSet(storageKey, local); }
-      return out;   // local draft wins
+      // "Local draft wins" used to return HERE, without ever asking the server. That is the whole of
+      // the ASC0055 bug: a copy nothing had compared to the row, handed straight to the autosync, which
+      // pushed it. The row is always read now; the bytes are handed to the autosync so the load still
+      // makes one read, and the comparison itself lives in reconcileDeviceCopy.
+      const fromServer = await readServer();
+      if (!out.serverError) _seedServer.set(`${accessId}:${tool}`, fromServer);
+      out.serverDiffers = !out.serverError && fromServer != null && fromServer !== "" && fromServer !== local && toolHasData(tool, fromServer);
+      return out;   // the local copy stays on screen; nothing is pushed until it has been reconciled
     }
     if (!force && local != null) {
       // Empty local copy of a tool we can judge exactly. Prefer a DURABLE on-device copy that does have
@@ -298,6 +305,20 @@ const BLOCKED_MSG = "This device’s copy can’t be read — it is not being sa
 // successful push, or by startToolAutosync, which only runs after a fresh seed.
 const _conflicts = new Set();
 const CONFLICT_MSG = "This was changed somewhere else — reload the page to get the latest copy";
+// DIVERGENCE — a device copy that is NOT derived from the server row. See docs/survey-sync-fix.md.
+// This is the one that wiped ASC0055 twice: the loop read the row only to take its rev, then pushed
+// whatever localStorage held, and every guard passed because each asks "did you read the row?" and
+// none asks "is what you are about to push derived from it?". A difference found at LOAD time is not
+// an edit — nobody has touched anything yet — so it is never resolved by a timer, only by a person.
+const _divergent = new Map();   // mapKey -> { accessId, tool, storageKey, serverRaw, deviceRaw, deviceKept }
+const DIVERGENT_MSG = "This device has a different copy";
+// Keys whose local copy has been compared against the row this session. Nothing is ever pushed for a
+// key that is not in here, on any path — the interval calls push() directly, so the gate cannot live
+// in the start-up prime alone.
+const _reconciled = new Set();
+// Server bytes seedToolData already fetched, handed to the autosync so the load makes ONE read.
+const _seedServer = new Map();
+const deviceSidecar = (storageKey) => `${storageKey}__device`;
 const _statusSubs = new Set();
 // `forKey` ("<accessId>:<tool>") scopes the two per-key flags to the tool the caller is showing.
 // The comment below always claimed `blocked` was per project:tool — the code read `.size`, which is
@@ -305,8 +326,10 @@ const _statusSubs = new Set();
 // "Not saving" / "Changed elsewhere", complete with a Reload button, while the survey saved fine.
 function snapshot(forKey = null) {
   const hit = (set) => (forKey ? set.has(forKey) : set.size > 0);
+  const divergentKey = forKey ? (_divergent.has(forKey) ? forKey : null) : [..._divergent.keys()][0] || null;
   return { online: _status.online, pending: _status.pending.size, quota: _status.quota, failed: _status.failed,
     blocked: hit(_status.blockedKeys) ? BLOCKED_MSG : null, conflict: hit(_conflicts) ? CONFLICT_MSG : null,
+    divergent: divergentKey ? DIVERGENT_MSG : null, divergentKey,
     savedAt: _status.savedAt };
 }
 function emitStatus() {
@@ -324,6 +347,99 @@ export function retryToolSync() {
   _status.failed = false; emitStatus();
   _flushers.forEach((f) => { try { f(); } catch { /* noop */ } });
 }
+// Compare this device's copy against the row before ANY push. Returns true when the copy may be sent.
+//
+// It is false whenever we cannot be sure: the row could not be read, or the copy differs from it. The
+// failure mode is "refuses to save and says so", never "overwrites the only copy" — the direction the
+// ASC0055 losses argue for. A divergence is recorded with BOTH copies so the person can pick.
+async function reconcileDeviceCopy(accessId, tool, storageKey) {
+  const mapKey = `${accessId}:${tool}`;
+  if (_reconciled.has(mapKey)) return true;
+  if (_divergent.has(mapKey)) return false;
+  let cur = null; try { cur = localStorage.getItem(storageKey); } catch { return false; }
+
+  // The seed already read the row on this load — use those bytes rather than asking twice.
+  let serverRaw = null, hadServer = false;
+  if (_seedServer.has(mapKey)) { serverRaw = _seedServer.get(mapKey); _seedServer.delete(mapKey); hadServer = true; }
+  else {
+    try {
+      const r = await (await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`)).json();
+      if (!r?.ok) return false;                       // no answer about the row → never push blind
+      _setBaseRev(accessId, tool, r.saved?.rev || "0");
+      serverRaw = r.saved?.data ?? null; hadServer = true;
+    } catch { return false; }                         // offline at load → the next tick asks again
+  }
+  if (!hadServer) return false;
+
+  // The row is empty or absent: this device's copy IS the backup, exactly as before.
+  if (serverRaw == null || serverRaw === "" || !toolHasData(tool, serverRaw)) { _reconciled.add(mapKey); return true; }
+  _lastPushed.set(mapKey, serverRaw);
+
+  // A question asked on an earlier load and not yet answered. The device copy lives in the sidecar, so
+  // it survives the reload that would otherwise make the banner vanish and strand those bytes.
+  if (idbAvailable()) {
+    const kept = await idbGet(deviceSidecar(storageKey));
+    if (kept != null && kept !== serverRaw) {
+      _divergent.set(mapKey, { accessId, tool, storageKey, serverRaw, deviceRaw: kept, deviceKept: true });
+      emitStatus();
+      return false;
+    }
+    if (kept != null) await idbDel(deviceSidecar(storageKey));   // the row caught up: nothing left to ask
+  }
+  if (cur == null || cur === serverRaw) { _reconciled.add(mapKey); return true; }   // nothing of ours, or identical
+
+  // Different. Keep both, show the saved one, and ask. Nothing is sent.
+  const entry = { accessId, tool, storageKey, serverRaw, deviceRaw: cur, deviceKept: false };
+  if (idbAvailable()) {
+    const w = await idbSet(deviceSidecar(storageKey), cur);
+    if (w?.ok) {
+      entry.deviceKept = true;
+      // Default to the saved one: the widget reads localStorage, so the row's bytes go there. Safe
+      // only because the device copy is now in the durable sidecar and "Push this one" can get it back.
+      try { localStorage.setItem(storageKey, serverRaw); } catch { /* quota */ }
+      await idbSet(storageKey, serverRaw);
+    }
+  }
+  // Without a durable sidecar the device copy stays exactly where it is — showing the saved copy would
+  // mean discarding the only copy of whatever this device holds. It still never gets pushed.
+  _divergent.set(mapKey, entry);
+  _status.pending.delete(mapKey);
+  emitStatus();
+  return false;
+}
+
+// What the person chose. Both clear the divergence and let syncing resume; neither is ever automatic.
+export async function useSavedCopy(accessId, tool) {
+  const mapKey = `${accessId}:${tool}`;
+  const e = _divergent.get(mapKey);
+  if (!e) return { ok: false };
+  try { localStorage.setItem(e.storageKey, e.serverRaw); } catch { /* quota */ }
+  if (idbAvailable()) { await idbSet(e.storageKey, e.serverRaw); await idbDel(deviceSidecar(e.storageKey)); }
+  _lastPushed.set(mapKey, e.serverRaw);   // the row already holds these bytes — nothing to send
+  _divergent.delete(mapKey); _reconciled.add(mapKey);
+  emitStatus();
+  return { ok: true, used: "saved" };
+}
+
+export async function pushDeviceCopy(accessId, tool) {
+  const mapKey = `${accessId}:${tool}`;
+  const e = _divergent.get(mapKey);
+  if (!e) return { ok: false };
+  try { localStorage.setItem(e.storageKey, e.deviceRaw); } catch { /* quota */ }
+  if (idbAvailable()) { await idbSet(e.storageKey, e.deviceRaw); await idbDel(deviceSidecar(e.storageKey)); }
+  _divergent.delete(mapKey); _reconciled.add(mapKey);
+  emitStatus();
+  _flushers.forEach((f) => { try { f(); } catch { /* noop */ } });   // goes out through the normal gated path
+  return { ok: true, used: "device" };
+}
+
+// For the banner: which copy is which, so the question can be asked in real terms.
+export function divergenceInfo(accessId, tool) {
+  const e = _divergent.get(`${accessId}:${tool}`);
+  if (!e) return null;
+  return { deviceBytes: (e.deviceRaw || "").length, savedBytes: (e.serverRaw || "").length, deviceKept: e.deviceKept };
+}
+
 const _flushers = new Set();   // each running autosync registers its push() so an 'online' event flushes all
 // Defence in depth for the outbound gate: when a TOOL reports that it could not load this device's copy
 // (the survey widget posts iotSurveyLoadFailed), the host stops pushing that key at all — not just the
@@ -343,6 +459,7 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   const mapKey = `${accessId}:${tool}`;
   _suspended.delete(mapKey);   // a (re)start always follows a successful seed
   _conflicts.delete(mapKey);   // …and a fresh seed is exactly how a conflict is resolved
+  _reconciled.delete(mapKey);  // every mount re-compares this device's copy with the row before pushing
   if (_status.blockedKeys.delete(mapKey)) emitStatus();   // a (re)start clears only THIS key
   let stopped = false;
   let readOnly = false;
@@ -363,6 +480,11 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   async function push() {
     if (stopped || readOnly || inFlight || _suspended.has(mapKey) || _conflicts.has(mapKey)) return;
     if (claimed && (_claims.get(mapKey) || {}).state === "held") return;   // somebody else is editing
+    // Never push a copy that has not been compared against the row. The interval calls push() directly,
+    // so this gate cannot live in the start-up prime alone — that is precisely how ASC0055 was wiped.
+    if (_divergent.has(mapKey)) return;
+    if (!_reconciled.has(mapKey) && !(await reconcileDeviceCopy(accessId, tool, storageKey))) return;
+    if (stopped) return;
     let cur;
     try { cur = localStorage.getItem(storageKey); } catch { return; }
     if (cur == null || cur === _lastPushed.get(mapKey)) { _status.pending.delete(mapKey); emitStatus(); return; }
@@ -410,19 +532,10 @@ export function startToolAutosync(accessId, tool, storageKey, { intervalMs = 500
   }
   _flushers.add(push);
 
-  // Prime with the server copy so we only push actual edits… unless the server has nothing
-  // yet, in which case the current local copy IS worth backing up (first tick pushes it).
-  (async () => {
-    if (!_lastPushed.has(mapKey)) {
-      try {
-        const res = await fetch(`/api/tool-data?accessId=${encodeURIComponent(accessId)}&tool=${encodeURIComponent(tool)}`);
-        const r = await res.json();
-        if (r?.ok) _setBaseRev(accessId, tool, r.saved?.rev || "0");
-        if (r?.ok && r.saved?.data != null) _lastPushed.set(mapKey, r.saved.data);
-      } catch { /* fall through */ }
-    }
-    await push();
-  })();
+  // Prime by COMPARING this device's copy with the row — not merely by reading the row's rev, which
+  // is all this used to do before pushing localStorage over it. push() re-checks anyway, so a prime
+  // that cannot reach the server simply leaves the key unreconciled and the next tick tries again.
+  (async () => { await reconcileDeviceCopy(accessId, tool, storageKey); await push(); })();
 
   const timer = setInterval(push, intervalMs);
   const release = () => { if (claimed) { try { navigator.sendBeacon?.("/api/tool-claim", new Blob([JSON.stringify({ accessId, tool, editorId: editorId(), action: "release" })], { type: "application/json" })); } catch { /* best effort */ } } };
