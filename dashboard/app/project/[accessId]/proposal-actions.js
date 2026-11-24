@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
+  getJobByAccessId, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, signedSurveyRefusal, logSurveyWriteRefusal, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -1103,6 +1103,13 @@ export async function saveToolDataAction(accessId, tool, data, { allowEmpty = fa
   // never whether the target is real, and there is no foreign key on project_tool_data. A stale tab
   // on a deleted project would otherwise keep recreating orphan rows. The two write paths must agree.
   if (!getJobByAccessId(accessId)) return { error: "That project no longer exists." };
+  // A SIGNED survey is a record, not a working copy — admin only, same as /api/tool-data, or it is
+  // not enforced at all. ASC0055 was signed off and was still overwritten twice.
+  const signedRefusal = signedSurveyRefusal(accessId, tool, tok.role);
+  if (signedRefusal) {
+    logSurveyWriteRefusal(accessId, tool, actorName(tok), tok.role, signedRefusal, (data || "").length);
+    return { error: signedRefusal, signedOff: true };
+  }
   // B14, same gate as /api/tool-data: refused when behind.
   if (toolWriteIsStale(accessId, tool, baseRev)) {
     return { error: "This was changed somewhere else since you opened it. Reload to get the latest copy.", stale: true };

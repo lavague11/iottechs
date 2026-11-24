@@ -1851,6 +1851,24 @@ function init() {
   const saCols = db.prepare("PRAGMA table_info(stage_acceptances)").all().map(c => c.name);
   if (!saCols.includes("fingerprint")) db.exec("ALTER TABLE stage_acceptances ADD COLUMN fingerprint TEXT");
 
+  // ---- Refused writes against a SIGNED survey (append-only) ----
+  // ASC0055 was signed off and still got overwritten, twice. Once a survey is accepted it is a
+  // record, not a working copy: only an admin may change it, and every refusal is kept with its
+  // reason so a silent "my change didn't save" has somewhere to be looked up.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS survey_write_refusals (
+      id                INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_access_id TEXT NOT NULL,
+      tool              TEXT NOT NULL,
+      actor             TEXT,
+      role              TEXT,
+      reason            TEXT NOT NULL,
+      bytes             INTEGER,
+      created_at        TEXT DEFAULT (datetime('now','localtime'))
+    )
+  `);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_swr_project ON survey_write_refusals(project_access_id, created_at)`);
+
   // ---- Stage transition log — one row each time a project enters a stage, so we can report
   // "days in current stage" (real per-stage aging) instead of guessing off last activity. ----
   db.exec(`
@@ -8823,6 +8841,31 @@ export function getStageAcceptances(accessId) {
   rows.forEach((r) => { out[r.stage] = { by: r.accepted_by, at: r.created_at, fingerprint: r.fingerprint || null }; });
   return out;
 }
+// A SIGNED survey is a record, not a working copy. ASC0055 was signed off and was still overwritten
+// twice by a stale device copy, so the signature has to mean something at the write path: once the
+// site survey is accepted, only an admin may change it. Scoped to the survey tools — the mockup and
+// the schedule keep their own rules.
+export function surveyIsSigned(accessId) {
+  const row = db.prepare("SELECT 1 FROM stage_acceptances WHERE project_access_id=? AND stage='site_survey'").get(String(accessId));
+  return !!row;
+}
+// Who may write a signed survey, and why a write was turned away. Returns null when the write may
+// proceed, or a reason string, which the caller both returns to the client and records.
+export function signedSurveyRefusal(accessId, tool, role) {
+  if (tool !== "survey" && tool !== "survey2") return null;
+  if (!surveyIsSigned(accessId)) return null;
+  if (role === "admin") return null;
+  return "This survey is signed off — only an admin can change it.";
+}
+export function logSurveyWriteRefusal(accessId, tool, actor, role, reason, bytes) {
+  db.prepare("INSERT INTO survey_write_refusals (project_access_id, tool, actor, role, reason, bytes) VALUES (?,?,?,?,?,?)")
+    .run(String(accessId), String(tool), actor || null, role || null, String(reason), Number.isFinite(+bytes) ? +bytes : null);
+}
+export function getSurveyWriteRefusals(accessId, limit = 50) {
+  return db.prepare("SELECT tool, actor, role, reason, bytes, created_at FROM survey_write_refusals WHERE project_access_id=? ORDER BY id DESC LIMIT ?")
+    .all(String(accessId), Math.max(1, Math.min(500, +limit || 50)));
+}
+
 // Re-approving with a new fingerprint UPDATES the record (INSERT OR IGNORE would keep the stale
 // one), so a fresh approval after a change captures the current data's fingerprint.
 export function acceptStage(accessId, stage, byName, fingerprint) {

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, toolRev } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, toolRev, signedSurveyRefusal, logSurveyWriteRefusal } from "../../../lib/db";
 import { claimStatus, isClaimedTool } from "../../../lib/tool-claim.js";
 import { can } from "../../../lib/roles";
 import { toolHasData } from "../../../lib/tool-data";
@@ -112,6 +112,14 @@ export async function POST(req) {
   // exists — unbounded growth from an abandoned tab, and it means deleting a project does not
   // reliably remove its tool data. Resolve the project first.
   if (!getJobByAccessId(accessId)) return Response.json({ error: "That project no longer exists." });
+  // A SIGNED survey is a record, not a working copy. ASC0055 was signed off and was still overwritten
+  // twice, so the signature has to bite here, before any of the staleness machinery. Admin only, and
+  // the refusal is recorded with its reason so "my change didn't save" has somewhere to be looked up.
+  const signedRefusal = signedSurveyRefusal(accessId, tool, tok.role);
+  if (signedRefusal) {
+    logSurveyWriteRefusal(accessId, tool, tok.name || tok.email || null, tok.role, signedRefusal, data.length);
+    return Response.json({ error: signedRefusal, signedOff: true });
+  }
   // B14: refuse a write made against a version the caller did not read. One that sends a stale rev
   // is told, rather than silently winning. `stale: true` lets the client re-seed instead of retrying
   // the same bytes.
