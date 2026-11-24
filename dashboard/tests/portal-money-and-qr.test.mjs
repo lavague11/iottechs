@@ -16,6 +16,7 @@ import { STATE_ACTION, CUSTOMER_STATUS } from "../lib/project-status.js";
 const gateway = readFileSync(new URL("../app/project/[accessId]/gateway-client.jsx", import.meta.url), "utf8");
 const portal = readFileSync(new URL("../app/project/[accessId]/customer-portal.jsx", import.meta.url), "utf8");
 const sandbox = readFileSync(new URL("../app/project/[accessId]/sandbox-bar.jsx", import.meta.url), "utf8");
+const page = readFileSync(new URL("../app/project/[accessId]/page.jsx", import.meta.url), "utf8");
 
 // ---------------------------------------------------------------- who may see money
 
@@ -27,20 +28,25 @@ test("the capability itself: a tech may not see the customer's financials", () =
   assert.equal(can("vendor", "customer.financials.view"), false, "nor a vendor");
 });
 
-test("both money CTAs are gated on that capability, not on a role list", () => {
-  // A hand-written `role === "tech"` check is exactly what the house rules forbid, and it is how the
-  // vendor case gets missed.
-  assert.match(gateway, /const canSeeMoney = can\(cView, "customer\.financials\.view"\);/);
-  assert.match(gateway, /AWAITING_DEPOSIT:\s*canSeeMoney \?/, "deposit");
-  assert.match(gateway, /AWAITING_FINAL_PAYMENT: canSeeMoney \?/, "final payment");
+test("both money CTAs are gated on who may RECORD, which is admin only", () => {
+  // Superseded by STEP 8 of the lifecycle audit. The first cut gated the button on
+  // customer.financials.view, which a manager and a customer also hold -- but recording a payment is
+  // admin-only server-side (PAY_ADMIN), so gating the button on visibility offered a manager a
+  // refusal. The button follows the server now.
+  assert.match(gateway, /const canSeeMoney = can\(cView, "customer\.financials\.view"\);/, "the capability is still read");
+  assert.match(gateway, /const canRecordPay = cView === "admin";/, "but the BUTTON follows the ledger gate");
+  assert.match(gateway, /AWAITING_DEPOSIT:\s*canRecordPay \?/, "deposit");
+  assert.match(gateway, /AWAITING_FINAL_PAYMENT: canRecordPay \?/, "final payment");
   assert.ok(!/AWAITING_FINAL_PAYMENT: \{ label: "Record Final Payment"/.test(gateway), "the ungated version is gone");
 });
 
-test("the money STATUS is suppressed too, not just its button", () => {
-  // Leaving "Awaiting Final Payment" on screen with the button removed still tells a tech the job is
-  // unpaid, which is the part they may not see.
-  assert.match(gateway, /MONEY_STATES = new Set\(\["AWAITING_DEPOSIT", "AWAITING_FINAL_PAYMENT"\]\)/);
-  assert.match(gateway, /status=\{as && !\(MONEY_STATES\.has\(projState\) && !canSeeMoney\)/);
+test("the money STATUS is read-only for a role that may not see the figures, not hidden", () => {
+  // Also superseded: suppressing the hero entirely left a technician unable to tell that a job was
+  // waiting on PAYMENT rather than on them. They now see the status and never a button -- and never a
+  // number, because page.jsx gates the computation so a tech is not sent the balance at all.
+  assert.match(gateway, /status=\{as \? \{ state: projState/, "the status renders for every role");
+  assert.match(gateway, /MONEY_STATES = new Set\(\["AWAITING_DEPOSIT", "AWAITING_FINAL_PAYMENT"\]\)/, "the money states are still named");
+  assert.match(page, /const maySeeMoney = can\(initialView, "customer\.financials\.view"\);/, "and the figures stay capability-gated server-side");
 });
 
 test("the two money states are the ones the status engine calls money, and no others", () => {

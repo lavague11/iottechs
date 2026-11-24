@@ -212,6 +212,62 @@ not cloned. One project, no duplicate.
 F5 is the one to chase first: it is exactly the "one clear next action per stage" rule, broken at
 stage 1, and it points at the hero CTA map rather than at the gate.
 
+## STEP 8 — the financial sweep
+
+**The headline: the server was never leaking payments to a technician.** The suspicion came from the
+UI, where the "Awaiting Final Payment" hero and its Record button rendered for every role. That was
+real and is fixed (`86eed71d`). Underneath, every money gate already excluded `tech`.
+
+What *was* wrong: recording money was open to a **manager** as well as an admin, the UI offered a
+button to roles the server would refuse, and a role that may not see the money saw **no status at
+all** — so a technician could not tell a job was waiting on payment rather than on them.
+
+| Action | Who could, before | Who should | Fixed? |
+|---|---|---|---|
+| Record a payment | admin, manager · customer (submits, pending) | **admin** · customer submits | **Yes** — `PAY_ADMIN` |
+| Confirm a payment | admin, manager | **admin** | **Yes** |
+| Remove a payment | admin, manager · customer (own pending only) | **admin** · customer cancels own pending | **Yes** |
+| Online pay (`/api/pay/create`) | admin, manager, owning customer — **403** otherwise | same | Already correct |
+| Invoices: send / schedule / cancel | admin, manager (`INV_STAFF`) | admin, manager | Already correct |
+| Proposal pricing, discounts, tax, deposit % | admin, manager, sales (`STAFF_EDIT`) | admin, manager, sales | Already correct |
+| Commission set | admin, manager | admin, manager | Already correct |
+| Commission / cost visibility | `cost.view` = admin, manager | same | Already correct |
+| Customer financial figures | `customer.financials.view` — **tech and vendor excluded** | same | Already correct |
+| Work order payout | tech sees their own; customer never | same | Already correct |
+
+**No refunds action exists** — there is no refund path in the codebase to leak.
+
+### The one thing I did NOT do, and why
+
+The brief asks that the technician's read-only card show **the amount remaining**. I shipped the
+status without any figure, deliberately:
+
+> `page.jsx` gates the *computation* of the money, not just its display — a tech is never sent the
+> numbers at all, with a comment citing Definition of Done rule 4 ("tech never sees customer
+> financials"). Showing a tech the balance means removing that protection and putting the figures in
+> a technician's payload.
+
+A technician now sees **"Awaiting Final Payment"** with no button and no number, which covers the
+operational need (do not chase this job, it is waiting on money). If the amount is genuinely wanted,
+it is a deliberate widening of rule 4 and a one-line change to the capability gate — **say so and I
+will make it**, but I would not do it silently.
+
+### Still owed on STEP 8
+
+The live 403 proof as a technician needs a tech session, and a tech login is a password — which
+stops with the owner by standing rule. The enforcement and its tests are in; the live call is a
+hand-off. `/api/pay/create` is the right endpoint to prove it with, since it is REST and already
+answers a real 403.
+
+## F6 and F7 — logged, not built (Medium)
+
+| # | Finding | Size | Type |
+|---|---|---|---|
+| F6 | **Placement never asks what a camera is or where.** Every camera lands as "Camera N" with an empty location, and **camera type (dome / bullet / turret / PTZ) does not exist as a data field at all**. STEP 6 asks whether a tech can see type, location and notes per camera — with no type field, the answer is no. Proposal: ask for type and location at placement, type stored as a real field on the device. | **Medium** | UX + data |
+| F7 | **"No room" has no value, so the PDF prints "Unassigned".** Locations come from room/zone assignment; an outdoor satellite survey has no rooms, so `locName` stays empty for every camera. This is the same root cause as the PDF legend complaint. Proposal: default an unroomed device to **"Outdoor"**, saved in the data, so the PDF, the customer layout and the tech list all agree. | **Medium** | Bug (data) |
+
+F6 and F7 are one change in two places: a device needs a *type* and always has a *location*.
+
 ## Open questions before STEP 1
 
 1. **The brief is truncated** — STEP 5 ends mid-sentence ("wait time between stages (how long the

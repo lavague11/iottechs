@@ -761,6 +761,10 @@ export async function finalizePcpAction(accessId, patch) {
 
 // ---- Approval & Deposit stage: signing, payments, acceptances, work order ----
 const STAFF = new Set(["admin", "manager"]);
+// Money in and out of the ledger is ADMIN ONLY, narrower than STAFF. Recording, confirming and
+// removing a payment are the three actions that change what the customer owes, and they are the
+// ones worth keeping to one pair of hands. Everything else a manager does is unchanged.
+const PAY_ADMIN = new Set(["admin"]);
 
 // Bundle the approval page needs in one round-trip: sanitized proposal + payments + acceptances.
 export async function getApprovalDataAction(accessId) {
@@ -848,7 +852,7 @@ export async function recordPaymentAction(accessId, payment) {
   if (!tok) return { error: "Not authenticated." };
   const isCustomer = tok.role === "customer";
   if (isCustomer && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
-  if (!isCustomer && !STAFF.has(tok.role)) return { error: "Unauthorized." };
+  if (!isCustomer && !PAY_ADMIN.has(tok.role)) return { error: "Only an admin can record a payment." };
   if (!(+payment?.amount > 0)) return { error: "Enter an amount." };
   const payments = addProjectPayment(accessId, {
     amount: payment.amount, method: payment.method, kind: payment.kind,
@@ -887,8 +891,8 @@ export async function deletePaymentAction(accessId, id) {
     const p = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
     if (!p || p.source !== "customer" || p.status !== "pending")
       return { error: "You can only cancel a pending payment you submitted." };
-  } else if (!STAFF.has(tok.role)) {
-    return { error: "Only Admin & Manager can remove payments." };
+  } else if (!PAY_ADMIN.has(tok.role)) {
+    return { error: "Only an admin can remove a payment." };
   }
   const before = (getProjectPayments(accessId) || []).find((x) => String(x.id) === String(id));
   const payments = deleteProjectPayment(accessId, id, { id: tok.id ?? null, name: actorName(tok) });
@@ -927,7 +931,7 @@ export async function voidTechSignatureAction(accessId) {
 // toward the balance and the deposit gate.
 export async function confirmPaymentAction(accessId, id) {
   const tok = await getSessionRole();
-  if (!tok || !STAFF.has(tok.role)) return { error: "Only Admin & Manager can confirm payments." };
+  if (!tok || !PAY_ADMIN.has(tok.role)) return { error: "Only an admin can confirm a payment." };
   const payments = confirmProjectPayment(accessId, id);
   // Now the money is received → email the customer a "payment recorded" confirmation with the amount.
   const confirmed = (payments || []).find((x) => String(x.id) === String(id));

@@ -3503,9 +3503,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // views (survey/proposal/schedule/workorder/closeout/completion) or an action callback (payment →
       // the Record Payment modal). Labels mirror the canonical STATE_ACTION primaries (project-status.js).
       const canSeeMoney = can(cView, "customer.financials.view");
-      // The two states whose whole subject is money. For a role that cannot see financials the hero
-      // is suppressed entirely rather than reworded — there is nothing true and useful to say in its
-      // place, and an empty-shell banner is worse than no banner.
+      // Recording money is ADMIN ONLY and enforced in recordPaymentAction. The button follows the
+      // server rather than the other way round: a manager who can see the balance still gets no
+      // Record button, because pressing it would only produce a refusal.
+      const canRecordPay = cView === "admin";
+      // The two states whose whole subject is money. A role that cannot see financials still sees the
+      // STATUS — a technician needs to know the job is waiting on payment so they do not chase it —
+      // but never the button, which is an action they cannot take. No figures either: the server never
+      // sends a tech the balance (page.jsx gates the computation itself), so there is nothing to show.
       const MONEY_STATES = new Set(["AWAITING_DEPOSIT", "AWAITING_FINAL_PAYMENT"]);
       const CTA = {
         INTAKE:             { label: "Open Site Survey", view: "survey" },
@@ -3521,11 +3526,11 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // (`customer.financials.view` excludes tech), so "Record Deposit" / "Record Final Payment" —
         // and the money-flavoured status above them — never render for one. Their work does not
         // change because an invoice is unpaid, and the hero would be an action they cannot take.
-        AWAITING_DEPOSIT:   canSeeMoney ? { label: "Record Deposit", action: "payment" } : null,
+        AWAITING_DEPOSIT:   canRecordPay ? { label: "Record Deposit", action: "payment" } : null,
         READY_TO_SCHEDULE:  { label: "Schedule Install", view: "schedule" },
         INSTALL_SCHEDULED:  { label: "View Schedule", view: "schedule" },
         INSTALL_IN_PROGRESS:{ label: "Open Work Order", view: "workorder" },
-        AWAITING_FINAL_PAYMENT: canSeeMoney ? { label: "Record Final Payment", action: "payment" } : null,
+        AWAITING_FINAL_PAYMENT: canRecordPay ? { label: "Record Final Payment", action: "payment" } : null,
         // COMPLETE / CLOSED_NOT_COMPLETED: nothing to do — no primary action.
       };
       // Card verb reflects state: Create (never started) · Edit (started/submitted) · Completed (signed/done).
@@ -3577,7 +3582,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // inside Completion. Shown to anyone on the project once the QR exists — it is the thing the
         // customer scans to set their app up, and staff get asked for it constantly.
         lp.system_qr && { key: "qr", label: "System QR", icon: SI.qr, onClick: () => setHubQrOpen(true) },
-        (staffFinance?.hasContract && !staffFinance?.paidInFull) && { key: "pay", label: "Record Payment", tone: "pay", icon: SI.pay, onClick: () => setHubPayOpen(true) },
+        (canRecordPay && staffFinance?.hasContract && !staffFinance?.paidInFull) && { key: "pay", label: "Record Payment", tone: "pay", icon: SI.pay, onClick: () => setHubPayOpen(true) },
         { key: "schedule", label: hubAppt ? "Reschedule" : "Schedule", view: "schedule", icon: SI.cal },
         lp.contact_phone && { key: "call", label: "Call", href: `tel:${lp.contact_phone}`, icon: SI.phone },
         lp.contact_email && { key: "email", label: "Email", href: `mailto:${lp.contact_email}`, icon: SI.mail },
@@ -3588,7 +3593,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           <StaffHub
             accessId={lp.access_id}
             project={lp}
-            status={as && !(MONEY_STATES.has(projState) && !canSeeMoney) ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
+            status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
             finance={staffFinance}
             appt={hubAppt}
             phases={simple3.phases}
