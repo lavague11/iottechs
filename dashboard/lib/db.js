@@ -1868,6 +1868,9 @@ function init() {
     )
   `);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_swr_project ON survey_write_refusals(project_access_id, created_at)`);
+  // "refused" or "allowed" — an edit to a job with a signed proposal is recorded too, not just a refusal.
+  const swrCols = db.prepare("PRAGMA table_info(survey_write_refusals)").all().map(c => c.name);
+  if (!swrCols.includes("outcome")) db.exec("ALTER TABLE survey_write_refusals ADD COLUMN outcome TEXT DEFAULT 'refused'");
 
   // ---- Stage transition log — one row each time a project enters a stage, so we can report
   // "days in current stage" (real per-stage aging) instead of guessing off last activity. ----
@@ -8861,21 +8864,29 @@ export function surveyIsSigned(accessId) {
 }
 // Who may write a signed survey, and why a write was turned away. Returns null when the write may
 // proceed, or a reason string, which the caller both returns to the client and records.
+// Only a survey the CUSTOMER signed is admin-only. A signed PROPOSAL does not lock the survey: the
+// proposal is the signed document, the survey is the working drawing behind it, and techs on live
+// jobs need it. The overwrite that wiped ASC0055 is stopped by the claim + lease + reconcile gates,
+// which apply to every survey regardless — a lock on staff was never what stood between it and the
+// loss. Every edit to a job with a signed proposal is still recorded (see signedJobEditNote).
 export function signedSurveyRefusal(accessId, tool, role) {
   if (tool !== "survey" && tool !== "survey2") return null;
-  const why = surveyLockReason(accessId);
-  if (!why) return null;
+  if (surveyLockReason(accessId) !== "site_survey_acceptance") return null;
   if (role === "admin") return null;
-  return why === "signed_proposal"
-    ? "This project has a signed proposal, so the survey is locked — only an admin can change it."
-    : "This survey is signed off — only an admin can change it.";
+  return "This survey is signed off — only an admin can change it.";
 }
-export function logSurveyWriteRefusal(accessId, tool, actor, role, reason, bytes) {
-  db.prepare("INSERT INTO survey_write_refusals (project_access_id, tool, actor, role, reason, bytes) VALUES (?,?,?,?,?,?)")
-    .run(String(accessId), String(tool), actor || null, role || null, String(reason), Number.isFinite(+bytes) ? +bytes : null);
+// Not a refusal — a note. Returned when the write is going ahead on a job whose proposal is signed,
+// so the caller records who changed the drawing behind a signed document.
+export function signedJobEditNote(accessId, tool) {
+  if (tool !== "survey" && tool !== "survey2") return null;
+  return surveyLockReason(accessId) === "signed_proposal" ? "Edit saved to a job with a signed proposal." : null;
+}
+export function logSurveyWriteRefusal(accessId, tool, actor, role, reason, bytes, outcome = "refused") {
+  db.prepare("INSERT INTO survey_write_refusals (project_access_id, tool, actor, role, reason, bytes, outcome) VALUES (?,?,?,?,?,?,?)")
+    .run(String(accessId), String(tool), actor || null, role || null, String(reason), Number.isFinite(+bytes) ? +bytes : null, String(outcome));
 }
 export function getSurveyWriteRefusals(accessId, limit = 50) {
-  return db.prepare("SELECT tool, actor, role, reason, bytes, created_at FROM survey_write_refusals WHERE project_access_id=? ORDER BY id DESC LIMIT ?")
+  return db.prepare("SELECT tool, actor, role, reason, bytes, outcome, created_at FROM survey_write_refusals WHERE project_access_id=? ORDER BY id DESC LIMIT ?")
     .all(String(accessId), Math.max(1, Math.min(500, +limit || 50)));
 }
 

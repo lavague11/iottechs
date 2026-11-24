@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { parseToken, parseAccessToken, parseSvcToken } from "../../../lib/auth";
-import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, toolRev, signedSurveyRefusal, logSurveyWriteRefusal } from "../../../lib/db";
+import { getJobByAccessId, getToolData, saveToolData, TOOL_KEYS, getServiceCall, customerOwnsProjectAccount, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, toolRev, signedSurveyRefusal, signedJobEditNote, logSurveyWriteRefusal } from "../../../lib/db";
 import { claimStatus, isClaimedTool } from "../../../lib/tool-claim.js";
 import { can } from "../../../lib/roles";
 import { toolHasData } from "../../../lib/tool-data";
@@ -150,6 +150,9 @@ export async function POST(req) {
     return Response.json({ error: "Refused: that would replace the saved survey with an empty one." });
   }
   const saved = saveToolData(accessId, tool, data, tok.name || tok.email || tok.role);
+  // The survey is the drawing behind a signed proposal. Staff may change it; it is recorded.
+  const note = signedJobEditNote(accessId, tool);
+  if (note) logSurveyWriteRefusal(accessId, tool, tok.name || tok.email || null, tok.role, note, data.length, "allowed");
   const { revalidatePath } = await import("next/cache");
   revalidatePath(`/project/${accessId}`);
   // the rev the client should now claim on its next write (B14)

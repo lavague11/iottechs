@@ -71,16 +71,39 @@ test("a project with no acceptance at all is untouched by any of this", () => {
 // THE SECOND RULE, and the one that actually covers ASC0055. Its survey carries no site_survey
 // acceptance; what it has is a SIGNED PROPOSAL. The survey is the thing that proposal was priced and
 // drawn from, so editing it afterwards edits the thing under a signature.
-test("a signed PROPOSAL locks the survey too, even with no survey acceptance", () => {
+// A SIGNED PROPOSAL DOES NOT LOCK THE SURVEY. The proposal is the signed document; the survey is the
+// working drawing behind it, and a tech on a live job needs it. The first cut of this guard locked
+// both and blocked techs on real jobs. What stops the overwrite is the claim + lease + reconcile
+// gates, which apply to every survey whether anything is signed or not — a lock on staff was never
+// the thing standing between ASC0055 and its loss.
+test("a signed PROPOSAL does NOT lock the survey — staff and techs can still edit", () => {
   const ID2 = "SIG0002";
   assert.equal(db.surveyLockReason(ID2), null, "nothing yet");
   dbRaw().prepare("INSERT INTO proposals (project_access_id, version, status, payload) VALUES (?,1,'draft','{}')").run(ID2);
-  assert.equal(db.surveyLockReason(ID2), null, "an UNSIGNED proposal locks nothing");
+  assert.equal(db.surveyLockReason(ID2), null, "an UNSIGNED proposal is nothing");
   dbRaw().prepare("UPDATE proposals SET signed_name='The Customer', signed_at=datetime('now','localtime') WHERE project_access_id=?").run(ID2);
-  assert.equal(db.surveyLockReason(ID2), "signed_proposal", "signed -> locked, by the proposal rule");
-  assert.equal(db.surveyIsSigned(ID2), true);
-  assert.match(db.signedSurveyRefusal(ID2, "survey2", "tech"), /signed proposal/i, "and the reason says which rule");
-  assert.equal(db.signedSurveyRefusal(ID2, "survey2", "admin"), null, "admin still can");
+  assert.equal(db.surveyLockReason(ID2), "signed_proposal", "the reason is still reported…");
+  for (const role of ["admin", "manager", "sales", "tech"]) {
+    assert.equal(db.signedSurveyRefusal(ID2, "survey2", role), null, `${role} may still edit a signed-proposal job`);
+  }
+  // …but the edit is recorded, because it changes the drawing behind a signed document.
+  const note = db.signedJobEditNote(ID2, "survey2");
+  assert.match(note, /signed proposal/i, "the write is noted");
+  db.logSurveyWriteRefusal(ID2, "survey2", "Tech Person", "tech", note, 4096, "allowed");
+  const rows = db.getSurveyWriteRefusals(ID2);
+  assert.equal(rows[0].outcome, "allowed", "recorded as an allowed edit, not a refusal");
+  assert.equal(rows[0].actor, "Tech Person");
+  // and a job with nothing signed is not noted at all
+  assert.equal(db.signedJobEditNote("NOPE0001", "survey2"), null);
+});
+
+test("BOTH write paths record an allowed edit to a signed-proposal job", () => {
+  const route = readFileSync(new URL("../app/api/tool-data/route.js", import.meta.url), "utf8");
+  const action = readFileSync(new URL("../app/project/[accessId]/proposal-actions.js", import.meta.url), "utf8");
+  for (const [src, who] of [[route, "POST /api/tool-data"], [action, "saveToolDataAction"]]) {
+    assert.match(src, /signedJobEditNote\(accessId, tool\)/, `${who} asks after saving`);
+    assert.match(src, /"allowed"\)/, `${who} records it as allowed`);
+  }
 });
 
 test("the survey acceptance rule outranks the proposal rule in the reason given", () => {

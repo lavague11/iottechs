@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import {
-  getJobByAccessId, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, signedSurveyRefusal, logSurveyWriteRefusal, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
+  getJobByAccessId, toolWriteIsStale, toolWriteNeedsClaim, getToolClaim, signedSurveyRefusal, signedJobEditNote, logSurveyWriteRefusal, getActiveProposal, getPublishedProposal, getWorkOrderProposal, getProposalChangeState, getProposalHistory, getProposalVersionRow, saveProposalDraft, markProposalSent,
   reviseProposal, cancelRevision, selectProposalOption, requestProposalChanges,
   getPriceBook, setPriceBook, setProposalTechPricing, setProposalCustomerFlags, setWorkOrderFinalized,
   signProposal, markProposalReviewed, acceptWorkOrder, getProjectPayments, addProjectPayment, deleteProjectPayment,
@@ -1148,6 +1148,8 @@ export async function saveToolDataAction(accessId, tool, data, { allowEmpty = fa
     }
   }
   const saved = saveToolData(accessId, tool, payload, actorName(tok));
+  const signedJobNote = signedJobEditNote(accessId, tool);
+  if (signedJobNote) logSurveyWriteRefusal(accessId, tool, actorName(tok), tok.role, signedJobNote, (payload || "").length, "allowed");
   return { ok: true, saved: { updated_at: saved.updated_at } };
 }
 const survey2OrSurveyHasData = (tool, raw) => (tool === "survey2" ? survey2HasData(raw) : surveyHasData(raw));
