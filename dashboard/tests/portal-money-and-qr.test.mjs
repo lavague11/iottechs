@@ -54,19 +54,23 @@ test("the two money states are the ones the status engine calls money, and no ot
 
 // ---------------------------------------------------------------- the demo bar
 
-test("a sticky header starts below the demo bar instead of under it", () => {
-  // The bar measures itself and publishes --sbx-h; every sticky top in the project view reads it, so
-  // the fix holds whichever header is on screen rather than only the one that was reported.
+test("the FIXED portal shell starts below the demo bar", () => {
+  // Measured on the live page: `.cpv` is position:fixed;inset:0, so it began at the top of the window
+  // and the bar (sticky, z-index 90) painted straight over its header — the row holding the customer's
+  // name. The first attempt offset `.cpv-head` instead and did nothing, because that header computes
+  // to position:static and `top` is meaningless on a static element. The SHELL is the thing to move.
+  assert.match(portal, /position:fixed;inset:var\(--sbx-h,0px\) 0 0 0;overflow-y:auto/, "the shell starts below the bar");
+  assert.ok(!/\.cpv\{[^}]*position:fixed;inset:0;/.test(portal), "and no longer pins to the window top");
   assert.match(sandbox, /--sbx-h/, "the bar still publishes its height");
   assert.match(sandbox, /\.sbx\{position:sticky;top:0;z-index:90/, "and still pins to the top");
-  assert.match(portal, /\.cpv-head\{position:sticky;top:var\(--sbx-h,0px\);/, "portal header");
-  assert.match(portal, /\.cpv-ovl-bar\{position:sticky;top:var\(--sbx-h,0px\);/, "overlay bar");
+  // Inside an already-offset shell, a sticky child sticks to 0 — offsetting it again would push it down
+  // by the bar's height a second time.
+  assert.match(portal, /\.cpv-head\{position:sticky;top:0;/, "the header sticks to the shell, not the window");
+  assert.match(portal, /\.cpv-ovl-bar\{position:sticky;top:0;/, "same for the overlay bar");
+  // A fixed overlay is viewport-relative, so it keeps its own offset.
+  assert.match(portal, /\.cpv-ovl\{position:fixed;top:var\(--sbx-h,0\)/, "fixed overlays still clear the bar");
+  // The legacy deck masthead sits in normal flow beside the bar, so it keeps its offset too.
   assert.match(gateway, /\.pvx \.masthead\{position:sticky;top:var\(--sbx-h,0px\);/, "deck masthead");
-  // nothing in the project view may still pin to a bare top:0 under the bar
-  for (const [src, who] of [[portal, "customer-portal.jsx"], [gateway, "gateway-client.jsx"]]) {
-    const bare = [...src.matchAll(/\.(cpv-head|cpv-ovl-bar|masthead)\{position:sticky;top:0/g)];
-    assert.equal(bare.length, 0, `${who} still has a header pinned under the demo bar`);
-  }
 });
 
 // ---------------------------------------------------------------- the QR
