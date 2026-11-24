@@ -192,6 +192,26 @@ One table per role. Steps are counted **from the project page**, as the brief as
 
 ---
 
+## STEP 1 — the test project (done)
+
+**`ASC73671` — "TEST — Audit Customer"**, created on production 2026-11-24 15:59 UTC.
+Contact `aelzoghabi@gmail.com` · (201) 555-0100 (a reserved fiction number, so no stranger is ever
+texted) · 2503 Jay Pl, Union, NJ 07083 · Security Cameras / CCTV · Commercial · built from scratch,
+not cloned. One project, no duplicate.
+
+### Findings from the intake alone — five, before a single stage was walked
+
+| # | Finding | Severity | Where |
+|---|---|---|---|
+| F1 | **"Start From" has no *Blank* option.** It offers only "Import Proposal" and "Previous Project", and defaults to `import`. Building from scratch — the ordinary case — is the unnamed state you reach by ignoring the control, while the UI says it will import and shows "PDF or image of an existing proposal · up to 10 MB" underneath. The code comment admits it: `useState("import")  // nothing chosen = start blank`. | **High** — the default misdescribes what will happen | `admin-shell.jsx:247,530-549` |
+| F2 | **The contact name is not required on the default path.** `required={startFrom !== "import"}` — so with the default selected, a project can be created with no contact name at all. | **Medium** | `admin-shell.jsx:452` |
+| F3 | **The contact field has no label and no placeholder.** Every other field in the modal has one. | Low (accessibility) | `admin-shell.jsx:452` |
+| F4 | **Create Project succeeded but the modal stayed open and never navigated.** The project was created; the admin is given no sign of it. Pressing the button again is the obvious next move, and would make a duplicate. | **High** — invites duplicate records | New Project modal |
+| F5 | **The next action at stage 1 is wrong.** On the new project the hero reads **"Create Proposal"**, while the dashboard card for the same job says *"Schedule the survey today"* and the `inquiry` gate is *"Survey appointment scheduled"*. Three sources, three different next actions, at the very first stage. | **High** — contradicts `STAGE_FLOW` | hero vs `stage-flow.js` |
+
+F5 is the one to chase first: it is exactly the "one clear next action per stage" rule, broken at
+stage 1, and it points at the hero CTA map rather than at the gate.
+
 ## Open questions before STEP 1
 
 1. **The brief is truncated** — STEP 5 ends mid-sentence ("wait time between stages (how long the
