@@ -111,14 +111,55 @@ real time): a write to a survey that already holds work must carry a claim, and 
 lease means only one editor writes a row at a time. Both enforced on BOTH write paths. Verified with
 two tabs.
 
-**The clean source** is the Hostinger files backup **2026-11-22 02:30** — ASC0055 row written
-2026-11-03 16:43:55, holding Floor 1 (6 cameras) AND Floor 2 (9 cameras) intact. Saved as a 197 KB
-JSON in the session scratchpad (`asc0055-clean-survey2.json`, sha256 `ddc5c874633002ed…`); both
-1.1 GB archives and the extracted databases were deleted. **The restore is NOT done — it waits for
-the owner.**
+**The clean source** was the Hostinger files backup **2026-11-22 02:30** — ASC0055 row written
+2026-11-03 16:43:55, holding Floor 1 (6 cameras) AND Floor 2 (9 cameras) intact.
 
 **Where NVR 29-38 came from: nowhere else.** ASC0055 is the only project in either backup that
 carries an `nvr`-kind device at all. They were generated inside its own row, not copied in.
+
+### THE REAL CAUSE — localStorage is pushed over the server row on every page open
+
+The claim/lease fix above closed a real hole, but it was **not** the one that kept wiping ASC0055.
+Proven live on 2026-11-24: the row was restored at 07:28:03, and **34 seconds later, simply opening
+the project page in ONE tab wiped it again** (rev `c453f859…` → `e247b574…`, back to ten NVRs).
+
+`startToolAutosync`'s prime (`tool-sync.js:415-425`) reads the server row **only to harvest its
+rev** — `_setBaseRev(r.saved.rev)` and `_lastPushed.set(r.saved.data)` — and then `push()` sends
+whatever is in **localStorage**. Every guard passes, because every guard only ever asked *"did you
+read the row?"*, never *"is what you are about to push derived from it?"*:
+
+| guard | why it passed |
+|---|---|
+| `toolWriteIsStale` | `baseRev` was fetched one tick earlier — perfectly current |
+| `toolWriteNeedsClaim` | a `baseRev` was present, so it returns false |
+| the editing lease | the tab legitimately holds it; it is the only editor |
+| `emptyOverContent` | the stale blob is not empty — it has ten devices |
+
+`seedToolData` makes it inevitable: at line 232, **when localStorage holds a copy with content it
+returns without ever reading the server**, so the device copy is never reconciled. Any browser
+carrying an old copy silently re-wipes the row every time the project is opened.
+
+**Confirmed on the owner's own Chrome:** it held the exact 114,117-byte ten-NVR blob in BOTH
+localStorage and IndexedDB — the source of the 05:47 write. That browser also carries survey copies
+for **32 other projects**, each the same risk.
+
+### The restore — DONE, 2026-11-24
+
+Approved mode: **splice the devices only**, because production was no longer "the clean row minus
+cameras". It held work done AFTER 11-03 that the backup does not have: Floor 1's traced floor plan
+(53,887-byte drawn background + an 11,228-byte plan), Floor 2's head-end position, and 16 cable
+runs — two of which (`cwq9ge1u`, `crfr9p5t`) are **Camera 8's and Camera 11's**, orphaned by the
+wipe and reattached the moment the cameras came back. A full overwrite would have destroyed all of it.
+
+Sequence: backed up the damaged row → cleared the poisoned device copy in both browsers → spliced
+the 15 cameras onto the live row, asserting **every field except the two device lists was
+byte-identical** → verified 6/9/0 with runs 1/16/0 and Floor 1's traced plan intact → three reloads,
+rev unchanged at `42fdde7caddae5e2`. All ASC0055 JSON then deleted from the scratchpad.
+
+**Still owed:** the code fix. Clearing a cache is not a fix — any staff browser holding an old copy
+of any project can still do this. The guard chain must stop asking "did you read the row?" and start
+asking "is this push derived from the row I read?", and a device copy that diverges from the server
+must be surfaced to the person, never silently pushed.
 
 ## The fix pass
 
