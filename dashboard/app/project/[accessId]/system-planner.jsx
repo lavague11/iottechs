@@ -4,7 +4,7 @@ import { getToolDataAction } from "./proposal-actions";
 import SystemWalkthrough from "./system-walkthrough";
 import SurveyDevices from "./survey-devices";
 import { toolAccepted } from "./survey-approve";   // fingerprint check — drives the contextual footer CTA
-import { subscribeSyncStatus, retryToolSync, subscribeClaim, takeOverTool } from "./tool-sync";
+import { subscribeSyncStatus, retryToolSync, subscribeClaim, takeOverTool, useSavedCopy, pushDeviceCopy } from "./tool-sync";
 import { claimBanner } from "../../../lib/tool-claim";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
 import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS, submitRows, submitGaps } from "../../../lib/survey-rail";
@@ -542,6 +542,7 @@ export default function SystemPlanner({
     <div className={`syp${!customer ? " syp--staff" : ""}${fsOn ? " syp--fs" : ""}${paneMode === "review" ? " syp--review" : ""}`} ref={rootRef}>
       <style>{CSS}</style>
       {!customer && <EditingElsewhere accessId={accessId} />}
+      {!customer && <DeviceCopyConflict accessId={accessId} />}
       {!customer && <SyncBadge syncKey={`${accessId}:survey2`} />}
 
       {/* The submit lock, said out loud — on every step, not just Review. This is the ONE unlock control
@@ -757,6 +758,25 @@ function EditingElsewhere({ accessId }) {
       <span className="syp-claim-dot" aria-hidden="true" />
       <span>{line}</span>
       <button type="button" className="syp-claim-take" onClick={() => takeOverTool(accessId, "survey2")}>Take over</button>
+    </div>
+  );
+}
+
+// A copy on this device that is NOT derived from the saved row. It is never pushed and never discarded
+// on its own — the person picks. Default is the saved copy, which is already what is on screen, so the
+// quiet option is also the safe one. Two words a button, per the design constitution.
+function DeviceCopyConflict({ accessId }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => subscribeSyncStatus(setSt, `${accessId}:survey2`), [accessId]);
+  if (!st?.divergent) return null;
+  const choose = async (fn) => { setBusy(true); try { await fn(accessId, "survey2"); } finally { setBusy(false); } };
+  return (
+    <div className="syp-claim" role="alert">
+      <span className="syp-claim-dot" aria-hidden="true" />
+      <span>{st.divergent}</span>
+      <button type="button" className="syp-claim-take" disabled={busy} onClick={() => choose(useSavedCopy)}>Use saved</button>
+      <button type="button" className="syp-claim-take" disabled={busy} onClick={() => choose(pushDeviceCopy)}>Push this</button>
     </div>
   );
 }
