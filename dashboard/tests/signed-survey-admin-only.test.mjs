@@ -15,6 +15,11 @@ import { readFileSync } from "node:fs";
 
 process.env.DB_DIR = mkdtempSync(path.join(tmpdir(), "signed-survey-"));
 const db = await import("../lib/db.js");
+// A second connection to the SAME file, so the proposal rule can be set up with real rows rather than
+// by mocking the thing under test.
+const { DatabaseSync } = await import("node:sqlite");
+let _raw = null;
+const dbRaw = () => (_raw ||= new DatabaseSync(path.join(db.dbDir(), "dashboard.db")));
 
 // The acceptance and the refusal log are keyed on the access id, so these need no project row —
 // which also proves the guard does not quietly depend on one.
@@ -60,6 +65,29 @@ test("a refusal is recorded with its reason, and the log is append-only", () => 
 test("a project with no acceptance at all is untouched by any of this", () => {
   assert.equal(db.surveyIsSigned("NOPE0001"), false);
   assert.equal(db.signedSurveyRefusal("NOPE0001", "survey2", "tech"), null);
+  assert.equal(db.surveyLockReason("NOPE0001"), null);
+});
+
+// THE SECOND RULE, and the one that actually covers ASC0055. Its survey carries no site_survey
+// acceptance; what it has is a SIGNED PROPOSAL. The survey is the thing that proposal was priced and
+// drawn from, so editing it afterwards edits the thing under a signature.
+test("a signed PROPOSAL locks the survey too, even with no survey acceptance", () => {
+  const ID2 = "SIG0002";
+  assert.equal(db.surveyLockReason(ID2), null, "nothing yet");
+  dbRaw().prepare("INSERT INTO proposals (project_access_id, version, status, payload) VALUES (?,1,'draft','{}')").run(ID2);
+  assert.equal(db.surveyLockReason(ID2), null, "an UNSIGNED proposal locks nothing");
+  dbRaw().prepare("UPDATE proposals SET signed_name='The Customer', signed_at=datetime('now','localtime') WHERE project_access_id=?").run(ID2);
+  assert.equal(db.surveyLockReason(ID2), "signed_proposal", "signed -> locked, by the proposal rule");
+  assert.equal(db.surveyIsSigned(ID2), true);
+  assert.match(db.signedSurveyRefusal(ID2, "survey2", "tech"), /signed proposal/i, "and the reason says which rule");
+  assert.equal(db.signedSurveyRefusal(ID2, "survey2", "admin"), null, "admin still can");
+});
+
+test("the survey acceptance rule outranks the proposal rule in the reason given", () => {
+  const ID3 = "SIG0003";
+  dbRaw().prepare("INSERT INTO proposals (project_access_id, version, status, payload, signed_name) VALUES (?,1,'sent','{}','X')").run(ID3);
+  db.acceptStage(ID3, "site_survey", "The Customer", "fp-3");
+  assert.equal(db.surveyLockReason(ID3), "site_survey_acceptance", "the survey's own sign-off is the nearer reason");
 });
 
 // Both write paths, or it is not enforced at all — the same reason the claim guard is checked twice.

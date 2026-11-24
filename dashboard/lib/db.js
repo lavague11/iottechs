@@ -8845,17 +8845,30 @@ export function getStageAcceptances(accessId) {
 // twice by a stale device copy, so the signature has to mean something at the write path: once the
 // site survey is accepted, only an admin may change it. Scoped to the survey tools — the mockup and
 // the schedule keep their own rules.
+// WHY a survey is locked, or null. Two rules, because the first one alone did not cover ASC0055:
+//   "site_survey_acceptance" — the customer signed off the survey itself.
+//   "signed_proposal"        — the customer signed a proposal for this project. The survey is what
+//                              that proposal was priced and drawn from, so changing it afterwards
+//                              edits the thing under a signature. ASC0055 is covered by THIS rule.
+export function surveyLockReason(accessId) {
+  const id = String(accessId);
+  if (db.prepare("SELECT 1 FROM stage_acceptances WHERE project_access_id=? AND stage='site_survey'").get(id)) return "site_survey_acceptance";
+  if (db.prepare("SELECT 1 FROM proposals WHERE project_access_id=? AND signed_name IS NOT NULL LIMIT 1").get(id)) return "signed_proposal";
+  return null;
+}
 export function surveyIsSigned(accessId) {
-  const row = db.prepare("SELECT 1 FROM stage_acceptances WHERE project_access_id=? AND stage='site_survey'").get(String(accessId));
-  return !!row;
+  return !!surveyLockReason(accessId);
 }
 // Who may write a signed survey, and why a write was turned away. Returns null when the write may
 // proceed, or a reason string, which the caller both returns to the client and records.
 export function signedSurveyRefusal(accessId, tool, role) {
   if (tool !== "survey" && tool !== "survey2") return null;
-  if (!surveyIsSigned(accessId)) return null;
+  const why = surveyLockReason(accessId);
+  if (!why) return null;
   if (role === "admin") return null;
-  return "This survey is signed off — only an admin can change it.";
+  return why === "signed_proposal"
+    ? "This project has a signed proposal, so the survey is locked — only an admin can change it."
+    : "This survey is signed off — only an admin can change it.";
 }
 export function logSurveyWriteRefusal(accessId, tool, actor, role, reason, bytes) {
   db.prepare("INSERT INTO survey_write_refusals (project_access_id, tool, actor, role, reason, bytes) VALUES (?,?,?,?,?,?)")
