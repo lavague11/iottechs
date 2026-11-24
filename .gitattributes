@@ -1,0 +1,25 @@
+# Line endings are checked out as LF on every platform.
+#
+# WHY THIS FILE EXISTS. With core.autocrlf=true and no attributes, git rewrote the working tree to
+# CRLF on every checkout and merge. Many tests read source files and match them with regexes that
+# end a one-line function at `}\n` — those stop matching against `}\r\n`, so `npm test` reported
+# four failures that had nothing to do with the code and would vanish again after the next commit.
+# A suite whose result depends on which git command ran last cannot be trusted to catch anything.
+* text=auto eol=lf
+
+# Binary assets must never be touched.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+*.db    binary
+*.sqlite binary
+*.zip   binary
+*.gz    binary
