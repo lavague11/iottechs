@@ -444,9 +444,12 @@
   .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s ease}
   /* labels stay out of the way — revealed on hover, or while a camera is selected / being aimed (the label is the aim handle) */
   .devNode:hover .icLabel,.devNode.sel .icLabel,.devNode.aim .icLabel{opacity:1}
-  /* Always-visible short number badge (top-right of the marker); the full name shows on hover/select. */
-  .devNode .devNum{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:var(--ink,#101418);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(16,17,18,.4);z-index:6;pointer-events:none;transition:opacity .12s}
-  .devNode:hover .devNum,.devNode.sel .devNum{opacity:0}
+  /* Short number badge (top-right of the marker). QUIET BY DEFAULT: a plan of twenty markers wearing
+     twenty black badges reads as a cloud of numbers rather than a layout, so the badge — like the IC
+     label and the cone — appears only on hover, on the selected device, or when a panel card is
+     highlighted. Touch has no hover, so tapping a marker selects it and the number comes with it. */
+  .devNode .devNum{position:absolute;top:-5px;right:-5px;min-width:16px;height:16px;padding:0 3px;border-radius:8px;background:var(--ink,#101418);color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:1.5px solid #fff;box-shadow:0 1px 3px rgba(16,17,18,.4);z-index:6;pointer-events:none;opacity:0;transition:opacity .12s}
+  .devNode:hover .devNum,.devNode.sel .devNum,.devNode.hl .devNum{opacity:1}
   .devNode.drag .devNum{display:none!important}
   /* UNPLACED-CAMERA TRAY — a strip at the bottom edge of the canvas; chips drag onto the plan to place. */
   #unplacedTray{position:absolute;left:8px;right:8px;bottom:8px;z-index:14;display:none;flex-direction:column;gap:6px;
@@ -2593,7 +2596,7 @@
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
       lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag);   // the map emphasizes WHERE (location name "Dining 1"); falls back to the identity name/tag when no location is resolved
       lab.title=lab.textContent;
-      // Short NUMBER always on the map (labels used to collide); the full name rides the hover label.
+      // Short NUMBER for the marker; revealed on hover/select (CSS) so twenty markers do not read as twenty badges.
       var num=el.querySelector(".devNum");
       if(num){ var m=(lab.textContent||"").match(/(\d+)\s*$/); num.textContent = m ? m[1] : String(devices.indexOf(d)+1); }
       lab.style.left=(cen+br*Math.cos(a))+"px"; lab.style.top=(cen+br*Math.sin(a))+"px";        // label rides the camera border
