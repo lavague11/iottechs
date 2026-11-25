@@ -764,12 +764,22 @@ test("toolPayloadSendable: validity, not content", () => {
     "a mockup draft that reads as 'empty' is still valid and must still sync");
 });
 
-test("a tech who may unlock the survey may also save it and send it back", () => {
-  // Unlock without write is silent loss wearing a different hat: the acceptance is deleted, the edits
-  // live only in localStorage, and the autosync latches read-only on the refusal.
-  for (const cap of ["survey.edit", "survey.unlock", "survey.submit"]) {
-    assert.equal(can("tech", cap), true, `tech must have ${cap}`);
-    for (const role of ["customer", "vendor", "readonly"]) assert.equal(can(role, cap), false, `${role} must not have ${cap}`);
+test("the three survey write capabilities move together, and the field is not in them", () => {
+  // SUPERSEDED by the tech-role overhaul. This test used to assert that a technician held all three,
+  // on the reasoning that unlock-without-write is silent loss wearing a different hat — the acceptance
+  // is deleted, the edits live only in localStorage, and the autosync latches read-only on the
+  // refusal. That reasoning still holds, which is why the three must stay IDENTICAL; what changed is
+  // who is in them. A technician now READS the survey (floor plan, placements, cable routes, aim
+  // cones) and never authors it, so they are absent from all three at once and the failure mode never
+  // arises. Owner's allow-list: lib/tech-scope.js.
+  const holders = (cap) => ["admin", "manager", "sales", "tech", "customer", "vendor", "readonly"].filter((r) => can(r, cap));
+  const edit = holders("survey.edit");
+  for (const cap of ["survey.unlock", "survey.submit"]) {
+    assert.deepEqual(holders(cap), edit, `${cap} must hold exactly the same roles as survey.edit`);
+  }
+  assert.deepEqual(edit, ["admin", "manager", "sales"], "the office authors the survey");
+  for (const role of ["tech", "customer", "vendor", "readonly"]) {
+    for (const cap of ["survey.edit", "survey.unlock", "survey.submit"]) assert.equal(can(role, cap), false, `${role} must not have ${cap}`);
   }
   // Both server write paths agree, and neither widens any OTHER tool.
   const route = readFileSync(new URL("../app/api/tool-data/route.js", import.meta.url), "utf8");

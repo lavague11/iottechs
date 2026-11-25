@@ -5,6 +5,7 @@ import { getJobByAccessId, updateStage, maybeAutoAdvance, setSurveyDate, verifyU
 import { LOGIN_VIEW, PIN_VIEW, STAGES, stageLabel, stagesForType, serviceCodeLabel, propertyTypeLabel, phaseGate, canAdvanceTo } from "../../../lib/spec";
 import { MASTER_ORDER } from "../../../lib/stage-flow";
 import { can as roleCan } from "../../../lib/roles";
+import { fenceTok } from "../../../lib/tech-scope";
 import { canSandbox } from "../../../lib/sandbox";
 import { contactWriteError } from "../../../lib/contact-guard";
 import { makePreviewToken } from "../../../lib/auth";
@@ -341,12 +342,7 @@ function contactWriteErr(tok, accessId, fields) {
 }
 
 export async function updateProjectInfoAction(accessId, fields) {
-  const hdrs   = await headers();
-  const cookie = hdrs.get("cookie") || "";
-  const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  if (!raw) return { error: "Not authenticated." };
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = await parseToken(raw.trim());
+  const tok = await getSessionTok();
   if (!tok?.role) return { error: "Not authenticated." };
   // The contact RECORD (name / business / phone / email / address) is a staff edit — `project.contact.edit`,
   // checked here in the action that writes, not in a wrapper in front of it. A customer keeps exactly two
@@ -368,12 +364,7 @@ export async function updateProjectInfoAction(accessId, fields) {
 // Admin/manager: correct a project's service line (fixes a job mis-filed at intake). Re-points the
 // row icon and any NEW proposal's default service; existing links/PIN (access_id) are unchanged.
 export async function setProjectServiceAction(accessId, code) {
-  const hdrs   = await headers();
-  const cookie = hdrs.get("cookie") || "";
-  const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  if (!raw) return { error: "Not authenticated." };
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = await parseToken(raw.trim());
+  const tok = await getSessionTok();
   if (!tok?.role || !["admin", "manager"].includes(tok.role)) return { error: "Only Admin & Manager can change the service." };
   const res = setProjectService(accessId, code);
   if (!res.ok) return res;
@@ -412,8 +403,10 @@ export async function setPropertyTypeAction(accessId, value) {
 const ISSUE_REPORTERS = new Set(["tech", "manager", "admin"]);
 const ISSUE_ADJUDICATORS = new Set(["admin", "manager"]);
 const issueActor = (tok) => tok.name || tok.email || (tok.role === "tech" ? "Technician" : tok.role);
-async function issueTok(accessId) {
-  const tok = await getAnyTok();
+// `actionKey` passes through to the tech allow-list at the choke point: install issues and install
+// photos are field work, so the callers that a technician is allowed to make name themselves.
+async function issueTok(accessId, actionKey) {
+  const tok = await getAnyTok(actionKey);
   if (!tok) return { error: "Please unlock the project first." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   // A logged-in technician is scoped to the jobs they're on: the access roster, the work-order crew,
@@ -431,14 +424,14 @@ async function techOnProject(accessId, tok) {
   return !!(prop?.tech_signed_name && norm(prop.tech_signed_name) === norm(tok.name));
 }
 export async function listInstallIssuesAction(accessId) {
-  const { tok, error } = await issueTok(accessId);
+  const { tok, error } = await issueTok(accessId, "listInstallIssuesAction");
   if (error) return { ok: false, error, issues: [] };
   if (!["admin", "manager", "sales", "tech"].includes(tok.role)) return { ok: false, error: "Internal only.", issues: [] };
   const { listInstallIssues } = await import("../../../lib/db");
   return { ok: true, issues: listInstallIssues(accessId) };
 }
 export async function reportInstallIssueAction(accessId, { targetKind, targetId, stepIdx, targetLabel, reason, note, mediaId } = {}) {
-  const { tok, error } = await issueTok(accessId);
+  const { tok, error } = await issueTok(accessId, "reportInstallIssueAction");
   if (error) return { error };
   if (!ISSUE_REPORTERS.has(tok.role)) return { error: "Only technicians and the office can flag install work." };
   // targetKind: order (whole work order), item (a line item), step (a checklist step), or device (a placed
@@ -519,7 +512,7 @@ export async function installIssueAction(accessId, id, action, { assignTo } = {}
 
 // ---- Install photos (media kind "install") — the `install_photos` lifecycle fact ----
 export async function listInstallPhotosAction(accessId) {
-  const { tok, error } = await issueTok(accessId);
+  const { tok, error } = await issueTok(accessId, "listInstallPhotosAction");
   if (error) return { ok: false, error, photos: [] };
   if (!["admin", "manager", "sales", "tech"].includes(tok.role)) return { ok: false, error: "Internal only.", photos: [] };
   const { listProjectMedia } = await import("../../../lib/db");
@@ -787,12 +780,7 @@ export async function cancelAddendumScheduleAction(accessId, addendumId) {
 }
 
 export async function addAssignmentAction(accessId, { userId, userName, userEmail, role, override }) {
-  const hdrs   = await headers();
-  const cookie = hdrs.get("cookie") || "";
-  const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  if (!raw) return { error: "Not authenticated." };
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = await parseToken(raw.trim());
+  const tok = await getSessionTok();
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
   const db = await import("../../../lib/db");
   // Qualification gate — a CERTIFIED tech must hold the badge this project's service needs. Legacy/
@@ -824,12 +812,7 @@ export async function addAssignmentAction(accessId, { userId, userName, userEmai
 }
 
 export async function removeAssignmentAction(accessId, assignmentId) {
-  const hdrs   = await headers();
-  const cookie = hdrs.get("cookie") || "";
-  const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
-  if (!raw) return { error: "Not authenticated." };
-  const { parseToken } = await import("../../../lib/auth");
-  const tok = await parseToken(raw.trim());
+  const tok = await getSessionTok();
   if (!["admin","manager"].includes(tok?.role)) return { error: "Unauthorized." };
   const { removeProjectAssignment, getProjectAssignments } = await import("../../../lib/db");
   // Read who it was BEFORE removing them — afterwards there is nothing left to address.
@@ -845,20 +828,27 @@ export async function removeAssignmentAction(accessId, assignmentId) {
   return { ok: true };
 }
 
-async function getSessionTok() {
+// THE TECH ALLOW-LIST, applied at the choke point. `actionKey` is the name of the action asking.
+// A technician gets a token back only for an action that is on the list in lib/tech-scope.js; for
+// anything else — including every action that passes no key at all — this returns null and the
+// caller's own "not authorized" path refuses the call. Deny by default: an action nobody deliberately
+// opened to techs is closed to them, so forgetting fails safe.
+// (the fence itself lives in lib/tech-scope.js — fenceTok)
+
+async function getSessionTok(actionKey) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";
   const raw    = cookie.split(";").find(c => c.trim().startsWith("iot_session="))?.split("=").slice(1).join("=");
   if (!raw) return null;
   const { parseToken } = await import("../../../lib/auth");
   const { withFreshRole } = await import("../../../lib/db");
-  return withFreshRole(await parseToken(raw.trim()));   // fresh DB role → role changes apply with no re-login
+  return fenceTok(withFreshRole(await parseToken(raw.trim())), actionKey);   // fresh DB role → role changes apply with no re-login
 }
 
 // Session token OR the project-scoped PIN cookie (same resolution order as proposal-actions):
 // the shell's view and the actions' auth must always agree.
-async function getAnyTok() {
-  const tok = await getSessionTok();
+async function getAnyTok(actionKey) {
+  const tok = await getSessionTok(actionKey);
   if (tok?.role) return tok;
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";
@@ -866,7 +856,7 @@ async function getAnyTok() {
   if (!raw) return null;
   const { parseAccessToken } = await import("../../../lib/auth");
   const at = await parseAccessToken(raw.trim());
-  return at?.role ? { role: at.role, accessId: at.accessId, viaPin: true } : null;
+  return at?.role ? fenceTok({ role: at.role, accessId: at.accessId, viaPin: true }, actionKey) : null;
 }
 
 // Customer asks to reopen a closed/lost project — opens a ticket for the office to action,
@@ -900,7 +890,7 @@ export async function requestProjectReopenAction(accessId) {
 // Tech-only stage advances: schedule→install (accept) and install→qc (complete)
 const TECH_TRANSITIONS = { schedule: "install", install: "qc" };
 export async function techAdvanceStageAction(accessId, fromStage) {
-  const tok = await getAnyTok();
+  const tok = await getAnyTok("techAdvanceStageAction");
   if (!tok || tok.role !== "tech") return { ok: false, error: "Only technicians can perform this action." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { ok: false, error: "Not your project." };
   const toStage = TECH_TRANSITIONS[fromStage];
@@ -966,7 +956,7 @@ export async function setAttentionAction(accessId, needsAttention, note) {
 }
 
 export async function submitExpenseAction(accessId, { description, category, amount, vendor }) {
-  const tok = await getSessionTok();
+  const tok = await getSessionTok("submitExpenseAction");
   if (!tok?.role || !["admin","manager","tech"].includes(tok.role)) return { error: "Unauthorized." };
   if (!description?.trim()) return { error: "Description required." };
   if (!amount || Number(amount) <= 0) return { error: "Valid amount required." };
@@ -1066,7 +1056,7 @@ export async function completeProjectAction(accessId, done = true, date = null) 
 
 // Save the branded system QR card (PNG data URL) to the project. Admin/manager/tech.
 export async function setSystemQrAction(accessId, dataUrl) {
-  const tok = await getSessionTok();
+  const tok = await getSessionTok("setSystemQrAction");
   if (!["admin", "manager", "tech"].includes(tok?.role)) return { error: "Unauthorized." };
   const s = String(dataUrl || "");
   if (s && !(s.startsWith("data:image/") && s.length < 3000000)) return { error: "Bad image." };

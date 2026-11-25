@@ -19,6 +19,7 @@ import {
   getEffectiveRates, actorName,
 } from "../../../lib/db";
 import { can } from "../../../lib/roles";
+import { fenceTok, DENIED_ROLE } from "../../../lib/tech-scope";
 import { sendSignoffRequest } from "../../../lib/wo-notify";
 
 // Same resolution as proposal-actions.js: a staff session cookie first (with a fresh DB role so a role
@@ -50,10 +51,13 @@ function admitted(tok, accessId) {
   return tok.role === "tech";
 }
 // One gate for every call here: a real session, a project that exists, the caller admitted to it, and
-// the capability.
-async function gate(accessId, cap) {
-  const tok = await getSessionRole();
+// the capability. `actionKey` adds the tech allow-list on top (lib/tech-scope.js): the capabilities
+// already keep a technician out of wo.edit/wo.send/wo.close, and this closes the rest by name, so a
+// work-order action added later is shut to the field until it is listed on purpose.
+async function gate(accessId, cap, actionKey) {
+  const tok = fenceTok(await getSessionRole(), actionKey);
   if (!tok?.role) return { error: "Sign in to continue." };
+  if (tok.role === DENIED_ROLE) return { error: "A technician cannot do that." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your project." };
   const job = getJobByAccessId(accessId);
   if (!job) return { error: "Project not found." };
@@ -65,7 +69,7 @@ async function gate(accessId, cap) {
 // Read. A customer never gets a work order at all; a technician gets it payout-stripped when the
 // office has turned payouts off for this job.
 export async function getWorkOrderAction(accessId) {
-  const g = await gate(accessId, "wo.view");
+  const g = await gate(accessId, "wo.view", "getWorkOrderAction");
   if (g.error) return g;
   // The actor is passed in so the document can answer "have I checked in today?" for THIS person —
   // the gate the field popup reads. It is never taken from the client.
@@ -175,7 +179,7 @@ export async function cancelWorkOrderRevisionAction(accessId) {
 // their custom PIN, else the last 4 of their phone), so it confirms the person holding the phone is the
 // account that is signing. It is NOT a login: a wrong PIN refuses the signature and nothing else.
 export async function signWorkOrderAction(accessId, { name, signatureData = null, pin = "" } = {}) {
-  const g = await gate(accessId, "wo.sign");
+  const g = await gate(accessId, "wo.sign", "signWorkOrderAction");
   if (g.error) return g;
   const me = g.tok.id != null ? getUserById(g.tok.id) : null;
   if (!me) return { error: "Sign in with your own account to sign a work order." };
@@ -229,7 +233,7 @@ function identified(tok) {
 // A technician who is NOT on this job's crew may still check in: the work is real and we want it in
 // the record. It is flagged instead, their money is held pending, and the office is told at once.
 export async function checkInAction(accessId, { lat = null, lng = null } = {}) {
-  const g = await gate(accessId, "wo.checkin");
+  const g = await gate(accessId, "wo.checkin", "checkInAction");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };
@@ -280,7 +284,7 @@ export async function decideCheckinAction(accessId, checkinId, decision) {
 // Requirement 17–20. The gate (checked in today · a note or photo for Needs attention · before+after
 // on a key line) lives in lib/work-order-field.js and runs HERE, not only in the popup.
 export async function setLineStatusAction(accessId, { lineKey, status, pickStep = null, note = "", attention = null, clientAt = null } = {}) {
-  const g = await gate(accessId, "wo.line.status");
+  const g = await gate(accessId, "wo.line.status", "setLineStatusAction");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };
@@ -315,7 +319,7 @@ export async function setLineStatusAction(accessId, { lineKey, status, pickStep 
 
 // A photo is uploaded to /api/media first and only its URL arrives here — a data: URL is refused.
 export async function addLinePhotoAction(accessId, { lineKey, slot, mediaUrl } = {}) {
-  const g = await gate(accessId, "wo.line.status");
+  const g = await gate(accessId, "wo.line.status", "addLinePhotoAction");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };
@@ -324,7 +328,7 @@ export async function addLinePhotoAction(accessId, { lineKey, slot, mediaUrl } =
   return { ok: true, doc: freshDoc(accessId, g.tok) };
 }
 export async function removeLinePhotoAction(accessId, mediaId) {
-  const g = await gate(accessId, "wo.line.status");
+  const g = await gate(accessId, "wo.line.status", "removeLinePhotoAction");
   if (g.error) return g;
   const r = removeWoLineMedia(accessId, mediaId);
   if (r.error) return r;
@@ -335,7 +339,7 @@ export async function removeLinePhotoAction(accessId, mediaId) {
 // device clock, so a retry can never double-pay; the result says which ops landed so the phone knows
 // what to drop and what to keep.
 export async function syncFieldQueueAction(accessId, ops) {
-  const g = await gate(accessId, "wo.line.status");
+  const g = await gate(accessId, "wo.line.status", "syncFieldQueueAction");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };
@@ -345,7 +349,7 @@ export async function syncFieldQueueAction(accessId, ops) {
 
 // Requirement 20 — the action trail. Staff only; it names who did what, and when.
 export async function getWorkOrderEventsAction(accessId, limit = 200) {
-  const g = await gate(accessId, "wo.view");
+  const g = await gate(accessId, "wo.view", "getWorkOrderEventsAction");
   if (g.error) return g;
   const row = woRow(accessId);
   if (!row) return { ok: true, events: [] };
@@ -357,7 +361,7 @@ export async function getWorkOrderEventsAction(accessId, limit = 200) {
 // Requirement 22 — End of day. A technician closes their OWN day; an admin may close it for someone
 // else (requirement 23's other half), which is why `forName` is only honoured for the office.
 export async function endDayAction(accessId, { forName = null, forUserId = null, note = null } = {}) {
-  const g = await gate(accessId, "wo.day.close");
+  const g = await gate(accessId, "wo.day.close", "endDayAction");
   if (g.error) return g;
   const anon = identified(g.tok);
   if (anon) return { error: anon };

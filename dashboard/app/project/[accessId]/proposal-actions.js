@@ -21,6 +21,7 @@ import { sanitizeProposal, validatePayload, seedTechPricingMap, addendumFingerpr
 import { buildVersionSnapshot, buildAddendumSnapshot } from "../../../lib/proposal-version-snapshot";
 import { addendumLabel } from "../../../lib/addendum-display";
 import { can, ROLE_KEYS } from "../../../lib/roles";
+import { fenceTok } from "../../../lib/tech-scope";
 import { claimStatus, isClaimedTool } from "../../../lib/tool-claim.js";
 import { paymentsForViewer } from "../../../lib/customer-portal";
 import { survey2CameraCount, survey2HasData, surveyHasData, mockupHasData } from "../../../lib/tool-data";
@@ -31,17 +32,23 @@ const STAFF_EDIT = new Set(["admin", "manager", "sales"]);
 
 // Session-token role resolution — same pattern as actions.js updateProjectInfoAction.
 // The client's `view` prop is display-only; every write re-verifies here.
-async function getSessionRole() {
+//
+// `actionKey` is the TECH ALLOW-LIST (lib/tech-scope.js) applied at the choke point. A technician
+// gets a token back only for an action that deliberately named itself as open to them; everything
+// else — which is every action in this file that passes no key — resolves to null for a tech and is
+// refused by the caller's own "not authorized" branch. Deny by default, so a new money or proposal
+// action added later is closed to the field until someone opens it on purpose.
+async function getSessionRole(actionKey) {
   const hdrs   = await headers();
   const cookie = hdrs.get("cookie") || "";
   const getC   = (name) => cookie.split(";").find((c) => c.trim().startsWith(name + "="))?.split("=").slice(1).join("=");
   const { parseToken, parseAccessToken } = await import("../../../lib/auth");
   const { withFreshRole } = await import("../../../lib/db");
   const raw = getC("iot_session");
-  if (raw) { const tok = withFreshRole(await parseToken(raw.trim())); if (tok?.role) return tok; }   // fresh DB role → role changes take effect with no re-login
+  if (raw) { const tok = withFreshRole(await parseToken(raw.trim())); if (tok?.role) return fenceTok(tok, actionKey); }   // fresh DB role → role changes take effect with no re-login
   // Fall back to a PIN-scoped access cookie (customer/tech who unlocked via project PIN).
   const acc = getC("iot_access");
-  if (acc) { const at = await parseAccessToken(acc.trim()); if (at?.role) return { role: at.role, accessId: at.accessId, viaPin: true }; }
+  if (acc) { const at = await parseAccessToken(acc.trim()); if (at?.role) return fenceTok({ role: at.role, accessId: at.accessId, viaPin: true }, actionKey); }
   return null;
 }
 
@@ -107,7 +114,7 @@ export async function getCustomerFinanceAction(accessId) {
 
 export async function getProposalAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false };   // gate reads to the project's own people (mirror getProposalDiffAction) — else any logged-in customer could read a stranger's proposal + signature
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("getProposalAction");
   const role = tok?.role || "customer";
   // Staff editors work the live draft (their workspace). A technician reads the FROZEN work-order
   // version (Phase 5), so a later proposal revision never moves their scope/payout. Everyone else —
@@ -814,7 +821,7 @@ export async function signProposalAction(accessId, name, signatureData) {
 // is assigned to the project. Only techs (via PIN or a tech-role session) may accept, and only
 // their own project when PIN-scoped.
 export async function acceptWorkOrderAction(accessId, name, signatureData) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("acceptWorkOrderAction");
   if (!tok) return { error: "Not authenticated." };
   if (tok.role !== "tech") return { error: "Only a technician can accept a work order." };
   if (tok.viaPin && String(tok.accessId) !== String(accessId)) return { error: "Not your work order." };
@@ -987,7 +994,7 @@ export async function trackPackageAction(accessId, number, carrier, force = fals
 }
 // Rate library — internal only (rates are technician payout figures, never shown to customers).
 export async function getRatesAction(accessId, techName) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("getRatesAction");
   if (!tok || !can(tok.role, "install.pay.view")) return { ok: false };   // the rate book is payout data
   if (!(await canReadProject(accessId))) return { ok: false };
   return { ok: true, book: getRateBook(), defaults: DEFAULT_RATES, effective: getEffectiveRates(techName || null) };
@@ -1004,7 +1011,7 @@ export async function getAcceptancesAction(accessId) {
   if (!(await canReadProject(accessId))) return { ok: false, acceptances: {}, toolMeta: null };
   // toolMeta = per-tool { has, fingerprint } so the client knows which tools need approval and
   // whether a prior approval was voided by a later change (accepted fingerprint ≠ current).
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("getAcceptancesAction");
   const meta = getToolMeta(accessId);
   // A vendor's scope is shipment tracking: no device inventory, QC state or install progress.
   const toolMeta = tok?.role === "vendor" ? { tracking: meta.tracking } : meta;
@@ -1063,7 +1070,7 @@ function sanitizeToolRead(tool, role, saved) {
 
 export async function getToolDataAction(accessId, tool) {
   if (!TOOL_KEYS.has(tool)) return { ok: false };
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("getToolDataAction");
   if (!tok || !(await canReadProject(accessId))) return { ok: false };
   // Crew assignments are internal — the customer's page never renders them, so don't send them.
   if (tool === "techs" && tok.role === "customer") return { ok: false };
@@ -1073,7 +1080,7 @@ export async function getToolDataAction(accessId, tool) {
 // a substring scan server-side (no JSON parse, and no shipping a multi-MB mockup blob to the client
 // just to decide whether to render the fold). The full data loads only when the customer expands it.
 export async function proposalLayoutMetaAction(accessId) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("proposalLayoutMetaAction");
   if (!tok || !(await canReadProject(accessId))) return { ok: false };
   const sv = getToolData(accessId, "survey2"), mk = getToolData(accessId, "mockup");
   // Canonical content checks (parse the blob), not a "data:image" substring scan — photos/backgrounds are
@@ -1081,7 +1088,7 @@ export async function proposalLayoutMetaAction(accessId) {
   return { ok: true, hasSurvey: survey2HasData(sv?.data), hasMockup: mockupHasData(mk?.data) };
 }
 export async function saveToolDataAction(accessId, tool, data, { allowEmpty = false, baseRev = null, editorId = null } = {}) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("saveToolDataAction");
   if (!tok) return { error: "Session expired." };
   if (!TOOL_KEYS.has(tool)) return { error: "Unknown tool." };
   // 8MB ceiling (matches next.config serverActions.bodySizeLimit): the mockup's photo grid is
@@ -1294,7 +1301,7 @@ export async function resolveNotePublicAction(accessId, id, approve) {
 }
 // Job Log events (calls, etc.) — internal, so customers never read them.
 export async function getEventsAction(accessId) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("getEventsAction");
   if (!tok || tok.role === "customer" || !(await canReadProject(accessId))) return { ok: false, events: [] };
   let events = getProjectEvents(accessId);
   // Event labels that carry a dollar figure are flagged `money` where they are logged (logProjectEvent). A role
@@ -1364,7 +1371,7 @@ export async function setPocAction(accessId, { name, phone }) {
 
 // Customer accepts a stage's deliverable (site survey / mockup) to unlock forward progress.
 export async function acceptStageAction(accessId, stage, on = true) {
-  const tok = await getSessionRole();
+  const tok = await getSessionRole("acceptStageAction");
   if (!tok) return { error: "Not authenticated." };
   if (tok.role === "customer" && !customerOwnsProject(tok, accessId)) return { error: "Not your project." };
   // QC sign-offs (Phase 2): the manager approves, the customer confirms the walkthrough — each bound

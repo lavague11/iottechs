@@ -138,7 +138,12 @@ test("customer header: Navigate + Share only - add-person and edit are staff cap
   assert.equal(can("customer", "project.contact.edit"), false);
   assert.equal(can("customer", "project.contact.save"), false);
   assert.equal(can("vendor", "project.contact.edit"), false);
-  for (const r of ["admin", "manager", "sales", "tech"]) assert.equal(can(r, "project.contact.edit"), true, r);
+  // A technician lost this in the tech-role overhaul: editing the customer's record is office work and
+  // "customer edits" is on the owner's refused list. They still READ the contact and may still save it
+  // to their phone, which is what gets them through the door.
+  for (const r of ["admin", "manager", "sales"]) assert.equal(can(r, "project.contact.edit"), true, r);
+  assert.equal(can("tech", "project.contact.edit"), false, "a tech does not edit the customer's record");
+  assert.equal(can("tech", "customer.contact.view"), true, "but still sees who to call");
   const gw = read("app/project/[accessId]/gateway-client.jsx");
   assert.match(gw, /can\(cView, "project\.contact\.save"\) && \{ label: "Add to contact"/);
   assert.match(gw, /canEdit: can\(cView, "project\.contact\.edit"\)/);

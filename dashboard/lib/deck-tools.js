@@ -23,7 +23,9 @@ export const DECK_TOOLS = {
   // Sales reads Install (status, line items, add-ons, issue state) — never pay, rates or edits.
   // Vendor sees shipment tracking only. Readonly sees the office layout with every control off.
   ph_install: [
-    { name: "Addendum",             access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", customer: "view", readonly: "view" } },
+    // A technician reads an addendum (it changes their scope) but no longer writes one — see
+    // roles.js "addendum.build" and the tech allow-list in lib/tech-scope.js.
+    { name: "Addendum",             access: { admin: "edit", manager: "edit", sales: "view", tech: "view", customer: "view", readonly: "view" } },
     { name: "Work Order",           access: { admin: "edit", manager: "edit", sales: "view", tech: "edit", readonly: "view" } },
     { name: "Shipment Tracking",    access: { vendor: "edit" } },
     { name: "Project Ready",        access: { customer: "view" } },

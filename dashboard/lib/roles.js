@@ -18,7 +18,11 @@ const CAPS = {
   "issue.adjudicate":    ["admin", "manager"],                              // assign rework, resolve, dismiss, reopen
   "issue.view":          ["admin", "manager", "sales", "tech", "readonly"],
   "addendum.view":       ["admin", "manager", "sales", "tech", "customer", "readonly"],
-  "addendum.build":      ["admin", "manager", "sales", "tech"],             // tech logs work only (no prices)
+  // A technician READS an addendum (it changes their scope) but no longer builds one. Owner's tech
+  // allow-list (lib/tech-scope.js) is "view the work order, do it, QC, expenses, QR, read the survey"
+  // — logging extra work as a change order is office work. Flagged in docs/lifecycle-audit.md: this
+  // WAS a tech workflow, and putting it back is one entry in two lists.
+  "addendum.build":      ["admin", "manager", "sales"],
   "addendum.price":      ["admin", "manager"],
   "addendum.sign":       ["customer"],
   "addendum.retail.view":["admin", "manager", "sales", "customer", "readonly"],
@@ -52,14 +56,18 @@ const CAPS = {
   "qc.sign.manager":     ["admin", "manager"],
   "qc.sign.customer":    ["customer"],
   "qc.view":             ["admin", "manager", "sales", "tech", "readonly"],
-  // Site survey. Techs are the people who actually walk the site, so they may edit the survey, reopen a
-  // submitted one and send it back for approval — which is NOT true of tool blobs in general (see
-  // `saveToolDataAction` / /api/tool-data, where everything else stays office-only). These three move
-  // together on purpose: unlock without edit, or edit without resubmit, strands a tech's work on one
-  // device, which is the same silent data loss as not saving at all.
-  "survey.edit":         ["admin", "manager", "sales", "tech"],   // write the survey2 blob
-  "survey.unlock":       ["admin", "manager", "sales", "tech"],   // reopen a submitted survey for edits
-  "survey.submit":       ["admin", "manager", "sales", "tech"],   // send / re-send it for customer approval
+  // Site survey — READ-ONLY for a technician as of the tech-role overhaul. They need the floor plan,
+  // the camera placements, the cable routes and the aim cones to do the install, and they get all of
+  // it; they do not change the drawing. The three write capabilities still move together on purpose
+  // (unlock without edit, or edit without resubmit, strands work on one device) — a technician is now
+  // absent from all three, so BOTH write paths refuse them: saveToolDataAction and POST
+  // /api/tool-data each derive their survey editors from `can(role,"survey.edit")`.
+  // NOTE: this supersedes the narrowing made earlier the same day, which let techs edit a survey on a
+  // signed-proposal job. The claim/lease/reconcile guards are what protect the survey from overwrite;
+  // this is about who may author it at all.
+  "survey.edit":         ["admin", "manager", "sales"],   // write the survey2 blob
+  "survey.unlock":       ["admin", "manager", "sales"],   // reopen a submitted survey for edits
+  "survey.submit":       ["admin", "manager", "sales"],   // send / re-send it for customer approval
   // Proposals
   "proposal.reuse":      ["admin", "manager", "sales"],                     // search old proposals, copy, import, pick a destination
   "proposal.revise":     ["admin", "manager"],                             // AI #2: remove a line, or revise a sent/signed proposal (supersede → v+1)
@@ -75,7 +83,10 @@ const CAPS = {
   // Project header icons. A customer gets Navigate + Share only: adding the contact to an address book and
   // editing the project's contact record are staff actions. `project.contact.edit` is enforced by
   // `updateProjectInfoAction` (server) — the header merely reads it to decide whether to draw the pencil.
-  "project.contact.edit": ["admin", "manager", "sales", "tech"],
+  // A technician is out: editing the customer's record is office work, and "customer edits" is on the
+  // owner's refused list. They still READ the site contact (customer.contact.view) — they have to call
+  // the person to be let in — and may still save them to their phone's address book.
+  "project.contact.edit": ["admin", "manager", "sales"],
   "project.contact.save": ["admin", "manager", "sales", "tech", "readonly"],   // "add person" (vCard)
   // CRM (New Project → Existing / New client). Customers never search the CRM.
   "customer.search":     ["admin", "manager", "sales"],                     // search + pick an existing client

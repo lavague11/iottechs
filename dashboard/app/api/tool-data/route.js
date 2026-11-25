@@ -96,11 +96,11 @@ export async function POST(req) {
   if (!tok) return Response.json({ error: "Session expired." });
   if (!SYNC_TOOLS.has(tool)) return Response.json({ error: "Unknown tool." });
   if (typeof data !== "string" || data.length > 8_000_000) return Response.json({ error: "Bad payload." });
-  // Writes are office-only (admin/manager/sales) with ONE exception: the site survey, which the tech on
-  // site may edit — `can(role, "survey.edit")`, the same capability behind "Edit survey" and Resubmit.
-  // Letting a tech unlock a survey they then cannot save strands their work in one browser's
-  // localStorage, which is the silent data loss this whole section is about. Mockup and schedule keep
-  // their existing sets. Enforced here AND in saveToolDataAction — the two write paths must agree.
+  // Writes are office-only (admin/manager/sales). The survey asks `can(role, "survey.edit")` rather
+  // than hard-coding the list, so the capability stays the one place that decides — and since the
+  // tech-role overhaul a technician is NOT in it: they read the survey (floor plan, placements, cable
+  // routes, aim cones) and never author it. Enforced here AND in saveToolDataAction — the two write
+  // paths must agree, or the gate is only as strong as whichever one a caller happens to use.
   const allowed = tool === "survey2" || tool === "survey"
     ? can(tok.role, "survey.edit")
     : ["admin", "manager", "sales"].includes(tok.role);

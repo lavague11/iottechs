@@ -369,8 +369,12 @@
   /* Background tab: top-left = Edit background + Enhance (direct). The rare "Create Hybrid Floor Plan" lives in a bottom-right ••• drop-up (#planMore), clear of the bottom-left utils. */
   #bgActions{position:absolute;left:14px;top:14px;z-index:9;display:none;align-items:center;gap:8px}
   body.ro #bgActions, body.frozen #bgActions{display:none!important}   /* read-only / submitted: the geometry is locked */
-  /* The one primary action while a background tool is open. Hidden otherwise, and never on a locked survey. */
-  #useBgBtn{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:10;display:none;
+  /* The one primary action while a background tool is open. Hidden otherwise, and never on a locked survey.
+     IT SITS ABOVE THE TOOL'S OWN TOOLBAR, not on it. Both background tools (satellite-capture.html and
+     draw-floorplan.html) dock their `.tbar` as a centred pill at bottom:16px when embedded — roughly 56px
+     tall — and this button lives in the PARENT document at z-index 10, so at bottom:18px it painted straight
+     over the whole toolbar: Level / Crop / Trace / Done were unreachable behind it. 16 + 56 + a 12px gap. */
+  #useBgBtn{position:absolute;left:50%;bottom:84px;transform:translateX(-50%);z-index:10;display:none;
     align-items:center;height:40px;padding:0 20px;border:1px solid var(--ink);border-radius:100px;
     background:var(--ink);color:#fff;cursor:pointer;font:700 13px var(--sans);white-space:nowrap;
     box-shadow:0 6px 20px rgba(16,17,18,.26)}

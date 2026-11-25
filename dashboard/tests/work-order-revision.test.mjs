@@ -120,7 +120,10 @@ test("the signature is refused unless the PIN matched, the version is sent, and 
 test("the action checks the signer's OWN pin, records device + IP, and never stores the PIN", () => {
   const i = actions.indexOf("export async function signWorkOrderAction");
   const body = actions.slice(i, actions.indexOf("\nexport ", i + 10));
-  assert.ok(body.includes('const g = await gate(accessId, "wo.sign")'), "capability-gated");
+  // gate() takes the action's own name as a third argument now (the tech allow-list in
+  // lib/tech-scope.js is applied at the choke point), so match the capability, not the whole call.
+  assert.ok(/const g = await gate\(accessId, "wo\.sign"[,)]/.test(body), "capability-gated");
+  assert.ok(body.includes('"signWorkOrderAction"'), "and names itself to the tech allow-list");
   // The PIN is compared in the DATA layer and discarded there. It is never fetched into the action,
   // so it cannot be held, logged or returned by mistake.
   assert.ok(body.includes("userPinMatches(me.id, pin)"), "compared against THIS account's own PIN");
