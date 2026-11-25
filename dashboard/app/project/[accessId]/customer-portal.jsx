@@ -446,6 +446,10 @@ export const PORTAL_CSS = `
 .cpv-cards{display:flex;flex-direction:column;gap:10px}
 .cpv-card{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--raise);border:1px solid var(--line);border-radius:14px;padding:15px 18px;cursor:pointer;color:inherit;font-family:inherit}
 .cpv-card:hover{border-color:var(--ink);background:#fff}
+/* A card with nothing to press yet — e.g. a technician whose work order the office has not issued.
+   No pointer, no hover lift, no affordance it cannot honour. */
+.cpv-card.inert{cursor:default;background:transparent;border-style:dashed}
+.cpv-card.inert:hover{border-color:var(--line);background:transparent}
 .cpv-card-title{font-size:16px;font-weight:700;color:var(--ink)}
 .cpv-card-sub{font-size:13px;color:var(--meta);margin-top:2px}
 .cpv-card-act{color:var(--gold-text);font-weight:700;font-size:14px;white-space:nowrap}

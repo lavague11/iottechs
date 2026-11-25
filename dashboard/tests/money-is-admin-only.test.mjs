@@ -64,8 +64,11 @@ test("the figures are never sent to a tech in the first place", () => {
 // ------------------------------------------------------------------ what the tech does see
 
 test("a role without the money capability sees the STATUS but never a button", () => {
-  // Read-only: the technician can tell the job is waiting on payment, so they do not chase it.
-  assert.match(gateway, /status=\{as \? \{ state: projState/, "the status is not suppressed");
+  // SUPERSEDED for the technician by the tech-role overhaul: the field gets its own ladder and no
+  // money state at all (see tests/tech-allowlist.test.mjs). Every OTHER role without the capability
+  // — vendor, and a readonly auditor — still reads the project status and still gets no button.
+  assert.match(gateway, /: \(as \? \{ state: projState/, "the status is not suppressed for the other roles");
+  assert.match(gateway, /status=\{isTechView/, "and the field is branched out of it entirely");
   assert.match(gateway, /const canRecordPay = cView === "admin";/);
   assert.match(gateway, /AWAITING_DEPOSIT:\s*canRecordPay \?/, "deposit button is admin only");
   assert.match(gateway, /AWAITING_FINAL_PAYMENT: canRecordPay \?/, "final payment button is admin only");

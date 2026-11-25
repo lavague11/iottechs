@@ -173,6 +173,12 @@ function init() {
   // Session invalidation counter: bumped whenever a user's role or disabled state changes, so their old
   // login tokens (which bake in the role) stop resolving and they re-authenticate with the new role.
   if (!uCols.includes("session_epoch")) db.exec("ALTER TABLE users ADD COLUMN session_epoch INTEGER DEFAULT 0");
+  // How this person is paid: per_job (the default and the only one with a per-job budget to show),
+  // hourly or salary. A technician sees "my budget for this job, my expenses, what's left" ONLY when
+  // they are paid per job — an hourly or salaried tech is not paid out of the job's labor line, so a
+  // budget card would be fiction. Defaults to per_job so nobody loses a payout figure they see today.
+  // See lib/tech-scope.js techJobBudget().
+  if (!uCols.includes("pay_type"))     db.exec("ALTER TABLE users ADD COLUMN pay_type TEXT DEFAULT 'per_job'");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL");
   db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email    ON users(email)    WHERE email    IS NOT NULL");
   // Databases created before phone logins have `email TEXT UNIQUE NOT NULL`, so a phone-only customer
@@ -3484,7 +3490,7 @@ export function withFreshRole(tok) {
 }
 
 export function getUserById(id) {
-  const r = db.prepare("SELECT id, name, username, email, phone, role, disabled, tech_cert, session_epoch FROM users WHERE id = ?").get(Number(id));
+  const r = db.prepare("SELECT id, name, username, email, phone, role, disabled, tech_cert, session_epoch, pay_type FROM users WHERE id = ?").get(Number(id));
   return r ? { ...r, tech_cert: safeJson(r.tech_cert, null) } : r;
 }
 

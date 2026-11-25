@@ -6,6 +6,7 @@ import { projectFileBase } from "../../../lib/doc-filename";
 import Link from "next/link";
 import { stagesForType, stageLabel, stageShortLabel, STAGES, phasesForType, masterToPhaseKey, phaseStatusWord, phaseLabelOf, phaseGate, gateReason, ROLES, COST_SAFE_VIEWS, proposalServiceForCode, SERVICE_CATALOG, serviceCodeLabel } from "../../../lib/spec";
 import { can, defaultProjectGroup, ROLE_COLOR } from "../../../lib/roles";
+import { techStatusOf, TECH_STATUS, techWorkOrderCard } from "../../../lib/tech-scope";
 import { priceLockWindow } from "../../../lib/proposal";
 import { sees } from "../../../lib/deck-tools";
 import { cellFor } from "../../../lib/matrix";
@@ -1590,7 +1591,7 @@ function MemberSearch({ staffUsers, onPickStaff, onPickCustomer }) {
 }
 
 // ---- Resolved project view ----
-function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, sandbox = null, canSandbox = false }) {
+function ResolvedView({ project, view, currentUser = null, projectStage, onProjectStage, viewingStageRef = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, previewRole = null, onPreviewRole, onReAuth = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, techBudget = null, sandbox = null, canSandbox = false }) {
   const [proposalData, setProposalData] = useState(proposal);
   // Customer Portal V2 balance — held in state (seeded from the server snapshot) so it can be pulled fresh
   // client-side after a payment/signature without a full reload (the balance is otherwise a static prop).
@@ -3323,6 +3324,20 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const woStarted = woSigned || woSubmitted || woExists || !!workOrders?.length;
       const simple3 = rail3;   // Simple view = 3 steps: Consulting · Install · Completion (derived from state, see rail3)
 
+      // ── THE FIELD'S OWN VIEW ──────────────────────────────────────────────────────────────────
+      // A technician does not get the customer's lifecycle with the money blanked out; they get their
+      // OWN sequence: wait for the work order → do it → QC → done. Nothing about an invoice changes
+      // what a tech does on site, so the money states have no input here at all (lib/tech-scope.js
+      // techStatusOf takes no money fact). This replaces the read-only "Awaiting Final Payment" card
+      // that STEP 8 left on their screen — the owner's call: a tech has no business with it.
+      const isTechView = cView === "tech";
+      const techState = isTechView ? techStatusOf({
+        woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned,
+      }) : null;
+      const techSt = techState ? TECH_STATUS[techState] : null;
+      const techDone = techState === "JOB_COMPLETE";
+      const techCompletedOn = techDone ? (lp.completed_at || sFacts.install_done_at || null) : null;
+
       const renderStaffOverlay = (key, onCloseOverlay) => {
         switch (key) {
           case "proposal":
@@ -3555,6 +3570,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         { key: "closeout", title: "Closeout", group: "customer", sub: qcSigned ? "Signed off." : "QC & sign-off.", action: qcSigned ? "Completed" : "Edit", done: qcSigned, locked: !pSigned, lockMsg: "Unlocks once the proposal is signed." },
         { key: "completion", title: "Completion", group: "customer", sub: isComplete ? "Complete." : "Final documents.", action: isComplete ? "Completed" : "Edit", done: isComplete, locked: !qcSigned, lockMsg: "Unlocks once closeout is signed." },
         // Internal: ONE Work Order card now holds the scheduling (Installation) + expenses inside it.
+        // For a TECHNICIAN the words come from the field ladder instead (bug #5: this card used to tell
+        // a tech to "Create the work order", which is the one thing a tech never does).
+        isTechView ? { key: "workorder", group: "internal", ownHeader: true,
+          ...techWorkOrderCard({ woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned, lineProgress: woLineProgress }) } :
         { key: "workorder", title: "Work Order", group: "internal",
           // The ladder the spec asks for: a draft waiting on a technician → awaiting their signature →
           // signed → how much of the work is done → complete.
@@ -3576,6 +3595,25 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         phone: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>,
         qr:    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v3M14 20h3M20 20v.01"/></svg>,
         mail:  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>,
+        doc:   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M12 18v-6M9 15l3 3 3-3"/></svg>,
+      };
+      // The Work Order PDF — the technician's single document. Built from the SAME role-sanitized
+      // proposal the tech already has on screen (techPrice only; retail never reached the browser)
+      // plus the survey blob they may read. The job budget rides along only when this tech is paid
+      // per job, which is the server's answer (techBudget), never the client's guess.
+      const downloadTechWorkOrderPdf = async () => {
+        try {
+          const { downloadWorkOrderPdf } = await import("../../../lib/workorder-pdf");
+          const survey = await getToolDataAction(lp.access_id, "survey2").then((r) => (r?.ok ? r.saved?.data : null)).catch(() => null);
+          downloadWorkOrderPdf(proposalData, {
+            fileBase, customerName: lp.company_name || lp.contact_name || lp.customer, customerAddress: lp.address,
+            customerPhone: lp.contact_phone, siteContact: lp.contact_name,
+            techName: currentUser?.name || proposalData?.tech_signed_name || null,
+            installDate: hubAppt?.date ? fmtDate(hubAppt.date) : null,
+            survey, budget: techBudget?.show ? techBudget : null,
+            tasks: woLineProgress ? { done: woLineProgress.done, total: woLineProgress.total } : null,
+          });
+        } catch (e) { showLiveToast("Could not build the PDF."); }
       };
       const hubActions = [
         // The customer's own activation QR, reachable from the portal home instead of only from
@@ -3583,28 +3621,46 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // customer scans to set their app up, and staff get asked for it constantly.
         lp.system_qr && { key: "qr", label: "System QR", icon: SI.qr, onClick: () => setHubQrOpen(true) },
         (canRecordPay && staffFinance?.hasContract && !staffFinance?.paidInFull) && { key: "pay", label: "Record Payment", tone: "pay", icon: SI.pay, onClick: () => setHubPayOpen(true) },
-        { key: "schedule", label: hubAppt ? "Reschedule" : "Schedule", view: "schedule", icon: SI.cal },
+        // The tech's one document, reachable at every stage — not only from inside the work order.
+        // It downloads from the frozen work-order proposal they already hold, so it works offline-ish
+        // and never asks the server for anything a tech may not have.
+        isTechView && woExists && { key: "wopdf", label: "Work Order PDF", icon: SI.doc, onClick: downloadTechWorkOrderPdf },
+        // Scheduling is the office's move, not the field's.
+        !isTechView && { key: "schedule", label: hubAppt ? "Reschedule" : "Schedule", view: "schedule", icon: SI.cal },
         lp.contact_phone && { key: "call", label: "Call", href: `tel:${lp.contact_phone}`, icon: SI.phone },
-        lp.contact_email && { key: "email", label: "Email", href: `mailto:${lp.contact_email}`, icon: SI.mail },
+        // A technician gets the phone, not the customer's email: the field calls to be let in.
+        (!isTechView && lp.contact_email) && { key: "email", label: "Email", href: `mailto:${lp.contact_email}`, icon: SI.mail },
       ].filter(Boolean);
 
+      // The field reads its OWN ladder, never the customer's state and never a money state: the
+      // owner's rule is that no customer payment or balance wording appears on a technician's screen
+      // — hero, stage labels, 3-step tracker, log entries or notifications. `finance` is withheld
+      // from them entirely (it is already null server-side) and `budget` carries the only money a
+      // tech ever sees: their own. `progressPct` fills to 100 once THEIR part is done, even while the
+      // project itself waits on a final payment — that wait is not the technician's progress.
       return (
         <>
           <StaffHub
             accessId={lp.access_id}
             project={lp}
-            status={as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null}
-            finance={staffFinance}
+            status={isTechView
+              ? (techSt ? { state: techState, label: techSt.label, color: statusToneHex(techSt.tone) } : null)
+              : (as ? { state: projState, label: `${as.label}${dateSuffix}`, color: statusToneHex(as.tone) } : null)}
+            finance={isTechView ? null : staffFinance}
+            budget={isTechView ? techBudget : null}
             appt={hubAppt}
             phases={simple3.phases}
             currentPhaseKey={simple3.currentKey}
-            progressPct={simplePct}
+            progressPct={isTechView && techDone ? 100 : simplePct}
             sections={hubSections}
             actions={hubActions}
             contact={deckCustomer}
             log={deckLog}
             defaultGroup={defaultProjectGroup(cView)}
-            primaryCta={projState ? (CTA[projState] || null) : null}
+            doneNote={isTechView && techDone ? { label: "Job complete", at: techCompletedOn, by: sFacts.qc_customer_signed_by || null } : null}
+            primaryCta={isTechView
+              ? (techSt?.cta ? { label: techSt.cta, view: "workorder" } : null)
+              : (projState ? (CTA[projState] || null) : null)}
             onPrimaryAction={(a) => { if (a === "payment") setHubPayOpen(true); }}
             role={cView}
             signOptionId={proposalData?.selected_option || proposalData?.payload?.options?.[0]?.id || ""}
@@ -4762,7 +4818,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
 
 
 // ---- Root export ----
-export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, sandbox = null, canSandbox = false }) {
+export default function GatewayClient({ project, initialView = null, currentUser = null, assignments = [], staffUsers = [], workOrders = [], expenses = [], requests = [], proposalViews = [], proposal = null, svcCall = null, customerPortalV2 = false, customerFinance = null, customerAppt = null, customerPayments = [], staffHub = false, staffFinance = null, staffAppt = null, techBudget = null, sandbox = null, canSandbox = false }) {
   const [view, setView]                 = useState(initialView);
   const [projectStage, setProjectStage] = useState(project.stage);
   // Last stage the body is actually showing — shared so a role switch (the pill) can carry it
@@ -4811,6 +4867,7 @@ export default function GatewayClient({ project, initialView = null, currentUser
       staffHub={staffHub}
       staffFinance={staffFinance}
       staffAppt={staffAppt}
+      techBudget={techBudget}
       sandbox={sandbox}
       canSandbox={canSandbox}
     />

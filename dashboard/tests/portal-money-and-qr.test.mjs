@@ -40,13 +40,18 @@ test("both money CTAs are gated on who may RECORD, which is admin only", () => {
   assert.ok(!/AWAITING_FINAL_PAYMENT: \{ label: "Record Final Payment"/.test(gateway), "the ungated version is gone");
 });
 
-test("the money STATUS is read-only for a role that may not see the figures, not hidden", () => {
-  // Also superseded: suppressing the hero entirely left a technician unable to tell that a job was
-  // waiting on PAYMENT rather than on them. They now see the status and never a button -- and never a
-  // number, because page.jsx gates the computation so a tech is not sent the balance at all.
-  assert.match(gateway, /status=\{as \? \{ state: projState/, "the status renders for every role");
-  assert.match(gateway, /MONEY_STATES = new Set\(\["AWAITING_DEPOSIT", "AWAITING_FINAL_PAYMENT"\]\)/, "the money states are still named");
-  assert.match(page, /const maySeeMoney = can\(initialView, "customer\.financials\.view"\);/, "and the figures stay capability-gated server-side");
+test("a technician gets their OWN status ladder, not the customer's money state", () => {
+  // Superseded TWICE, and the second time by the owner directly. The first cut suppressed the hero
+  // for a role without the money capability; STEP 8 restored it read-only, reasoning that a tech
+  // needs to know a job is waiting on payment rather than on them. The owner's answer was that a
+  // technician has no business with the customer's invoice at all: "Remove the 'Awaiting Final
+  // Payment' card, plus every customer payment or balance reference in the hero, stage labels, the
+  // 3-step tracker text, log entries, and notifications." So the field now reads its own ladder —
+  // wait for the work order → do it → QC → job complete — which takes no money fact as input.
+  assert.match(gateway, /status=\{isTechView\s*\n?\s*\? \(techSt \? \{ state: techState/, "the tech branch comes first");
+  assert.match(gateway, /: \(as \? \{ state: projState/, "every other role keeps the project status");
+  assert.match(gateway, /finance=\{isTechView \? null : staffFinance\}/, "and no balance is handed to the field");
+  assert.match(page, /const maySeeMoney = can\(initialView, "customer\.financials\.view"\);/, "the figures stay capability-gated server-side");
 });
 
 test("the two money states are the ones the status engine calls money, and no others", () => {

@@ -56,6 +56,14 @@ const SearchIco = () => <svg width="14" height="14" viewBox="0 0 24 24" fill="no
 
 export default function JobLog({ accessId, role, acceptances = {}, project, preview, staffUsers = [], extraEvents = [] }) {
   const isCust = role === "customer";
+  // A technician's log is the FIELD's log. Two things are not in it: the customer's money (requirement
+  // 4 — no payment or balance reference anywhere on a tech's screen, log entries included) and the
+  // office's notes, which are not on the tech allow-list. Both server actions already refuse a tech,
+  // so this is the UI agreeing with the server rather than the gate itself — without it the page would
+  // fire two calls that come back empty and render two empty shells.
+  const isTech = role === "tech";
+  // Deliberately broad: a label that mentions money in any of these terms is office business.
+  const MONEY_WORDS = /payment|paid|deposit|invoice|balance|refund|\$\d/i;
   const [notes, setNotes] = useState([]);
   const [events, setEvents] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -72,13 +80,13 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
 
   useEffect(() => {
     let live = true;
-    getNotesAction(accessId).then((r) => { if (live && r?.ok) setNotes(r.notes || []); }).catch(() => {});
+    if (!isTech) getNotesAction(accessId).then((r) => { if (live && r?.ok) setNotes(r.notes || []); }).catch(() => {});
     if (!isCust) {
       getEventsAction(accessId).then((r) => { if (live && r?.ok) setEvents(r.events || []); }).catch(() => {});
-      getPaymentsForLogAction(accessId).then((r) => { if (live && r?.ok) setPayments(r.payments || []); }).catch(() => {});
+      if (!isTech) getPaymentsForLogAction(accessId).then((r) => { if (live && r?.ok) setPayments(r.payments || []); }).catch(() => {});
     }
     return () => { live = false; };
-  }, [accessId, isCust]);
+  }, [accessId, isCust, isTech]);
 
   // Timeline: milestones (from acceptances) + logged events (calls…), newest first, then the
   // inquiry pinned at the bottom as the origin.
@@ -108,6 +116,10 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   // Basic = milestones + inquiry (customer-safe); Advanced (staff) adds forensic events.
   const advanced = !isCust && mode === "advanced";
   let timeline = advanced ? full : full.filter((e) => !ADVANCED_KINDS.has(e.kind));
+  // Money never reaches a technician's timeline. The derived payment rows are already absent (the
+  // ledger is never fetched for them), but project_events carries free-text labels written by the
+  // office — "Deposit recorded", "Payment canceled", "Invoice sent" — so filter on the words too.
+  if (isTech) timeline = timeline.filter((e) => e.kind !== "pay" && !MONEY_WORDS.test(String(e.verb || "")));
   if (actQ) timeline = timeline.filter((e) => `${e.verb} ${e.by || ""}`.toLowerCase().includes(actQ.toLowerCase()));
   const shownNotes = noteQ ? notes.filter((n) => `${n.body} ${n.author_name || ""}`.toLowerCase().includes(noteQ.toLowerCase())) : notes;
   const toggleExpand = (id) => setExpanded((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -190,7 +202,7 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
   }
 
   return (
-    <div className="jl">
+    <div className={`jl${isTech ? " jl-one" : ""}`}>
       <style>{CSS}</style>
 
       {/* ---- Activity ---- */}
@@ -226,8 +238,9 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
         )}
       </section>
 
-      {/* ---- Notes ---- */}
-      <section className="jl-col jl-notes-col">
+      {/* ---- Notes ---- (office only: project notes are not on the tech allow-list, and an empty
+           column is an empty shell — the field sees Activity full-width instead) */}
+      {!isTech && <section className="jl-col jl-notes-col">
         <div className="jl-head-row">
           <div className="jl-head mono">Notes</div>
           <button className={`jl-icbtn ${noteQ != null ? "on" : ""}`} title="Search notes" onClick={() => setNoteQ((q) => (q == null ? "" : null))}><SearchIco /></button>
@@ -287,13 +300,14 @@ export default function JobLog({ accessId, role, acceptances = {}, project, prev
             ))}
           </ul>
         )}
-      </section>
+      </section>}
     </div>
   );
 }
 
 const CSS = `
 .jl{height:100%;display:grid;grid-template-columns:1fr 1fr;gap:0;color:var(--dv-ink,#101418);font-family:var(--font-sans),system-ui,sans-serif}
+.jl.jl-one{grid-template-columns:1fr}   /* field view: Activity only, so it takes the whole width */
 .jl .mono{font-family:var(--font-mono,"JetBrains Mono"),ui-monospace,monospace}
 .jl-col{min-height:0;overflow-y:auto;padding:22px 26px;scrollbar-width:none}
 .jl-col::-webkit-scrollbar{width:0;display:none}

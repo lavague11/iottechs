@@ -24,9 +24,11 @@ const fmtTime = (t) => { try { const [h, m] = String(t).split(":").map(Number); 
 const apptType = (a) => (a?.kind === "install" || /install/i.test(a?.title || "")) ? "Installation" : (a?.kind === "survey" || /survey/i.test(a?.title || "")) ? "Site Survey" : (a?.title || "Appointment");
 
 const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Work Order", expenses: "Expenses", systemqr: "System QR" };
+const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
+  budget = null, doneNote = null,
   sections = [], actions = [], primaryCta = null, onPrimaryAction = null, renderOverlay, onRefresh, onAdvanced, dashboardHref = null, contact = null, log = null, defaultGroup = "customer",
   onDemo = null, demoBusy = false,
   role = "", signOptionId = "", onStageJump = null,
@@ -119,6 +121,18 @@ export default function StaffHub({
     <div className="cpv">
       <style>{PORTAL_CSS}</style>
       <style>{`
+/* The technician's own money — their payout for this job, their expenses, what is left. Three
+   figures on one row, tabular so they line up; red only when the job has gone over. */
+.cpv-budget{border:1px solid var(--line);border-radius:14px;padding:14px 18px;background:var(--raise)}
+.cpv-budget-row{display:flex;gap:26px;flex-wrap:wrap;margin-top:8px}
+.cpv-budget-row>div{display:flex;flex-direction:column;gap:2px}
+.cpv-budget-row span{font-size:12px;color:var(--meta)}
+.cpv-budget-row b{font-size:19px;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.cpv-budget-row>div.over b{color:var(--red,#C4553D)}
+.cpv-budget-note{margin-top:8px;font-size:12px;color:var(--meta)}
+/* The field's end state. */
+.cpv-donenote{display:flex;align-items:center;gap:8px;padding:13px 18px;border:1px solid #bfe0cd;border-radius:14px;background:#f6fbf8;color:var(--green);font-size:14px}
+.cpv-donenote span{color:var(--meta);font-weight:600}
 .cpv-rail{display:flex;flex-wrap:wrap;gap:8px}
 .cpv-railbtn{display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 15px;border:1px solid var(--line);border-radius:10px;background:var(--raise);color:var(--ink);font:700 13.5px/1 inherit;text-decoration:none;cursor:pointer}
 .cpv-railbtn:hover{border-color:var(--ink);background:#fff}
@@ -268,26 +282,63 @@ export default function StaffHub({
                 )}
               </div>
               <div className="cpv-cardgrid">
-                {shown.map((c) => (
-                  <button key={c.key} className={`cpv-card${c.locked ? " locked" : ""}`} disabled={c.locked} onClick={() => !c.locked && open(c.view || c.key, { sign: c.sign })}>
-                    <div className="cpv-card-main">
-                      <div className="cpv-card-title">{c.title}{c.done && <svg className="cpv-card-ck" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Done" style={{ marginLeft: 6, verticalAlign: "-2px", color: "var(--green)" }}><path d="M20 6 9 17l-5-5"/></svg>}</div>
-                      <div className="cpv-card-sub">{c.locked ? (c.lockMsg || "Locked") : c.sub}</div>
-                    </div>
-                    <span className={`cpv-card-act${c.done ? " done" : ""}`}>
-                      {c.locked
-                        ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        : c.done ? (c.action || "View") : `${c.action || "Open"} →`}
-                    </span>
-                  </button>
-                ))}
+                {shown.map((c) => {
+                  // `action: null` = there is genuinely nothing to press yet (a technician whose work
+                  // order the office has not issued). It renders as a plain card, not a disabled
+                  // button with an "Open →" that leads nowhere.
+                  const inert = c.action === null;
+                  const body = (
+                    <>
+                      <div className="cpv-card-main">
+                        <div className="cpv-card-title">{c.title}{c.done && <svg className="cpv-card-ck" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" role="img" aria-label="Done" style={{ marginLeft: 6, verticalAlign: "-2px", color: "var(--green)" }}><path d="M20 6 9 17l-5-5"/></svg>}</div>
+                        <div className="cpv-card-sub">{c.locked ? (c.lockMsg || "Locked") : c.sub}</div>
+                      </div>
+                      {!inert && (
+                        <span className={`cpv-card-act${c.done ? " done" : ""}`}>
+                          {c.locked
+                            ? <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            : c.done ? (c.action || "View") : `${c.action || "Open"} →`}
+                        </span>
+                      )}
+                    </>
+                  );
+                  return inert
+                    ? <div key={c.key} className="cpv-card inert">{body}</div>
+                    : <button key={c.key} className={`cpv-card${c.locked ? " locked" : ""}`} disabled={c.locked} onClick={() => !c.locked && open(c.view || c.key, { sign: c.sign })}>{body}</button>;
+                })}
               </div>
             </section>
           );
         })()}
 
-        {/* BALANCE + payment ledger — hidden until there is a contract. */}
+        {/* BALANCE + payment ledger — hidden until there is a contract, and never passed for a
+            technician (page.jsx does not even compute the figures for one). */}
         <PortalBalance accessId={accessId} finance={finance} staff />
+
+        {/* THE TECH'S OWN BUDGET — their payout for this job, their expenses, what is left. Renders
+            only when the server said there is an honest number: paid per job, payouts visible on
+            this work order, and a budget actually set. Never a $0 card. */}
+        {budget?.show && (
+          <section className="cpv-budget" aria-label="Job budget">
+            <div className="cpv-kick">Job budget</div>
+            <div className="cpv-budget-row">
+              <div><span>Budget</span><b>{money(budget.budget)}</b></div>
+              <div><span>Expenses</span><b>{money(budget.spent)}</b></div>
+              <div className={budget.remaining < 0 ? "over" : ""}><span>Remaining</span><b>{money(budget.remaining)}</b></div>
+            </div>
+            {budget.pending > 0 && <div className="cpv-budget-note">{budget.pending} awaiting approval</div>}
+          </section>
+        )}
+
+        {/* JOB COMPLETE — the field's end state: the date and who signed it off. */}
+        {doneNote && (
+          <section className="cpv-donenote">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <b>{doneNote.label}</b>
+            {doneNote.at && <span>{fmtDate(doneNote.at)}</span>}
+            {doneNote.by && <span>· {doneNote.by}</span>}
+          </section>
+        )}
 
         {reqSignOpen && (
           <RequestSignatureSheet accessId={accessId} optionId={signOptionId} role={role}

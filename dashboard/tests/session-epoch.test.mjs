@@ -38,7 +38,9 @@ test("a role or disabled change bumps session_epoch", () => {
 
 test("every getter that mints a token selects session_epoch", () => {
   // getUserById is the one getSessionUser + the project loader read the epoch from — it MUST include it.
-  assert.ok(/getUserById[\s\S]{0,160}session_epoch FROM users/.test(db), "getUserById selects session_epoch");
+  // (pay_type was appended after session_epoch for the technician's job budget, so match the column
+  // in the list rather than as the last one before FROM.)
+  assert.ok(/getUserById[\s\S]{0,180}session_epoch[^"]*FROM users/.test(db), "getUserById selects session_epoch");
   for (const marker of [
     "role, disabled, session_epoch FROM users WHERE LOWER(email) = ?",      // getUserByEmail
     "phone, role, session_epoch FROM users WHERE REPLACE",                   // getUserByPhone

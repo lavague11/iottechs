@@ -424,6 +424,27 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     // Payment ledger for the customer's balance card — whitelisted columns only (paymentsSummary).
     if (customerPortalV2 && finSum.hasContract) customerPayments = paymentsSummary(getProjectPayments(p.access_id));
   }
+  // THE TECHNICIAN'S OWN MONEY, and the only money that ever reaches one. Their payout for THIS job,
+  // the expenses THEY filed against it, and what is left. Computed here for the same reason the
+  // customer's figures are computed behind a capability: a prop that is never built cannot be read
+  // out of the RSC payload. Inputs are their own — the work-order payout total (already payout-
+  // stripped by sanitizeWorkOrderDoc when the office turned payouts off for this job) and the
+  // expense list that was filtered to this tech above. The customer's price, the margin and any
+  // other tech's payout are not inputs and never appear.
+  let techBudget = null;
+  if (initialView === "tech") {
+    try {
+      const { getWorkOrderDoc, sanitizeWorkOrderDoc } = await import("../../../lib/db");
+      const { techJobBudget } = await import("../../../lib/tech-scope");
+      const doc = sanitizeWorkOrderDoc(getWorkOrderDoc(p.access_id), "tech");
+      techBudget = techJobBudget({
+        payType: currentUser?.pay_type,
+        payoutTotal: doc?.total ?? null,          // null when payouts are hidden for this job → no card
+        expenses,                                  // already this tech's own rows only
+        techId: currentUser?.id ?? null,
+      });
+    } catch { techBudget = null; }                 // no work order yet → no budget, no card
+  }
   // The upcoming appointment is NOT money — it is whitelisted by sanitizeAppt — so it sits outside the finance
   // gate: a technician still sees the installation card. (D12's gate above wraps the finance computation only.)
   // Server-authoritative upcoming appointment (the schedule tool-blob is the canonical store), sanitized to
@@ -441,7 +462,7 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     }
   } catch { /* no schedule / bad blob → no appointment */ }
 
-  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} customerPayments={customerPayments} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt}
+  return <GatewayClient project={project} initialView={initialView} currentUser={currentUser} assignments={assignments} staffUsers={staffUsers} workOrders={workOrders} expenses={expenses} requests={requests} proposalViews={proposalViews} proposal={proposal} svcCall={svcCall} customerPortalV2={customerPortalV2} customerFinance={customerFinance} customerAppt={customerAppt} customerPayments={customerPayments} staffHub={staffHub} staffFinance={staffFinance} staffAppt={staffAppt} techBudget={techBudget}
     sandbox={project.sandbox_of ? { sourceAccessId: project.sandbox_of, as: asRole || "admin" } : null}
     canSandbox={canSandbox(currentUser?.role)} />;
 }
