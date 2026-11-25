@@ -149,7 +149,7 @@ function history(initialDevices = [], initialRoutes = []) {
     function mountDevice(d){ S.mounted.push(d.id); }
     function renderRoutes(){} function renderRouteBar(){} function renderPanel(){}
     function updateCount(){} function reportDevices(){} function renderUnplacedTray(){}
-    function queueSave(){} function updateCamBtns(){}
+    function queueSave(){} function updateCamBtns(){} function paintDevTag(){}
     ${extractFn("pSnap")}
     ${extractFn("pHistReset")}
     ${extractFn("pHistPush")}

@@ -66,7 +66,7 @@ function build({ devices = [], floor = {}, frozen = false, RO = false } = {}) {
     // Placement now has a real history of its own (pHist), which undoAction delegates to off-Route.
     var pHist=[], pHi=-1, pHistFloor=-1, selId=null, devSeq=0;
     var work={ querySelectorAll:function(){ return []; } };
-    function mountDevice(){} function reportDevices(){} function renderUnplacedTray(){} function updateCamBtns(){}
+    function mountDevice(){} function reportDevices(){} function renderUnplacedTray(){} function updateCamBtns(){} function paintDevTag(){}
     // undo/redo disarm: a correction is never a placement.
     var armedK=null; function arm(k){ armedK=k; }
     ${extractFn("disarm")}

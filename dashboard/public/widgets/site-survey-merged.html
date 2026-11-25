@@ -75,6 +75,16 @@
   #roomLayer path{fill:transparent;stroke:none;cursor:pointer;pointer-events:all}
   @media (hover:hover){ #roomLayer path:hover{fill:rgba(185,138,46,.14)} }
   #roomLayer path.sel{fill:rgba(185,138,46,.22);stroke:#b98a2e;stroke-width:1.6;vector-effect:non-scaling-stroke}
+  /* DEVICE READOUT — the bottom-left corner names whatever device is hovered or selected, one chip at a
+     time, so the plan stays a plan. Joins the established bottom-left ladder (utils 14 · scale 56 ·
+     room/boundary 86 · region bar 116); while it is up, body.devtag lifts the rest of the ladder over it. */
+  #devTag{position:absolute;left:14px;bottom:56px;z-index:7;display:none;align-items:center;gap:8px;padding:5px 11px;border-radius:8px;background:rgba(16,20,24,.86);color:#fff;font:600 12px var(--sans);max-width:230px;pointer-events:none}
+  #devTag.on{display:inline-flex}
+  #devTag .dt-dot{width:8px;height:8px;border-radius:50%;flex:none;background:currentColor}
+  #devTag .dt-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  body.devtag #gridScale{bottom:92px}
+  body.devtag #roomTag,body.devtag #boundaryTag{bottom:122px}
+  body.devtag #rgBar{bottom:152px}
   #roomTag{position:absolute;left:14px;bottom:86px;z-index:7;display:none;align-items:center;gap:8px;padding:5px 7px 5px 11px;border-radius:8px;background:rgba(16,20,24,.82);color:#fff;font:600 12px var(--sans)}
   #roomTag .rt-sub{color:rgba(255,255,255,.6);font-weight:500}
   #roomTag button{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:6px;padding:5px 9px;font:600 11px var(--sans);cursor:pointer}
@@ -442,8 +452,11 @@
   .devNode.sel .devDot,.devNode:hover .devDot,.devNode.hl .devDot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(185,138,46,.28)}
   /* IC label rides the camera border toward the facing side; in Angles it's the aim grip */
   .devNode .icLabel{position:absolute;left:calc(var(--isz,40px)/2);top:calc(var(--isz,40px)/2);transform:translate(-50%,-50%);background:var(--ink);color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 7px;border-radius:6px;white-space:nowrap;max-width:104px;overflow:hidden;text-overflow:ellipsis;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s ease}
-  /* labels stay out of the way — revealed on hover, or while a camera is selected / being aimed (the label is the aim handle) */
-  .devNode:hover .icLabel,.devNode.sel .icLabel,.devNode.aim .icLabel{opacity:1}
+  /* The name is NOT a banner on the plan. A dozen devices meant a dozen dark banners stacked over the
+     layout, each one hiding the thing it was labelling. The name now reads in ONE place — the #devTag
+     chip in the bottom-left corner — and the only label still drawn on a marker is the aim grip for
+     the camera being aimed, because there it is a control you drag, not a caption. */
+  .devNode.aim.sel .icLabel{opacity:1}
   /* Short number badge (top-right of the marker). QUIET BY DEFAULT: a plan of twenty markers wearing
      twenty black badges reads as a cloud of numbers rather than a layout, so the badge — like the IC
      label and the cone — appears only on hover, on the selected device, or when a panel card is
@@ -819,7 +832,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="devTag" aria-live="polite"><span class="dt-dot"></span><span class="dt-name"></span></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <button type="button" id="rtHeadAdd" aria-label="Add head-end" title="Head-end" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -1662,7 +1675,7 @@
     function pCanRedo(){ return pHistFloor===curFloor && pHi>=0 && pHi<pHist.length-1; }
     function pApply(s){ var st; try{ st=JSON.parse(s); }catch(e){ return; }
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=st.d||[]; selId=null;
+      devices=st.d||[]; selId=null; paintDevTag();
       // mountDevice, not reAdd: a restore puts the record back VERBATIM. reAdd re-derives tag and name,
       // which would renumber the very devices undo is supposed to bring back unchanged.
       devices.forEach(function(d){ if(+d.id>devSeq) devSeq=+d.id; mountDevice(d); });
@@ -2578,8 +2591,8 @@
       // with no photo has nothing to view, so it goes straight to the comment.
       if(RO){ el.style.cursor="pointer"; el.addEventListener("click", function(e){ e.stopPropagation(); if(d.photo){ showViewPop(d, el, true); } else { postSurveyComment(d); } }); }
       // Hover (desktop) previews the camera's view photo; tapping the badge pins it (mobile).
-      el.addEventListener("mouseenter", function(){ if(d.photo && !popPinned) showViewPop(d, el, false); });
-      el.addEventListener("mouseleave", function(){ if(!popPinned) hideViewPop(); });
+      el.addEventListener("mouseenter", function(){ devTagPeek(d); if(d.photo && !popPinned) showViewPop(d, el, false); });
+      el.addEventListener("mouseleave", function(){ devTagPeek(null); if(!popPinned) hideViewPop(); });
       var vb=el.querySelector(".viewBadge");
       vb.addEventListener("pointerdown", function(e){ e.stopPropagation(); });
       vb.addEventListener("click", function(e){ e.stopPropagation(); if(!d.photo) return;
@@ -2594,7 +2607,7 @@
       var dot=el.querySelector(".devDot"); if(dot) dot.style.backgroundImage=d.photo?("url("+d.photo+")"):"";
       var cen=ISZ/2, br=Math.round(ISZ/2)+4;                 // node centre + border radius scale with the icon size
       var a=d.aim*Math.PI/180, lab=el.querySelector(".icLabel");
-      lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag);   // the map emphasizes WHERE (location name "Dining 1"); falls back to the identity name/tag when no location is resolved
+      lab.textContent=devLabel(d);
       lab.title=lab.textContent;
       // Short NUMBER for the marker; revealed on hover/select (CSS) so twenty markers do not read as twenty badges.
       var num=el.querySelector(".devNum");
@@ -2621,8 +2634,23 @@
         if(rg){ rg.style.left=(RR-6)+"px"; rg.style.top="-6px"; rg.title = pxPerFt()>0 ? (Math.round(d.range)+" ft radius") : "Drag to size the coverage"; } }
     }
     var _suppressSelPost=false;   // set while applying an incoming selectCid, so we don't echo it back
+    // The one name for a device on the map: WHERE it is ("Dining 1") before WHAT it is called, falling
+    // back to the identity name/tag when no location is resolved. Shared by the aim grip and the readout.
+    function devLabel(d){ return d ? cap(d.locName||(d.name&&d.name.trim())||d.tag) : ""; }
+    // Bottom-left readout. Hover is a peek, selection is sticky: letting go of a hover falls back to the
+    // selected device rather than going blank, so the chip always answers "which one am I working on".
+    var devTagHover=null;
+    function paintDevTag(){ var t=document.getElementById("devTag"); if(!t) return;
+      if(devTagHover && devices.indexOf(devTagHover)<0) devTagHover=null;
+      var d=devTagHover||byIdDev(selId)||null, on=!!d;
+      t.classList.toggle("on",on); document.body.classList.toggle("devtag",on);
+      if(!on) return;
+      t.querySelector(".dt-name").textContent=devLabel(d);
+      t.querySelector(".dt-dot").style.color=RT_BASE_KINDS[d.k]?"#b98a2e":d.color;
+      t.title=devLabel(d); }
+    function devTagPeek(d){ devTagHover=d||null; paintDevTag(); }
     function select(id){ if(id!=null) disarm();   // picking an existing device means you have stopped placing
-      selId=id; devices.forEach(renderDevice); selectPanelCard(id); if(id!=null){ growCone(id); growCoverage(id); }   // selecting (incl. Walkthrough via selectCid) replays the coverage reveal for that device
+      selId=id; devices.forEach(renderDevice); selectPanelCard(id); paintDevTag(); if(id!=null){ growCone(id); growCoverage(id); }   // selecting (incl. Walkthrough via selectCid) replays the coverage reveal for that device
       // Broadcast the cid of the picked camera so the host (System Planner) can focus the same camera in
       // the CAMERA VIEWS pane. Only on genuine picks here — suppressed while a relay is being applied.
       if(!_suppressSelPost){ var sd=byIdDev(id); try{ parent.postMessage({ type:"iotSurveySelect", project:PID, cid:(sd&&sd.cid)||null }, "*"); }catch(e){} }
@@ -3516,7 +3544,7 @@
     function loadFloor(i){ if(aligning) exitAlign(true); curFloor=i; var f=floors[i]||{};
       if(bgToolSrc===SAT_SRC) bgToolSrc=null;   // the shared satellite iframe holds the previous floor's capture/outline → next enterBg reloads a clean frame
       [].forEach.call(work.querySelectorAll(".devNode"), function(el){ el.remove(); });
-      devices=[]; devSeq=0; selId=null; coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
+      devices=[]; devSeq=0; selId=null; paintDevTag(); coverageRevealed=false; bgHasImage=!!f.started; bgData=f.bg||null; curBgSource=f.bgSource||null; curFloorScale=f.scale||null; curFloorAerial=f.aerial||null; sceneAspect=null;   // re-derive the plate shape from this floor's photo (reveal coverage once this floor is ready)
       regionMode=false; document.body.classList.remove("regions"); var _rl=document.getElementById("regionLayer"); if(_rl) _rl.style.pointerEvents="none"; closeZonePop(false); bdLoad();   // leave edit mode + load this floor's boundary
       focusMode=false; updateFocusBtn();   // each floor opens in Full view
       // reAddPool = the whole stored list while it loads, so ordinals are minted against the tags that

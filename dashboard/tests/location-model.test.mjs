@@ -93,8 +93,46 @@ test("identity is never written; the reconciler writes only location fields with
 });
 
 test("the map label prefers the location name; identity is the fallback", () => {
-  assert.ok(survey.includes("lab.textContent=cap(d.locName||(d.name&&d.name.trim())||d.tag)"), "canvas emphasizes WHERE");
+  assert.ok(survey.includes("function devLabel(d){ return d ? cap(d.locName||(d.name&&d.name.trim())||d.tag) : \"\"; }"),
+    "ONE resolver: location name first, identity name/tag as the fallback");
+  assert.ok(survey.includes("lab.textContent=devLabel(d);"), "the aim grip reads it");
+  assert.ok(survey.includes('t.querySelector(".dt-name").textContent=devLabel(d);'), "and so does the bottom-left readout");
   assert.ok(survey.includes('function sugShown(d){ if(d && d.k==="cam") return ""'), "camera suggestion row yields to the auto location name");
   assert.ok(survey.includes('locName:d.locName||"",placementType:d.placementType||""'), "location + placement persist");
   assert.ok(survey.includes('locName:d.locName||"", placementType:d.placementType||"", cone:'), "the roster push to the page carries location + placement");
+});
+
+// THE NAME READS IN ONE PLACE.
+//
+// Found on a live plan (ASC0062): every device on the floor wore its own dark banner — "Dining Room 8",
+// "Dining Room 4", "Room 6" — stacked over each other and over the layout they were labelling. Eight
+// devices meant eight banners covering the plan. The name now lives in a single chip in the bottom-left
+// corner naming whatever is hovered or selected, and the only label still drawn on a marker is the aim
+// grip for the camera actually being aimed, where it is a control you drag rather than a caption.
+test("the device name is a bottom-left readout, not a banner on every marker", () => {
+  // The only reveal left for the on-marker label: angle mode AND selected — the grip you drag to aim.
+  assert.match(survey, /\.devNode\.aim\.sel \.icLabel\{opacity:1\}/, "the grip survives");
+  assert.ok(!/\.devNode:hover \.icLabel/.test(survey), "hover no longer paints a banner");
+  assert.ok(!/\.devNode\.sel \.icLabel\{/.test(survey), "nor does plain selection");
+  assert.ok(!/\.devNode\.aim \.icLabel\{opacity:1\}/.test(survey),
+    "and angle mode no longer paints one on EVERY camera at once — the screenshot that started this");
+  // aiming still has a second path that never needed the label (tap the plan where it should point),
+  // so the grip is a convenience, not the only way through.
+  assert.match(survey, /d\.aim=Math\.round\(Math\.atan2\(e\.clientY-cy, e\.clientX-cx\)\*180\/Math\.PI\)/,
+    "tap-to-aim is still there");
+});
+
+test("the readout: one chip, hover peeks, selection sticks, and it heals itself", () => {
+  assert.match(survey, /<div id="devTag" aria-live="polite">/, "it exists and announces itself");
+  assert.match(survey, /#devTag\{position:absolute;left:14px;bottom:56px;/, "bottom-LEFT, on the existing ladder");
+  assert.match(survey, /body\.devtag #gridScale\{bottom:92px\}/, "and it lifts the rest of that ladder over itself");
+  // Hover is a peek; letting go falls back to the selected device rather than going blank.
+  assert.match(survey, /var d=devTagHover\|\|byIdDev\(selId\)\|\|null, on=!!d;/, "hover first, then selection");
+  assert.match(survey, /devTagPeek\(d\);.*showViewPop\(d, el, false\)/, "mouseenter peeks");
+  assert.match(survey, /devTagPeek\(null\);.*hideViewPop\(\)/, "mouseleave releases the peek");
+  assert.match(survey, /selectPanelCard\(id\); paintDevTag\(\);/, "selection repaints it");
+  // A hovered device can vanish without a mouseleave — erased, or the floor changed under the pointer.
+  assert.match(survey, /if\(devTagHover && devices\.indexOf\(devTagHover\)<0\) devTagHover=null;/,
+    "it never names a device that is no longer on this floor");
+  assert.match(survey, /devices=\[\]; devSeq=0; selId=null; paintDevTag\(\);/, "cleared on a floor change");
 });
