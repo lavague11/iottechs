@@ -279,3 +279,156 @@ F6 and F7 are one change in two places: a device needs a *type* and always has a
    real payment. Both hand off to the owner, per the standing rule.
 4. **Technician identity.** Walking the tech role needs a technician account to assign. Use an
    existing test tech, or create one?
+
+---
+
+# TECH ROLE OVERHAUL — what was built, and what it cost
+
+Owner's instruction, in full: *"A tech can do exactly these, nothing else"* — view the work order, do
+it, QC, add expenses, add the QR code, VIEW the site survey (plan, placements, cable routes, angles),
+view their own job budget, download the work order PDF. *"Everything else is hidden in the UI AND
+refused on the server … a server-side allow-list for the tech role (deny by default), not per-button
+hiding."*
+
+## 1. The allow-list as implemented
+
+The fence is at the **choke points**, not on each action. Every server action on the project page
+resolves its caller through one of three helpers, and each now takes the name of the action asking:
+
+| File | Choke point | Actions behind it |
+|---|---|---|
+| `app/project/[accessId]/actions.js` | `getSessionTok(actionKey)` / `getAnyTok(actionKey)` | 55 |
+| `app/project/[accessId]/proposal-actions.js` | `getSessionRole(actionKey)` | 74 |
+| `app/project/[accessId]/work-order-actions.js` | `gate(accessId, cap, actionKey)` | 25 |
+
+`lib/tech-scope.js` `fenceTok()` turns a technician's token into the role **`"denied"`** for any
+action that is not on the list — **including every action that passes no name at all**. So the ~130
+actions nobody deliberately opened are closed, and one added next year is closed until someone lists
+it on purpose. The failure mode of forgetting is a refusal, not a leak.
+
+**Why `"denied"` and not `null`.** Several actions fall back to `tok?.role || "customer"` when there
+is no token, and a customer MAY see the customer's money — so returning `null` to a blocked tech would
+have handed them the payment ledger through the back door. `"denied"` is in no capability list and no
+role array, so every check it meets fails closed.
+
+Four actions in `actions.js` resolved their own session inline and never met the fence
+(`updateProjectInfoAction`, `setProjectServiceAction`, `addAssignmentAction`,
+`removeAssignmentAction`). Their own role checks already excluded techs, but a fence with four holes
+is not a fence — they now go through `getSessionTok()`.
+
+### The 23 actions a technician may call
+
+| Action | What it is |
+|---|---|
+| `getWorkOrderAction`, `getWorkOrderEventsAction` | read the work order + its history |
+| `signWorkOrderAction`, `acceptWorkOrderAction` | accept the work order = accept the assignment |
+| `checkInAction`, `endDayAction` | "I'm on site" / close the day |
+| `setLineStatusAction`, `addLinePhotoAction`, `removeLinePhotoAction`, `syncFieldQueueAction` | do the work |
+| `listInstallIssuesAction`, `reportInstallIssueAction`, `listInstallPhotosAction` | flag problems, photos |
+| `techAdvanceStageAction` | their own forward step |
+| `acceptStageAction` | the QC sign-off |
+| `submitExpenseAction` | add an expense |
+| `setSystemQrAction` | add the activation QR |
+| `getProposalAction` | the **frozen work-order** proposal — `techPrice` only |
+| `getToolDataAction`, `saveToolDataAction` | tool blobs; **which** tool is decided by `roles.js` |
+| `proposalLayoutMetaAction`, `getAcceptancesAction`, `getEventsAction`, `getRatesAction` | the reads the field screens need |
+
+### Refused — the ones worth naming
+
+`recordPaymentAction` · `deletePaymentAction` · `confirmPaymentAction` · `sendInvoiceAction` ·
+`saveProposalDraftAction` · `sendProposalAction` · `reviseProposalAction` · `saveTechPricingAction` ·
+`getPaymentsForLogAction` · `getCustomerFinanceAction` · `getApprovalDataAction` ·
+`createWorkOrderAction` · `createWorkOrderDocAction` · `finalizeWorkOrderAction` ·
+`submitWorkOrderAction` · `updateProjectInfoAction` · `addAssignmentAction` ·
+`removeAssignmentAction` · `setStage` · `setCommissionAction` · `setPayoutAction` ·
+`payExpenseAction` · `declineExpenseAction` · `closeProjectAction` · `setInternalJobAction` ·
+`getNotesAction` · `addNoteAction` · `submitToolAction` — and everything else not listed above.
+
+### Capabilities removed from `tech` in `lib/roles.js`
+
+| Capability | Effect |
+|---|---|
+| `survey.edit` / `survey.unlock` / `survey.submit` | the survey is read-only for the field. **Both** write paths derive their survey editors from `can(role,"survey.edit")`, so one change closes `saveToolDataAction` and `POST /api/tool-data` at once |
+| `project.contact.edit` | no customer edits. They still **read** the contact (`customer.contact.view`) and may save it to their phone |
+| `addendum.build` | logging extra work as a change order is office work now |
+
+**Two of these were real field workflows, and this is the cost of "exactly these, nothing else":**
+
+1. **`addendum.build`** — a tech finding extra work on site could log it (unpriced) for the office to
+   price. They now cannot. If a tech on a roof finds two more drops are needed, they phone it in.
+2. **`submitRequestAction`** — a tech asking the office for materials or help. Not on the list, so it
+   is refused and its UI hidden.
+
+Both are one entry in two lists to restore. Say the word and either goes back.
+
+## 2. Still owed
+
+- **The live 403 as a real technician.** The enforcement and the tests are in; proving it against a
+  production tech session needs a tech password, which stops with the owner.
+- **An admin control for `users.pay_type`.** The column exists and defaults to `per_job` (so nobody
+  loses a payout figure they see today). Setting someone to hourly or salary currently needs a DB write.
+
+---
+
+# CUSTOMER VIEW AUDIT — report only, nothing changed
+
+Every control and status a customer sees, by stage. Sources: `lib/customer-portal.js`
+(`viewAvailability` / `portalCards`), `CARD_COPY` in `customer-portal.jsx`, `CUSTOMER_STATUS` in
+`lib/project-status.js`, and `customerNextAction` in `gateway-client.jsx`.
+
+## The hero: one status, one action
+
+| State | Customer sees | CTA? | Should they? |
+|---|---|---|---|
+| INTAKE | "Getting Started" | no | yes |
+| BUILD_SURVEY | "Site Survey" | no | yes |
+| AWAITING_SURVEY_APPROVAL | "Approve Site Survey" | **yes** → survey | yes |
+| CREATE_PROPOSAL / SEND_PROPOSAL | "Awaiting Proposal" | no | yes |
+| AWAITING_SIGNATURE | "Review & Sign Proposal" | **yes** → proposal | yes |
+| CHANGES_REQUESTED | "Awaiting Proposal" | no | yes — their request is with the office. See Q3 |
+| AWAITING_DEPOSIT | "Pay Deposit" | **yes** → payment | yes |
+| READY_TO_SCHEDULE | "Awaiting Installation" | no | **see Q1** |
+| INSTALL_SCHEDULED | "Installation Scheduled" | no | yes |
+| INSTALL_IN_PROGRESS | "Installation In Progress" | no | yes |
+| AWAITING_FINAL_PAYMENT | "Final Payment Due" | **yes** → payment | yes |
+| COMPLETE | "Complete" | no | yes |
+| CLOSED_NOT_COMPLETED | "Closed" | no | yes |
+
+## The cards — each renders only when it applies
+
+| Card | Appears when | Button | What it does | Should they? |
+|---|---|---|---|---|
+| Site Survey | survey has data | **View** | read-only plan, placements, their walkthrough | yes |
+| System Preview | mockup has data | **View** | camera photo preview (folded into Survey) | yes |
+| Proposal | a published proposal exists | **Review** → **Sign** | opens the stored PDF; signs it | yes |
+| Phone Setup | signed and pre-install | **Start** | links to the mobile-setup guide | yes |
+| Installation | an appointment exists or install started | **View** | date, time, location — never crew or notes | yes |
+| Change Order | an add-on is priced and awaiting, or one was signed | **Review** | approve or decline the add-on | yes |
+| Sign Off | every work-order line is complete | **Sign** | signs that the work is done | **see Q2** |
+| Completion | closeout ready or complete | **View** | certificate, warranty, activation QR | yes |
+| Balance | there is a contract | **Make Payment** | total / paid / remaining, Zelle + Square | yes |
+
+**Closeout has no card on purpose** — its only customer-facing job moved inside Completion, so the
+portal never shows two closing actions.
+
+## What a customer never sees (verified, not assumed)
+
+Cost · margin · commission · the tech payout · the work order itself (scope, lines, crew, daily logs)
+· internal notes · the staff directory · appointment `notes` and the invited roster · payment
+recorder, processor ids and proof photos · an unsent draft proposal · an unpriced add-on.
+
+## The three questions this raised
+
+1. **READY_TO_SCHEDULE is a dead end for the customer.** They have paid the deposit and the hero says
+   "Awaiting Installation" with no action and no date. Dispatch owns the calendar by design, but the
+   customer has no way to say "weekday mornings suit me". **Medium** — a "Request a date" note that
+   lands on the scheduling tool, not a self-booking calendar.
+2. **Sign Off and Completion are two closing signatures.** Sign Off appears the moment the last work
+   order line is marked; Completion carries the closeout confirmation. Closeout was deliberately
+   merged INTO Completion so there would be one ending — Sign Off reintroduces a second one.
+   **Medium** — likely the same merge again.
+3. **CHANGES_REQUESTED reads "Awaiting Proposal".** Truthful but flat: a customer who asked for a
+   change gets the same words as one who has never seen a proposal. **Small** — "Your changes are
+   with us".
+
+Nothing in this section was changed.
