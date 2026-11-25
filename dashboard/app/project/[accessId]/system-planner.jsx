@@ -7,7 +7,7 @@ import { toolAccepted } from "./survey-approve";   // fingerprint check — driv
 import { subscribeSyncStatus, retryToolSync, subscribeClaim, takeOverTool, useSavedCopy, pushDeviceCopy } from "./tool-sync";
 import { claimBanner } from "../../../lib/tool-claim";
 import { rosterFromSurvey, surveyLastStep, surveyEditedAfterSubmit, surveyFloors } from "../../../lib/survey-state";
-import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS, submitRows, submitGaps } from "../../../lib/survey-rail";
+import { stepAfter, stepBefore, railFromEcho, FLOOR_BAR_STEPS, submitRows, submitGaps, deviceSummary, submitTotals } from "../../../lib/survey-rail";
 import { routeTotal } from "../../../lib/survey-routes";
 
 // Projects whose rail the user has navigated in this session. Module scope on purpose: a per-mount
@@ -456,6 +456,25 @@ export default function SystemPlanner({
   // summary read one function and a test can execute it.
   const submitFloors = useMemo(() => submitRows(floors, roster), [floors, roster]);
   const surveyGaps = useMemo(() => submitGaps(submitFloors), [submitFloors]);
+  // REVIEW THUMBNAILS — the plan WITH what was placed on it. These were the bare background image, so
+  // the last screen before approval showed empty floor plans whatever had been surveyed: no cameras,
+  // no speakers, no cable runs. Rasterized by the one survey renderer (lib/survey2-export), the same
+  // one the customer's layout and the PDF use, at thumbnail width — so a device that shows here shows
+  // there. Built only while the Review step is open, and never blocks it: until they resolve, the
+  // cards fall back to the plain background exactly as before.
+  const [reviewThumbs, setReviewThumbs] = useState(null);
+  useEffect(() => {
+    if (customer || paneMode !== "review" || !sv) { return; }
+    let live = true;
+    (async () => {
+      try {
+        const { exportSurvey2Images } = await import("../../../lib/survey2-export");
+        const imgs = await exportSurvey2Images(sv, { maxWidth: 420 });
+        if (live) setReviewThumbs(imgs || []);
+      } catch { /* a bad floor never costs the Review step its summary */ }
+    })();
+    return () => { live = false; };
+  }, [customer, paneMode, sv]);
   const surveyComplete = surveyGaps.length === 0;
   // REBUILD: ONE Submit button, gated on the SURVEY. Blocked (muted) while there are gaps; Submit label is
   // just "Submit" (never Re-submit). Mockup/Camera-Views submission is dropped from the flow.
@@ -658,7 +677,7 @@ export default function SystemPlanner({
               ))}
             </div>
           )}
-          <SubmitSummary rows={submitFloors} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
+          <SubmitSummary rows={submitFloors} thumbs={reviewThumbs} onGoPlan={() => goRail("layout")} onGoPhotos={() => goRail("views")} />
           {/* The Submit action lives in the universal bottom bar (center "Submit ▾") — no inline approve bar. */}
         </div>
       )}
@@ -846,21 +865,28 @@ function SyncBadge({ syncKey = null }) {
 // cameras still missing a photo. Thumbnails open the Plan; the missing-photo flag opens Camera Photos.
 // `rows` is submitFloors — the SAME rows the Approval badge and the open-items list read, so the
 // summary can never contradict the verdict printed above it.
-function SubmitSummary({ rows = [], onGoPlan, onGoPhotos }) {
+function SubmitSummary({ rows = [], thumbs = null, onGoPlan, onGoPhotos }) {
   const list = rows;
   if (!list.length) return <div className="syp-summary-empty">Start a floor to see the summary.</div>;
-  const totalCams = list.reduce((n, f) => n + f.camCount, 0);
-  const totalMissing = list.reduce((n, f) => n + f.missing, 0);
+  // The rendered plan when it is ready, the bare background until then, "No plan" when there is none.
+  // Matched by NAME, not position: the exporter drops a floor whose image fails to load, so the two
+  // lists can be different lengths and an index lookup would hang one floor's plan on another.
+  const byName = new Map((thumbs || []).filter((t) => t && t.img).map((t) => [String(t.name || ""), t.img]));
+  const thumbOf = (f) => byName.get(String(f.name || "")) || f.bg || null;
+  // EVERY device kind, in the planner's own words — this read "N cameras" per floor, so a floor of
+  // speakers said "0 cameras" and looked empty on the last screen before approval. The photo flag
+  // stays camera-specific: only a camera takes a view photo.
+  const t = submitTotals(list);
   return (
     <div className="syp-summary">
       {list.map((f, i) => (
         <div className="syp-sum-floor" key={i}>
           <button className="syp-sum-thumb" onClick={onGoPlan} title="Open the floor plan" aria-label={`Open ${f.name} plan`}>
-            {f.bg ? <img src={f.bg} alt="" /> : <span className="syp-sum-noimg">No plan</span>}
+            {thumbOf(f) ? <img src={thumbOf(f)} alt="" /> : <span className="syp-sum-noimg">No plan</span>}
           </button>
           <div className="syp-sum-meta">
             <div className="syp-sum-name">{f.name}</div>
-            <div className="syp-sum-stat">{f.camCount} camera{f.camCount === 1 ? "" : "s"}</div>
+            <div className="syp-sum-stat">{deviceSummary(f.byKind) || "Nothing placed"}</div>
             {f.missing > 0 && (
               <button className="syp-sum-flag" onClick={onGoPhotos} title="Add the missing photos">
                 {f.missing} missing photo{f.missing === 1 ? "" : "s"}
@@ -869,7 +895,7 @@ function SubmitSummary({ rows = [], onGoPlan, onGoPhotos }) {
           </div>
         </div>
       ))}
-      <div className="syp-sum-total">{totalCams} camera{totalCams === 1 ? "" : "s"} total{totalMissing > 0 ? ` · ${totalMissing} still need a photo` : (totalCams > 0 ? " · all have photos" : "")}</div>
+      <div className="syp-sum-total">{t.label || "Nothing placed yet"}{t.missing > 0 ? ` · ${t.missing} still need a photo` : (t.cameras > 0 ? " · all cameras have photos" : "")}</div>
     </div>
   );
 }

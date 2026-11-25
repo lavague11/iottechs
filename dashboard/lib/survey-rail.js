@@ -3,6 +3,7 @@
 // only a projection of it (it has two: Background and Setup), and its `iotSurveyStep` echo may never move the
 // rail past a step the user did not ask for.
 import { RAIL_STEPS } from "./survey-state.js";
+import { SURVEY_GROUPS, ANNOTATION_KINDS, kindOf } from "./survey2-model.js";
 
 // R4 — the floor picker shows on Background, Layout, Placement and Route only. Those are the steps
 // where a FLOOR is the thing being worked on. Camera Angles pages through cameras and Approval
@@ -95,16 +96,71 @@ export function submitRows(floors = [], roster = []) {
     const devices = (r && Array.isArray(r.devices) && r.devices.length)
       ? r.devices
       : (f ? (f.cams || (Array.isArray(f.devices) ? f.devices : [])) : []);
-    const cams = devices.filter((d) => d && d.k === "cam" && d.placed !== false);
+    const placed = devices.filter((d) => d && d.k && d.placed !== false && !ANNOTATION_KINDS.has(d.k));
+    const cams = placed.filter((d) => d.k === "cam");
+    // EVERY kind, not just cameras. This step counted `k === "cam"` alone, so a floor holding ten
+    // speakers — or alarm contacts, or POS gear — reported "0 cameras" and read as empty right before
+    // the survey went out for approval. The rest of the survey has one device model for exactly this
+    // reason (lib/survey2-model.js: the customer layout and the PDF render every kind); the Review
+    // step was the last camera-only surface. Annotations (Important / Outlet / Hazard) are notes on
+    // the plan, not equipment, so they are not counted here either — same rule as surveyCounts and
+    // unwiredDevices.
+    const byKind = {};
+    placed.forEach((d) => { byKind[d.k] = (byKind[d.k] || 0) + 1; });
     out.push({
       name: (r && r.name) || (f && f.name) || `Floor ${i + 1}`,
       bg: (f && f.bg) || null,
       hasBase: f ? !!(f.bg || (f.ctx && f.ctx.src) || f.aerial || f.bgSource) : true,
       camCount: cams.length,
+      devCount: placed.length,
+      byKind,
+      // Only a camera takes a view photo, so the gap stays camera-specific — a speaker with no photo
+      // is not a gap, it is a speaker.
       missing: cams.filter((c) => !c.photo).length,
     });
   }
   return out;
+}
+
+// "8 cameras", "10 speakers", "8 cameras · 10 speakers" — a floor's contents in the planner's own
+// words. Declared group order (SURVEY_GROUPS), so the phrase is stable between renders, and the
+// canonical kind names, so nothing here invents a label the rest of the survey does not use.
+export function deviceSummary(byKind = {}) {
+  const parts = [];
+  for (const g of SURVEY_GROUPS) {
+    for (const it of g.items) {
+      const n = +byKind[it.k] || 0;
+      if (!n) continue;
+      parts.push(`${n} ${plural(it.name, n)}`);
+    }
+  }
+  // A kind the model does not know about still gets counted rather than silently dropped.
+  for (const k of Object.keys(byKind)) {
+    if (FLAT_KINDS.has(k) || !byKind[k]) continue;
+    parts.push(`${byKind[k]} ${plural(kindOf(k).name, byKind[k])}`);
+  }
+  return parts.join(" · ");
+}
+const FLAT_KINDS = new Set(SURVEY_GROUPS.flatMap((g) => g.items.map((it) => it.k)));
+// "Camera" → "Cameras"; "Door / Window" → "Door / Windows" is wrong, so a name holding a slash or
+// already ending in s is left alone and only the count carries the plurality.
+function plural(name, n) {
+  const s = String(name || "Device");
+  if (n === 1 || /[s\/]$/.test(s) || s.includes("/")) return s.toLowerCase();
+  return (s + "s").toLowerCase();
+}
+
+// Totals across every floor, in the same words.
+export function submitTotals(rows = []) {
+  const byKind = {};
+  rows.forEach((f) => Object.entries(f.byKind || {}).forEach(([k, n]) => { byKind[k] = (byKind[k] || 0) + n; }));
+  return {
+    devices: rows.reduce((n, f) => n + (f.devCount || 0), 0),
+    cameras: rows.reduce((n, f) => n + (f.camCount || 0), 0),
+    missing: rows.reduce((n, f) => n + (f.missing || 0), 0),
+    byKind,
+    label: deviceSummary(byKind),
+  };
 }
 
 // A real gap is a floor with no background, or a PLACED camera with no photo. A floor with no
