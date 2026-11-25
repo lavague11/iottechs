@@ -60,7 +60,6 @@
   .libBtn span{color:var(--muted);font-weight:400}
 
   /* device + FOV (used when a background is set) */
-  #aerialCredit{position:absolute;display:none;z-index:6;pointer-events:none;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;font-weight:600;white-space:nowrap;color:rgba(255,255,255,.95);background:rgba(0,0,0,.45);text-shadow:0 0 3px rgba(0,0,0,.8)}   /* Google imagery credit, sized by IOTTileLayout.creditMetrics against the plate */
   #scene{position:absolute;inset:0;transform-origin:0 0}   /* wheel/pinch zoom scales this (bg + devices); UI controls stay fixed */
   #planWorld{position:absolute;inset:0;transform-origin:50% 50%}   /* the plan + its grid/zones/rooms/devices ride ONE manual alignment transform (floor.planXf) over the fixed aerial; identity on plain/Plan-view floors */
   #gridLayer{position:absolute;inset:0;z-index:2;pointer-events:none;display:none;background-image:linear-gradient(to right,rgba(16,20,24,.14) 1px,transparent 1px),linear-gradient(to bottom,rgba(16,20,24,.14) 1px,transparent 1px)}   /* Phase 4.3: ONE scaled grid on the plate (scene-local px → rides the zoom); under devices (z3), over the plan */
@@ -832,7 +831,7 @@
 
         <!-- STATE B: a background is set → the working canvas (hidden until chosen) -->
         <div id="working" style="display:none;position:absolute;inset:0">
-          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="aerialCredit" aria-hidden="true"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="devTag" aria-live="polite"><span class="dt-dot"></span><span class="dt-name"></span></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
+          <div id="scene"><div class="stage-img" id="aerialImg"></div><div id="planWorld"><div class="stage-img" id="stageImg"></div><div class="dimOverlay"></div><div id="gridLayer"></div><svg id="zoneLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><div id="zoneTags"></div><svg id="regionLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="roomLayer" preserveAspectRatio="none" aria-hidden="true"></svg><svg id="routeLayer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg></div><div id="alignDrag"></div></div><div id="gridScale"></div><div id="devTag" aria-live="polite"><span class="dt-dot"></span><span class="dt-name"></span></div><div id="roomTag"></div><div id="boundaryTag"></div><svg id="northArrow" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="12.5" fill="rgba(16,20,24,.86)"/><path d="M13 8 L16 13 L14 13 L14 20 L12 20 L12 13 L10 13 Z" fill="#fff"/><text x="13" y="7" text-anchor="middle" font-size="7" font-weight="800" fill="#fff" font-family="system-ui,sans-serif">N</text></svg>
           <button class="sidechip" data-side="top" aria-label="Top side: Front"></button><button class="sidechip" data-side="right" aria-label="Right side: Right"></button><button class="sidechip" data-side="bottom" aria-label="Bottom side: Rear"></button><button class="sidechip" data-side="left" aria-label="Left side: Left"></button>
           <div id="siPanel" role="dialog" aria-label="Site analysis"></div>
           <button type="button" id="rtHeadAdd" aria-label="Add head-end" title="Head-end" style="display:none"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -1021,7 +1020,6 @@
 
   <!-- upload source picker -->
 
-  <script src="tile-layout.js?v=20261116"></script>
   <script>
     // ---- project context: title the header from the real job (?project=<accessId>) ----
     var PID = new URLSearchParams(location.search).get("project") || "";
@@ -3345,13 +3343,6 @@
         ad.addEventListener("pointermove", function(e){ if(!aligning||!last) return; var sc=document.getElementById("scene").getBoundingClientRect(); if(!sc.width||!sc.height) return;
           nudgeAlign({ tx:(e.clientX-last.x)/sc.width*100, ty:(e.clientY-last.y)/sc.height*100 }); last={x:e.clientX,y:e.clientY}; });
         ad.addEventListener("pointerup", function(){ last=null; }); ad.addEventListener("pointercancel", function(){ last=null; }); } })();
-    // Google imagery is credited wherever it is RENDERED (nothing stored carries a credit). Same sizing as the export's
-    // drawCredit — IOTTileLayout.creditMetrics against this plate — so the app, the PDF and Download agree.
-    function aerialCreditSync(cap, v, f){ var el=document.getElementById("aerialCredit"), sc=document.getElementById("scene"); if(!el||!sc||!window.IOTTileLayout) return;
-      var bg=f&&f.bg, sat=cap ? v!=="plan" : !!(f&&f.aerial&&typeof bg==="string"&&bg&&bg.indexOf("data:image/svg")!==0&&!bg.split("?")[0].toLowerCase().endsWith(".svg"));
-      if(!sat){ el.style.display="none"; return; }
-      var m=IOTTileLayout.creditMetrics(sc.offsetWidth||800, sc.offsetHeight||600);
-      el.textContent=m.text; el.style.cssText="display:block;right:"+m.margin+"px;bottom:"+m.margin+"px;font-size:"+m.font+"px;padding:"+m.padY+"px "+m.padX+"px;line-height:1"; }
     function renderView(){
       var aerial=document.getElementById("aerialImg"), img=document.getElementById("stageImg"); if(!aerial||!img) return;
       var f=floors[curFloor]||{}, cap=hybridCapable(f), v=cap?normView(f.view):null;   // Full | Layered | Plan (default Layered); legacy satellite→full, hybrid→layered
@@ -3373,7 +3364,6 @@
       var pw=document.getElementById("planWorld");
       if(pw && !aligning){ var ax=(cap && v!=="plan") ? validXf(f.planXf) : null; pw.style.transform = (ax && !xfIsId(ax)) ? xfCss(ax) : ""; }
       syncViewSeg(cap, v);
-      aerialCreditSync(cap, v, f);
       // Rotate moved into the ••• sheet; buildMoreSheet hides it on hybrid-capable floors (rotating bgData
       // alone would misalign the ctx aerial/planSvg layers, and a ctx plan is already leveled).
       var ab=document.getElementById("alignBtn"); if(ab){ ab.style.display=(cap && v!=="plan" && !frozen())?"":"none"; ab.classList.toggle("on",aligning); }   // Align plan→aerial: only on a hybrid floor in an aerial view, staff only

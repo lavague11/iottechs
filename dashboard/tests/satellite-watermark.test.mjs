@@ -44,7 +44,15 @@ test("enhance prompt tells the model not to redraw text", () => {
 });
 
 
-// ---- attribution: stored imagery is clean; every RENDER / DELIVERY stamps once, against its own size ----
+// ---- attribution: NOTHING carries a Google credit, anywhere ----
+//
+// This file used to assert the opposite: tiles cropped to drop Google's baked-in strip, then ONE clean
+// "Imagery © Google" composited back onto every render and delivery. On 2026-11-25 the owner decided to
+// carry no attribution at all — planner screen, customer layout, proposal PDF, work order PDF, Review
+// thumbnails and the satellite Download — having been told Google Maps Platform's terms ask for one. The
+// tests below are the other side of that same coin: they now hold the credit OUT, so it cannot drift back
+// in one surface at a time. The TILE CROP above is untouched and still tested — it is about Google's own
+// repeated strip smearing under AI Enhance, not about attribution.
 import vm from "node:vm";
 import { drawAerialWindow, isSatelliteRaster } from "../lib/survey2-export.js";
 
@@ -63,47 +71,34 @@ function fakeCtx() {
     fillText: (...a) => calls.push(["fillText", ...a]) };
   return g;
 }
-const credits = (g) => g.calls.filter((c) => c[0] === "fillText" && c[1] === TL.CREDIT);
+// Anything written onto a plate at all. The credit was the only text these paths ever drew, so "no text"
+// is the honest assertion — stronger than matching one string that could simply be reworded.
+const texts = (g) => g.calls.filter((c) => c[0] === "fillText");
 
-test("creditMetrics: fixed text, no invented year, scales with the output and stays legible", () => {
-  assert.equal(TL.CREDIT, "Imagery \u00A9 Google");
-  const s = TL.creditMetrics(800, 600), b = TL.creditMetrics(2600, 1800), tiny = TL.creditMetrics(100, 80);
-  assert.ok(s.font >= 12 && b.font <= 28 && b.font > s.font);
-  assert.equal(tiny.font, 12);
+test("the credit API is gone from tile-layout; the tile crop it was bundled with is not", () => {
+  assert.deepEqual(Object.keys(TL).sort(), ["PAD", "TILE", "layout"]);
+  for (const k of ["drawCredit", "creditMetrics", "creditBox", "CREDIT"]) assert.equal(TL[k], undefined, k);
+  // The crop is a separate concern and still the reason this module exists.
+  assert.equal(typeof TL.layout, "function");
+  assert.ok(TL.PAD >= 32);
 });
 
-test("drawCredit lands in the output's own bottom-right, inside the bounds, for any size", () => {
-  for (const [w, h] of [[400, 300], [1000, 800], [2400, 1700]]) {
-    const g = fakeCtx(), b = TL.drawCredit(g, w, h);
-    assert.equal(credits(g).length, 1);
-    assert.ok(b.x > w / 2 && b.y > h / 2, "bottom-right quadrant");
-    assert.ok(b.x + b.w <= w && b.y + b.h <= h, "never cropped by the edge");
-    const m = TL.creditMetrics(w, h);
-    assert.equal(Math.round(w - (b.x + b.w)), m.margin);
-    assert.equal(Math.round(h - (b.y + b.h)), m.margin);
-  }
-});
-
-test("a WINDOWED aerial render is credited even though the window excludes the image's bottom-right corner", () => {
+test("a WINDOWED aerial render draws the window and nothing else", () => {
   const im = { naturalWidth: 2000, naturalHeight: 1500 };
-  const rect = { x: 0.3, y: 0.25, w: 0.35, h: 0.3 };            // 0.65 / 0.55 — nowhere near the 1.0 / 1.0 corner
-  assert.ok(rect.x + rect.w < 0.9 && rect.y + rect.h < 0.9, "this window cannot contain the full image's corner");
+  const rect = { x: 0.3, y: 0.25, w: 0.35, h: 0.3 };
   const g = fakeCtx(); drawAerialWindow(g, im, { full: true, rect }, 1200, 900);
   const draw = g.calls.find((c) => c[0] === "drawImage");
-  assert.deepEqual(draw.slice(2, 6), [rect.x * 2000, rect.y * 1500, rect.w * 2000, rect.h * 1500]);   // only the window was drawn
-  const c = credits(g);
-  assert.equal(c.length, 1, "exactly one credit");
-  const box = TL.creditBox(1200, 900, TL.CREDIT.length * 8);     // the plate's OWN corner, not the aerial's
-  assert.equal(c[0][2], box.textX); assert.equal(c[0][3], box.textY);
-  assert.ok(box.x + box.w <= 1200 && box.y + box.h <= 900 && box.x > 900);
+  assert.deepEqual(draw.slice(2, 6), [rect.x * 2000, rect.y * 1500, rect.w * 2000, rect.h * 1500]);
+  assert.equal(texts(g).length, 0, "no credit on the plate a customer reads");
+  assert.ok(!g.calls.some((c) => c[0] === "fillRect"), "and no chip behind one");
 });
 
-test("legacy (non-full) aerial path is credited too, once", () => {
+test("the legacy (non-full) aerial path draws nothing on top either", () => {
   const g = fakeCtx(); drawAerialWindow(g, { naturalWidth: 800, naturalHeight: 800 }, { full: false }, 1200, 900);
-  assert.equal(credits(g).length, 1);
+  assert.equal(texts(g).length, 0);
 });
 
-test("a plain satellite floor is credited on the plate; vector plans and AI plans without an aerial are not", () => {
+test("isSatelliteRaster still names the distinction, though nothing stamps on it now", () => {
   assert.equal(isSatelliteRaster({ aerial: { northDeg: 0 }, bg: "data:image/jpeg;base64,AAAA" }), true);
   assert.equal(isSatelliteRaster({ aerial: { northDeg: 0 }, bg: "/api/media/abc.jpg" }), true);
   assert.equal(isSatelliteRaster({ aerial: { northDeg: 0 }, bg: "data:image/svg+xml;base64,AAAA" }), false);
@@ -111,7 +106,7 @@ test("a plain satellite floor is credited on the plate; vector plans and AI plan
   assert.equal(isSatelliteRaster({ bg: "data:image/png;base64,AAAA" }), false);
 });
 
-test("the STORED aerial is credit-free: trCtx (what becomes ctx.src) draws no credit, so reopen-crop-Use cannot stack them", () => {
+test("the STORED aerial was always clean, and still is: trCtx composites nothing", () => {
   const body = satSrc.match(/function trCtx\(\)\{[\s\S]*?return out; \}/)[0];
   const g = fakeCtx(), made = [];
   const sandbox = {
@@ -122,32 +117,25 @@ test("the STORED aerial is credit-free: trCtx (what becomes ctx.src) draws no cr
   vm.createContext(sandbox);
   const out = vm.runInContext(`(${body.replace(/^function trCtx/, "function")})()`, sandbox);
   assert.ok(out && out.src === "data:image/jpeg;base64,STORED" && out.full === true);
-  assert.equal(credits(g).length, 0, "no credit in the stored context image");
   assert.ok(!g.calls.some((c) => c[0] === "fillText" || c[0] === "fillRect"));
 });
 
-test("Use / trace-Use post the raw capture (stored clean); only Download stamps, on a copy", () => {
+test("every exit from the satellite tool hands out the raw capture — Use, trace-Use and Download alike", () => {
   const posts = satSrc.match(/satellite-capture-result[^\n]*/g) || [];
   assert.equal(posts.length, 2);
-  for (const p of posts) assert.ok(/dataUrl:\$\("prevImg"\)\.src/.test(p), p);
-  assert.ok(!/creditDue|creditedUrl/.test(satSrc), "the stamped-state machine is gone");
-  const dl = satSrc.match(/function creditedDownloadUrl\(\)[\s\S]*?toDataURL[^\n]*\n/)[0];
-  assert.match(dl, /createElement\("canvas"\)/);
-  assert.match(dl, /IOTTileLayout\.drawCredit\(g,cv\.width,cv\.height\)/);
-  assert.ok(!/capCanvas\s*=[^=]/.test(dl), "never mutates capCanvas (the pixels Enhance sends)");
-  assert.match(satSrc, /a\.href=creditedDownloadUrl\(\)/);
-  const enh = satSrc.match(/function enhance\(revision\)[\s\S]*?"image\/png"\); \}/)[0];
-  assert.ok(!/drawCredit|credited/.test(enh), "Enhance only ever sees clean pixels");
+  for (const q of posts) assert.ok(/dataUrl:\$\("prevImg"\)\.src/.test(q), q);
+  assert.ok(!/creditedDownloadUrl|creditDue|creditedUrl|drawCredit/.test(satSrc), "no stamping path left");
+  assert.match(satSrc, /a\.href=\$\("prevImg"\)\.src; a\.download="satellite-capture\.jpg"/,
+    "Download is the stored bytes, not a stamped copy");
 });
 
-test("render surfaces: export stamps both plate paths; the live widget overlays the credit on the plate", () => {
+test("no render surface carries a credit: not the export plates, not the live planner", () => {
   const ex = read("../lib/survey2-export.js");
-  assert.match(ex, /if \(!hybrid && isSatelliteRaster\(f\)\) TileLayout\.drawCredit\(ctx, W, H\)/);
-  assert.match(ex, /TileLayout\.drawCredit\(ctx, W, H\);\n\s*\} catch/);
-  assert.match(mergedSrc, /<script src="tile-layout\.js/);
-  assert.match(mergedSrc, /id="aerialCredit"/);
-  assert.match(mergedSrc, /syncViewSeg\(cap, v\);\n\s*aerialCreditSync\(cap, v, f\);/);
-  assert.match(mergedSrc, /IOTTileLayout\.creditMetrics\(sc\.offsetWidth/);
+  assert.ok(!/drawCredit|TileLayout/.test(ex), "the exporter no longer imports or calls it");
+  assert.ok(!/aerialCredit|creditMetrics/.test(mergedSrc), "nor does the planner overlay one");
+  assert.ok(!/tile-layout\.js/.test(mergedSrc), "which is why the planner stopped loading tile-layout at all");
+  // the satellite widget still needs it — that is where the CROP runs.
+  assert.match(satSrc, /<script src="tile-layout\.js/);
 });
 
 test("inline <script> blocks of both widgets parse (source-parses does not cover public/widgets)", () => {

@@ -734,14 +734,11 @@
   }); }
 
   /* ---------- finalized actions ---------- */
-  /* Attribution (see tile-layout.js): STORED imagery carries no credit — the model must never be fed one, and a reopened
-     aerial must not stack them. The credit is drawn where the aerial is RENDERED or DELIVERED (survey plate, export,
-     Download); Download below is the only exit here that hands out a file, so it is the only one that stamps. */
-  function creditedDownloadUrl(){ if(!capCanvas) return $("prevImg").src;
-    var cv=document.createElement("canvas"); cv.width=capCanvas.width; cv.height=capCanvas.height; var g=cv.getContext("2d"); g.drawImage(capCanvas,0,0); IOTTileLayout.drawCredit(g,cv.width,cv.height); return cv.toDataURL("image/jpeg",0.92); }
   function usePreview(){ trDraftPost(null); var FT=3.28084, scale=(capMetersW>0&&capMetersH>0)?{ftW:+(capMetersW*FT).toFixed(2), ftH:+(capMetersH*FT).toFixed(2)}:null;
     try{ parent.postMessage({type:"satellite-capture-result", dataUrl:$("prevImg").src, scale:scale, aerial: capAerial}, "*"); }catch(e){} }
-  function downloadImg(){ var a=document.createElement("a"); a.href=creditedDownloadUrl(); a.download="satellite-capture.jpg"; a.click(); }
+  /* Download hands out the capture exactly as it is stored — nothing is composited on the way out
+     (tile-layout.js says why there is no attribution anywhere). */
+  function downloadImg(){ var a=document.createElement("a"); a.href=$("prevImg").src; a.download="satellite-capture.jpg"; a.click(); }
 
   /* Auto before/after scanner — no dragging. #prevImg (enhanced) is the base; #cmpBefore (original)
      overlays it, revealed from the left as a glowing scanner line sweeps. cmpPos: 0 = all AFTER
