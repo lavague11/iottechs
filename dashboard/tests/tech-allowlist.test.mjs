@@ -209,6 +209,12 @@ test("the tech ladder never mentions money, and ends at Job complete", () => {
   assert.equal(techStatusOf({ woExists: true, started: true }), "WORK_IN_PROGRESS");
   assert.equal(techStatusOf({ woExists: true, woAccepted: true, installDone: true }), "QC");
   assert.equal(techStatusOf({ woExists: true, woAccepted: true, installDone: true, qcSigned: true }), "JOB_COMPLETE");
+  // A closed-out job routinely carries qc_customer_signed and completed_at while install_done was
+  // never stamped (seeded and legacy rows both do it). Either finishing fact ends the tech's job —
+  // requiring all three told a technician their finished work was still in progress. Caught live on
+  // ASC0129, which reads 3 of 3 lines complete at the completion stage.
+  assert.equal(techStatusOf({ woExists: true, woAccepted: true, qcSigned: true }), "JOB_COMPLETE", "QC signed, install_done never stamped");
+  assert.equal(techStatusOf({ woExists: true, woAccepted: true, completed: true }), "JOB_COMPLETE", "project closed out");
   // An unpaid invoice is not a state a technician has: the ladder has no input for it.
   const src = read("../lib/tech-scope.js");
   assert.ok(!/AWAITING_FINAL_PAYMENT|AWAITING_DEPOSIT|balance/.test(src.slice(src.indexOf("TECH_STATUS"))), "no money state in the tech ladder");

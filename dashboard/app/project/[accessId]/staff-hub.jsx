@@ -25,6 +25,12 @@ const apptType = (a) => (a?.kind === "install" || /install/i.test(a?.title || ""
 
 const TITLES = { install: "Installation", schedule: "Scheduling", workorder: "Work Order", expenses: "Expenses", systemqr: "System QR" };
 const money = (n) => "$" + (Math.round((+n || 0) * 100) / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+// fmtDate above takes a DATE ("2026-11-20"); a DB timestamp is "2026-11-20 06:04:59" and parsing that
+// as `${d}T00:00:00` yields Invalid Date. Take the date part of either shape.
+const fmtStamp = (d) => {
+  const m = String(d || "").match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? fmtDate(m[1]) : "";
+};
 
 export default function StaffHub({
   accessId, project, status, finance, appt, phases = [], currentPhaseKey, progressPct = null,
@@ -257,6 +263,24 @@ export default function StaffHub({
           </section>
         ) : null}
 
+        {/* ACTION RAIL — the quick moves that are not tools: call the site, open the activation QR,
+            download the work order PDF, record a payment. This prop was accepted and its CSS written
+            when the hub was built, but nothing ever rendered it, so every rail button the gateway
+            computed — Call, Schedule, Record Payment — has been invisible since. The technician's
+            "Work Order PDF" is the one that has to be reachable at every stage, which is what
+            surfaced it. Each entry is a link, an overlay or a callback; a `tone` tints it. */}
+        {actions.length > 0 && (
+          <section className="cpv-rail" aria-label="Actions">
+            {actions.map((a) => {
+              const inner = <>{a.icon}{a.label}</>;
+              const cls = `cpv-railbtn${a.tone ? " " + a.tone : ""}`;
+              if (a.href) return <a key={a.key} className={cls} href={a.href}>{inner}</a>;
+              return <button key={a.key} type="button" className={cls}
+                onClick={() => (a.onClick ? a.onClick() : a.view ? open(a.view) : null)}>{inner}</button>;
+            })}
+          </section>
+        )}
+
         {/* PROJECT tools — grouped Customer / Internal (admin sees both via the toggle). */}
         {sections.length > 0 && (() => {
           // What this ROLE may see decides the cards; what it HAS decides whether a toggle renders.
@@ -330,13 +354,13 @@ export default function StaffHub({
           </section>
         )}
 
-        {/* JOB COMPLETE — the field's end state: the date and who signed it off. */}
-        {doneNote && (
+        {/* JOB COMPLETE — the DATE and the sign-off. The words "Job complete" are already the hero
+            above it, so the note carries only what the hero does not. */}
+        {doneNote && (doneNote.at || doneNote.by) && (
           <section className="cpv-donenote">
             <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
-            <b>{doneNote.label}</b>
-            {doneNote.at && <span>{fmtDate(doneNote.at)}</span>}
-            {doneNote.by && <span>· {doneNote.by}</span>}
+            {doneNote.at && <b>{fmtStamp(doneNote.at)}</b>}
+            {doneNote.by && <span>Signed off by {doneNote.by}</span>}
           </section>
         )}
 

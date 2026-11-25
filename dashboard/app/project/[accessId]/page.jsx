@@ -301,6 +301,22 @@ export default async function ProjectLinkPage({ params, searchParams }) {
     // Work order: submitted (office froze it) / accepted (a tech signed it), on ANY version — the Staff Hub
     // card needs these because a `work_orders` row alone misses a WO the office submitted through the sheet.
     project.work_order_submitted = !!f.work_order_submitted; project.work_order_accepted = !!f.work_order_accepted;
+    // The work-order DOCUMENT's own facts. buildStageFacts has computed these since the document
+    // became its own signed record, but nothing carried them to the client — so the hub fell back to
+    // the legacy `work_orders` table and the proposal's wo_finalized_at, and a project whose work
+    // order lives only in the `wo` table read as "no work order" however far along it was. For a
+    // technician that was the difference between seeing their job and being told to wait for it.
+    project.wo_exists = !!f.wo_exists; project.wo_signed = !!f.wo_signed;
+    project.wo_lines_total = +f.wo_lines_total || 0; project.wo_lines_done = +f.wo_lines_done || 0;
+    // "Is there a survey / a mockup to show?" — server-derived so a card that depends on it is right
+    // on FIRST PAINT instead of after the client's acceptances round-trip. Same reason
+    // addendum_awaiting_signature is here. It is a boolean, not content: no device, no photo and no
+    // geometry rides along, so it is safe for every role that can open the page at all.
+    try {
+      const { getToolMeta } = await import("../../../lib/db");
+      const tm = getToolMeta(p.access_id) || {};
+      project.survey_has = !!tm.survey?.has; project.mockup_has = !!tm.mockup?.has;
+    } catch { project.survey_has = false; project.mockup_has = false; }
     // B13: a priced change order still waiting on the customer's signature — server-derived so the
     // portal's "Sign" card is right on first paint, not only once tool meta has loaded.
     project.addendum_awaiting_signature = !!f.addendum_awaiting_signature; }

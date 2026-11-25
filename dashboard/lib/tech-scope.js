@@ -160,8 +160,14 @@ export const TECH_STATUS = {
 //   started    — any line has been marked, or a check-in happened
 //   installDone— the field work is finished
 //   qcSigned   — QC is signed off
-export function techStatusOf({ woExists, woAccepted, started, installDone, qcSigned } = {}) {
-  if (qcSigned && installDone) return "JOB_COMPLETE";
+//   completed  — the project itself is closed out (completed_at)
+//
+// The two finishing facts are checked INDEPENDENTLY of install_done on purpose. A closed-out job
+// routinely carries qc_customer_signed and completed_at while install_done was never stamped — seeded
+// and legacy rows both do it — and requiring all three told a technician their finished job was still
+// "work in progress". The nearest true fact wins.
+export function techStatusOf({ woExists, woAccepted, started, installDone, qcSigned, completed } = {}) {
+  if (qcSigned || completed) return "JOB_COMPLETE";
   if (installDone) return "QC";
   if (!woExists) return "AWAITING_WORK_ORDER";
   if (!woAccepted && !started) return "WORK_ORDER_READY";
@@ -170,8 +176,8 @@ export function techStatusOf({ woExists, woAccepted, started, installDone, qcSig
 
 // The work-order CARD's words for a technician — the bug the owner found was this card still saying
 // "Create the work order" to a tech, who never creates one.
-export function techWorkOrderCard({ woExists, woAccepted, started, installDone, qcSigned, lineProgress } = {}) {
-  const state = techStatusOf({ woExists, woAccepted, started, installDone, qcSigned });
+export function techWorkOrderCard({ woExists, woAccepted, started, installDone, qcSigned, completed, lineProgress } = {}) {
+  const state = techStatusOf({ woExists, woAccepted, started, installDone, qcSigned, completed });
   if (state === "AWAITING_WORK_ORDER") return { title: "Work Order", sub: "The office has not issued it yet.", action: null, done: false };
   if (state === "JOB_COMPLETE") return { title: "Work Order", sub: "Complete.", action: "View", done: true };
   if (state === "QC") return { title: "Work Order", sub: "Work complete — run QC.", action: "Open", done: true };

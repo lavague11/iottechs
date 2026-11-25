@@ -1946,6 +1946,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     : (_pRank(proposalData?.status || "") > _pRank(lp.proposal_status || "") ? (proposalData?.status || "") : (lp.proposal_status || ""));
   // A QC sign-off counts only while every device passes AND it still matches the checklist's fingerprint.
   const qcSignedCurrent = (key) => !!(toolMeta?.qc?.allPass && acceptances?.[key] && acceptances[key].fingerprint === toolMeta.qc.fingerprint);
+  // May THIS viewer author the survey? The capability, not the role string — and the same one both
+  // server write paths ask (saveToolDataAction and POST /api/tool-data derive their survey editors
+  // from it). A technician is out of it since the tech-role overhaul: they read the plan, the
+  // placements, the cable routes and the aim cones, and change none of them. The widgets take this as
+  // `customerView`, their read-only mode, so the UI never offers an editor the server would refuse.
+  const surveyEditable = can(cView, "survey.edit");
+
   const custFacts = {
     appt_date:         lp.date,
     date:              lp.date,           // stage-flow's inquiry check reads `date` (same name as buildStageFacts)
@@ -1967,6 +1974,13 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     // (proposalData is the live row, so submitting in the sheet flips the card without a reload.)
     work_order_submitted: !!lp.work_order_submitted || !!proposalData?.wo_finalized_at,
     work_order_accepted:  !!lp.work_order_accepted || !!proposalData?.tech_signed_name,
+    // The work-order DOCUMENT's own facts, carried from buildStageFacts by page.jsx. Without these
+    // the hub could only see the legacy signals, so a project whose work order lives in the `wo`
+    // table alone read as "no work order yet".
+    wo_exists:         !!lp.wo_exists,
+    wo_signed:         !!lp.wo_signed || !!proposalData?.tech_signed_name,
+    wo_lines_total:    +lp.wo_lines_total || 0,
+    wo_lines_done:     +lp.wo_lines_done || 0,
     proposal_status:   pubProposalStatus,
     proposal_signed:   !!proposalData?.signed_name || !!lp.proposal_signed,
     deposit_submitted: lp.deposit_submitted,
@@ -1975,10 +1989,10 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
     install_date_fmt:  fmtDate(lp.install_date || lp.date),
     // Per-tool "published (office submitted) / has data / done (customer approved)" — drives the
     // celebratory "X has been published" pop-up below.
-    survey_has:        !!toolMeta?.survey?.has,
+    survey_has:        !!toolMeta?.survey?.has || !!lp.survey_has,   // server-derived fallback: right on first paint
     survey_published:  !!acceptances?.submit_site_survey,
     survey_done:       !!acceptances?.site_survey,
-    mockup_has:        !!toolMeta?.mockup?.has,
+    mockup_has:        !!toolMeta?.mockup?.has || !!lp.mockup_has,
     mockup_published:  !!acceptances?.submit_mockup,
     mockup_submitted:  !!acceptances?.submit_mockup,
     mockup_done:       !!acceptances?.mockup,
@@ -2407,7 +2421,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole || !surveyEditable} noApproval noRoster
                     propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has || surveyHasLocal}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
@@ -2423,7 +2437,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               // Flows at content height (no fixed frame) — the phone preview sizes itself, then the
               // Approve bar sits directly beneath it. No dead grey space under the preview.
               <div>
-                <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                <MockupWidget embedded accessId={lp.access_id} view={view} customerView={!!previewRole || !surveyEditable} noApproval
                   customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
                 {/* Submit / Approve moved to the ONE Planner footer (both tools together). */}
               </div>
@@ -3332,7 +3346,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       // that STEP 8 left on their screen — the owner's call: a tech has no business with it.
       const isTechView = cView === "tech";
       const techState = isTechView ? techStatusOf({
-        woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned,
+        woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned, completed: !!lp.completed_at,
       }) : null;
       const techSt = techState ? TECH_STATUS[techState] : null;
       const techDone = techState === "JOB_COMPLETE";
@@ -3364,7 +3378,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             const surveyNode = (
               <div style={heavyCol} className="ss-tool-col">
                 <div style={{ flex: 1, minHeight: 0 }} className="ss-tool-body">
-                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval noRoster
+                  <SiteSurveyWidget accessId={lp.access_id} view={view} customerView={!!previewRole || !surveyEditable} noApproval noRoster
                     propertyType={lp.property_type || "commercial"} canEditProperty={canEditProperty} onPropertyChange={onPropertyChange} bizContext={bizContext}
                     customerName={lp.contact_name || lp.customer} onHasData={setSurveyHasLocal} hasData={svMetaEff.has}
                     submitted={toolAccepted(svMetaEff, acceptances.submit_site_survey)} approved={toolAccepted(svMetaEff, acceptances.site_survey)}
@@ -3377,7 +3391,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
               <div>
                 {/* Photos view (merged System Preview) — opens straight to the phone grid (no Build splash);
                     works with no map at all, so a preview-only job never touches the floor plan. */}
-                <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+                <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole || !surveyEditable} noApproval
                   customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={mkMetaEff.has || mockupHasLocal} />
               </div>
             );
@@ -3425,7 +3439,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             // immediately; wrapping in .ss-tool-body makes the grid fill the overlay (same CSS the survey
             // uses). The widget's own bar owns Upload/Layout/Reset/Fullscreen.
             return (<div className="ss-mk-wrap">
-              <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole} noApproval
+              <MockupWidget embedded startBuilt accessId={lp.access_id} view={view} customerView={!!previewRole || !surveyEditable} noApproval
                 customerName={lp.contact_name || lp.customer} onHasData={setMockupHasLocal} hasData={(toolMeta?.mockup?.has) || mockupHasLocal} />
             </div>);
           }
@@ -3573,7 +3587,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // For a TECHNICIAN the words come from the field ladder instead (bug #5: this card used to tell
         // a tech to "Create the work order", which is the one thing a tech never does).
         isTechView ? { key: "workorder", group: "internal", ownHeader: true,
-          ...techWorkOrderCard({ woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned, lineProgress: woLineProgress }) } :
+          ...techWorkOrderCard({ woExists, woAccepted: woSigned, started: !!(woLineProgress?.done) || woSubmitted, installDone, qcSigned, completed: !!lp.completed_at, lineProgress: woLineProgress }) } :
         { key: "workorder", title: "Work Order", group: "internal",
           // The ladder the spec asks for: a draft waiting on a technician → awaiting their signature →
           // signed → how much of the work is done → complete.
@@ -3586,7 +3600,14 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         // Activation QR — the code the customer scans to set up the cameras in the app. Staff upload/replace
         // it here (the same tool also sits at the top of Closeout); the customer sees it read-only.
         { key: "systemqr", title: "System QR", group: "internal", sub: lp.system_qr ? "Saved." : "Upload the activation code.", action: lp.system_qr ? "Edit" : "Add", done: !!lp.system_qr, ownHeader: true },
-      ];
+        // THE FIELD'S COPY OF THE PLAN. Site Survey is a customer-group card, and a technician only has
+        // the internal group — so the one document they install from was unreachable from their hub.
+        // It opens the same planner everyone else sees, read-only (surveyEditable is false for them):
+        // floor plan or aerial, every placement, the cable routes and the aim cones. Only when there
+        // is something to show.
+        (isTechView && (sHasSurvey || sHasMockup)) && { key: "survey", title: "Site Survey", group: "internal",
+          sub: "Plan, placements, cable routes.", action: "View", ownHeader: true },
+      ].filter(Boolean);
 
       // Action rail — quick staff moves. Record Payment only when there's a billable contract still owed.
       const SI = {
