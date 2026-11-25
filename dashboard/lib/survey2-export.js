@@ -1,6 +1,7 @@
 "use client";
 import { parseSurveyFloors, surveyScene, surveyDevices, surveyCounts, hybridCapable, deviceIcon } from "./survey2-model.js";
 import { northArrowAngle } from "./site-transform.js";
+import { validRoutes, validHead, cableColor, bundles, bundleColor, segMidpoint, OUTLINE } from "./survey-routes.js";
 import { validXf, xfMatrix } from "./plan-xf.js";
 import TileLayout from "../public/widgets/tile-layout.js";   // the ONE credit sizing/drawing source (shared with the satellite widget)
 
@@ -74,6 +75,9 @@ export function exportSurvey2Images(surveyData, { maxWidth = 2400 } = {}) {   //
       drawExportGrid(ctx, f.bg, (f.scale && f.scale.ftW > 0) ? f.scale.ftW : 0, W, H, gridMode);
       // Layer 1c — estimated site context: zones (translucent, labeled) + boundary (dashed). Same plate-% polygons the planner draws.
       drawExportRegions(ctx, f, W, H);
+      // Layer 1d — wiring runs + the head-end, under the coverage and the markers so a device disc
+      // always sits on top of the cable that reaches it.
+      drawExportRoutes(ctx, f, W, H);
       // Real scale (when the floor was traced/captured): the plan image is f.scale.ftW feet wide, drawn W px wide.
       const pxPerFt = (f.scale && f.scale.ftW > 0) ? W / f.scale.ftW : 0;
       const scene = surveyScene(floors, fi, W, H, { pxPerFt, dense: 7 });   // >7 devices → codes only on the plan (names in the legend) so a crowded plan doesn't overlap
@@ -251,6 +255,71 @@ function drawExportGrid(ctx, bg, ftW, W, H, gridMode = 0) {
 // Estimated site boundary + zones on the export (plate-% polygons → export px). Zones are translucent, type-colored,
 // labeled; the boundary is a dashed gold loop. Estimates — never drawn or labeled as a legal/parcel line.
 const EXPORT_ZONE_RGB = { street: "120,132,148", driveway: "176,136,84", parking: "74,126,206", "front-yard": "84,164,104", "rear-yard": "138,172,64", "side-yard": "58,160,150", alley: "154,102,170", loading: "206,112,72", entrance: "200,84,114", custom: "140,146,150" };
+// WIRING RUNS. The model has carried `routes` and `head` since the planner learned to draw cable, but
+// nothing rendered them outside the widget — so the customer's layout, the proposal appendix and the
+// technician's work order all showed devices floating with no cable between them. They are drawn here,
+// under the coverage and the markers, from the same percent-space points the planner stored
+// (lib/survey-routes.js), with a dark outline under each stroke so a neon run stays legible on a white
+// floor plan AND on a dark aerial. A stretch carrying more than one run is ONE physical bundle in the
+// ceiling: it draws once, thicker, with a count — four coincident strokes read as one cable and
+// under-report the work.
+function drawExportRoutes(ctx, f, W, H) {
+  try {
+    const runs = validRoutes(f.routes);
+    const head = validHead(f.head);
+    if (!runs.length && !head) return;
+    const px = (p) => [(p[0] || 0) / 100 * W, (p[1] || 0) / 100 * H];
+    const unit = Math.max(1, Math.min(W, H) / 220);          // one "pen width" that scales with the sheet
+    const stroke = (pts, color, w) => {
+      ctx.beginPath();
+      pts.forEach((p, i) => { const q = px(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
+      ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.setLineDash([]);
+      ctx.lineWidth = w + unit * 1.1; ctx.strokeStyle = OUTLINE; ctx.stroke();   // the dark keyline first
+      ctx.lineWidth = w; ctx.strokeStyle = color; ctx.stroke();
+    };
+    // Every run at its own colour. A daisy chain is dashed — it is a different physical install.
+    runs.forEach((r) => {
+      if (r.run === "daisy") {
+        ctx.save();
+        stroke(r.pts, cableColor(r.cable), unit * 1.6);
+        ctx.setLineDash([unit * 4, unit * 3]);
+        ctx.lineWidth = unit * 1.6; ctx.strokeStyle = "rgba(255,255,255,.85)";
+        ctx.beginPath(); r.pts.forEach((p, i) => { const q = px(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); }); ctx.stroke();
+        ctx.restore();
+      } else {
+        stroke(r.pts, cableColor(r.cable), unit * 1.6);
+      }
+    });
+    // Shared stretches, redrawn thicker with the count.
+    bundles(f.routes).forEach((s) => {
+      stroke([s.a, s.b], bundleColor(s), unit * 3.2);
+      const m = px(segMidpoint(s));
+      const rr = unit * 4.4;
+      ctx.beginPath(); ctx.arc(m[0], m[1], rr, 0, Math.PI * 2);
+      ctx.fillStyle = "#fff"; ctx.fill();
+      ctx.lineWidth = Math.max(1, unit * 0.6); ctx.strokeStyle = OUTLINE; ctx.stroke();
+      ctx.fillStyle = OUTLINE; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `800 ${Math.round(rr * 1.15)}px system-ui, "Segoe UI", sans-serif`;
+      ctx.fillText("×" + s.count, m[0], m[1] + 0.5);
+    });
+    // The head-end every home run terminates at — the rack / NVR. A square, so it never reads as
+    // another device disc.
+    if (head) {
+      const q = px([head.x, head.y]);
+      const sz = unit * 7;
+      ctx.save();
+      ctx.shadowColor = "rgba(16,17,18,.3)"; ctx.shadowBlur = unit * 3;
+      ctx.fillStyle = "#fff"; ctx.fillRect(q[0] - sz / 2, q[1] - sz / 2, sz, sz);
+      ctx.restore();
+      ctx.lineWidth = Math.max(1.2, unit * 0.8); ctx.strokeStyle = OUTLINE;
+      ctx.strokeRect(q[0] - sz / 2, q[1] - sz / 2, sz, sz);
+      ctx.fillStyle = OUTLINE; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `800 ${Math.round(sz * 0.52)}px system-ui, "Segoe UI", sans-serif`;
+      ctx.fillText("HE", q[0], q[1] + 0.5);
+    }
+  } catch { /* a malformed route never costs the floor its plan */ }
+}
+
 function drawExportRegions(ctx, f, W, H) {
   try {
     const toPx = (p) => [((Array.isArray(p) ? p[0] : p.x) || 0) / 100 * W, ((Array.isArray(p) ? p[1] : p.y) || 0) / 100 * H];

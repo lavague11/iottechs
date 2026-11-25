@@ -7,6 +7,7 @@ import { workOrderScope } from "../lib/workorder-scope.js";
 import { downloadWorkOrderPdf } from "../lib/workorder-pdf.js";
 import { downloadSurveyPdf } from "../lib/survey-pdf.js";
 import { PDF } from "../lib/pdf-chrome.js";
+import { readFileSync } from "node:fs";
 
 const BOTTOM = PDF.H - PDF.FOOTER_H - PDF.SAFE_GAP;
 let seq = 0;
@@ -43,12 +44,90 @@ test("work order scope: locations, aggregated equipment, labor with payout, reta
 test("work order PDF: sections, payout totals, acceptance, canonical name, nothing under the footer", () => {
   const r = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "Maribel Santos", customerAddress: "155 Maher Ave, Clifton, NJ", techName: "Marco Diaz", installDate: "Oct 2, 2026", __trace: m.__trace, __footers: m.__footers, __return: true }));
   assert.equal(r.name, "Maribel Santos - CCTV - 0046 - Work Order.pdf");
-  for (const s of ["EQUIPMENT LOCATIONS", "EQUIPMENT", "LABOR", "WORK ORDER TOTAL", "WORK ORDER ACCEPTANCE"]) assert.ok(r.texts.includes(s), s);
+  // LABOR became TASKS in the tech-role overhaul: this sheet goes in a van and gets ticked, so the
+  // work is a checklist with a box per row, not a price list.
+  for (const s of ["EQUIPMENT LOCATIONS", "EQUIPMENT", "TASKS", "WORK ORDER TOTAL", "WORK ORDER ACCEPTANCE"]) assert.ok(r.texts.includes(s), s);
   assert.ok(r.texts.some((t) => t.includes("Marco Diaz")));
   assert.ok(r.texts.some((t) => /^\$/.test(t)), "payout amounts present");
   assert.ok(!r.texts.some((t) => t === "$300.00" || t === "$70.00"), "no retail prices leak in");
   assert.deepEqual(r.trace.filter((t) => t.y > BOTTOM), []);
   assert.ok(r.footers.every((f) => f.startsWith("Work Order | ")));
+});
+
+// ──────────────────────────────────────────── the technician's one document (tech-role overhaul)
+
+const PNG1 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+const floors = [
+  { name: "Floor 1", img: PNG1, counts: { canonical: 2, rendered: 2 }, devices: [{ code: "C1", label: "Front Entrance", kind: "Camera" }, { code: "C2", label: "Parking Lot", kind: "Camera" }] },
+  { name: "Floor 2", img: PNG1, counts: { canonical: 1, rendered: 1 }, devices: [{ code: "C3", label: "Back Door", kind: "Camera" }] },
+];
+
+test("the work order PDF carries the job info a tech needs to get through the door", () => {
+  const r = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "Buck N Up Store", customerAddress: "155 Maher Ave, Clifton, NJ",
+    siteContact: "Maribel Santos", customerPhone: "(917) 727-0081", techName: "Marco Diaz", installDate: "Oct 2, 2026",
+    __trace: m.__trace, __footers: m.__footers, __return: true }));
+  // infoStrip joins its pairs into one line, so match the line rather than a standalone cell.
+  const strip = r.texts.find((t) => t.includes("Technician:")) || "";
+  for (const t of ["Site contact:", "Phone:", "Technician:", "Scheduled:"]) assert.ok(strip.includes(t), t);
+  assert.ok(strip.includes("Maribel Santos"), "the person to call on site");
+  assert.ok(strip.includes("727-0081"), "and their number");
+  // The site contact is omitted when it is just the customer again — no line that says nothing.
+  const same = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "Maribel Santos", siteContact: "Maribel Santos", __trace: m.__trace, __return: true }));
+  assert.ok(!same.texts.some((t) => t.includes("Site contact:")), "no redundant row");
+});
+
+test("the work order PDF carries the SITE SURVEY — one landscape sheet per floor", () => {
+  const r = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "Maribel Santos", customerAddress: "155 Maher Ave",
+    surveyImages: floors, __trace: m.__trace, __footers: m.__footers, __return: true }));
+  assert.equal(r.pages, 3, "the work order page + one sheet per floor");
+  assert.ok(r.texts.includes("SITE SURVEY"));
+  assert.ok(r.texts.includes("Floor 1") && r.texts.includes("Floor 2"));
+  for (const code of ["C1", "C2", "C3"]) assert.ok(r.texts.includes(code), code);
+  assert.ok(r.texts.some((t) => t.startsWith("Front Entrance")), "placements are named, not just coded");
+  // Nothing is painted under a footer on any page, portrait or landscape.
+  assert.deepEqual(r.trace.filter((t) => t.y > BOTTOM), []);
+  // No survey supplied → no survey pages and no empty header over nothing.
+  const none = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, __trace: m.__trace, __return: true }));
+  assert.equal(none.pages, 1);
+  assert.ok(!none.texts.includes("SITE SURVEY"));
+});
+
+test("cable routes and aim cones are drawn INTO the floor raster, which is why the PDF carries them", () => {
+  // The PDF places an image; the routes and cones are painted by the one planner renderer, so this
+  // asserts the source rather than re-deriving geometry here. If the renderer ever stopped drawing
+  // them, the technician's sheet would quietly lose them with every other surface.
+  const src = readFileSync(new URL("../lib/survey2-export.js", import.meta.url), "utf8");
+  assert.match(src, /drawExportRoutes\(ctx, f, W, H\);/, "the export draws the wiring runs");
+  assert.match(src, /scene\.cones\.forEach/, "and the aim cones");
+  // The runs come from the one route model, not a second copy of the geometry.
+  assert.match(src, /from "\.\/survey-routes\.js"/);
+  // and the proposal appendix + the work order use the SAME sheet renderer
+  const wopdf = readFileSync(new URL("../lib/workorder-pdf.js", import.meta.url), "utf8");
+  assert.match(wopdf, /c\.surveyFloor\(f, \{/, "work order uses createBrandDoc's surveyFloor");
+  const prop = readFileSync(new URL("../lib/proposal-pdf.js", import.meta.url), "utf8");
+  assert.match(prop, /surveySheetBody\(doc, f, \{/, "and the proposal uses the same body");
+});
+
+test("the tech's PDF shows THEIR budget, or no money at all — never the customer's", () => {
+  // Paid per job: their budget, their expenses, what is left. The customer's price is not an input —
+  // the proposal reaching this renderer is already sanitized to techPrice.
+  const paid = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "X",
+    budget: { show: true, budget: 234, spent: 40, remaining: 194 }, __trace: m.__trace, __return: true }));
+  assert.ok(paid.texts.includes("YOUR JOB BUDGET"));
+  for (const t of ["BUDGET", "EXPENSES", "REMAINING"]) assert.ok(paid.texts.includes(t), t);
+  assert.ok(paid.texts.includes("$234.00") && paid.texts.includes("$194.00"));
+  assert.ok(!paid.texts.includes("WORK ORDER TOTAL"), "the office's total is replaced, not stacked beneath");
+  assert.ok(!paid.texts.some((t) => t === "$300.00" || t === "$70.00"), "no retail anywhere");
+
+  // Hourly / salaried / payouts hidden: no money on the sheet at all, and the rate columns go with it.
+  const none = render((m) => downloadWorkOrderPdf(wo(), { fileBase: base, customerName: "X", hidePayout: true, __trace: m.__trace, __return: true }));
+  assert.ok(!none.texts.includes("YOUR JOB BUDGET"));
+  assert.ok(!none.texts.includes("WORK ORDER TOTAL"));
+  assert.ok(!none.texts.includes("Rate") && !none.texts.includes("Total"), "the money columns are dropped, not dashed");
+  assert.ok(!none.texts.some((t) => /^\$/.test(t)), "not one dollar figure");
+  // The work is still all there — it is a work order, not a receipt.
+  for (const s of ["EQUIPMENT LOCATIONS", "EQUIPMENT", "TASKS", "WORK ORDER ACCEPTANCE"]) assert.ok(none.texts.includes(s), s);
+  assert.ok(none.texts.includes("Task") && none.texts.includes("Qty"));
 });
 
 test("work order PDF: rates pending reads TBD; a proposal with no options still names + renders", () => {

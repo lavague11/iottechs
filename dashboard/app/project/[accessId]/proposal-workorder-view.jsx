@@ -2,8 +2,9 @@
 import { useState, useEffect, useRef } from "react";
 import { workOrderScope } from "../../../lib/workorder-scope";
 import { downloadWorkOrderPdf } from "../../../lib/workorder-pdf";
+import { exportSurvey2Images } from "../../../lib/survey2-export";
 import { techOptionTotal, titleCase, serviceColor, fmtSignStamp } from "../../../lib/proposal";
-import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction } from "./proposal-actions";
+import { getProposalAction, acceptWorkOrderAction, voidTechSignatureAction, getToolDataAction } from "./proposal-actions";
 import ProposalSignModal from "./proposal-sign-modal";
 import { TaglinePill, Wordmark } from "../../components/brand";
 import { SUPPORT_PHONE, SUPPORT_EMAIL } from "../../../lib/nap";
@@ -24,7 +25,7 @@ function itemNameNode(name, outdoor) {
 // internal labor/equipment doc: every line is valued at its TECH price (set by admin at the
 // install stage), never the customer price. Server strips customer price/cost before this ever
 // reaches a tech (see sanitizeProposal role "tech"); this component only ever reads techPrice.
-export default function ProposalWorkOrderView({ fileBase = null, accessId, proposal, preview, customerName, customerAddress, onProposalChange, signerName, assignedTech = null, canVoid = false }) {
+export default function ProposalWorkOrderView({ fileBase = null, accessId, proposal, preview, customerName, customerAddress, customerPhone = null, siteContact = null, installDate = null, budget = null, hidePayout = false, onProposalChange, signerName, assignedTech = null, canVoid = false }) {
   const [fetched, setFetched] = useState(null);
   const p = fetched || proposal;
   const [viewingOpt, setViewingOpt] = useState(() => p?.selected_option || p?.payload?.options?.[0]?.id);
@@ -98,7 +99,22 @@ export default function ProposalWorkOrderView({ fileBase = null, accessId, propo
   const { locations, equipment, labor, laborSum, equipHasPay } = scope;
   const eqRate = (n) => (equipHasPay ? rate(n) : "—");
   const svcNotes = scope.notes;
-  const downloadWO = () => downloadWorkOrderPdf(p, { fileBase, customerName, customerAddress, techName: assignedTech?.name || p.tech_signed_name || null, optionId: opt.id });
+  // The PDF carries the site survey too (floor plan, placements, cable routes, aim cones) — the same
+  // raster the proposal appendix uses. The blob is fetched here rather than held by this component:
+  // it is multi-megabyte and only needed at the moment someone asks for the file. `budget` /
+  // `hidePayout` come from the caller, which is the only place that knows how this tech is paid.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const downloadWO = async () => {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    try {
+      const survey = await getToolDataAction(accessId, "survey2").then((r) => (r?.ok ? r.saved?.data : null)).catch(() => null);
+      const surveyImages = survey ? await exportSurvey2Images(survey).catch(() => []) : [];
+      downloadWorkOrderPdf(p, { fileBase, customerName, customerAddress, customerPhone, siteContact,
+        techName: assignedTech?.name || p.tech_signed_name || null, installDate, optionId: opt.id,
+        surveyImages, budget, hidePayout });
+    } finally { setPdfBusy(false); }
+  };
 
   return (
     <div className="pwo-root">

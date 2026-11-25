@@ -8,7 +8,7 @@ import ProposalWorkOrderView from "./proposal-workorder-view";
 // (tech prices only); customer (and staff previewing as customer) get the review surface.
 // Data arrives server-sanitized per role from page.jsx (lib/proposal.js sanitizeProposal) —
 // cost/margin never reach non-staff, and the customer price never reaches a tech.
-export default function ProposalPanel({ fileBase = null, accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, viewCount = 0, onShowViews, embedded = false, defaultService }) {
+export default function ProposalPanel({ fileBase = null, accessId, view, cView, custView, proposal, customerName, customerAddress, customerPhone, customerEmail, onProposalChange, onAdvance, onStageSync, signerName, assignedTech, viewCount = 0, onShowViews, embedded = false, defaultService, siteContact = null, installDate = null, techBudget = null }) {
   const staffBuilder = ["admin", "manager", "sales"].includes(cView);
   return (
     <div className="prop-wrap">
@@ -16,7 +16,10 @@ export default function ProposalPanel({ fileBase = null, accessId, view, cView, 
       {staffBuilder ? (
         <ProposalBuilder fileBase={fileBase} accessId={accessId} role={cView} initial={proposal} onProposalChange={onProposalChange} viewCount={viewCount} onShowViews={onShowViews} customerName={customerName} customerAddress={customerAddress} customerPhone={customerPhone} customerEmail={customerEmail} embedded={embedded} defaultService={defaultService} />
       ) : cView === "tech" ? (
-        <ProposalWorkOrderView fileBase={fileBase} accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress} onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
+        <ProposalWorkOrderView fileBase={fileBase} accessId={accessId} proposal={proposal} preview={custView} customerName={customerName} customerAddress={customerAddress}
+          customerPhone={customerPhone} siteContact={siteContact} installDate={installDate}
+          budget={techBudget?.show ? techBudget : null} hidePayout={cView === "tech" && !techBudget?.show}
+          onProposalChange={onProposalChange} signerName={signerName} assignedTech={assignedTech} canVoid={["admin", "manager"].includes(view)} />
       ) : (
         <ProposalCustomerView
           fileBase={fileBase} accessId={accessId} proposal={proposal} preview={custView} customerName={customerName}

@@ -2503,7 +2503,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             node: (
               <AccordionProvider><div style={{ height: "100%", overflow: "auto", padding: "16px 18px" }}>
                 {sees(cView, "ph_proposal", "Tech Board") && <TechProjectBoard project={lp} />}
-                <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                <ProposalPanel embedded siteContact={lp.contact_name} installDate={pickAppt("install")?.date || null} techBudget={techBudget} fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
                   defaultService={proposalServiceForCode(lp.service_code)}
                   proposal={proposalData} onProposalChange={setProposalData} onAdvance={(s) => browse(s)}
                   onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
@@ -3072,7 +3072,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
           case "proposal":
             return (
               <AccordionProvider><div style={{ maxWidth: 820, margin: "0 auto" }}>
-                <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
+                <ProposalPanel embedded siteContact={lp.contact_name} installDate={pickAppt("install")?.date || null} techBudget={techBudget} fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={!!previewRole}
                   defaultService={proposalServiceForCode(lp.service_code)} proposal={proposalData} onProposalChange={setProposalData}
                   onAdvance={(s) => browse(s)} onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                   customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
@@ -3342,7 +3342,7 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
         switch (key) {
           case "proposal":
             return (<AccordionProvider><div style={ovl(900)}>
-              <ProposalPanel embedded fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={false}
+              <ProposalPanel embedded siteContact={lp.contact_name} installDate={pickAppt("install")?.date || null} techBudget={techBudget} fileBase={fileBase} accessId={lp.access_id} view={view} cView={cView} custView={false}
                 defaultService={proposalServiceForCode(lp.service_code)} proposal={proposalData} onProposalChange={setProposalData}
                 onAdvance={(s) => browse(s)} onStageSync={syncStage} customerName={lp.contact_name || lp.customer} customerAddress={lp.address}
                 customerPhone={lp.contact_phone} customerEmail={lp.contact_email}
@@ -3604,14 +3604,17 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
       const downloadTechWorkOrderPdf = async () => {
         try {
           const { downloadWorkOrderPdf } = await import("../../../lib/workorder-pdf");
+          const { exportSurvey2Images } = await import("../../../lib/survey2-export");
           const survey = await getToolDataAction(lp.access_id, "survey2").then((r) => (r?.ok ? r.saved?.data : null)).catch(() => null);
+          const surveyImages = survey ? await exportSurvey2Images(survey).catch(() => []) : [];
           downloadWorkOrderPdf(proposalData, {
             fileBase, customerName: lp.company_name || lp.contact_name || lp.customer, customerAddress: lp.address,
             customerPhone: lp.contact_phone, siteContact: lp.contact_name,
             techName: currentUser?.name || proposalData?.tech_signed_name || null,
             installDate: hubAppt?.date ? fmtDate(hubAppt.date) : null,
-            survey, budget: techBudget?.show ? techBudget : null,
-            tasks: woLineProgress ? { done: woLineProgress.done, total: woLineProgress.total } : null,
+            surveyImages,
+            budget: techBudget?.show ? techBudget : null,
+            hidePayout: !techBudget?.show,   // hourly/salaried, or payouts hidden on this job → no money at all
           });
         } catch (e) { showLiveToast("Could not build the PDF."); }
       };
@@ -4452,6 +4455,9 @@ function ResolvedView({ project, view, currentUser = null, projectStage, onProje
             view={view}
             cView={cView}
             custView={!!previewRole}
+            siteContact={lp.contact_name}
+            installDate={pickAppt("install")?.date || null}
+            techBudget={techBudget}
             defaultService={proposalServiceForCode(lp.service_code)}
             proposal={proposalData}
             onProposalChange={setProposalData}
