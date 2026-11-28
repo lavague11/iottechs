@@ -341,8 +341,11 @@ export default function SystemPlanner({
     { key: "review", label: "Submit", done: false, enabled: sig.bgReady },
   ];
   // Survey Navigation popover (the top-right ••• ) — Add-Service-modal styling: 2-col icon tiles in the
-  // linear order Background · Layout · Placement · Camera Angles · Submit (Camera Angles = the views pane).
-  // Each carries a tinted icon + current/completed state; Full screen + Walkthrough move to a Tools section.
+  // linear order Background · Layout · Placement · Route · Camera Angles · Approval.
+  // Six steps fill the two columns exactly, three rows deep: Approval used to span the full width on a
+  // fourth row of its own, which left a hole beside Camera Angles and made the last step read as a
+  // separate thing rather than the end of the same list. Each tile carries a tinted icon + current/
+  // completed state; Full screen + Walkthrough move to a Tools section.
   const NAV_ITEMS = [
     { key: "background", label: "Background", color: "#5E7CA3", done: sig.bgReady, enabled: true,
       icon: <><path d="M9 18l-6 3V6l6-3 6 3 6-3v15l-6 3-6-3z" /><path d="M9 3v15M15 6v15" /></> },
@@ -356,7 +359,7 @@ export default function SystemPlanner({
       icon: <><path d="M4 20v-6a3 3 0 0 1 3-3h7a3 3 0 0 0 3-3V4" /><circle cx="4" cy="21" r="1.6" /><circle cx="20" cy="3" r="1.6" /></> },
     { key: "views", label: "Camera Angles", color: "#8673A6", done: hasViews, enabled: sig.bgReady,
       icon: <><path d="M23 19V7a2 2 0 0 0-2-2h-3l-2-2H8L6 5H3a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h18a2 2 0 0 0 2-2z" /><circle cx="12" cy="13" r="3.5" /></> },
-    { key: "review", label: "Approval", color: "#3E7D5A", done: false, enabled: sig.bgReady, span: true,
+    { key: "review", label: "Approval", color: "#3E7D5A", done: false, enabled: sig.bgReady,
       icon: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></> },
   ];
   // ONE popover design (the Survey Navigation panel), used by BOTH the top-bar ••• (drops down) and the
@@ -374,7 +377,7 @@ export default function SystemPlanner({
         <div className="syp-navpop-grid">
           {NAV_ITEMS.map((it) => (
             <button key={it.key} type="button" disabled={!it.enabled}
-              className={`syp-navpop-tile${railStep === it.key ? " cur" : ""}${it.span ? " span" : ""}`}
+              className={`syp-navpop-tile${railStep === it.key ? " cur" : ""}`}
               onClick={() => { if (it.enabled) { goRail(it.key, { jump: true }); setOpen(false); } }}>
               <span className="syp-navpop-ic" style={{ color: it.color, background: `${it.color}22` }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">{it.icon}</svg>
@@ -1187,7 +1190,6 @@ const CSS = `
 .syp-navpop-tile{display:flex;align-items:center;gap:12px;width:100%;min-height:54px;padding:9px 12px;border:1px solid transparent;border-radius:12px;background:none;cursor:pointer;font-family:inherit;text-align:left;transition:background .13s,border-color .13s}
 .syp-navpop-tile:hover:not(:disabled){background:var(--dv-raise,#FBFBFA);border-color:var(--dv-line,#E4E4DF)}
 .syp-navpop-tile.cur{background:var(--dv-raise,#FBFBFA);border-color:var(--dv-ink,#101418)}
-.syp-navpop-tile.span{grid-column:1 / -1}
 .syp-navpop-tile:disabled{opacity:.42;cursor:default}
 .syp-navpop-ic{flex:0 0 auto;width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:10px}
 .syp-navpop-name{flex:1;min-width:0;font-size:.9rem;font-weight:600;color:var(--dv-ink,#101418)}
